@@ -200,6 +200,176 @@ public class KioskCredentialService(
         }
     }
 
+    public async Task<Result<IssuedKioskCredential>> BeginRotationAsync(Guid clientId, string rotatedByUserId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync(cancellationToken);
+
+            DateTime now = _timeProvider.GetUtcNow().UtcDateTime;
+
+            // An earlier rotation that never finished (the server restarted mid-way, say).
+            List<ClientCredential> stalePending = await ctx.ClientCredentials
+                .TagWithCallSite()
+                .Where(x => x.ClientId == clientId && x.IsActive && x.ActivatedUtc == null)
+                .ToListAsync(cancellationToken);
+
+            foreach (ClientCredential stale in stalePending)
+            {
+                Revoke(stale, now, rotatedByUserId, "Rotation not confirmed");
+            }
+
+            bool hasActive = await ctx.ClientCredentials
+                .AsNoTracking()
+                .TagWithCallSite()
+                .AnyAsync(x => x.ClientId == clientId && x.IsActive && x.ActivatedUtc != null, cancellationToken);
+
+            if (!hasActive)
+            {
+                return Result<IssuedKioskCredential>.Fail("This kiosk has no credential to rotate. It needs pairing.");
+            }
+
+            string secret = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(SecretBytes));
+
+            ClientCredential pending = new()
+            {
+                Id = Guid.NewGuid(),
+                ClientId = clientId,
+                SecretHash = HashSecret(secret),
+                Source = ClientCredentialSource.Rotation,
+                CreatedUtc = now,
+                CreatedByUserId = rotatedByUserId,
+                ActivatedUtc = null,
+                IsActive = true
+            };
+
+            ctx.ClientCredentials.Add(pending);
+            await ctx.SaveChangesAsync(cancellationToken);
+
+            return Result<IssuedKioskCredential>.Ok(new IssuedKioskCredential(pending.Id, clientId, FormatToken(pending.Id, secret)));
+        }
+        catch (Exception ex)
+        {
+            return Result<IssuedKioskCredential>.Fail($"Failed to start rotating the kiosk's credential: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> CompleteRotationAsync(Guid pendingCredentialId, string rotatedByUserId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync(cancellationToken);
+
+            ClientCredential? pending = await ctx.ClientCredentials
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(x => x.Id == pendingCredentialId && x.IsActive && x.ActivatedUtc == null, cancellationToken);
+
+            if (pending is null)
+            {
+                return Result<bool>.Fail("That rotation is no longer waiting to be confirmed.");
+            }
+
+            DateTime now = _timeProvider.GetUtcNow().UtcDateTime;
+
+            List<ClientCredential> replaced = await ctx.ClientCredentials
+                .TagWithCallSite()
+                .Where(x => x.ClientId == pending.ClientId && x.IsActive && x.Id != pending.Id)
+                .ToListAsync(cancellationToken);
+
+            foreach (ClientCredential old in replaced)
+            {
+                Revoke(old, now, rotatedByUserId, "Rotated");
+            }
+
+            pending.ActivatedUtc = now;
+
+            await ctx.SaveChangesAsync(cancellationToken);
+
+            foreach (ClientCredential old in replaced)
+            {
+                Evict(_cache, old.Id);
+            }
+
+            _logger.LogInformation("Rotated kiosk {ClientId}'s credential to {CredentialId}", pending.ClientId, pending.Id);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to finish rotating the kiosk's credential: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> CancelRotationAsync(Guid pendingCredentialId, string reason, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync(cancellationToken);
+
+            ClientCredential? pending = await ctx.ClientCredentials
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(x => x.Id == pendingCredentialId && x.IsActive && x.ActivatedUtc == null, cancellationToken);
+
+            if (pending is null)
+            {
+                return Result<bool>.Ok(false);
+            }
+
+            Revoke(pending, _timeProvider.GetUtcNow().UtcDateTime, null, reason);
+            await ctx.SaveChangesAsync(cancellationToken);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to cancel the rotation: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<int>> RevokeAllAsync(Guid clientId, string revokedByUserId, string reason, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync(cancellationToken);
+
+            List<ClientCredential> active = await ctx.ClientCredentials
+                .TagWithCallSite()
+                .Where(x => x.ClientId == clientId && x.IsActive)
+                .ToListAsync(cancellationToken);
+
+            DateTime now = _timeProvider.GetUtcNow().UtcDateTime;
+
+            foreach (ClientCredential credential in active)
+            {
+                Revoke(credential, now, revokedByUserId, reason);
+            }
+
+            await ctx.SaveChangesAsync(cancellationToken);
+
+            // At once, not after the cache entry runs out: a revoke takes effect on the next request.
+            foreach (ClientCredential credential in active)
+            {
+                Evict(_cache, credential.Id);
+            }
+
+            _logger.LogInformation("Revoked {Count} credential(s) of kiosk {ClientId} by {UserId}: {Reason}", active.Count, clientId, revokedByUserId, reason);
+
+            return Result<int>.Ok(active.Count);
+        }
+        catch (Exception ex)
+        {
+            return Result<int>.Fail($"Failed to revoke the kiosk's credential: {ex.Message}");
+        }
+    }
+
+    private static void Revoke(ClientCredential credential, DateTime now, string? byUserId, string reason)
+    {
+        credential.IsActive = false;
+        credential.RevokedUtc = now;
+        credential.RevokedByUserId = byUserId;
+        credential.RevokeReason = reason.Length > 200 ? reason[..200] : reason;
+    }
+
     private async Task<Result<CachedCredential>> LoadAsync(Guid credentialId, CancellationToken cancellationToken)
     {
         if (_cache.TryGetValue(CacheKey(credentialId), out CachedCredential? cached) && cached is not null)

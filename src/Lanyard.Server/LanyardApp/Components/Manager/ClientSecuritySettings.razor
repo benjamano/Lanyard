@@ -1,0 +1,206 @@
+@using Lanyard.Application.Services.Authentication
+@using Lanyard.Infrastructure.Enum
+@using System.Globalization
+
+@inject IKioskSecurityService _securityService
+
+@* The Security tab: how this kiosk signs in, and rotating or revoking its credential. *@
+@if (_loadError is not null)
+{
+    <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false" Class="mt-2">@_loadError</FluentMessageBar>
+}
+else if (_summary is null)
+{
+    <FluentText Class="mt-2">Loading...</FluentText>
+}
+else
+{
+    <div class="kiosk-security mt-2">
+        <div class="kiosk-security-status">
+            <div class="kiosk-security-item">
+                <span class="kiosk-security-label">Signs in with</span>
+                <span class="kiosk-security-value">@SignInLabel()</span>
+                <span class="kiosk-security-hint">@SignInHint()</span>
+            </div>
+            @if (_summary.Current is KioskCredentialSummary current)
+            {
+                <div class="kiosk-security-item">
+                    <span class="kiosk-security-label">Credential issued</span>
+                    <span class="kiosk-security-value">@FormatUk(current.CreatedUtc)</span>
+                    <span class="kiosk-security-hint">@SourceLabel(current.Source)</span>
+                </div>
+                <div class="kiosk-security-item">
+                    <span class="kiosk-security-label">Last used</span>
+                    <span class="kiosk-security-value">@(current.LastUsedUtc is DateTime used ? FormatUk(used) : "Not yet")</span>
+                </div>
+            }
+        </div>
+
+        @if (_summary.LastAuthMethod == ClientAuthMethod.LegacySecret)
+        {
+            <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                This kiosk still signs in with the old shared secret. It switches to its own credential by itself once it updates to the latest kiosk software.
+            </FluentMessageBar>
+        }
+
+        <FluentText>
+            <strong>Rotate</strong> gives the kiosk a new credential and retires the old one, for example if you think the old one was copied. The kiosk must be connected; it reconnects by itself a moment later.
+        </FluentText>
+        <FluentText>
+            <strong>Revoke</strong> stops the kiosk connecting at once. It shows a pairing code, and only works again once an Admin pairs it with Add kiosk.
+        </FluentText>
+
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px" VerticalGap="8px" Wrap="true">
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ArrowRotateClockwise())"
+                          Disabled="@(!CanRotate || _busy)" Loading="@_rotating" OnClick="RotateAsync"
+                          Title="@RotateTitle()">Rotate credential</FluentButton>
+            <FluentButton IconStart="@(new Icons.Regular.Size20.ShieldDismiss())" Disabled="@(_summary.Current is null || _busy)"
+                          OnClick="RevokeAsync" Title="@(_summary.Current is null ? "This kiosk has no credential to revoke" : "Revoke this kiosk's credential")">Revoke</FluentButton>
+        </FluentStack>
+
+        @if (_summary.History.Count > 0)
+        {
+            <div>
+                <FluentText Weight="TextWeight.Semibold">History</FluentText>
+                <ul class="kiosk-security-history">
+                    @foreach (KioskCredentialSummary entry in _summary.History)
+                    {
+                        <li>
+                            <span>@FormatUk(entry.CreatedUtc) · @SourceLabel(entry.Source)</span>
+                            @if (entry.IsActive)
+                            {
+                                <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Success">In use</FluentBadge>
+                            }
+                            else
+                            {
+                                <span class="kiosk-security-hint">Retired @(entry.RevokedUtc is DateTime revoked ? FormatUk(revoked) : string.Empty)@(entry.RevokeReason is null ? string.Empty : $": {entry.RevokeReason}")</span>
+                            }
+                        </li>
+                    }
+                </ul>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Guid ClientId { get; set; }
+
+    [Parameter]
+    public string? ClientName { get; set; }
+
+    private KioskSecuritySummary? _summary;
+    private string? _loadError;
+    private bool _busy;
+    private bool _rotating;
+
+    private bool CanRotate => _summary is { IsConnected: true, Current: not null };
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        Result<KioskSecuritySummary> result = await _securityService.GetAsync(ClientId);
+
+        _summary = result.IsSuccess ? result.Data : null;
+        _loadError = result.IsSuccess ? null : result.Error;
+    }
+
+    private async Task RotateAsync()
+    {
+        _busy = true;
+        _rotating = true;
+
+        try
+        {
+            Result<bool> result = await _securityService.RotateAsync(ClientId);
+
+            if (result.IsSuccess)
+            {
+                _toastService.ShowSuccess("New credential saved on the kiosk. The old one no longer works.");
+            }
+            else
+            {
+                _toastService.ShowError(result.Error ?? "Couldn't rotate the credential.");
+            }
+
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+            _rotating = false;
+        }
+    }
+
+    private async Task RevokeAsync()
+    {
+        DialogResult dialog = await _dialogService.ShowDialogAsync<RevokeKioskDialog>(options =>
+        {
+            options.Header.Title = "Revoke kiosk";
+            options.Width = "min(480px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(RevokeKioskDialog.ClientName), ClientName ?? "this kiosk");
+        });
+
+        if (dialog.Cancelled)
+        {
+            return;
+        }
+
+        _busy = true;
+
+        try
+        {
+            Result<bool> result = await _securityService.RevokeAsync(ClientId, dialog.Value as string);
+
+            if (result.IsSuccess)
+            {
+                _toastService.ShowSuccess("Revoked. The kiosk has been disconnected and needs pairing again.");
+            }
+            else
+            {
+                _toastService.ShowError(result.Error ?? "Couldn't revoke the kiosk.");
+            }
+
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private string SignInLabel() => _summary?.LastAuthMethod switch
+    {
+        // Had a credential, and none is in use now: an Admin revoked it.
+        _ when _summary is { Current: null, History.Count: > 0 } => "Revoked: needs pairing",
+        ClientAuthMethod.Credential => "Its own credential",
+        ClientAuthMethod.LegacySecret => "Shared secret",
+        _ when _summary?.Current is not null => "Its own credential",
+        _ => "Not signed in yet"
+    };
+
+    private string SignInHint() => _summary is null
+        ? string.Empty
+        : _summary.IsConnected ? "Connected now" : "Not connected";
+
+    private string RotateTitle() => _summary switch
+    {
+        { Current: null } => "This kiosk has no credential to rotate",
+        { IsConnected: false } => "The kiosk must be connected to rotate its credential",
+        _ => "Give this kiosk a new credential"
+    };
+
+    private static string SourceLabel(ClientCredentialSource source) => source switch
+    {
+        ClientCredentialSource.Pairing => "Paired with a code",
+        ClientCredentialSource.LegacyExchange => "Switched from the shared secret",
+        ClientCredentialSource.Rotation => "Rotated",
+        _ => source.ToString()
+    };
+
+    private static string FormatUk(DateTime utc) =>
+        utc.ToLocalTime().ToString("dd/MM/yyyy HH:mm", CultureInfo.GetCultureInfo("en-GB"));
+}

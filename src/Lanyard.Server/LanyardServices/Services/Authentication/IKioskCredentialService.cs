@@ -25,4 +25,14 @@ public interface IKioskCredentialService
 
     // Issues an active credential for the kiosk, revoking any it already had.
     Task<Result<IssuedKioskCredential>> IssueAsync(Guid clientId, ClientCredentialSource source, string? createdByUserId, CancellationToken cancellationToken = default);
+
+    // Rotation, in three steps so the kiosk is never left without a working credential: a new one
+    // is minted but not yet valid; once the kiosk confirms it saved it, it becomes the only valid
+    // one; if the kiosk doesn't confirm, it's thrown away and the old one carries on.
+    Task<Result<IssuedKioskCredential>> BeginRotationAsync(Guid clientId, string rotatedByUserId, CancellationToken cancellationToken = default);
+    Task<Result<bool>> CompleteRotationAsync(Guid pendingCredentialId, string rotatedByUserId, CancellationToken cancellationToken = default);
+    Task<Result<bool>> CancelRotationAsync(Guid pendingCredentialId, string reason, CancellationToken cancellationToken = default);
+
+    // Revokes every credential the kiosk has (active or pending). Returns how many.
+    Task<Result<int>> RevokeAllAsync(Guid clientId, string revokedByUserId, string reason, CancellationToken cancellationToken = default);
 }

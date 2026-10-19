@@ -434,7 +434,9 @@
         await _dialogService.ShowDialogAsync<ClientSettingsDialog>(options =>
         {
             options.Header.Title = "Client Settings";
-            options.Width = "min(900px, 95vw)";
+            // Wide enough for every tab heading on one line: when they overflow, the tab strip
+            // scrolls and drags the open tab's content sideways with it.
+            options.Width = "min(1000px, 95vw)";
             options.Modal = true;
             options.Parameters.Add(nameof(ClientSettingsDialog.ClientId), clientId);
         });

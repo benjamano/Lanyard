@@ -34,11 +34,13 @@ public class SignalRControlHub(
     IVideoStreamTokenService videoStreamTokenService,
     IGameResultService gameResultService,
     IKioskMediaTokenService mediaTokenService,
+    KioskConnectionRegistry connectionRegistry,
     IKioskHealthService kioskHealthService,
     IAudioClipPlaybackService audioClipPlaybackService) : Hub, ISignalRProjectionControlHub
 {
     private readonly ILogger<SignalRControlHub> _logger = logger;
     private readonly IKioskMediaTokenService _mediaTokenService = mediaTokenService;
+    private readonly KioskConnectionRegistry _connectionRegistry = connectionRegistry;
 
     private readonly MusicPlayerService _playerService = playerService;
     private readonly IClientService _clientService = clientService;
@@ -129,6 +131,9 @@ public class SignalRControlHub(
 
         _logger.LogInformation("Kiosk {ClientId} ({ConnectionId}) authenticated with {AuthMethod}", clientId, Context.ConnectionId, client.LastAuthMethod);
 
+        // So revoking the kiosk can close this connection straight away.
+        _connectionRegistry.Register(clientId, Context);
+
         await SendProjectionProgramInfoToClientAsync(client.Id);
         await SendMusicSettingsToClientAsync(client);
         await SendDmxSettingsToClientAsync(client);
@@ -196,6 +201,7 @@ public class SignalRControlHub(
         }
 
         _connections.TryRemove(Context.ConnectionId, out _);
+        _connectionRegistry.Unregister(Context.ConnectionId);
         _dmxClientService.ForgetConnection(Context.ConnectionId);
 
         await base.OnDisconnectedAsync(exception);

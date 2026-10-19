@@ -104,6 +104,7 @@ public class SignalRControlHubDisconnectTests
             Mock.Of<IVideoStreamTokenService>(),
             Mock.Of<IGameResultService>(),
             Mock.Of<IKioskMediaTokenService>(),
+            new KioskConnectionRegistry(),
             Mock.Of<IKioskHealthService>(),
             Mock.Of<IAudioClipPlaybackService>())
         {
