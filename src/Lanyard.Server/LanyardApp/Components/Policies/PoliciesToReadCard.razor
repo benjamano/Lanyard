@@ -1,0 +1,58 @@
+@using Lanyard.Application.Services.Policies
+@using Lanyard.Infrastructure.DTO.Policies
+
+@inject IPolicyAcknowledgementService _acknowledgementService
+@inject TimeProvider _timeProvider
+
+@* Home-page card. Only shows once the person has a policy at all, so companies that don't use
+   policies don't get an empty card. *@
+
+@if (_items is { Count: > 0 })
+{
+    <FluentCard Appearance="CardAppearance.Filled" Height="100%">
+        <div class="policies-card-head">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Policies to read</FluentText>
+            <a class="policies-card-link" href="/policies">See all</a>
+        </div>
+
+        @if (ToRead.Count == 0)
+        {
+            <p class="policies-card-done">You're up to date with all @(_items.Count == 1 ? "1 policy" : $"{_items.Count} policies").</p>
+        }
+        else
+        {
+            <ul class="policies-card-list">
+                @foreach (MyPolicyItem item in ToRead.Take(MaxShown))
+                {
+                    <li><MyPolicyRow Item="@item" NowUtc="@_now" /></li>
+                }
+            </ul>
+
+            @if (ToRead.Count > MaxShown)
+            {
+                <a class="policies-card-link" href="/policies">and @(ToRead.Count - MaxShown) more</a>
+            }
+        }
+    </FluentCard>
+}
+
+@code {
+    private const int MaxShown = 3;
+
+    private List<MyPolicyItem>? _items;
+    private DateTime _now;
+
+    private List<MyPolicyItem> ToRead => [.. (_items ?? []).Where(x => x.Status != PolicyStatus.UpToDate)];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        Result<string> userId = await _securityService.GetCurrentUserIdAsync();
+
+        if (userId.IsSuccess && userId.Data is not null)
+        {
+            _items = (await _acknowledgementService.GetMyPoliciesAsync(userId.Data)).Data;
+        }
+    }
+}

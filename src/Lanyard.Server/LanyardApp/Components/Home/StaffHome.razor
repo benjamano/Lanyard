@@ -3,6 +3,7 @@
 
 @using Lanyard.App.Components.Layout.Staff
 @using Lanyard.App.Components.Training
+@using Lanyard.App.Components.Policies
 @using Lanyard.App.Components.Dashboards
 @using Lanyard.Application.Services.Authentication
 @using Microsoft.AspNetCore.Authorization
@@ -60,6 +61,12 @@ else
                     <OutstandingTrainingCard />
                 </FluentGridItem>
             }
+            @if (_showPolicies)
+            {
+                <FluentGridItem Lg="4" Md="6" Sm="12" Xs="12">
+                    <PoliciesToReadCard />
+                </FluentGridItem>
+            }
             <FluentGridItem Lg="4" Md="6" Sm="12" Xs="12" HiddenWhen="GridItemHidden.MdAndDown">
                 <DigitalClock />
             </FluentGridItem>
@@ -97,10 +104,12 @@ else
     // Not persisted: it's one cached lookup, and a stale prerender value would show a module the
     // company has just lost.
     private bool _showTraining;
+    private bool _showPolicies;
 
     protected override async Task OnInitializedAsync()
     {
         _showTraining = await _companyFeatureService.IsEnabledForCurrentUserAsync(CompanyFeature.Training);
+        _showPolicies = await _companyFeatureService.IsEnabledForCurrentUserAsync(CompanyFeature.Policies);
 
         if (Initialized)
         {

@@ -1,0 +1,25 @@
+@using Lanyard.Infrastructure.DTO.Policies
+
+@* One policy in a member of staff's list (My Policies page and the home-page card). *@
+
+<a class="my-policy-row" href="@($"/policies/{Item.PolicyId}")">
+    <span class="my-policy-row-text">
+        <span class="my-policy-row-name">@Item.Name</span>
+        <span class="my-policy-row-detail">@Detail</span>
+    </span>
+    <FluentBadge Appearance="@BadgeAppearance.Tint" Color="@PolicyDisplay.StatusColor(Item.Status)">
+        @PolicyDisplay.StatusLabel(Item.Status)
+    </FluentBadge>
+</a>
+
+@code {
+    [Parameter, EditorRequired]
+    public required MyPolicyItem Item { get; set; }
+
+    [Parameter, EditorRequired]
+    public required DateTime NowUtc { get; set; }
+
+    private string Detail => Item.Status == PolicyStatus.UpToDate && Item.DueDate is DateTime nextDue
+        ? $"Read again by {PolicyDisplay.Date(nextDue)}"
+        : PolicyDisplay.Detail(Item.Status, Item.AcknowledgedVersionNumber, Item.AcknowledgedAtUtc, Item.DueDate, NowUtc);
+}

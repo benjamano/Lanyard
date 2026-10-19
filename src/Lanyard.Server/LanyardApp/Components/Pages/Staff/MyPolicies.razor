@@ -1,0 +1,103 @@
+@page "/policies"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@attribute [RequiresFeature(CompanyFeature.Policies)]
+
+@using Lanyard.App.Components.Policies
+@using Lanyard.Application.Services.Policies
+@using Lanyard.Infrastructure.DTO.Policies
+
+@inject IPolicyAcknowledgementService _acknowledgementService
+@inject TimeProvider _timeProvider
+
+<PageTitle>My Policies</PageTitle>
+
+<div class="my-policies">
+    <div>
+        <h1 class="my-policies-title">My Policies</h1>
+        <p class="my-policies-subtitle">Policies you need to read and acknowledge.</p>
+    </div>
+
+    @if (_error is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@_error</FluentMessageBar>
+    }
+    else if (_items is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" HorizontalGap="8px">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else if (_items.Count == 0)
+    {
+        <div class="my-policies-empty">
+            <FluentIcon Value="@(new Icons.Regular.Size48.DocumentText())" Color="Color.Neutral" />
+            <p>You haven't been asked to read any policies.</p>
+        </div>
+    }
+    else
+    {
+        <section class="my-policies-section" aria-labelledby="to-read-heading">
+            <h2 id="to-read-heading" class="my-policies-heading">To read <span class="my-policies-count">@ToRead.Count</span></h2>
+            @if (ToRead.Count == 0)
+            {
+                <p class="my-policies-done">You're all caught up.</p>
+            }
+            else
+            {
+                <ul class="my-policies-list">
+                    @foreach (MyPolicyItem item in ToRead)
+                    {
+                        <li><MyPolicyRow Item="@item" NowUtc="@_now" /></li>
+                    }
+                </ul>
+            }
+        </section>
+
+        @if (UpToDate.Count > 0)
+        {
+            <section class="my-policies-section" aria-labelledby="up-to-date-heading">
+                <h2 id="up-to-date-heading" class="my-policies-heading">Up to date <span class="my-policies-count">@UpToDate.Count</span></h2>
+                <ul class="my-policies-list">
+                    @foreach (MyPolicyItem item in UpToDate)
+                    {
+                        <li><MyPolicyRow Item="@item" NowUtc="@_now" /></li>
+                    }
+                </ul>
+            </section>
+        }
+    }
+</div>
+
+@code {
+    private List<MyPolicyItem>? _items;
+    private string? _error;
+    private DateTime _now;
+
+    private List<MyPolicyItem> ToRead => [.. (_items ?? []).Where(x => x.Status != PolicyStatus.UpToDate)];
+    private List<MyPolicyItem> UpToDate => [.. (_items ?? []).Where(x => x.Status == PolicyStatus.UpToDate).OrderBy(x => x.Name)];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        Result<string> userId = await _securityService.GetCurrentUserIdAsync();
+
+        if (!userId.IsSuccess || userId.Data is null)
+        {
+            _error = "Please sign in again to see your policies.";
+            return;
+        }
+
+        Result<List<MyPolicyItem>> result = await _acknowledgementService.GetMyPoliciesAsync(userId.Data);
+
+        if (result.IsSuccess)
+        {
+            _items = result.Data;
+        }
+        else
+        {
+            _error = result.Error ?? "Your policies couldn't be loaded.";
+        }
+    }
+}

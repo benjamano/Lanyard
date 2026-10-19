@@ -1,0 +1,183 @@
+@page "/policies/{PolicyId:guid}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@attribute [RequiresFeature(CompanyFeature.Policies)]
+
+@using Lanyard.App.Components.Policies
+@using Lanyard.Application.Services.Policies
+@using Lanyard.Infrastructure.DTO.Policies
+
+@inject IPolicyAcknowledgementService _acknowledgementService
+@inject TimeProvider _timeProvider
+@inject IJSRuntime JS
+
+<PageTitle>@(_item?.Name ?? "Policy")</PageTitle>
+
+<div class="read-policy">
+    <div class="read-policy-back">
+        <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.ArrowLeft())"
+                      OnClick="@(() => _navigationManager.NavigateTo("/policies"))">
+            My Policies
+        </FluentButton>
+    </div>
+
+    @if (_error is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@_error</FluentMessageBar>
+    }
+    else if (_item is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" HorizontalGap="8px">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else
+    {
+        <div class="read-policy-head">
+            <h1 class="read-policy-title">@_item.Name</h1>
+            <p class="read-policy-meta">
+                Version @_item.CurrentVersionNumber@(_item.CurrentVersionPublishedDate is DateTime published ? $" · published {PolicyDisplay.Date(published)}" : null)
+            </p>
+            @if (!string.IsNullOrWhiteSpace(_item.Description))
+            {
+                <p class="read-policy-description">@_item.Description</p>
+            }
+        </div>
+
+        @switch (_item.Status)
+        {
+            case PolicyStatus.Overdue:
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">
+                    This was due on @PolicyDisplay.Date(_item.DueDate!.Value). Please read it and acknowledge it now.
+                </FluentMessageBar>
+                break;
+            case PolicyStatus.Outstanding:
+                <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                    Please read it and acknowledge it by @PolicyDisplay.Date(_item.DueDate!.Value).
+                </FluentMessageBar>
+                break;
+            default:
+                @if (_item.AcknowledgedAtUtc is DateTime acknowledgedAt && _item.AcknowledgedVersionNumber is int acknowledgedVersion)
+                {
+                    <FluentMessageBar Intent="MessageBarIntent.Success" AllowDismiss="false">
+                        You acknowledged version @acknowledgedVersion on @PolicyDisplay.DateAndTime(acknowledgedAt).
+                        @(_item.DueDate is DateTime again ? $"You'll be asked to read it again by {PolicyDisplay.Date(again)}." : null)
+                    </FluentMessageBar>
+                }
+                break;
+        }
+
+        @if (_item.CurrentVersionNumber > 1 && !string.IsNullOrWhiteSpace(_item.CurrentVersionChangeSummary))
+        {
+            <div class="read-policy-changes">
+                <span class="read-policy-changes-label">What's changed in version @_item.CurrentVersionNumber</span>
+                <span class="read-policy-changes-text">@_item.CurrentVersionChangeSummary</span>
+            </div>
+        }
+
+        @if (_item.CurrentVersionId is Guid versionId)
+        {
+            <div class="read-policy-document">
+                @* Phones get a button instead of an embedded viewer: iOS only shows the first page of a
+                   PDF in an iframe, and the browser's own viewer is easier to read on a small screen. *@
+                <div class="read-policy-open">
+                    <FluentAnchorButton Href="@PolicyDisplay.VersionFileUrl(versionId)" Target="LinkTarget.Blank"
+                                        Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.DocumentPdf())">
+                        Open the policy (PDF)
+                    </FluentAnchorButton>
+                </div>
+                <iframe class="read-policy-frame" src="@PolicyDisplay.VersionFileUrl(versionId)" title="@($"{_item.Name}, version {_item.CurrentVersionNumber}")"></iframe>
+            </div>
+
+            @if (NeedsAcknowledging)
+            {
+                <div class="read-policy-acknowledge">
+                    <FluentCheckbox @bind-Value="_ticked" Disabled="@_busy" Label="@Statement" />
+                    <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Checkmark())"
+                                  Disabled="@(!_ticked || _busy)" OnClick="@(() => AcknowledgeAsync(versionId))">
+                        @(_busy ? "Saving..." : "Acknowledge")
+                    </FluentButton>
+                </div>
+            }
+        }
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Guid PolicyId { get; set; }
+
+    private record AcknowledgeResponse(bool Ok, string? Error, int? VersionNumber, DateTime? AcknowledgedAtUtc, bool? AlreadyAcknowledged);
+
+    private MyPolicyItem? _item;
+    private string? _userId;
+    private string? _error;
+    private bool _ticked;
+    private bool _busy;
+
+    // Still to do, or a newer (minor) version than the one they acknowledged: either way they can
+    // acknowledge the version on screen.
+    private bool NeedsAcknowledging => _item is not null
+        && (_item.Status != PolicyStatus.UpToDate || (_item.AcknowledgedVersionNumber ?? 0) < _item.CurrentVersionNumber);
+
+    private string Statement => _item is null ? string.Empty : PolicyRequirementCalculator.StatementFor(_item.Name, _item.CurrentVersionNumber);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<string> userId = await _securityService.GetCurrentUserIdAsync();
+
+        if (!userId.IsSuccess || userId.Data is null)
+        {
+            _error = "Please sign in again to read this policy.";
+            return;
+        }
+
+        _userId = userId.Data;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        Result<MyPolicyItem> result = await _acknowledgementService.GetMyPolicyAsync(_userId!, PolicyId);
+
+        if (result.IsSuccess)
+        {
+            _item = result.Data;
+        }
+        else
+        {
+            _error = result.Error ?? "This policy couldn't be loaded.";
+        }
+    }
+
+    private async Task AcknowledgeAsync(Guid versionId)
+    {
+        _busy = true;
+
+        AcknowledgeResponse response;
+
+        try
+        {
+            response = await JS.InvokeAsync<AcknowledgeResponse>("lanyardPolicies.acknowledge", versionId.ToString());
+        }
+        catch (JSException)
+        {
+            response = new AcknowledgeResponse(false, "Your acknowledgement couldn't be recorded. Please try again.", null, null, null);
+        }
+
+        _busy = false;
+
+        if (!response.Ok)
+        {
+            _toastService.ShowError(response.Error ?? "Your acknowledgement couldn't be recorded.");
+
+            // A newer version may have been published while the page was open.
+            await LoadAsync();
+            return;
+        }
+
+        _ticked = false;
+        _toastService.ShowSuccess($"Thanks - you've acknowledged version {response.VersionNumber}.");
+        await LoadAsync();
+    }
+}

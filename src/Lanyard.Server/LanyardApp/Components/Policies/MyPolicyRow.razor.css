@@ -1,0 +1,39 @@
+.my-policy-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    min-height: 44px;
+    box-sizing: border-box;
+    color: inherit;
+    text-decoration: none;
+    min-width: 0;
+}
+
+.my-policy-row:hover {
+    background: var(--colorNeutralBackground1Hover);
+}
+
+.my-policy-row:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+    outline-offset: -2px;
+}
+
+.my-policy-row-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.3;
+}
+
+.my-policy-row-name {
+    font-weight: var(--fontWeightSemibold);
+    overflow-wrap: anywhere;
+}
+
+.my-policy-row-detail {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+    overflow-wrap: anywhere;
+}

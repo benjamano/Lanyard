@@ -42,6 +42,14 @@
                 </FluentNavItem>
             }
 
+            @if (Has(CompanyFeature.Policies))
+            {
+                <FluentNavItem Href="/policies" IconRest="@(new Icons.Regular.Size20.DocumentCheckmark())"
+                               IconActive="@(new Icons.Filled.Size20.DocumentCheckmark())" Match="NavLinkMatch.All">
+                    My Policies
+                </FluentNavItem>
+            }
+
             @if (Has(CompanyFeature.StaffScheduling))
             {
                 <FluentNavItem Href="/rota" IconRest="@(new Icons.Regular.Size20.CalendarLtr())"

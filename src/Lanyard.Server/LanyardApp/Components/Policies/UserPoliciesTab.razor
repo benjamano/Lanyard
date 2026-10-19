@@ -1,0 +1,107 @@
+@using Lanyard.Application.Services.Policies
+@using Lanyard.Infrastructure.DTO.Policies
+
+@inject IPolicyAcknowledgementService _acknowledgementService
+@inject TimeProvider _timeProvider
+
+@* The Policies tab on a user's page: where they stand on each policy, and every acknowledgement
+   they've made. Only Admins see the IP address and device each was made from. *@
+
+<div class="user-policies">
+    @if (_error is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@_error</FluentMessageBar>
+    }
+    else if (_items is null || _history is null)
+    {
+        <FluentSpinner />
+    }
+    else
+    {
+        <section class="user-policies-section">
+            <h3 class="user-policies-heading">Policies</h3>
+            @if (_items.Count == 0)
+            {
+                <p class="user-policies-muted">They haven't been asked to read any policies.</p>
+            }
+            else
+            {
+                <ul class="user-policies-list">
+                    @foreach (MyPolicyItem item in _items)
+                    {
+                        <li class="user-policies-row">
+                            <span class="user-policies-text">
+                                <span class="user-policies-name">@item.Name</span>
+                                <span class="user-policies-detail">@PolicyDisplay.Detail(item.Status, item.AcknowledgedVersionNumber, item.AcknowledgedAtUtc, item.DueDate, _now)</span>
+                            </span>
+                            <FluentBadge Appearance="@BadgeAppearance.Tint" Color="@PolicyDisplay.StatusColor(item.Status)">
+                                @PolicyDisplay.StatusLabel(item.Status)
+                            </FluentBadge>
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+
+        <section class="user-policies-section">
+            <h3 class="user-policies-heading">Acknowledgements</h3>
+            @if (_history.Count == 0)
+            {
+                <p class="user-policies-muted">Nothing acknowledged yet.</p>
+            }
+            else
+            {
+                <ul class="user-policies-list">
+                    @foreach (PolicyAcknowledgementRecord record in _history)
+                    {
+                        <li class="user-policies-row user-policies-record">
+                            <span class="user-policies-text">
+                                <span class="user-policies-name">@record.PolicyName, version @record.VersionNumber</span>
+                                <span class="user-policies-detail">
+                                    @PolicyDisplay.DateAndTime(record.AcknowledgedAtUtc)@(record.DeviceLabel is null ? null : $" · {record.DeviceLabel}")@(record.IpAddress is null ? null : $" · {record.IpAddress}")
+                                </span>
+                                <span class="user-policies-statement">"@record.StatementText"</span>
+                            </span>
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required string UserId { get; set; }
+
+    private List<MyPolicyItem>? _items;
+    private List<PolicyAcknowledgementRecord>? _history;
+    private string? _error;
+    private DateTime _now;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+        Result<string> me = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scope.IsSuccess || scope.Data is null || !me.IsSuccess || me.Data is null)
+        {
+            _error = "Please sign in again to see this person's policies.";
+            return;
+        }
+
+        Result<List<MyPolicyItem>> items = await _acknowledgementService.GetPoliciesForPersonAsync(UserId, me.Data, scope.Data);
+        Result<List<PolicyAcknowledgementRecord>> history = await _acknowledgementService.GetHistoryAsync(UserId, me.Data, scope.Data);
+
+        if (!items.IsSuccess || !history.IsSuccess)
+        {
+            _error = items.Error ?? history.Error ?? "Their policies couldn't be loaded.";
+            return;
+        }
+
+        _items = items.Data;
+        _history = history.Data;
+    }
+}

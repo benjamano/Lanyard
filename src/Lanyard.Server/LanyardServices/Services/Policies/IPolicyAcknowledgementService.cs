@@ -18,6 +18,11 @@ public interface IPolicyAcknowledgementService
     Task<Result<PolicyAcknowledgementResult>> AcknowledgeAsync(Guid versionId, string userId, PolicyAcknowledgementEvidence evidence,
         CancellationToken cancellationToken = default);
 
+    // Where someone else stands on each of their policies, for a manager looking at that person.
+    // Same visibility rule as GetHistoryAsync.
+    Task<Result<List<MyPolicyItem>>> GetPoliciesForPersonAsync(string targetUserId, string requestingUserId, LocationScope scope,
+        CancellationToken cancellationToken = default);
+
     // A person's acknowledgements, newest first. Anyone can see their own; an Admin anyone's in
     // their company; a Manager anyone at their location. IP address and device only for Admins.
     Task<Result<List<PolicyAcknowledgementRecord>>> GetHistoryAsync(string targetUserId, string requestingUserId, LocationScope scope,
