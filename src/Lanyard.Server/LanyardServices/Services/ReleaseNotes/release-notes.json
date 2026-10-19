@@ -737,7 +737,11 @@
       "Publish a new version whenever the policy changes. Choose whether everyone has to acknowledge it again, or, for a small fix such as a typo, whether their earlier acknowledgement still counts.",
       "Each policy's page shows who is up to date, who still has to read it and who is overdue, with every version and its PDF. Managers see their own location's staff, and can see but not change company-wide policies.",
       "Policy PDFs are only shown to the people asked to read them and to their managers. They don't appear in the File Manager.",
-      "Policies can be switched off for a company under Manage > Companies & Locations."
+      "Policies can be switched off for a company under Manage > Companies & Locations.",
+      "Staff have a new My Policies page, and a \"Policies to read\" card on the home page, listing the policies they need to read, with overdue ones first.",
+      "Open a policy to read it, tick \"I have read and understood\" and press Acknowledge. On a phone, the PDF opens full screen in your phone's own viewer.",
+      "Each acknowledgement records the version, the time, and the device and internet address it came from, so there's a clear record of who agreed to what.",
+      "A user's page (Manage > Users) has a new Policies tab showing where they stand on each policy and everything they've acknowledged. Only Admins see the device and internet address."
     ]
   }
 ]

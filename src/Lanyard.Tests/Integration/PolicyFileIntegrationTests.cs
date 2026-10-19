@@ -169,6 +169,64 @@ public class PolicyFileIntegrationTests
         Assert.AreNotEqual("application/pdf", response.Content.Headers.ContentType?.MediaType);
     }
 
+    private async Task<HttpResponseMessage> AcknowledgeAsync(HttpClient client, bool withToken)
+    {
+        using HttpRequestMessage request = new(HttpMethod.Post, $"/api/policies/versions/{_versionId}/acknowledge");
+        request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1");
+
+        if (withToken)
+        {
+            AntiforgeryTokenResponse? token = await client.GetFromJsonAsync<AntiforgeryTokenResponse>("/api/policies/antiforgery");
+            request.Headers.Add(token!.HeaderName, token.Token);
+        }
+
+        return await client.SendAsync(request);
+    }
+
+    private sealed record AntiforgeryTokenResponse(string HeaderName, string Token);
+
+    [TestMethod]
+    public async Task Acknowledge_WithTheToken_RecordsTheBrowserItCameFrom()
+    {
+        HttpClient client = await SignedInAsAsync("policyreader");
+
+        HttpResponseMessage response = await AcknowledgeAsync(client, withToken: true);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, await response.Content.ReadAsStringAsync());
+
+        using IServiceScope scope = _factory.Services.CreateScope();
+        ApplicationDbContext ctx = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        PolicyAcknowledgement record = ctx.PolicyAcknowledgements.Single();
+
+        Assert.AreEqual(_versionId, record.PolicyVersionId);
+        StringAssert.Contains(record.UserAgent, "iPhone");
+        StringAssert.Contains(record.DeviceLabel, "iPhone");
+        // No IP address assertion: the in-memory test server has no remote connection to report.
+    }
+
+    [TestMethod]
+    public async Task Acknowledge_WithoutTheToken_IsRejected()
+    {
+        HttpClient client = await SignedInAsAsync("policyreader");
+
+        HttpResponseMessage response = await AcknowledgeAsync(client, withToken: false);
+
+        Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
+
+        using IServiceScope scope = _factory.Services.CreateScope();
+        Assert.AreEqual(0, scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().PolicyAcknowledgements.Count());
+    }
+
+    [TestMethod]
+    public async Task Acknowledge_ByStaffItIsntAssignedTo_IsRejected()
+    {
+        HttpClient client = await SignedInAsAsync("policyoutsider");
+
+        HttpResponseMessage response = await AcknowledgeAsync(client, withToken: true);
+
+        Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     [TestMethod]
     public async Task FileManagerDownload_WithTheKioskSecret_DoesNotServeTheRestrictedFile()
     {

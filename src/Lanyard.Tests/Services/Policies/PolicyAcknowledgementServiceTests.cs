@@ -153,6 +153,22 @@ public class PolicyAcknowledgementServiceTests
     }
 
     [TestMethod]
+    public async Task PoliciesForPerson_ManagerAtTheirLocation_YesElsewhere_No()
+    {
+        PolicyWorld w = await PolicyWorld.CreateAsync();
+        await w.PublishAsync();
+        PolicyAcknowledgementService service = w.Acknowledgements();
+
+        Result<List<MyPolicyItem>> sameLocation = await service.GetPoliciesForPersonAsync(w.Amy.Id, "mgr", w.ManagerAt(w.Ipswich));
+        Result<List<MyPolicyItem>> otherLocation = await service.GetPoliciesForPersonAsync(w.Amy.Id, "mgr", w.ManagerAt(w.Wisbech));
+        Result<List<MyPolicyItem>> colleague = await service.GetPoliciesForPersonAsync(w.Amy.Id, w.Bob.Id, w.StaffAt(w.Ipswich));
+
+        Assert.AreEqual(1, sameLocation.Data!.Count);
+        Assert.IsFalse(otherLocation.IsSuccess);
+        Assert.IsFalse(colleague.IsSuccess);
+    }
+
+    [TestMethod]
     public async Task History_EvidenceOnlyForAdmins_AndManagersOnlyForTheirLocation()
     {
         PolicyWorld w = await PolicyWorld.CreateAsync();

@@ -158,6 +158,32 @@ public class PolicyAcknowledgementService(
         }
     }
 
+    public async Task<Result<List<MyPolicyItem>>> GetPoliciesForPersonAsync(string targetUserId, string requestingUserId, LocationScope scope,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            if (RefuseCaller<List<MyPolicyItem>>(requestingUserId, out int companyId) is { } refused)
+            {
+                return refused;
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync(cancellationToken);
+
+            if (!await CanSeePersonAsync(ctx, targetUserId, requestingUserId, scope, cancellationToken))
+            {
+                return Result<List<MyPolicyItem>>.Fail("You can't see this person's policies.");
+            }
+
+            return Result<List<MyPolicyItem>>.Ok(await LoadMyPoliciesAsync(ctx, companyId, targetUserId, null, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load policies for {UserId}", targetUserId);
+            return Result<List<MyPolicyItem>>.Fail($"Failed to load policies: {ex.Message}");
+        }
+    }
+
     public async Task<Result<List<PolicyAcknowledgementRecord>>> GetHistoryAsync(string targetUserId, string requestingUserId, LocationScope scope,
         CancellationToken cancellationToken = default)
     {
@@ -170,17 +196,9 @@ public class PolicyAcknowledgementService(
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync(cancellationToken);
 
-            bool isSelf = targetUserId == requestingUserId;
-
-            if (!isSelf && !scope.IsAdmin)
+            if (!await CanSeePersonAsync(ctx, targetUserId, requestingUserId, scope, cancellationToken))
             {
-                bool sharesLocation = scope.IsManager && scope.LocationId is int locationId
-                    && await ctx.UserLocationMemberships.AnyAsync(x => x.UserId == targetUserId && x.LocationId == locationId, cancellationToken);
-
-                if (!sharesLocation)
-                {
-                    return Result<List<PolicyAcknowledgementRecord>>.Fail("You can't see this person's policy history.");
-                }
+                return Result<List<PolicyAcknowledgementRecord>>.Fail("You can't see this person's policy history.");
             }
 
             bool showEvidence = scope.IsAdmin;
@@ -255,6 +273,19 @@ public class PolicyAcknowledgementService(
             .OrderByDescending(x => x.Status)
             .ThenBy(x => x.Status == PolicyStatus.UpToDate ? DateTime.MaxValue : x.DueDate ?? DateTime.MaxValue)
             .ThenBy(x => x.Name)];
+    }
+
+    // Yourself, anyone in your company if you're an Admin, or anyone at your location if you're a Manager.
+    private static async Task<bool> CanSeePersonAsync(ApplicationDbContext ctx, string targetUserId, string requestingUserId, LocationScope scope,
+        CancellationToken cancellationToken)
+    {
+        if (targetUserId == requestingUserId || scope.IsAdmin)
+        {
+            return true;
+        }
+
+        return scope.IsManager && scope.LocationId is int locationId
+            && await ctx.UserLocationMemberships.AnyAsync(x => x.UserId == targetUserId && x.LocationId == locationId, cancellationToken);
     }
 
     private Result<T>? RefuseCaller<T>(string userId, out int companyId)

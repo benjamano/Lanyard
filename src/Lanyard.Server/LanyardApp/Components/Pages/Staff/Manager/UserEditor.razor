@@ -8,6 +8,7 @@
 @using Lanyard.Application.Services.Locations
 @using Lanyard.App.Components.Manager
 @using Lanyard.App.Components.Rota
+@using Lanyard.App.Components.Policies
 
 @inject IGdprService _gdprService
 @inject INotificationService ToastService
@@ -189,6 +190,13 @@ else
                 </FluentTab>
             }
 
+            @if (!_hiddenFeatures.Contains(CompanyFeature.Policies))
+            {
+                <FluentTab Id="user-policies" Header="Policies" IconStart="new Icons.Regular.Size20.DocumentCheckmark()">
+                    <UserPoliciesTab UserId="@user.Id" />
+                </FluentTab>
+            }
+
             @if (!_hiddenFeatures.Contains(CompanyFeature.StaffScheduling))
             {
                 <FluentTab Id="user-rota" Header="Rota" IconStart="new Icons.Regular.Size20.CalendarLtr()">
@@ -293,6 +301,7 @@ else
             "account" => "user-account",
             "documents" when !_hiddenFeatures.Contains(CompanyFeature.Onboarding) => "user-documents",
             "rota" when !_hiddenFeatures.Contains(CompanyFeature.StaffScheduling) => "user-rota",
+            "policies" when !_hiddenFeatures.Contains(CompanyFeature.Policies) => "user-policies",
             "danger" => "user-danger",
             _ => "user-details"
         };
