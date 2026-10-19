@@ -101,6 +101,7 @@ builder.Services.AddScoped<IGdprService, GdprService>();
 builder.Services.AddSingleton<IClientSecretValidator, ClientSecretValidator>();
 builder.Services.AddSingleton<IKioskCredentialService, KioskCredentialService>();
 builder.Services.AddSingleton<IKioskMediaTokenService, KioskMediaTokenService>();
+builder.Services.AddScoped<IKioskEnrolmentService, KioskEnrolmentService>();
 builder.Services.AddScoped<ICurrentUserAccessor, CurrentUserAccessor>();
 builder.Services.AddScoped<IFileService, FileService>();
 
@@ -500,6 +501,20 @@ builder.Services.AddRateLimiter(options =>
         return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = 6,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        });
+    });
+
+    // A kiosk asks for a pairing code once, and again every 15 minutes while nobody approves it.
+    // Several kiosks can share a venue's IP, so this allows a room full of them being set up at once.
+    options.AddPolicy(Lanyard.API.Controllers.KioskEnrolmentController.RateLimitPolicy, httpContext =>
+    {
+        string ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 20,
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0
         });

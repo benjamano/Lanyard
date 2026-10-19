@@ -21,9 +21,13 @@
 <PageTitle>Clients</PageTitle>
 
 <FluentCard Height="auto">
-    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">
-        Clients
-    </FluentText>
+    <div class="clients-header">
+        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">
+            Clients
+        </FluentText>
+        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Add())"
+                      OnClick="OpenPairKioskDialogAsync">Add kiosk</FluentButton>
+    </div>
     @if (_versionCounts.Count > 0)
     {
         <div class="clients-version-summary">
@@ -408,6 +412,21 @@
             options.Parameters.Add(nameof(ClientScreensDialog.ClientId), client.Id);
             options.Parameters.Add(nameof(ClientScreensDialog.ClientName), client.Name);
         });
+    }
+
+    private async Task OpenPairKioskDialogAsync()
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<PairKioskDialog>(options =>
+        {
+            options.Header.Title = "Add kiosk";
+            options.Width = "min(520px, 95vw)";
+            options.Modal = true;
+        });
+
+        if (!result.Cancelled)
+        {
+            await GetClientsAsync();
+        }
     }
 
     private async Task OpenClientSettingsDialog(Guid clientId)

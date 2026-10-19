@@ -20,3 +20,21 @@ public enum ClientAuthMethod
     LegacySecret = 0,
     Credential = 1
 }
+
+// Where a kiosk's request to be paired has got to. Only Pending can be approved or rejected.
+public enum ClientEnrolmentStatus
+{
+    // Showing its pairing code, waiting for an Admin.
+    Pending = 0,
+
+    // An Admin approved it; the kiosk hasn't collected its credential yet.
+    Approved = 1,
+
+    // The kiosk collected its credential. Final.
+    Collected = 2,
+
+    Rejected = 3,
+
+    // The code ran out before anyone approved it, or the kiosk asked for a new one.
+    Expired = 4
+}

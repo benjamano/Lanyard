@@ -732,11 +732,14 @@
   {
     "version": "1.4.17",
     "releaseDate": "2026-10-19",
-    "summary": "Each kiosk gets its own sign-in instead of one password shared by every kiosk.",
+    "summary": "Each kiosk gets its own sign-in instead of one password shared by every kiosk, and new kiosks are added by typing in a pairing code.",
     "details": [
       "Kiosks are moving from one shared password to their own credential, so the server always knows which kiosk is talking to it and only ever shows it your company's music, files and screens.",
       "Manage > Clients shows how each kiosk signed in last time. Kiosks still on the old shared password are marked \"Shared secret\". They move over by themselves once they update to the latest kiosk software, and nothing changes for them until then.",
-      "A kiosk the server has never seen is no longer added to the Clients list automatically. New kiosks will be added by pairing them with a code, coming in the next update."
+      "A kiosk the server has never seen is no longer added to the Clients list automatically. Add a new kiosk by pairing it instead.",
+      "To pair a kiosk, start Lanyard Client on the PC and it shows an 8-character pairing code. On Manage > Clients, press Add kiosk and type the code in. You'll see the PC's name, IP address and software version, so you can check it's the right one. Give it a name, pick its location and press Approve. It connects by itself a few seconds later.",
+      "Codes last 15 minutes. You can also press Reject if a code isn't one you expected. Only Admins can pair kiosks, and only into the company they're signed in to.",
+      "Pairing a PC that is already one of your kiosks, for example after it was reset, keeps all its settings."
     ]
   }
 ]
