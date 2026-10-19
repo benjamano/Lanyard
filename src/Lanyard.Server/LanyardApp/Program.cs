@@ -15,6 +15,7 @@ using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Training;
 using Lanyard.Application.Services.StaffDocuments;
 using Lanyard.Application.Services.Compliance;
+using Lanyard.Application.Services.Insights;
 using Lanyard.Application.Services.Onboarding;
 using Lanyard.Application.Services.Notifications;
 using Lanyard.Application.Services.Scheduling;
@@ -144,6 +145,7 @@ builder.Services.AddScoped<IPasskeyService, PasskeyService>();
 builder.Services.AddScoped<IStaffDocumentTypeService, StaffDocumentTypeService>();
 builder.Services.AddScoped<IStaffDocumentService, StaffDocumentService>();
 builder.Services.AddScoped<IComplianceService, ComplianceService>();
+builder.Services.AddScoped<IDemandInsightsService, DemandInsightsService>();
 builder.Services.AddScoped<IOnboardingService, OnboardingService>();
 builder.Services.AddScoped<IStaffPositionService, StaffPositionService>();
 builder.Services.AddScoped<IRequiredTrainingService, RequiredTrainingService>();
@@ -152,6 +154,8 @@ builder.Services.AddScoped<IStaffBulkUpdateService, StaffBulkUpdateService>();
 builder.Services.AddScoped<IClockInPinService, ClockInPinService>();
 builder.Services.AddScoped<ISchedulingSettingsService, SchedulingSettingsService>();
 builder.Services.AddScoped<IRotaService, RotaService>();
+builder.Services.AddScoped<IShiftSuggestionService, ShiftSuggestionService>();
+builder.Services.AddScoped<IStaffAvailabilityService, StaffAvailabilityService>();
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ITerminalEphemeralTokenService, TerminalEphemeralTokenService>();
 builder.Services.AddSingleton<ITerminalEventBus, TerminalEventBus>();
@@ -248,6 +252,7 @@ builder.Services.Configure<KioskSelfTestOptions>(builder.Configuration.GetSectio
 builder.Services.AddHostedService<KioskSelfTestRetentionHostedService>();
 builder.Services.AddHostedService<IdleTriggerHostedService>();
 builder.Services.AddHostedService<ScheduledTriggerHostedService>();
+builder.Services.AddHostedService<KioskAlertMonitorHostedService>();
 
 builder.Services.AddScoped<IClientZoneScoreboardService, ClientZoneScoreboardService>();
 

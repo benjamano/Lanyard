@@ -374,6 +374,10 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                     existingCompliance.ExpiryWindowDays = incomingCompliance.ExpiryWindowDays;
                     existingCompliance.LocationId = incomingCompliance.LocationId;
                     break;
+                case DemandStaffingWidget existingDemand when widget is DemandStaffingWidget incomingDemand:
+                    existingDemand.RangeDays = incomingDemand.RangeDays;
+                    existingDemand.LocationId = incomingDemand.LocationId;
+                    break;
             }
 
             Dashboard? parentDashboard = await ctx.Dashboards
@@ -761,6 +765,11 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 ExpiryWindowDays = complianceWidget.ExpiryWindowDays,
                 LocationId = complianceWidget.LocationId
             },
+            DemandStaffingWidget demandWidget => new DemandStaffingWidget
+            {
+                RangeDays = demandWidget.RangeDays,
+                LocationId = demandWidget.LocationId
+            },
             _ => throw new InvalidOperationException("Unsupported widget type.")
         };
 
@@ -888,6 +897,12 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             targetCompliance.MaxItems = sourceCompliance.MaxItems;
             targetCompliance.ExpiryWindowDays = sourceCompliance.ExpiryWindowDays;
             targetCompliance.LocationId = sourceCompliance.LocationId;
+        }
+
+        if (target is DemandStaffingWidget targetDemand && source is DemandStaffingWidget sourceDemand)
+        {
+            targetDemand.RangeDays = sourceDemand.RangeDays;
+            targetDemand.LocationId = sourceDemand.LocationId;
         }
 
         if (target is ProjectionStatusWidget targetProjectionStatus && source is ProjectionStatusWidget sourceProjectionStatus)

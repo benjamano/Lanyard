@@ -137,6 +137,9 @@ public class RotaService(
                 (await TimeOffService.LiveTimeOffQuery(ctx, rowIds, firstWeek, afterLastWeek.AddDays(-1)).ToListAsync())
                 .ToLookup(x => x.UserId);
 
+            ILookup<string, StaffAvailability> availabilityByUser =
+                (await StaffAvailabilityService.ForUsers(ctx, rowIds, companyId).ToListAsync()).ToLookup(x => x.UserId);
+
             List<StaffPosition> positions = await ctx.StaffPositions
                 .AsNoTracking()
                 .TagWithCallSite()
@@ -213,7 +216,8 @@ public class RotaService(
                     warnings,
                     isMember)
                 {
-                    TimeOff = userTimeOff
+                    TimeOff = userTimeOff,
+                    Availability = availabilityByUser[user.Id].ToList()
                 });
             }
 
@@ -378,6 +382,17 @@ public class RotaService(
                 warnings.Add(timeOff.Status == TimeOffStatus.Approved
                     ? $"This person has approved {typeName} on {shiftDay.ToString("ddd d MMM", RotaFormat.Uk)}."
                     : $"This person has asked for {typeName} on {shiftDay.ToString("ddd d MMM", RotaFormat.Uk)} (not decided yet).");
+            }
+
+            // Likewise a time they've said they can't work: the manager may have agreed it with them.
+            if (shift.UserId is string personId)
+            {
+                List<StaffAvailability> availability = await StaffAvailabilityService.ForUsers(ctx, [personId], location.CompanyId).ToListAsync();
+
+                if (StaffAvailabilityRules.Conflict(availability, shift.StartUtc, shift.EndUtc) is StaffAvailability unavailable)
+                {
+                    warnings.Add($"This person has said they can't work {StaffAvailabilityRules.Describe(unavailable)}.");
+                }
             }
 
             DateTime now = DateTime.UtcNow;
@@ -946,7 +961,7 @@ public class RotaService(
     private static string JoinCourseNames(List<TrainingGap> gaps) =>
         gaps.Count == 1 ? gaps[0].CourseName : $"{string.Join(", ", gaps.Take(gaps.Count - 1).Select(x => x.CourseName))} and {gaps[^1].CourseName}";
 
-    private static string? ValidateTimes(DateTime startUtc, DateTime endUtc, int breakMinutes)
+    internal static string? ValidateTimes(DateTime startUtc, DateTime endUtc, int breakMinutes)
     {
         if (endUtc <= startUtc)
         {

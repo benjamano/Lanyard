@@ -1,6 +1,7 @@
 @page "/rota"
 @page "/rota/time-off"
 @page "/rota/open"
+@page "/rota/availability"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @attribute [RequiresFeature(CompanyFeature.StaffScheduling)]
 
@@ -8,6 +9,7 @@
 @using Lanyard.App.Components.Rota.TimeOff
 @using Lanyard.App.Components.Rota.Claims
 @using Lanyard.App.Components.Rota.CalendarFeed
+@using Lanyard.App.Components.Rota.Availability
 @using Microsoft.AspNetCore.Components.Routing
 @implements IDisposable
 
@@ -42,22 +44,34 @@
                     <MyTimeOffPanel />
                 </div>
             </FluentTab>
+            <FluentTab Id="availability" Header="Availability" IconStart="@(new Icons.Regular.Size20.CalendarClock())" DeferredLoading="true">
+                <div class="pt-3">
+                    @if (currentUserId is not null)
+                    {
+                        <AvailabilityEditor UserId="@currentUserId" />
+                    }
+                </div>
+            </FluentTab>
         </FluentTabs>
     </FluentStack>
 </div>
 
 @code {
     private string? activeTabId;
+    private string? currentUserId;
     private MyShiftsList? shiftsList;
 
     // /rota/time-off opens straight on the Time off tab (it's what the nav's "Time Off" link and any
     // "your request was decided" link point at). /rota and /rota/time-off are the same component,
     // so moving between them reuses this instance without re-initialising it - the tab follows the
     // address on every navigation instead. Clicking a tab doesn't navigate, so it never snaps back.
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         activeTabId = TabFor(_navigationManager.Uri);
         _navigationManager.LocationChanged += OnLocationChanged;
+
+        Result<string> userId = await _securityService.GetCurrentUserIdAsync();
+        currentUserId = userId.IsSuccess ? userId.Data : null;
     }
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
@@ -77,6 +91,7 @@
 
         return path.EndsWith("/time-off", StringComparison.OrdinalIgnoreCase) ? "time-off"
             : path.EndsWith("/open", StringComparison.OrdinalIgnoreCase) ? "open"
+            : path.EndsWith("/availability", StringComparison.OrdinalIgnoreCase) ? "availability"
             : "shifts";
     }
 

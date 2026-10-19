@@ -237,39 +237,27 @@ public class SignalRControlHub(
     // Stamps the client row so a dashboard can show how long a kiosk has been down. Only
     // stamps when the row still points at this connection: a kiosk that reconnects before its
     // old socket's disconnect event fires has already written a newer connection ID, and
-    // overwriting here would report a live client as offline.
+    // overwriting here would report a live client as offline. The check and the write happen
+    // together in RecordDisconnectAsync, which touches no other column.
     private async Task RecordClientDisconnectAsync(Guid clientId)
     {
-        Result<Client?> clientResult = await _clientService.GetClientFromIdAsync(clientId);
+        Result<bool> result = await _clientService.RecordDisconnectAsync(clientId, Context.ConnectionId, DateTime.UtcNow);
 
-        if (!clientResult.IsSuccess || clientResult.Data == null)
+        if (!result.IsSuccess)
         {
-            _logger.LogWarning("Failed to load client {ClientId} to record its disconnect: {Error}", clientId, clientResult.Error);
+            _logger.LogWarning("Failed to record disconnect timestamp for client {ClientId}: {Error}", clientId, result.Error);
 
             return;
         }
 
-        Client client = clientResult.Data;
-
-        if (client.MostRecentConnectionId != Context.ConnectionId)
+        if (!result.Data)
         {
             _logger.LogInformation("Skipping disconnect timestamp for client {ClientId}: it has already reconnected on a newer connection", clientId);
 
             return;
         }
 
-        client.LastDisconnectDate = DateTime.UtcNow;
-
-        Result<Client?> updateResult = await _clientService.UpdateClientAsync(client);
-
-        if (!updateResult.IsSuccess)
-        {
-            _logger.LogWarning("Failed to record disconnect timestamp for client {ClientId}: {Error}", clientId, updateResult.Error);
-
-            return;
-        }
-
-        _logger.LogInformation("Recorded disconnect for client {ClientName} ({ClientId})", client.Name, clientId);
+        _logger.LogInformation("Recorded disconnect for client {ClientId} ({ConnectionId})", clientId, Context.ConnectionId);
     }
 
     public async Task PlaybackStateChanged(PlaybackState state)
