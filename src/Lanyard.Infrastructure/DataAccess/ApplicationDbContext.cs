@@ -113,6 +113,11 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<CompanyOnboardingSettings> CompanyOnboardingSettings { get; set; }
         public DbSet<CompanyFeatureSetting> CompanyFeatureSettings { get; set; }
         public DbSet<CompanyOnboardingStandingAttachment> CompanyOnboardingStandingAttachments { get; set; }
+        public DbSet<Policy> Policies { get; set; }
+        public DbSet<PolicyAudiencePosition> PolicyAudiencePositions { get; set; }
+        public DbSet<PolicyVersion> PolicyVersions { get; set; }
+        public DbSet<PolicyAcknowledgement> PolicyAcknowledgements { get; set; }
+        public DbSet<PolicyAssignment> PolicyAssignments { get; set; }
         public DbSet<StaffPosition> StaffPositions { get; set; }
         public DbSet<UserPosition> UserPositions { get; set; }
         public DbSet<StaffPositionRequiredCourse> StaffPositionRequiredCourses { get; set; }
@@ -899,9 +904,110 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<Song>()
                 .HasIndex(x => x.BpmAnalysisStatus);
 
+            ConfigurePolicies(modelBuilder);
+
             ConfigureDmxFixtureDefinitions(modelBuilder);
 
             ConfigureCompanyTenancy(modelBuilder);
+        }
+
+        // Policies and their acknowledgements. Versions and acknowledgements are evidence, so
+        // nothing about them cascades: policies are only ever deactivated, versions never deleted.
+        private static void ConfigurePolicies(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<Policy>(entity =>
+            {
+                entity.Property(x => x.Name).HasMaxLength(200);
+                entity.Property(x => x.CreatedByUserId).HasMaxLength(450);
+
+                entity.HasOne(x => x.Location)
+                    .WithMany()
+                    .HasForeignKey(x => x.LocationId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasIndex(x => new { x.CompanyId, x.IsActive });
+            });
+
+            modelBuilder.Entity<PolicyAudiencePosition>(entity =>
+            {
+                entity.HasIndex(x => new { x.PolicyId, x.StaffPositionId }).IsUnique();
+
+                entity.HasOne(x => x.Policy)
+                    .WithMany(x => x.Positions)
+                    .HasForeignKey(x => x.PolicyId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                // Positions are only ever deactivated, so the link never needs to follow a deleted one.
+                entity.HasOne(x => x.StaffPosition)
+                    .WithMany()
+                    .HasForeignKey(x => x.StaffPositionId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<PolicyVersion>(entity =>
+            {
+                entity.Property(x => x.FileName).HasMaxLength(260);
+                entity.Property(x => x.PublishedByUserId).HasMaxLength(450);
+
+                entity.HasIndex(x => new { x.PolicyId, x.VersionNumber }).IsUnique();
+
+                entity.HasOne(x => x.Policy)
+                    .WithMany(x => x.Versions)
+                    .HasForeignKey(x => x.PolicyId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                // Restrict for the same reason as StaffDocument: the File Manager must not be able
+                // to take an acknowledged version's PDF away.
+                entity.HasOne(x => x.FileMetadata)
+                    .WithMany()
+                    .HasForeignKey(x => x.FileMetadataId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<PolicyAcknowledgement>(entity =>
+            {
+                entity.HasIndex(x => new { x.UserId, x.PolicyId, x.AcknowledgedAtUtc });
+
+                entity.HasOne(x => x.Policy)
+                    .WithMany()
+                    .HasForeignKey(x => x.PolicyId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(x => x.PolicyVersion)
+                    .WithMany()
+                    .HasForeignKey(x => x.PolicyVersionId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                // Restrict, not Cascade: acknowledgements are kept for 6 years
+                // (docs/DATA_RETENTION.md). Both delete paths re-point them to the placeholder
+                // account first (PolicyRetention, run by ScheduleRetention.DetachUserAsync).
+                entity.HasOne(x => x.User)
+                    .WithMany()
+                    .HasForeignKey(x => x.UserId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<PolicyAssignment>(entity =>
+            {
+                // One row per person per policy; the audience sync reactivates rather than re-adds.
+                entity.HasIndex(x => new { x.PolicyId, x.UserId }).IsUnique();
+
+                // My Policies and the home-page card read by person; Compliance and the reminder
+                // sweep read what's outstanding.
+                entity.HasIndex(x => new { x.UserId, x.IsActive });
+                entity.HasIndex(x => new { x.IsActive, x.OutstandingFrom });
+
+                entity.HasOne(x => x.Policy)
+                    .WithMany()
+                    .HasForeignKey(x => x.PolicyId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                // Working state, not evidence: it goes with the account.
+                entity.HasOne(x => x.User)
+                    .WithMany()
+                    .HasForeignKey(x => x.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
         }
 
         // Fixture definition -> mode -> channel -> colour range. Built-ins are seeded here with
@@ -1049,6 +1155,7 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<CourseAssignment>().HasQueryFilter(x => TenantFilterDisabled || x.Course!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<CourseQuizAttempt>().HasQueryFilter(x => TenantFilterDisabled || x.Assignment!.Course!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<CourseQuizAttemptAnswer>().HasQueryFilter(x => TenantFilterDisabled || x.Attempt!.Assignment!.Course!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<PolicyAudiencePosition>().HasQueryFilter(x => TenantFilterDisabled || x.Policy!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<CourseSectionProgress>().HasQueryFilter(x => TenantFilterDisabled || x.Assignment!.Course!.CompanyId == TenantCompanyId);
 
             // Rota, time off and chat were built company/location-aware from the start and check

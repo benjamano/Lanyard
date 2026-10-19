@@ -2495,6 +2495,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsRestricted")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime>("UploadedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2877,6 +2880,246 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasIndex("PlaylistId");
 
                     b.ToTable("PlaylistSongMembers");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Policy", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AcknowledgeWithinDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CurrentVersionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int?>("ReacknowledgeEveryMonths")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RequiredVersionNumber")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LocationId");
+
+                    b.HasIndex("CompanyId", "IsActive");
+
+                    b.ToTable("Policies");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.PolicyAcknowledgement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("AcknowledgedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DeviceLabel")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("FileSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("PolicyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PolicyVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("StatementText")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("PolicyId");
+
+                    b.HasIndex("PolicyVersionId");
+
+                    b.HasIndex("UserId", "PolicyId", "AcknowledgedAtUtc");
+
+                    b.ToTable("PolicyAcknowledgements");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.PolicyAssignment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("AcknowledgedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("AcknowledgedVersionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("AssignedDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("DueDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("LastAcknowledgementId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("LastReminderSentDate")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("OutstandingFrom")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PolicyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ReminderCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("IsActive", "OutstandingFrom");
+
+                    b.HasIndex("PolicyId", "UserId")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "IsActive");
+
+                    b.ToTable("PolicyAssignments");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.PolicyAudiencePosition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PolicyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("StaffPositionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StaffPositionId");
+
+                    b.HasIndex("PolicyId", "StaffPositionId")
+                        .IsUnique();
+
+                    b.ToTable("PolicyAudiencePositions");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.PolicyVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ChangeSummary")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("FileMetadataId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)");
+
+                    b.Property<string>("FileSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("PolicyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PublishedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<DateTime>("PublishedDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("RequiresReacknowledgement")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("FileMetadataId");
+
+                    b.HasIndex("PolicyId", "VersionNumber")
+                        .IsUnique();
+
+                    b.ToTable("PolicyVersions");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgram", b =>
@@ -5314,6 +5557,124 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("Song");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Policy", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Location");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.PolicyAcknowledgement", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Policy", "Policy")
+                        .WithMany()
+                        .HasForeignKey("PolicyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.PolicyVersion", "PolicyVersion")
+                        .WithMany()
+                        .HasForeignKey("PolicyVersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Policy");
+
+                    b.Navigation("PolicyVersion");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.PolicyAssignment", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Policy", "Policy")
+                        .WithMany()
+                        .HasForeignKey("PolicyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Policy");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.PolicyAudiencePosition", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Policy", "Policy")
+                        .WithMany("Positions")
+                        .HasForeignKey("PolicyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.StaffPosition", "StaffPosition")
+                        .WithMany()
+                        .HasForeignKey("StaffPositionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Policy");
+
+                    b.Navigation("StaffPosition");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.PolicyVersion", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.FileMetadata", "FileMetadata")
+                        .WithMany()
+                        .HasForeignKey("FileMetadataId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Policy", "Policy")
+                        .WithMany("Versions")
+                        .HasForeignKey("PolicyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("FileMetadata");
+
+                    b.Navigation("Policy");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgram", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.Company", null)
@@ -5882,6 +6243,13 @@ namespace Lanyard.Infrastructure.Migrations
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Playlist", b =>
                 {
                     b.Navigation("Members");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Policy", b =>
+                {
+                    b.Navigation("Positions");
+
+                    b.Navigation("Versions");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgram", b =>

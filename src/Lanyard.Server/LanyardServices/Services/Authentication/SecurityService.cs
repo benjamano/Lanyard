@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Policies;
 using Lanyard.Application.Services.Demo;
 using Lanyard.Application.Services.Tenancy;
 using Lanyard.Infrastructure.Enum;
@@ -41,6 +42,7 @@ public class SecurityService : ISecurityService
     private readonly ITenantContext? _tenant;
     private readonly IDemoGuard? _demoGuard;
     private readonly ITwoFactorPolicyService? _twoFactorPolicy;
+    private readonly IPolicyAudienceService? _policyAudience;
 
     private async Task<bool> IsDemoSessionAsync() => _demoGuard is not null && await _demoGuard.IsDemoSessionAsync();
 
@@ -59,8 +61,10 @@ public class SecurityService : ISecurityService
         IOnboardingService onboardingService,
         ITenantContext? tenant = null,
         IDemoGuard? demoGuard = null,
-        ITwoFactorPolicyService? twoFactorPolicy = null)
+        ITwoFactorPolicyService? twoFactorPolicy = null,
+        IPolicyAudienceService? policyAudience = null)
     {
+        _policyAudience = policyAudience;
         _tenant = tenant;
         _demoGuard = demoGuard;
         _twoFactorPolicy = twoFactorPolicy;
@@ -471,6 +475,8 @@ public class SecurityService : ISecurityService
                 _logger.LogWarning(ex, "Failed to auto-assign training courses to newly created user {UserId}", user.Id);
             }
 
+            await AssignPoliciesToNewUserAsync(user.Id, locationIds);
+
             try
             {
                 // First of the (possibly several) locations the new hire was just added to -
@@ -646,6 +652,47 @@ public class SecurityService : ISecurityService
         }
 
         return await _emailService.SendSetPasswordEmailAsync(user, setPasswordUrl, logoUrl, accentColorHex, locationName);
+    }
+
+    // Policies are assigned from location membership by PolicyAudienceService, which the hourly
+    // reminder sweep runs anyway; running it now means a new starter sees their policies on first
+    // sign-in. Never blocks account creation, same as the course auto-assign above.
+    private async Task AssignPoliciesToNewUserAsync(string userId, IReadOnlyCollection<int> locationIds)
+    {
+        if (_policyAudience is null || locationIds.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            List<int> companyIds;
+
+            await using (ApplicationDbContext ctx = await _factory.CreateDbContextAsync())
+            {
+                companyIds = await ctx.Locations
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .Where(x => locationIds.Contains(x.Id))
+                    .Select(x => x.CompanyId)
+                    .Distinct()
+                    .ToListAsync();
+            }
+
+            foreach (int companyId in companyIds)
+            {
+                Result<PolicySyncResult> sync = await _policyAudience.SyncAsync(companyId);
+
+                if (!sync.IsSuccess)
+                {
+                    _logger.LogWarning("Failed to assign policies to new user {UserId} in company {CompanyId}: {Error}", userId, companyId, sync.Error);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to assign policies to newly created user {UserId}", userId);
+        }
     }
 
     private async Task RestoreShiftsAsync(string userId, ScheduleRetention.Snapshot snapshot)

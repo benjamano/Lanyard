@@ -1,4 +1,5 @@
 using Lanyard.Application.Services.Chat;
+using Lanyard.Application.Services.Policies;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
@@ -38,7 +39,10 @@ public static class ScheduleRetention
         // Chat history is detached in the same step (ChatRetention), so one snapshot undoes both.
         public ChatRetention.Snapshot Chat { get; init; } = ChatRetention.Snapshot.Empty;
 
-        public int Count => Shifts.Count + TimeEntries.Count + Terminals.Count + Claims.Count + Chat.Count;
+        // Policy acknowledgements are kept for the same 6 years and detached in the same step.
+        public PolicyRetention.Snapshot Policies { get; init; } = PolicyRetention.Snapshot.Empty;
+
+        public int Count => Shifts.Count + TimeEntries.Count + Terminals.Count + Claims.Count + Chat.Count + Policies.Count;
     }
 
     private const string Placeholder = ApplicationDbContext.SystemDeletedUserPlaceholderId;
@@ -86,6 +90,7 @@ public static class ScheduleRetention
         claims.AddRange(linked.Where(x => claims.All(c => c.Id != x.Id)));
 
         ChatRetention.Snapshot chat = await ChatRetention.DetachUserAsync(ctx, userId, nowUtc, gdprErasure);
+        PolicyRetention.Snapshot policies = await PolicyRetention.DetachUserAsync(ctx, userId, gdprErasure);
 
         Snapshot snapshot = new(
             shifts.Select(x => new ShiftFields(x.Id, x.UserId, x.IsActive, x.RemovalPending, x.CreateByUserId, x.UpdateByUserId, x.PublishedByUserId)).ToList(),
@@ -93,7 +98,8 @@ public static class ScheduleRetention
             terminals.Select(x => new TerminalFields(x.Id, x.CreatedByUserId, x.RevokedByUserId)).ToList(),
             claims.Select(x => new ClaimFields(x.Id, x.UserId, x.Status, x.DecidedByUserId, x.DecidedUtc, x.DecisionReason)).ToList())
         {
-            Chat = chat
+            Chat = chat,
+            Policies = policies
         };
 
         // Pick-ups, call-offs and swaps are kept as rota history like the shifts, anonymised. Any
@@ -222,6 +228,7 @@ public static class ScheduleRetention
         }
 
         await ChatRetention.RestoreAsync(ctx, snapshot.Chat);
+        await PolicyRetention.RestoreAsync(ctx, snapshot.Policies);
 
         List<Guid> shiftIds = snapshot.Shifts.Select(x => x.Id).ToList();
         Dictionary<Guid, Shift> shifts = await ctx.Shifts.Where(x => shiftIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id);

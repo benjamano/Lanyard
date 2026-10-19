@@ -15,6 +15,7 @@
 | Application/security logs | `90 days` | Security monitoring; data minimisation |
 | Chat messages | `2 years` from sending (pinned posts: until unpinned) | Workplace messaging; data minimisation |
 | Chat reports | `2 years` after they were resolved | Evidence for disputes and repeat behaviour |
+| Policy acknowledgements (who, which version, when, IP address/device) | Duration of employment + `6 years` | Evidence that staff were given health & safety and other policies, for claims and inspections |
 
 ## Current implementation status
 
@@ -128,6 +129,29 @@ time off, erasure keeps the decision but clears their name from it. Requests can
 reason for a rejection and notes from the requester; managers should avoid putting medical detail
 in either. Leave types and company or position allowances contain no personal data.
 
+### Policy acknowledgements
+
+When someone acknowledges a policy (Policies > a policy > "I have read and understood"), a
+`PolicyAcknowledgement` row records who, which version, when, the exact sentence they ticked, a
+SHA-256 hash of the PDF they were shown, and the IP address, browser (user agent) and a short device
+description as the server saw them. The app never edits these rows. They are evidence that the
+person was given the policy, so they are **kept for the length of employment plus 6 years**, the
+same as rota and timesheet records:
+
+- **Account deleted:** the acknowledgements are re-pointed to the placeholder account
+  (`PolicyRetention`, run by `ScheduleRetention.DetachUserAsync`), so "version 3 was acknowledged
+  on 4 March from an iPhone" survives but no longer names the person. `PolicyAcknowledgement.UserId`
+  is a restricting foreign key, so a delete can't skip this step.
+- **GDPR erasure:** as above, and the IP address, browser and device are cleared too.
+- Where the person stands on each policy (`PolicyAssignment`: due date, reminders sent) is working
+  state and is **deleted with the account**. Their name is cleared from policies they created and
+  versions they published.
+- The policy PDFs themselves contain no personal data. They are stored as restricted files: the
+  File Manager can't list, download, move or delete them, and they are only served to someone the
+  policy is assigned to or a manager of it.
+
+As with shifts, nothing purges acknowledgements after 6 years yet (see follow-up work below).
+
 ### Kiosk diagnostics
 
 An Admin can fetch the last 500 lines a kiosk has logged (Manage > Clients > Diagnostics). Those
@@ -149,7 +173,7 @@ These are deliberately **not** implemented as part of the security-hardening cha
 are destructive and need their own reviewed, tested change:
 
 1. **Retention sweeper** — a scheduled job that hard-deletes or anonymises records past their
-   retention period.
+   retention period (including shifts, time entries and policy acknowledgements older than 6 years).
 2. **Erasure endpoint** — an admin action that hard-deletes or irreversibly anonymises a data
    subject's personal data on a verified request (name, email, DOB → nulled/anonymised; logs
    scrubbed of the subject's identifiers).

@@ -426,6 +426,10 @@ public class GdprService : IGdprService
 
             ctx.TimeOffAllowances.RemoveRange(personalAllowances);
 
+            // Where they stood on each policy is working state; the acknowledgements themselves
+            // were kept and anonymised by PolicyRetention.
+            ctx.PolicyAssignments.RemoveRange(await ctx.PolicyAssignments.Where(x => x.UserId == userId).ToListAsync());
+
             // Their devices and notification choices exist only for them.
             ctx.PushSubscriptions.RemoveRange(await ctx.PushSubscriptions.Where(x => x.UserId == userId).ToListAsync());
             ctx.NotificationPreferences.RemoveRange(await ctx.NotificationPreferences.Where(x => x.UserId == userId).ToListAsync());

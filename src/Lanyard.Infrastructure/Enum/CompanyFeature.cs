@@ -17,5 +17,9 @@ public enum CompanyFeature
     Onboarding = 4,
 
     // The Announcements page and widget.
-    Announcements = 5
+    Announcements = 5,
+
+    // Policies and handbooks staff read and acknowledge. 6 and 7 are left for modules in flight
+    // on other branches (insights, party bookings).
+    Policies = 8
 }

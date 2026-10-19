@@ -29,6 +29,13 @@ internal static class DemoDataWiper
         await ctx.CourseSections.ExecuteDeleteAsync(ct);
         await ctx.Courses.ExecuteDeleteAsync(ct);
 
+        // Policies (before positions and files, which they point at)
+        await ctx.PolicyAcknowledgements.ExecuteDeleteAsync(ct);
+        await ctx.PolicyAssignments.ExecuteDeleteAsync(ct);
+        await ctx.PolicyVersions.ExecuteDeleteAsync(ct);
+        await ctx.PolicyAudiencePositions.ExecuteDeleteAsync(ct);
+        await ctx.Policies.ExecuteDeleteAsync(ct);
+
         // Chat
         await ctx.ChatReports.ExecuteDeleteAsync(ct);
         await ctx.ChatMessages.ExecuteDeleteAsync(ct);
