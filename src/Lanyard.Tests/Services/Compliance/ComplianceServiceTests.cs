@@ -413,6 +413,142 @@ public class ComplianceServiceTests
         CollectionAssert.AreEqual(new[] { f.Amy.Id, dan.Id }, result.Data.ExpiredDocuments.Rows.Select(x => x.UserId).ToArray());
     }
 
+    // ---- Policies ----
+
+    private static async Task<Policy> AddPolicyAsync(Fixture f, string name, int? locationId, bool isActive = true, int? companyId = null)
+    {
+        await using ApplicationDbContext ctx = new(f.Options);
+        Policy policy = new()
+        {
+            Id = Guid.NewGuid(),
+            CompanyId = companyId ?? f.Company.Id,
+            Name = name,
+            LocationId = locationId,
+            CurrentVersionNumber = 1,
+            RequiredVersionNumber = 1,
+            IsActive = isActive
+        };
+        ctx.Policies.Add(policy);
+        await ctx.SaveChangesAsync();
+        return policy;
+    }
+
+    // outstandingFrom null = up to date.
+    private static async Task AddPolicyAssignmentAsync(Policy policy, Fixture f, UserProfile user, DateTime? outstandingFrom, DateTime? dueDate, bool isActive = true)
+    {
+        await using ApplicationDbContext ctx = new(f.Options);
+        ctx.PolicyAssignments.Add(new PolicyAssignment
+        {
+            Id = Guid.NewGuid(),
+            CompanyId = policy.CompanyId,
+            PolicyId = policy.Id,
+            UserId = user.Id,
+            AssignedDate = Now.AddDays(-30),
+            OutstandingFrom = outstandingFrom,
+            DueDate = dueDate,
+            IsActive = isActive
+        });
+        await ctx.SaveChangesAsync();
+    }
+
+    [TestMethod]
+    public async Task Policies_SplitIntoOverdueAndToRead()
+    {
+        Fixture f = await SeedAsync();
+        UserProfile dan = await SchedulingTestHelpers.SeedUserAsync(f.Options, f.Ipswich, "Dan");
+        Policy fire = await AddPolicyAsync(f, "Fire policy", f.Ipswich.Id);
+        await AddPolicyAssignmentAsync(fire, f, f.Amy, Now.AddDays(-20), Now.AddDays(-3));
+        await AddPolicyAssignmentAsync(fire, f, dan, Now.AddDays(-2), Now.AddDays(5));
+
+        Result<ComplianceSummary> result = await ServiceFor(f).GetSummaryAsync(SchedulingTestHelpers.ManagerScopeFor(f.Ipswich), new ComplianceQuery(null, 30));
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.AreEqual("Fire policy · 3 days overdue", result.Data!.OverduePolicies.Rows.Single().Detail);
+        Assert.AreEqual(f.Amy.Id, result.Data.OverduePolicies.Rows.Single().UserId);
+        Assert.AreEqual("Fire policy · due in 5 days", result.Data.OutstandingPolicies.Rows.Single().Detail);
+        Assert.AreEqual(dan.Id, result.Data.OutstandingPolicies.Rows.Single().UserId);
+    }
+
+    [TestMethod]
+    public async Task Policies_IgnoreUpToDate_NotYetOpen_Inactive_AndRemovedPolicies()
+    {
+        Fixture f = await SeedAsync();
+        UserProfile dan = await SchedulingTestHelpers.SeedUserAsync(f.Options, f.Ipswich, "Dan");
+        UserProfile eve = await SchedulingTestHelpers.SeedUserAsync(f.Options, f.Ipswich, "Eve");
+        Policy fire = await AddPolicyAsync(f, "Fire policy", f.Ipswich.Id);
+        Policy removed = await AddPolicyAsync(f, "Old policy", f.Ipswich.Id, isActive: false);
+
+        await AddPolicyAssignmentAsync(fire, f, f.Amy, null, null);                                  // up to date
+        await AddPolicyAssignmentAsync(fire, f, dan, Now.AddDays(10), Now.AddDays(24));              // re-read window not open yet
+        await AddPolicyAssignmentAsync(fire, f, eve, Now.AddDays(-20), Now.AddDays(-3), isActive: false); // left the audience
+        await AddPolicyAssignmentAsync(removed, f, f.Amy, Now.AddDays(-20), Now.AddDays(-3));
+
+        Result<ComplianceSummary> result = await ServiceFor(f).GetSummaryAsync(SchedulingTestHelpers.ManagerScopeFor(f.Ipswich), new ComplianceQuery(null, 30));
+
+        Assert.AreEqual(0, result.Data!.OverduePolicies.ItemCount);
+        Assert.AreEqual(0, result.Data.OutstandingPolicies.ItemCount);
+    }
+
+    [TestMethod]
+    public async Task Policies_OneLocation_ShowsItsOwnAndCompanyWide_AdminWholeCompanyShowsAll()
+    {
+        Fixture f = await SeedAsync();
+        Policy ipswich = await AddPolicyAsync(f, "Ipswich policy", f.Ipswich.Id);
+        Policy wisbech = await AddPolicyAsync(f, "Wisbech policy", f.Wisbech.Id);
+        Policy handbook = await AddPolicyAsync(f, "Handbook", null);
+        Policy other = await AddPolicyAsync(f, "Other company policy", f.OtherLocation.Id, companyId: f.OtherCompany.Id);
+
+        await AddPolicyAssignmentAsync(ipswich, f, f.Amy, Now.AddDays(-1), Now.AddDays(10));
+        await AddPolicyAssignmentAsync(handbook, f, f.Amy, Now.AddDays(-1), Now.AddDays(10));
+        await AddPolicyAssignmentAsync(wisbech, f, f.Bob, Now.AddDays(-1), Now.AddDays(10));
+        await AddPolicyAssignmentAsync(handbook, f, f.Bob, Now.AddDays(-1), Now.AddDays(10));
+        await AddPolicyAssignmentAsync(other, f, f.Cara, Now.AddDays(-1), Now.AddDays(10));
+        ComplianceService service = ServiceFor(f);
+
+        Result<ComplianceSummary> ipswichView = await service.GetSummaryAsync(SchedulingTestHelpers.ManagerScopeFor(f.Ipswich), new ComplianceQuery(null, 30));
+        Result<ComplianceSummary> wholeCompany = await service.GetSummaryAsync(AdminScope(f), new ComplianceQuery(null, 30));
+
+        CollectionAssert.AreEquivalent(new[] { "Ipswich policy · due in 10 days", "Handbook · due in 10 days" },
+            ipswichView.Data!.OutstandingPolicies.Rows.Select(x => x.Detail).ToArray());
+        Assert.AreEqual(4, wholeCompany.Data!.OutstandingPolicies.ItemCount);
+        Assert.AreEqual(2, wholeCompany.Data.OutstandingPolicies.PeopleCount);
+    }
+
+    [TestMethod]
+    public async Task Policies_FeatureSwitchedOff_SectionsAreEmpty()
+    {
+        Fixture f = await SeedAsync();
+        Policy fire = await AddPolicyAsync(f, "Fire policy", f.Ipswich.Id);
+        await AddPolicyAssignmentAsync(fire, f, f.Amy, Now.AddDays(-20), Now.AddDays(-3));
+
+        await using (ApplicationDbContext ctx = new(f.Options))
+        {
+            ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = f.Company.Id, Feature = Infrastructure.Enum.CompanyFeature.Policies, IsEnabled = false });
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<ComplianceSummary> result = await ServiceFor(f).GetSummaryAsync(SchedulingTestHelpers.ManagerScopeFor(f.Ipswich), new ComplianceQuery(null, 30));
+
+        Assert.AreEqual(0, result.Data!.OverduePolicies.ItemCount);
+    }
+
+    [TestMethod]
+    public async Task Policies_MaxRows_CapsTheNamesButNotTheCounts()
+    {
+        Fixture f = await SeedAsync();
+        UserProfile dan = await SchedulingTestHelpers.SeedUserAsync(f.Options, f.Ipswich, "Dan");
+        UserProfile eve = await SchedulingTestHelpers.SeedUserAsync(f.Options, f.Ipswich, "Eve");
+        Policy fire = await AddPolicyAsync(f, "Fire policy", f.Ipswich.Id);
+        await AddPolicyAssignmentAsync(fire, f, f.Amy, Now.AddDays(-30), Now.AddDays(-9));
+        await AddPolicyAssignmentAsync(fire, f, dan, Now.AddDays(-30), Now.AddDays(-5));
+        await AddPolicyAssignmentAsync(fire, f, eve, Now.AddDays(-30), Now.AddDays(-1));
+
+        Result<ComplianceSummary> result = await ServiceFor(f).GetSummaryAsync(SchedulingTestHelpers.ManagerScopeFor(f.Ipswich), new ComplianceQuery(null, 30, 2));
+
+        Assert.AreEqual(3, result.Data!.OverduePolicies.ItemCount);
+        CollectionAssert.AreEqual(new[] { f.Amy.Id, dan.Id }, result.Data.OverduePolicies.Rows.Select(x => x.UserId).ToArray());
+    }
+
     private static async Task<StaffDocumentType> AddTypeAsync(Fixture f, string name, bool isActive = true)
     {
         await using ApplicationDbContext ctx = new(f.Options);

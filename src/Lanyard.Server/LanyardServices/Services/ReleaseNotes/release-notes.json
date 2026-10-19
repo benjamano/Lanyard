@@ -741,7 +741,8 @@
       "Staff have a new My Policies page, and a \"Policies to read\" card on the home page, listing the policies they need to read, with overdue ones first.",
       "Open a policy to read it, tick \"I have read and understood\" and press Acknowledge. On a phone, the PDF opens full screen in your phone's own viewer.",
       "Each acknowledgement records the version, the time, and the device and internet address it came from, so there's a clear record of who agreed to what.",
-      "A user's page (Manage > Users) has a new Policies tab showing where they stand on each policy and everything they've acknowledged. Only Admins see the device and internet address."
+      "A user's page (Manage > Users) has a new Policies tab showing where they stand on each policy and everything they've acknowledged. Only Admins see the device and internet address.",
+      "The Compliance page and the Compliance at a Glance dashboard widget now show Overdue policies and Policies to read: who still has to acknowledge which policy, and how many days late or how long they have left. Select a name to open that person's Policies tab."
     ]
   }
 ]

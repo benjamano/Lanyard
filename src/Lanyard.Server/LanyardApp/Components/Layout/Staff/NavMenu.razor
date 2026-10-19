@@ -108,7 +108,7 @@
                     </FluentNavItem>
                 }
 
-                @if (Has(CompanyFeature.Training) || Has(CompanyFeature.Onboarding))
+                @if (Has(CompanyFeature.Training) || Has(CompanyFeature.Onboarding) || Has(CompanyFeature.Policies))
                 {
                     <FluentNavItem Href="/manage/compliance" IconRest="@(new Icons.Regular.Size20.ShieldCheckmark())"
                                    IconActive="@(new Icons.Filled.Size20.ShieldCheckmark())">
