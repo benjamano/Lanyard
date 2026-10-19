@@ -98,6 +98,10 @@
             <Authorized>
                 <DeviceSync />
                 <InstallAppPrompt AppName="@_installLinks.AppName" IconHref="@_installLinks.AppleTouchIconHref" />
+                @if (!_isDemoSession)
+                {
+                    <FeedbackPrompt />
+                }
             </Authorized>
         </AuthorizeView>
         @if (_isDemoSession)

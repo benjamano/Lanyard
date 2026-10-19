@@ -746,7 +746,8 @@
       "Each live text has fallback text, shown when there's no data yet (for example before the first game of the day) and on a kiosk that's playing offline. Leave it blank to use a sensible default. The editor shows what the screen would say right now.",
       "Game data comes from the kiosk's location. A kiosk with no location set uses all of your company's games, and shows the fallback for opening hours.",
       "A kiosk now refuses to play a projection program that belongs to a different company.",
-      "Tell us what you think: a new feedback button in the top bar lets you give Lanyard a thumbs up or down, with an optional comment, from any page. It goes straight to the Lanyard team."
+      "Tell us what you think: a new feedback button in the top bar lets you give Lanyard a thumbs up or down, with an optional comment, from any page. It goes straight to the Lanyard team.",
+      "Every month or so Lanyard asks you to rate it out of 5 stars and say why. Press Not now to be asked again in a week, or Don't ask again to stop it for good."
     ]
   }
 ]

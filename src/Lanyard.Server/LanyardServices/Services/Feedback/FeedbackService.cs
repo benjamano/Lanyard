@@ -249,6 +249,72 @@ public sealed class FeedbackService(
         }
     }
 
+    public async Task<Result<bool>> ShouldPromptAsync(string userId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            var user = await ctx.Users
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.Id == userId)
+                .Select(x => new { x.FeedbackPromptOptOut, x.FeedbackPromptLastUtc, x.InvitedDate, x.PasswordSetDate })
+                .FirstOrDefaultAsync();
+
+            if (user is null)
+            {
+                return Result<bool>.Ok(false);
+            }
+
+            DateTime? lastRating = await ctx.UserFeedback
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.UserId == userId && x.Kind == FeedbackKind.StarRating)
+                .MaxAsync(x => (DateTime?)x.CreatedUtc);
+
+            // Invited is when the account was made; accounts from before invites existed only have
+            // the password date, and the seeded admin has neither (treated as long-standing).
+            DateTime? started = user.InvitedDate ?? user.PasswordSetDate;
+
+            return Result<bool>.Ok(FeedbackPromptRules.ShouldPrompt(user.FeedbackPromptOptOut, started, user.FeedbackPromptLastUtc, lastRating, Now));
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to check the feedback prompt: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> RecordPromptAsync(string userId, FeedbackPromptOutcome outcome)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            UserProfile? user = await ctx.Users.FirstOrDefaultAsync(x => x.Id == userId);
+
+            if (user is null)
+            {
+                return Result<bool>.Fail("User not found.");
+            }
+
+            user.FeedbackPromptLastUtc = Now;
+
+            if (outcome == FeedbackPromptOutcome.OptOut)
+            {
+                user.FeedbackPromptOptOut = true;
+            }
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to record the feedback prompt: {ex.Message}");
+        }
+    }
+
     public static string? ScoreError(FeedbackKind kind, int score) => kind switch
     {
         FeedbackKind.Thumbs when score is 1 or -1 => null,

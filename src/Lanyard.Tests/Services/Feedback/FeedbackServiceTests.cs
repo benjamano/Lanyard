@@ -300,4 +300,80 @@ public class FeedbackServiceTests
         Assert.IsTrue((await admin.SetReviewedAsync(feedback.Id, false)).IsSuccess);
         Assert.AreEqual(2, (await admin.CountUnreviewedAsync()).Data);
     }
+
+    [TestMethod]
+    public async Task ThePrompt_IsShownOnce_ThenRestsForAWeek()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedPeopleAsync(options);
+        TestClock clock = new(Now);
+        FeedbackService service = GetService(options, clock: clock);
+
+        Assert.IsTrue((await service.ShouldPromptAsync(StaffUserId)).Data);
+
+        await service.RecordPromptAsync(StaffUserId, FeedbackPromptOutcome.Shown);
+        Assert.IsFalse((await service.ShouldPromptAsync(StaffUserId)).Data, "Shown counts as asked, even if ignored.");
+
+        clock.Advance(TimeSpan.FromDays(7));
+        Assert.IsTrue((await service.ShouldPromptAsync(StaffUserId)).Data);
+    }
+
+    [TestMethod]
+    public async Task AStarRating_RestsThePromptForAMonth()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedPeopleAsync(options);
+        TestClock clock = new(Now);
+        FeedbackService service = GetService(options, clock: clock);
+
+        await service.SubmitAsync(new(StaffUserId, 1, null, FeedbackKind.StarRating, 5, null, "/"));
+
+        clock.Advance(TimeSpan.FromDays(29));
+        Assert.IsFalse((await service.ShouldPromptAsync(StaffUserId)).Data);
+
+        clock.Advance(TimeSpan.FromDays(1));
+        Assert.IsTrue((await service.ShouldPromptAsync(StaffUserId)).Data);
+    }
+
+    [TestMethod]
+    public async Task AThumbsFromTheHeader_DoesNotRestThePrompt()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedPeopleAsync(options);
+        FeedbackService service = GetService(options);
+
+        await service.SubmitAsync(Thumbs(1));
+
+        Assert.IsTrue((await service.ShouldPromptAsync(StaffUserId)).Data);
+    }
+
+    [TestMethod]
+    public async Task DontAskAgain_IsRemembered()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedPeopleAsync(options);
+        TestClock clock = new(Now);
+        FeedbackService service = GetService(options, clock: clock);
+
+        await service.RecordPromptAsync(StaffUserId, FeedbackPromptOutcome.OptOut);
+        clock.Advance(TimeSpan.FromDays(400));
+
+        Assert.IsFalse((await service.ShouldPromptAsync(StaffUserId)).Data);
+        await using ApplicationDbContext ctx = new(options);
+        Assert.IsTrue((await ctx.Users.SingleAsync(x => x.Id == StaffUserId)).FeedbackPromptOptOut);
+    }
+
+    [TestMethod]
+    public async Task ANewAccount_IsNotAskedInItsFirstWeek()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedPeopleAsync(options);
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            (await ctx.Users.SingleAsync(x => x.Id == StaffUserId)).InvitedDate = Now.AddDays(-2);
+            await ctx.SaveChangesAsync();
+        }
+
+        Assert.IsFalse((await GetService(options).ShouldPromptAsync(StaffUserId)).Data);
+    }
 }

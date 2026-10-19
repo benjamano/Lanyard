@@ -18,4 +18,9 @@ public interface IFeedbackService
 
     // Platform admins only. reviewed: false puts it back in the unreviewed list.
     Task<Result<bool>> SetReviewedAsync(Guid feedbackId, bool reviewed);
+
+    // Whether this person should see the star-rating prompt now (FeedbackPromptRules).
+    Task<Result<bool>> ShouldPromptAsync(string userId);
+
+    Task<Result<bool>> RecordPromptAsync(string userId, FeedbackPromptOutcome outcome);
 }
