@@ -1,0 +1,170 @@
+.self-test-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.self-test-muted {
+    color: var(--colorNeutralForeground3);
+    margin: 0;
+}
+
+.self-test-small {
+    font-size: var(--fontSizeBase200);
+    line-height: var(--lineHeightBase200);
+}
+
+.self-test-result {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+}
+
+.self-test-group-title {
+    margin: 4px 0 6px;
+    font-size: var(--fontSizeBase300);
+    font-weight: var(--fontWeightSemibold);
+    color: var(--colorNeutralForeground2);
+}
+
+.self-test-checks {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+/* A plain list rather than a grid, so long details and hints wrap on a phone. */
+.self-test-check {
+    display: flex;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--colorNeutralStroke3);
+}
+
+.self-test-check:last-child {
+    border-bottom: none;
+}
+
+.self-test-icon {
+    display: inline-flex;
+    flex: none;
+    align-self: flex-start;
+    padding-top: 1px;
+}
+
+.self-test-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    flex: 1;
+}
+
+.self-test-heading {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    column-gap: 12px;
+}
+
+.self-test-title {
+    font-weight: var(--fontWeightSemibold);
+}
+
+.self-test-outcome {
+    font-size: var(--fontSizeBase200);
+    font-weight: var(--fontWeightSemibold);
+}
+
+.self-test-detail,
+.self-test-ask {
+    overflow-wrap: anywhere;
+    color: var(--colorNeutralForeground2);
+}
+
+.self-test-ask {
+    font-style: italic;
+}
+
+.self-test-hint {
+    overflow-wrap: anywhere;
+    padding: 6px 8px;
+    border-radius: 4px;
+    background: var(--colorNeutralBackground3);
+}
+
+.self-test-check-pass .self-test-icon,
+.self-test-check-pass .self-test-outcome {
+    color: var(--colorPaletteGreenForeground1);
+}
+
+.self-test-check-warn .self-test-icon,
+.self-test-check-warn .self-test-outcome {
+    color: var(--colorPaletteDarkOrangeForeground1);
+}
+
+.self-test-check-fail {
+    background: var(--colorPaletteRedBackground1);
+}
+
+.self-test-check-fail .self-test-icon,
+.self-test-check-fail .self-test-outcome {
+    color: var(--colorPaletteRedForeground1);
+}
+
+.self-test-check-fail .self-test-hint {
+    background: var(--colorNeutralBackground1);
+}
+
+.self-test-check-neutral .self-test-icon,
+.self-test-check-neutral .self-test-outcome {
+    color: var(--colorNeutralForeground3);
+}
+
+.self-test-history {
+    width: 100%;
+}
+
+.self-test-history summary {
+    cursor: pointer;
+    font-weight: var(--fontWeightSemibold);
+}
+
+.self-test-history ul {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+}
+
+.self-test-history-item {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    width: 100%;
+    padding: 8px 10px;
+    border: none;
+    border-bottom: 1px solid var(--colorNeutralStroke3);
+    background: transparent;
+    color: var(--colorNeutralForeground1);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.self-test-history-item:hover {
+    background: var(--colorNeutralBackground1Hover);
+}
+
+.self-test-history-selected {
+    background: var(--colorNeutralBackground1Selected);
+}
+
+/* Wide enough for the result on one line; on a phone it drops below the date instead of squeezing. */
+.self-test-history-result {
+    flex: 1 1 220px;
+    font-weight: var(--fontWeightSemibold);
+}

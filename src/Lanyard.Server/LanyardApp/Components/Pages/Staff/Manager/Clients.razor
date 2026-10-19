@@ -40,7 +40,7 @@
         </div>
     }
     <div class="clients-grid-wrapper">
-        <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="minmax(0, 0.6fr) minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(125px, 1.1fr) minmax(0, 1.1fr) 180px" Class="clients-grid">
+        <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="minmax(0, 0.6fr) minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(125px, 1.1fr) minmax(0, 1.1fr) 224px" Class="clients-grid">
             <ChildContent>
                 <PropertyColumn Property="x => x.Id" Title="Client ID" Class="clients-col-id"/>
                 <PropertyColumn Sortable="true" Property="x => x.Name" Title="Name" />
@@ -102,6 +102,11 @@
                                       IconStart="@(new Icons.Regular.Size20.Desktop())"
                                       Disabled="@(!context.IsCurrentlyConnected)"
                                       OnClick="() => OpenScreensDialogAsync(context)" />
+                        <FluentButton Appearance="ButtonAppearance.Transparent"
+                                      Title="@(context.IsCurrentlyConnected ? "Self-test" : "Self-test (client is offline)")"
+                                      IconStart="@(new Icons.Regular.Size20.Stethoscope())"
+                                      Disabled="@(!context.IsCurrentlyConnected)"
+                                      OnClick="() => OpenSelfTestDialogAsync(context)" />
                     </FluentStack>
                 </TemplateColumn>
             </ChildContent>
@@ -163,6 +168,11 @@
                                   IconStart="@(new Icons.Regular.Size20.Desktop())"
                                   Disabled="@(!client.IsCurrentlyConnected)"
                                   OnClick="() => OpenScreensDialogAsync(client)" />
+                    <FluentButton Appearance="ButtonAppearance.Transparent"
+                                  Title="@(client.IsCurrentlyConnected ? "Self-test" : "Self-test (client is offline)")"
+                                  IconStart="@(new Icons.Regular.Size20.Stethoscope())"
+                                  Disabled="@(!client.IsCurrentlyConnected)"
+                                  OnClick="() => OpenSelfTestDialogAsync(client)" />
                 </div>
             </div>
         }
@@ -362,6 +372,18 @@
             options.Modal = true;
             options.Parameters.Add(nameof(ClientScreensDialog.ClientId), client.Id);
             options.Parameters.Add(nameof(ClientScreensDialog.ClientName), client.Name);
+        });
+    }
+
+    private async Task OpenSelfTestDialogAsync(ClientConnectedWithCapabilitiesDTO client)
+    {
+        await _dialogService.ShowDialogAsync<ClientSelfTestDialog>(options =>
+        {
+            options.Header.Title = $"Self-test: {client.Name}";
+            options.Width = "min(900px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ClientSelfTestDialog.ClientId), client.Id);
+            options.Parameters.Add(nameof(ClientSelfTestDialog.ClientName), client.Name);
         });
     }
 
