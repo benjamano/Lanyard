@@ -16,6 +16,15 @@ public class DmxController
     /// <summary>True once the server has told this kiosk to drive a DMX device, even if opening it failed.</summary>
     public bool IsConfigured => _isConfigured;
 
+    /// <summary>The USB index the server last asked for, or null before any DMX settings arrive.</summary>
+    public uint? ConfiguredIndex { get; private set; }
+
+    public long FramesWritten => _device.FramesWritten;
+
+    public string? LastWriteError => _device.LastWriteError;
+
+    public DateTime? LastNonZeroFrameUtc => _device.LastNonZeroFrameUtc;
+
     public DmxController(IServiceScopeFactory serviceScopeFactory, ILogger<DmxController> logger)
     {
         _serviceScopeFactory = serviceScopeFactory;
@@ -27,6 +36,7 @@ public class DmxController
     public void Open(uint dmxUsbDeviceIndex)
     {
         _isConfigured = true;
+        ConfiguredIndex = dmxUsbDeviceIndex;
 
         if (!_device.Open(dmxUsbDeviceIndex))
         {
@@ -127,6 +137,17 @@ public class DmxController
     public void MarkNotConfigured()
     {
         _isConfigured = false;
+    }
+
+    /// <summary>For the self-test: lights every channel briefly, then restores the frame.</summary>
+    public Task FlashAsync(TimeSpan duration)
+    {
+        return _device.FlashAsync(duration);
+    }
+
+    public bool TryListDevices(out List<(int Index, string? Description, string? SerialNumber)> devices)
+    {
+        return _device.TryListDevices(out devices);
     }
 
     public List<string> GetAvailableDevices()

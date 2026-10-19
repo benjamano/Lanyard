@@ -32,4 +32,10 @@ public static class ClientHubMethods
     /// <c>ClientScreenshotDTO</c>. One call per screen, so each reply stays under the hub's size limit.
     /// </summary>
     public const string CaptureProjectionWindow = "CaptureProjectionWindow";
+
+    /// <summary>
+    /// Server to kiosk, client result: takes a <c>KioskSelfTestRequestDTO</c>, checks the kiosk's
+    /// audio, DMX, packet capture and WebView2, and returns a <c>KioskSelfTestResultDTO</c>.
+    /// </summary>
+    public const string RunSelfTest = "RunSelfTest";
 }
