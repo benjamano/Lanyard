@@ -28,4 +28,9 @@ public interface IClientDiagnosticsStore
 
     /// <summary>The client's latest screenshots, or null once they have expired.</summary>
     ClientScreenshotCapture? GetLatestScreenshots(Guid clientId);
+
+    /// <summary>The same guard again for hardware self-tests, so one can't start while another runs.</summary>
+    bool TryBeginSelfTest(Guid clientId, out string? reason);
+
+    void EndSelfTest(Guid clientId);
 }

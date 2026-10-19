@@ -267,6 +267,41 @@ public class GdprServiceTests
     }
 
     [TestMethod]
+    public async Task EraseUserDataAsync_ClearsWhoRanAKioskSelfTest_KeepsTheResult()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        UserManager<UserProfile> userManager = BuildUserManager(options);
+
+        UserProfile admin = await SeedUserAsync(userManager, "Ada", "Min", "admin@example.com");
+        UserProfile target = await SeedUserAsync(userManager);
+
+        Guid runId = Guid.NewGuid();
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.ClientSelfTestRuns.Add(new ClientSelfTestRun
+            {
+                Id = runId,
+                ClientId = Guid.NewGuid(),
+                RequestedByUserId = target.Id,
+                RequestedAtUtc = DateTime.UtcNow,
+                Status = Lanyard.Shared.Enum.ClientSelfTestStatus.Completed
+            });
+
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<bool> result = await BuildService(options, userManager, BuildSecurityServiceMock(isAdmin: true, admin)).EraseUserDataAsync(target.Id);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using ApplicationDbContext verifyCtx = new(options);
+        ClientSelfTestRun? run = await verifyCtx.ClientSelfTestRuns.FindAsync(runId);
+        Assert.IsNotNull(run);
+        Assert.IsNull(run.RequestedByUserId);
+    }
+
+    [TestMethod]
     public async Task EraseUserDataAsync_RepointsNonNullableAttributionFKs_ToPlaceholder_KeepsParentRows()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();

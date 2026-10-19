@@ -19,6 +19,9 @@ public class ClientDiagnosticsStore(TimeProvider timeProvider) : IClientDiagnost
     // Longer than the log tail's: each request captures and re-encodes every screen on the kiosk.
     public static readonly TimeSpan ScreenshotCooldown = TimeSpan.FromSeconds(10);
 
+    // A self-test plays a beep and may flash the lights, so give whoever is near the kiosk a moment.
+    public static readonly TimeSpan SelfTestCooldown = TimeSpan.FromSeconds(15);
+
     private readonly TimeProvider _timeProvider = timeProvider;
 
     private readonly ConcurrentDictionary<Guid, ClientLogTailCapture> _logTails = new();
@@ -32,6 +35,20 @@ public class ClientDiagnosticsStore(TimeProvider timeProvider) : IClientDiagnost
     private readonly RequestGuard _screenshotGuard = new(ScreenshotCooldown,
         "The screens are already being captured on this kiosk.",
         "The screens were captured a moment ago. Try again in a few seconds.");
+
+    private readonly RequestGuard _selfTestGuard = new(SelfTestCooldown,
+        "A self-test is already running on this kiosk.",
+        "A self-test ran on this kiosk a moment ago. Try again in a few seconds.");
+
+    public bool TryBeginSelfTest(Guid clientId, out string? reason)
+    {
+        return _selfTestGuard.TryBegin(clientId, Now(), out reason);
+    }
+
+    public void EndSelfTest(Guid clientId)
+    {
+        _selfTestGuard.End(clientId);
+    }
 
     public bool TryBeginLogTail(Guid clientId, out string? reason)
     {

@@ -268,6 +268,15 @@ public class GdprService : IGdprService
                 audioClipPlay.TriggeredByUserId = null;
             }
 
+            List<ClientSelfTestRun> selfTestRuns = await ctx.ClientSelfTestRuns
+                .Where(x => x.RequestedByUserId == userId)
+                .ToListAsync();
+
+            foreach (ClientSelfTestRun selfTestRun in selfTestRuns)
+            {
+                selfTestRun.RequestedByUserId = null;
+            }
+
             List<AudioClipSchedule> audioClipSchedules = await ctx.AudioClipSchedules
                 .Where(x => x.CreatedByUserId == userId)
                 .ToListAsync();

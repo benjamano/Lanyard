@@ -113,6 +113,64 @@ public class ClientHealthSnapshot
     public DateTime? LastOfflineEndedUtc { get; set; }
 }
 
+/// <summary>
+/// One hardware self-test an Admin ran on a kiosk from the Clients page, with the checklist the
+/// kiosk sent back. Kept for <c>KioskSelfTestOptions.RetentionDays</c>, then purged. Runs where the
+/// kiosk never answered are kept too, because "it didn't respond" is useful history.
+/// </summary>
+public class ClientSelfTestRun : ICompanyOwned
+{
+    public Guid Id { get; set; }
+    public int CompanyId { get; set; }
+
+    public Guid ClientId { get; set; }
+    public Client? Client { get; set; }
+
+    // Nullable so a GDPR erasure can clear it; the name is read through the link, never copied.
+    public string? RequestedByUserId { get; set; }
+    public UserProfile? RequestedByUser { get; set; }
+
+    public DateTime RequestedAtUtc { get; set; }
+    public DateTime? CompletedAtUtc { get; set; }
+
+    public ClientSelfTestStatus Status { get; set; }
+
+    [StringLength(500)]
+    public string? Error { get; set; }
+
+    [StringLength(ClientVersionFormat.MaxLength)]
+    public string? ClientVersion { get; set; }
+
+    public bool FlashRequested { get; set; }
+
+    public List<ClientSelfTestCheck> Checks { get; set; } = [];
+}
+
+/// <summary>One row of a self-test's checklist, as the kiosk reported it.</summary>
+public class ClientSelfTestCheck
+{
+    public Guid Id { get; set; }
+
+    public Guid RunId { get; set; }
+    public ClientSelfTestRun? Run { get; set; }
+
+    // The kiosk's order, which groups checks by hardware.
+    public int SortOrder { get; set; }
+
+    // A Lanyard.Shared.Kiosk.SelfTestCheckKeys value.
+    [StringLength(50)]
+    public string Key { get; set; } = string.Empty;
+
+    public SelfTestOutcome Outcome { get; set; }
+
+    // A Lanyard.Shared.Kiosk.SelfTestCodes value.
+    [StringLength(50)]
+    public string? Code { get; set; }
+
+    [StringLength(300)]
+    public string? Detail { get; set; }
+}
+
 public class ClientProjectionSettings
 {
     public Guid Id { get; set; }

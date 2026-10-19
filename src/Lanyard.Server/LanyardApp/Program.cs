@@ -124,6 +124,7 @@ builder.Services.AddScoped<IClientReleaseCatalogService, ClientReleaseCatalogSer
 builder.Services.AddScoped<IClientUpdatePolicyService, ClientUpdatePolicyService>();
 builder.Services.AddScoped<IClientReleaseAdminService, ClientReleaseAdminService>();
 builder.Services.AddScoped<IClientDiagnosticsService, ClientDiagnosticsService>();
+builder.Services.AddScoped<IKioskSelfTestService, KioskSelfTestService>();
 builder.Services.AddScoped<IKioskHealthService, KioskHealthService>();
 builder.Services.AddScoped<IKioskOfflineManifestService, KioskOfflineManifestService>();
 builder.Services.Configure<KioskHealthOptions>(builder.Configuration.GetSection(KioskHealthOptions.SectionName));
@@ -243,6 +244,8 @@ builder.Services.AddHostedService<AutomationEngineHostedService>();
 builder.Services.AddHostedService<GameDataTriggerHostedService>();
 builder.Services.Configure<AutomationExecutionLogOptions>(builder.Configuration.GetSection(AutomationExecutionLogOptions.SectionName));
 builder.Services.AddHostedService<AutomationExecutionRetentionHostedService>();
+builder.Services.Configure<KioskSelfTestOptions>(builder.Configuration.GetSection(KioskSelfTestOptions.SectionName));
+builder.Services.AddHostedService<KioskSelfTestRetentionHostedService>();
 builder.Services.AddHostedService<IdleTriggerHostedService>();
 builder.Services.AddHostedService<ScheduledTriggerHostedService>();
 

@@ -64,6 +64,8 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ClientRelease> ClientReleases { get; set; }
         public DbSet<ClientProjectionSettings> ClientProjectionSettings { get; set; }
         public DbSet<ClientHealthSnapshot> ClientHealthSnapshots { get; set; }
+        public DbSet<ClientSelfTestRun> ClientSelfTestRuns { get; set; }
+        public DbSet<ClientSelfTestCheck> ClientSelfTestChecks { get; set; }
         public DbSet<ProjectionProgram> ProjectionPrograms { get; set; }
         public DbSet<ProjectionProgramStep> ProjectionProgramSteps { get; set; }
         public DbSet<ClientAvailableScreen> ClientAvailableScreens { get; set; }
@@ -198,6 +200,30 @@ namespace Lanyard.Infrastructure.DataAccess
                     .HasForeignKey<ClientHealthSnapshot>(x => x.ClientId)
                     .OnDelete(DeleteBehavior.Cascade);
                 entity.Property(x => x.ClientVersion).HasMaxLength(ClientVersionFormat.MaxLength);
+            });
+
+            modelBuilder.Entity<ClientSelfTestRun>(entity =>
+            {
+                // A kiosk's self-test history goes with the kiosk.
+                entity.HasOne(x => x.Client)
+                    .WithMany()
+                    .HasForeignKey(x => x.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                // Cleared by GDPR erasure (GdprService), like AudioClipPlay.TriggeredByUserId.
+                entity.HasOne(x => x.RequestedByUser)
+                    .WithMany()
+                    .HasForeignKey(x => x.RequestedByUserId);
+
+                entity.HasIndex(x => new { x.ClientId, x.RequestedAtUtc });
+
+                // The retention sweep deletes by age across every kiosk.
+                entity.HasIndex(x => x.RequestedAtUtc);
+
+                entity.HasMany(x => x.Checks)
+                    .WithOne(x => x.Run)
+                    .HasForeignKey(x => x.RunId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             modelBuilder.Entity<DashboardWidget>()
@@ -1019,6 +1045,7 @@ namespace Lanyard.Infrastructure.DataAccess
 
             modelBuilder.Entity<ClientProjectionSettings>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientHealthSnapshot>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ClientSelfTestCheck>().HasQueryFilter(x => TenantFilterDisabled || x.Run!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableScreen>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableVideoDevice>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableNetworkInterface>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
