@@ -28,6 +28,11 @@ namespace Lanyard.Infrastructure.Models
         public DateTime? InvitedDate { get; set; }
         public DateTime? PasswordSetDate { get; set; }
 
+        // Set the first time the user finishes or skips the course player walkthrough. Until then
+        // it starts by itself on every course they open, so a new starter sees it on their very
+        // first course whichever device they use.
+        public DateTime? CourseWalkthroughCompletedDate { get; set; }
+
         public string GetName()
         {
             return FirstName + " " + LastName;

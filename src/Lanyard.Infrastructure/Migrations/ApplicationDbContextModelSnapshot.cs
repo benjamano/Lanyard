@@ -3848,6 +3848,9 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("CourseWalkthroughCompletedDate")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid?>("DefaultDashboardId")
                         .HasColumnType("uuid");
 

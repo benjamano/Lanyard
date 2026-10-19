@@ -1500,4 +1500,68 @@ public class CourseAssignmentServiceTests
         Assert.IsTrue(result.Success, result.Error);
         Assert.IsEmpty(result.Data!);
     }
+
+    [TestMethod]
+    public async Task ShouldShowCourseWalkthroughAsync_NewUser_ReturnsTrue()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (Location ipswich, _) = await SeedTwoLocationsAsync(options);
+        await SeedUserInLocationAsync(options, "new-starter", ipswich.Id);
+
+        Result<bool> result = await GetService(options).ShouldShowCourseWalkthroughAsync("new-starter");
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.IsTrue(result.Data);
+    }
+
+    [TestMethod]
+    public async Task ShouldShowCourseWalkthroughAsync_AfterMarkedCompleted_ReturnsFalse()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (Location ipswich, _) = await SeedTwoLocationsAsync(options);
+        await SeedUserInLocationAsync(options, "new-starter", ipswich.Id);
+        CourseAssignmentService service = GetService(options);
+
+        Result<bool> markResult = await service.MarkCourseWalkthroughCompletedAsync("new-starter");
+        Result<bool> result = await service.ShouldShowCourseWalkthroughAsync("new-starter");
+
+        Assert.IsTrue(markResult.IsSuccess);
+        Assert.IsTrue(result.IsSuccess);
+        Assert.IsFalse(result.Data);
+    }
+
+    [TestMethod]
+    public async Task MarkCourseWalkthroughCompletedAsync_CalledTwice_KeepsFirstDate()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (Location ipswich, _) = await SeedTwoLocationsAsync(options);
+        await SeedUserInLocationAsync(options, "new-starter", ipswich.Id);
+        CourseAssignmentService service = GetService(options);
+
+        await service.MarkCourseWalkthroughCompletedAsync("new-starter");
+        DateTime? firstDate;
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            firstDate = (await ctx.Users.SingleAsync(x => x.Id == "new-starter")).CourseWalkthroughCompletedDate;
+        }
+
+        await Task.Delay(10);
+        Result<bool> secondResult = await service.MarkCourseWalkthroughCompletedAsync("new-starter");
+
+        await using ApplicationDbContext verifyCtx = new(options);
+        UserProfile user = await verifyCtx.Users.SingleAsync(x => x.Id == "new-starter");
+        Assert.IsTrue(secondResult.IsSuccess);
+        Assert.IsNotNull(firstDate);
+        Assert.AreEqual(firstDate, user.CourseWalkthroughCompletedDate);
+    }
+
+    [TestMethod]
+    public async Task MarkCourseWalkthroughCompletedAsync_UnknownUser_Fails()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+        Result<bool> result = await GetService(options).MarkCourseWalkthroughCompletedAsync("nobody");
+
+        Assert.IsFalse(result.IsSuccess);
+    }
 }

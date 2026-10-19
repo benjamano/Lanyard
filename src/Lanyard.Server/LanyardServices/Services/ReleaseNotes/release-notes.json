@@ -652,7 +652,7 @@
   {
     "version": "1.4.16",
     "releaseDate": "2026-10-13",
-    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, and assign it automatically. Add your shifts to Google, Apple or Outlook calendar. Kiosks recover by themselves when the server or internet comes back. Plan each venue's music by time of day with the new music schedule. Get suggestions for who should fill an open shift, and tell your managers when you can't work.",
+    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, and assign it automatically. Add your shifts to Google, Apple or Outlook calendar. Kiosks recover by themselves when the server or internet comes back. Plan each venue's music by time of day with the new music schedule. Get suggestions for who should fill an open shift, and tell your managers when you can't work. New staff get a guided tour of their first training course.",
     "details": [
       "Positions can now require training. Under Manage > Rota > Positions, open a position's settings and tick the courses someone must pass before they can work it, such as Laser Arena Marshalling for Marshals.",
       "Staff can't pick up an open shift, or take one in a swap, for a position until they've passed its required courses. For a course that has to be renewed, the pass must still be in date on the day of the shift.",
@@ -745,7 +745,9 @@
       "Last game winner shows the winning team and its total (or the top gun in a game without teams) of the most recent game today. Today's top score shows the best single score of the day. Opening hours today uses the hours set for the kiosk's location.",
       "Each live text has fallback text, shown when there's no data yet (for example before the first game of the day) and on a kiosk that's playing offline. Leave it blank to use a sensible default. The editor shows what the screen would say right now.",
       "Game data comes from the kiosk's location. A kiosk with no location set uses all of your company's games, and shows the fallback for opening hours.",
-      "A kiosk now refuses to play a projection program that belongs to a different company."
+      "A kiosk now refuses to play a projection program that belongs to a different company.",
+      "New staff now get a short guided tour the first time they open a training course. It highlights the list of sections, where the content goes, and the Next and Previous buttons, and explains the quiz and its pass mark.",
+      "The tour only starts by itself until someone has finished or skipped it once, on any device. Press How this works at the top of a course to see it again. Managers can also run it from a course preview to see what their staff see."
     ]
   }
 ]
