@@ -80,6 +80,14 @@
                 </FluentNavItem>
             }
 
+            @if (_canPlayAudioClips)
+            {
+                <FluentNavItem Href="/manage/audio-clips" IconRest="@(new Icons.Regular.Size20.Speaker2())"
+                               IconActive="@(new Icons.Filled.Size20.Speaker2())">
+                    Audio Clips
+                </FluentNavItem>
+            }
+
             @if (_isManager)
             {
                 <FluentNavSectionHeader Title="Management" />
@@ -97,6 +105,14 @@
                     <FluentNavItem Href="/manage/compliance" IconRest="@(new Icons.Regular.Size20.ShieldCheckmark())"
                                    IconActive="@(new Icons.Filled.Size20.ShieldCheckmark())">
                         Compliance
+                    </FluentNavItem>
+                }
+
+                @if (Has(CompanyFeature.Insights))
+                {
+                    <FluentNavItem Href="/manage/insights" IconRest="@(new Icons.Regular.Size20.DataArea())"
+                                   IconActive="@(new Icons.Filled.Size20.DataArea())">
+                        Insights
                     </FluentNavItem>
                 }
 
@@ -274,6 +290,7 @@
     private bool _canManageDmx;
     private bool _canManageFiles;
     private bool _canPostAnnouncements;
+    private bool _canPlayAudioClips;
     private string? _displayName;
     private ReleaseNote? _latestRelease;
     private IEnumerable<ReleaseNote> _releaseNotes = [];
@@ -329,6 +346,7 @@
         _canManageDmx = _isAdmin || user.IsInRole("CanManageDmxSystems");
         _canManageFiles = _isAdmin || user.IsInRole("CanManageFiles");
         _canPostAnnouncements = _isAdmin || user.IsInRole("CanPostAnnouncements");
+        _canPlayAudioClips = _isManager || user.IsInRole("CanPlayAudioClips");
 
         if (_isAuthenticated)
         {

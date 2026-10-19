@@ -1759,6 +1759,49 @@ public class DashboardServiceTests
     }
 
     [TestMethod]
+    public async Task DashboardService_SaveDashboard_PersistsAndUpdatesDemandStaffingWidget()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        // Id = Guid.Empty forces CreateWidgetCopy, whose default arm fails the whole save.
+        DemandStaffingWidget demand = new() { Id = Guid.Empty, RangeDays = 56, LocationId = 3, IsActive = true };
+        dashboard.Widgets = [demand];
+        Assert.IsTrue((await service.SaveDashboardAsync(dashboard)).Success);
+
+        await using (ApplicationDbContext read = new(options))
+        {
+            DemandStaffingWidget created = await read.DashboardWidgets.OfType<DemandStaffingWidget>().SingleAsync();
+            Assert.AreEqual(WidgetType.DemandStaffing, created.Type);
+            Assert.AreEqual(56, created.RangeDays);
+            Assert.AreEqual(3, created.LocationId);
+            demand.Id = created.Id;
+        }
+
+        demand.RangeDays = 14;
+        demand.LocationId = null;
+        Result<bool> result = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        DemandStaffingWidget saved = await ctx.DashboardWidgets.OfType<DemandStaffingWidget>().SingleAsync();
+        Assert.AreEqual(14, saved.RangeDays);
+        Assert.IsNull(saved.LocationId);
+    }
+
+    [TestMethod]
+    public void DemandStaffingWidget_DefaultsToFourWeeksAtTheSignedInLocation()
+    {
+        DemandStaffingWidget widget = new();
+
+        Assert.AreEqual(WidgetType.DemandStaffing, widget.Type);
+        Assert.AreEqual(28, widget.RangeDays);
+        Assert.IsNull(widget.LocationId);
+    }
+
+    [TestMethod]
     public void ComplianceSummaryWidget_DefaultsToAThirtyDayWindowForEveryLocation()
     {
         ComplianceSummaryWidget widget = new();
