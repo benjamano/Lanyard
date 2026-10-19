@@ -46,6 +46,7 @@ internal static class DemoDataWiper
         await ctx.TimeOffRequests.ExecuteDeleteAsync(ct);
         await ctx.TimeOffAllowances.ExecuteDeleteAsync(ct);
         await ctx.TimeOffTypes.ExecuteDeleteAsync(ct);
+        await ctx.StaffAvailabilities.ExecuteDeleteAsync(ct);
         await ctx.UserPositions.ExecuteDeleteAsync(ct);
         await ctx.ContractRequirements.ExecuteDeleteAsync(ct);
         await ctx.StaffPositions.ExecuteDeleteAsync(ct);

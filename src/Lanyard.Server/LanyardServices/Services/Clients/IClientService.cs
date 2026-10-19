@@ -17,6 +17,12 @@ public interface IClientService
     Task<Result<string?>> GetClientCurrentConnectionIdAsync(Guid clientId);
     Task<Result<Client?>> CreateClientAsync(Client newClient);
     Task<Result<Client?>> UpdateClientAsync(Client updatedClient);
+
+    // Stamps LastDisconnectDate, and nothing else, but only while connectionId is still the
+    // client's current connection. Ok(false) when it has already reconnected on a newer one. Not
+    // UpdateClientAsync: that writes back the whole row, so a reconnect landing between its read
+    // and its write would be undone.
+    Task<Result<bool>> RecordDisconnectAsync(Guid clientId, string connectionId, DateTime disconnectedAtUtc);
     Task<Result<IEnumerable<Client>>> GetConnectedClientsAsync();
     Task<Result<IEnumerable<ClientConnectedDTO>>> GetClientsAsync();
     Task<Result<IEnumerable<ClientConnectedWithCapabilitiesDTO>>> GetClientsWithCapabilitiesAsync();

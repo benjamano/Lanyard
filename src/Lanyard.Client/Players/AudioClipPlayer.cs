@@ -13,6 +13,9 @@ public interface IAudioClipPlayer
 
     /// <summary>Stops the clip with this play id, or whatever is playing for Guid.Empty.</summary>
     void Stop(Guid playId);
+
+    /// <summary>True from the moment a clip is asked to play until it ends, fails or is stopped.</summary>
+    bool IsPlaying { get; }
 }
 
 /// <summary>
@@ -36,6 +39,17 @@ public sealed class AudioClipPlayer(ILogger<AudioClipPlayer> logger, IAudioClipC
     private ActivePlay? _current;
 
     public event Action<AudioClipPlaybackReport>? PlaybackChanged;
+
+    public bool IsPlaying
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _current != null;
+            }
+        }
+    }
 
     private sealed class ActivePlay(AudioClipPlayCommand command)
     {

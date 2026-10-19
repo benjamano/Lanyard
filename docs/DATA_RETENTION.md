@@ -13,6 +13,7 @@
 | Clock-in / shift / rota records | `6 years` | Employment/payroll record-keeping obligations |
 | Client device records (IP/MAC) | While the device is in service + `6 months` | Operations & troubleshooting |
 | Application/security logs | `90 days` | Security monitoring; data minimisation |
+| Kiosk hardware self-test results | `90 days` | Diagnosing venue hardware; links to the Admin who ran it |
 | Chat messages | `2 years` from sending (pinned posts: until unpinned) | Workplace messaging; data minimisation |
 | Chat reports | `2 years` after they were resolved | Evidence for disputes and repeat behaviour |
 
@@ -128,6 +129,15 @@ time off, erasure keeps the decision but clears their name from it. Requests can
 reason for a rejection and notes from the requester; managers should avoid putting medical detail
 in either. Leave types and company or position allowances contain no personal data.
 
+### Availability
+
+When someone says they can't, or would rather, work (`StaffAvailability`: a weekday, a time range
+and an optional note) is their own record, set by them or a manager. It is **deleted with the
+account** (cascading foreign key; removed explicitly by GDPR erasure, at every company), and a
+manager who set someone else's has their name cleared from it on erasure. A removed window is kept
+inactive rather than deleted, so it's still covered by the above. The note is free text; it should
+say when, not why (no medical or family detail).
+
 ### Kiosk diagnostics
 
 An Admin can fetch the last 500 lines a kiosk has logged (Manage > Clients > Diagnostics). Those
@@ -142,6 +152,14 @@ same rules: **held in server memory only, for 10 minutes**, only the latest capt
 written to the database, file storage or telemetry, only visible to Admins of the kiosk's own
 company, and each request is recorded in the server log with the Admin's name. Kiosks only capture
 when asked; nothing is captured in the background.
+
+An Admin can also run a hardware self-test on a kiosk (Manage > Clients > Self-test): the kiosk
+checks its speakers, DMX interface, laser tag network card and WebView2 runtime and reports a
+pass/fail checklist. The results describe hardware only (device names, versions and error
+messages), so unlike log tails and screenshots they **are stored**, with a link to the Admin who
+ran the test, and **purged after 90 days** (`Kiosks:SelfTest:RetentionDays`). They are deleted with
+the kiosk, only visible to Admins of the kiosk's own company, and GDPR erasure clears the link to
+the Admin while keeping the result.
 
 ## Required follow-up work (tracked separately)
 

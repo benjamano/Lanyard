@@ -1,0 +1,165 @@
+@inject IStaffAvailabilityService _availabilityService
+
+@* A person's weekly availability: when they can't, or would rather, work. Used on My Shifts (their
+   own) and in the user editor (a manager's view of someone else). *@
+<div class="availability">
+    @if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else if (rows is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" HorizontalGap="8px">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else
+    {
+        <div class="availability-header">
+            <FluentText Class="availability-intro">
+                @if (ForManager)
+                {
+                    <text>When they can't work, or would rather work, each week. Rota suggestions leave them out at times they can't work, and you're warned if you put them on one.</text>
+                }
+                else
+                {
+                    <text>Tell your managers when you can't work, or would rather work, each week. They see it when they build the rota.</text>
+                }
+            </FluentText>
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Add())" OnClick="@(() => OpenAsync(null))">
+                Add a time
+            </FluentButton>
+        </div>
+
+        @if (actionError is not null)
+        {
+            <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@actionError</FluentMessageBar>
+        }
+
+        @if (rows.Count == 0)
+        {
+            <FluentCard Height="auto">
+                <FluentText>@(ForManager ? "They haven't said when they can't work." : "You haven't said when you can't work. Without it, you could be put on any shift.")</FluentText>
+            </FluentCard>
+        }
+        else
+        {
+            <ul class="availability-list">
+                @foreach (StaffAvailability row in rows)
+                {
+                    <li class="availability-item">
+                        <div class="availability-main">
+                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="@(row.Kind == AvailabilityKind.Unavailable ? BadgeColor.Warning : BadgeColor.Success)">
+                                @(row.Kind == AvailabilityKind.Unavailable ? "Can't work" : "Prefers")
+                            </FluentBadge>
+                            <span class="availability-when">@StaffAvailabilityRules.Describe(row)</span>
+                            @if (!string.IsNullOrWhiteSpace(row.Notes))
+                            {
+                                <span class="availability-note">@row.Notes</span>
+                            }
+                        </div>
+                        <div class="availability-actions">
+                            @if (confirmingRemoveId == row.Id)
+                            {
+                                <FluentButton Appearance="ButtonAppearance.Primary" Color="Color.Error" Size="ButtonSize.Small" Disabled="@isBusy" OnClick="@(() => RemoveAsync(row.Id))">Remove</FluentButton>
+                                <FluentButton Size="ButtonSize.Small" Disabled="@isBusy" OnClick="@(() => confirmingRemoveId = null)">Keep</FluentButton>
+                            }
+                            else
+                            {
+                                <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="@(new Icons.Regular.Size20.Edit())"
+                                              Title="@($"Edit {StaffAvailabilityRules.Describe(row)}")" OnClick="@(() => OpenAsync(row))" />
+                                <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="@(new Icons.Regular.Size20.Delete())"
+                                              Title="@($"Remove {StaffAvailabilityRules.Describe(row)}")" OnClick="@(() => confirmingRemoveId = row.Id)" />
+                            }
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+    }
+</div>
+
+@code {
+    // Whose availability. Their own unless ForManager.
+    [Parameter, EditorRequired]
+    public required string UserId { get; set; }
+
+    [Parameter]
+    public bool ForManager { get; set; }
+
+    private List<StaffAvailability>? rows;
+    private string? loadError;
+    private string? actionError;
+    private Guid? confirmingRemoveId;
+    private bool isBusy;
+
+    private LocationScope? scope;
+    private string? actingUserId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null || !actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            loadError = "Couldn't confirm who you are - try reloading the page.";
+            return;
+        }
+
+        scope = scopeResult.Data;
+        actingUserId = actingUser.Data;
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        Result<List<StaffAvailability>> result = await _availabilityService.GetAsync(scope!, UserId, actingUserId!);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            loadError = result.Error;
+            return;
+        }
+
+        loadError = null;
+        rows = result.Data;
+    }
+
+    private async Task OpenAsync(StaffAvailability? existing)
+    {
+        actionError = null;
+
+        DialogResult result = await _dialogService.ShowDialogAsync<AvailabilityDialog>(options =>
+        {
+            options.Width = "440px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(AvailabilityDialog.UserId), UserId);
+            options.Parameters.Add(nameof(AvailabilityDialog.Existing), existing);
+            options.Parameters.Add(nameof(AvailabilityDialog.ForManager), ForManager);
+        });
+
+        if (!result.Cancelled)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task RemoveAsync(Guid id)
+    {
+        isBusy = true;
+        Result<bool> result = await _availabilityService.RemoveAsync(scope!, id, actingUserId!);
+        isBusy = false;
+        confirmingRemoveId = null;
+
+        if (!result.IsSuccess)
+        {
+            actionError = result.Error;
+            return;
+        }
+
+        await LoadAsync();
+    }
+}

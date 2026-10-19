@@ -101,7 +101,7 @@ public class ClientDiagnosticsController(
         return reply;
     }
 
-    private static string? GetClientVersion()
+    internal static string? GetClientVersion()
     {
         string? version = Assembly.GetEntryAssembly()?
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?

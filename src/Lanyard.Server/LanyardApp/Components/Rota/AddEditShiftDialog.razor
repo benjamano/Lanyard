@@ -5,6 +5,7 @@
 
 @inject IRotaService _rotaService
 @inject IShiftClaimService _shiftClaimService
+@inject IShiftSuggestionService _shiftSuggestionService
 
 <FluentDialogBody>
     <TitleTemplate>
@@ -42,6 +43,13 @@
                 </FluentMessageBar>
             }
 
+            @if (SelectedUnavailable is StaffAvailability unavailable)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                    @SelectedName has said they can't work @StaffAvailabilityRules.Describe(unavailable)@(string.IsNullOrWhiteSpace(unavailable.Notes) ? "" : $" ({unavailable.Notes})"). You can still put them on it.
+                </FluentMessageBar>
+            }
+
             @if (ExistingTrainingGaps.Count > 0)
             {
                 <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
@@ -51,6 +59,31 @@
 
             <FluentSelect TOption="StaffOption" TValue="string" Items="@staffOptions" OptionText="@(x => x.Name)" OptionValue="@(x => x.UserId)"
                           Value="@userId" ValueChanged="@OnStaffChanged" Label="Staff member" Width="100%" />
+
+            @if (ShowSuggestions)
+            {
+                <div class="shift-dialog-suggest">
+                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Lightbulb())"
+                                  Disabled="@(isSuggesting || isBusy)" OnClick="@SuggestAsync">
+                        @(isSuggesting ? "Finding staff..." : HasCurrentSuggestions ? "Refresh suggestions" : "Suggest staff")
+                    </FluentButton>
+
+                    @if (suggestError is not null)
+                    {
+                        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@suggestError</FluentMessageBar>
+                    }
+
+                    @if (HasCurrentSuggestions && suggestions is not null)
+                    {
+                        @if (ClaimNote is string claimNote)
+                        {
+                            <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">@claimNote</FluentMessageBar>
+                        }
+
+                        <ShiftSuggestionsPanel Suggestions="@suggestions" SelectedUserId="@userId" OnUse="@UseSuggestion" />
+                    }
+                </div>
+            }
 
             <FluentDatePicker TValue="DateTime?" @bind-Value="date" Label="Date" Culture="@RotaDisplayExtensions.Uk" Style="width: 100%;" />
 
@@ -131,6 +164,22 @@
     [Parameter]
     public Shift? Existing { get; set; }
 
+    // A time the chosen person has said they can't work, for the day and times entered.
+    private StaffAvailability? SelectedUnavailable
+    {
+        get
+        {
+            if (date is not DateTime chosen || View.Rows.FirstOrDefault(r => r.User.Id == userId) is not RotaStaffRow row || row.Availability.Count == 0)
+            {
+                return null;
+            }
+
+            DateOnly day = DateOnly.FromDateTime(chosen);
+
+            return StaffAvailabilityRules.Conflict(row.Availability, RotaTime.ToUtc(day, startTime), RotaTime.ToUtc(EndsNextDay ? day.AddDays(1) : day, endTime));
+        }
+    }
+
     // The rota's missing-training note for this shift - only while it's still the same person in
     // the same position, since a different choice would need checking afresh (the save does that).
     private IReadOnlyList<TrainingGap> ExistingTrainingGaps =>
@@ -163,6 +212,46 @@
     private bool confirmingDelete;
     private bool confirmingRelease;
     private bool savedSomething;
+
+    // Suggestions for the day, times, break and position they were asked for. Changing any of
+    // those hides them (and offers "Suggest staff" again), so a stale list is never shown.
+    private ShiftSuggestions? suggestions;
+    private string? suggestionsKey;
+    private bool isSuggesting;
+    private string? suggestError;
+
+    private string SuggestionKey => $"{date:yyyy-MM-dd}|{startTime}|{endTime}|{breakMinutes}|{positionId}";
+
+    private bool HasCurrentSuggestions => suggestions is not null && suggestionsKey == SuggestionKey;
+
+    // Offered for an open shift; kept on screen after "Use" so the manager can change their mind.
+    private bool ShowSuggestions => userId == RotaCellRef.OpenShift || HasCurrentSuggestions;
+
+    // Saving with someone other than the person who asked turns their request down.
+    private string? ClaimNote
+    {
+        get
+        {
+            if (suggestions is null || userId == RotaCellRef.OpenShift)
+            {
+                return null;
+            }
+
+            List<string> askers = suggestions.Ranked
+                .Where(x => x.AskedForShift && x.UserId != userId)
+                .Select(x => x.DisplayName)
+                .ToList();
+
+            if (askers.Count == 0)
+            {
+                return null;
+            }
+
+            string names = askers.Count == 1 ? askers[0] : $"{string.Join(", ", askers.Take(askers.Count - 1))} and {askers[^1]}";
+
+            return $"{names} asked for this shift. Saving it for {SelectedName} turns {(askers.Count == 1 ? "that request" : "those requests")} down.";
+        }
+    }
 
     private string SelectedName => userId == RotaCellRef.OpenShift
         ? "nobody yet"
@@ -265,19 +354,7 @@
         }
 
         DateOnly day = DateOnly.FromDateTime(date.Value);
-
-        Shift shift = new()
-        {
-            Id = Existing?.Id ?? Guid.Empty,
-            LocationId = View.LocationId,
-            UserId = userId == RotaCellRef.OpenShift ? null : userId,
-            StaffPositionId = Guid.TryParse(positionId, out Guid parsed) ? parsed : null,
-            StartUtc = RotaTime.ToUtc(day, startTime),
-            EndUtc = RotaTime.ToUtc(EndsNextDay ? day.AddDays(1) : day, endTime),
-            BreakMinutes = breakMinutes,
-            Notes = notes,
-            CreateByUserId = actingUser.Data
-        };
+        Shift shift = BuildShift(day, actingUser.Data);
 
         Result<ShiftSaveResult> result = await _rotaService.SaveShiftAsync(scopeResult.Data, shift, actingUser.Data);
 
@@ -306,6 +383,66 @@
         }
 
         await Dialog.CloseAsync(true);
+    }
+
+    private Shift BuildShift(DateOnly day, string actingUserId) => new()
+    {
+        Id = Existing?.Id ?? Guid.Empty,
+        LocationId = View.LocationId,
+        UserId = userId == RotaCellRef.OpenShift ? null : userId,
+        StaffPositionId = Guid.TryParse(positionId, out Guid parsed) ? parsed : null,
+        StartUtc = RotaTime.ToUtc(day, startTime),
+        EndUtc = RotaTime.ToUtc(EndsNextDay ? day.AddDays(1) : day, endTime),
+        BreakMinutes = breakMinutes,
+        Notes = notes,
+        CreateByUserId = actingUserId
+    };
+
+    private async Task SuggestAsync()
+    {
+        suggestError = null;
+
+        if (date is null)
+        {
+            suggestError = "Choose a date first.";
+            return;
+        }
+
+        isSuggesting = true;
+
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            isSuggesting = false;
+            suggestError = scopeResult.Error ?? "Couldn't confirm who you are - try reloading the page.";
+            return;
+        }
+
+        string key = SuggestionKey;
+        Result<ShiftSuggestions> result = await _shiftSuggestionService.SuggestAsync(scopeResult.Data, BuildShift(DateOnly.FromDateTime(date.Value), string.Empty));
+
+        isSuggesting = false;
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            suggestError = result.Error;
+            return;
+        }
+
+        suggestions = result.Data;
+        suggestionsKey = key;
+    }
+
+    // Puts the person in the picker; the manager still presses Save, which checks everything again.
+    private void UseSuggestion(ShiftSuggestion person)
+    {
+        if (staffOptions.All(x => x.UserId != person.UserId))
+        {
+            staffOptions.Add(new StaffOption(person.UserId, person.DisplayName));
+        }
+
+        OnStaffChanged(person.UserId);
     }
 
     private async Task DeleteAsync()
