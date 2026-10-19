@@ -775,10 +775,11 @@
   {
     "version": "1.4.18",
     "releaseDate": "2026-10-19",
-    "summary": "The old shared kiosk password is switched off: every kiosk now signs in with its own credential.",
+    "summary": "The old shared kiosk password is switched off: every kiosk now signs in with its own credential. Send feedback about Lanyard from the top bar.",
     "details": [
       "Kiosks can no longer connect with the password that used to be shared by every kiosk. Each one uses its own credential, which an Admin can rotate or revoke.",
-      "A kiosk that still showed \"Shared secret\" on Manage > Clients can't connect any more. Pair it again with Add kiosk: it keeps its settings."
+      "A kiosk that still showed \"Shared secret\" on Manage > Clients can't connect any more. Pair it again with Add kiosk: it keeps its settings.",
+      "Tell us what you think: a new feedback button in the top bar lets you give Lanyard a thumbs up or down, with an optional comment, from any page. It goes straight to the Lanyard team."
     ]
   }
 ]
