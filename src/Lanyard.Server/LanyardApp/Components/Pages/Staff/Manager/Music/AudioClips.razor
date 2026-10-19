@@ -23,13 +23,16 @@
                         The music dips while a clip plays and comes back afterwards.
                     </FluentText>
                 </div>
-                @if (canAdd)
-                {
-                    <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Add())"
-                                  OnClick="@AddClipAsync">
-                        Add clip
-                    </FluentButton>
-                }
+                <div class="d-flex flex-wrap gap-2">
+                    <HelpButton AreaKey="@HelpRegistry.Music" Topic="clips" />
+                    @if (canAdd)
+                    {
+                        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Add())"
+                                      OnClick="@AddClipAsync">
+                            Add clip
+                        </FluentButton>
+                    }
+                </div>
             </div>
 
             @if (loadError is not null)

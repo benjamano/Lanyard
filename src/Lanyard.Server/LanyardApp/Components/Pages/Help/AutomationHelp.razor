@@ -1,0 +1,17 @@
+@page "/help/automation"
+@attribute [Authorize(Roles = "Admin")]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.Automation
+
+<HelpPage AreaKey="@HelpRegistry.Automation">
+    <FluentTab Id="help-rules" Header="Rules &amp; Triggers" IconStart="@(new Icons.Regular.Size16.Flash())">
+        <AutomationRulesHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-conditions" Header="Conditions &amp; Actions" IconStart="@(new Icons.Regular.Size16.Filter())" DeferredLoading="true">
+        <AutomationConditionsActionsHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-log" Header="Execution Log" IconStart="@(new Icons.Regular.Size16.History())" DeferredLoading="true">
+        <AutomationLogHelpTab />
+    </FluentTab>
+</HelpPage>

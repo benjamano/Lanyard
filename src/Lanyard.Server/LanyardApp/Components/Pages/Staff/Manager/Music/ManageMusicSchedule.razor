@@ -21,13 +21,16 @@
                         at the end of the song that's playing. Times are UK time.
                     </FluentText>
                 </div>
-                @if (schedule is not null)
-                {
-                    <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Add())"
-                                  OnClick="@AddDaypartAsync">
-                        Add part of the day
-                    </FluentButton>
-                }
+                <div class="d-flex flex-wrap gap-2">
+                    <HelpButton AreaKey="@HelpRegistry.Music" Topic="schedule" />
+                    @if (schedule is not null)
+                    {
+                        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Add())"
+                                      OnClick="@AddDaypartAsync">
+                            Add part of the day
+                        </FluentButton>
+                    }
+                </div>
             </div>
 
             @if (locationOptions.Count > 1)

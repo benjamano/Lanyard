@@ -28,11 +28,14 @@
                 Engine: @(_engineEnabled ? "Enabled" : "Disabled")
             </FluentSwitch>
         </FluentStack>
-        <FluentButton Appearance="ButtonAppearance.Outline"
-                      IconEnd="new Icons.Regular.Size20.Add()"
-                      OnClick="OpenAddRuleDialogAsync">
-            New Rule
-        </FluentButton>
+        <div class="d-flex gap-2 flex-shrink-0">
+            <FluentButton Appearance="ButtonAppearance.Outline"
+                          IconEnd="new Icons.Regular.Size20.Add()"
+                          OnClick="OpenAddRuleDialogAsync">
+                New Rule
+            </FluentButton>
+            <HelpButton AreaKey="@HelpRegistry.Automation" />
+        </div>
     </FluentStack>
 
     <FluentDataGrid Items="@_rules.AsQueryable()" GridTemplateColumns="1fr 1fr 1fr auto auto" Style="width: 100%;">
