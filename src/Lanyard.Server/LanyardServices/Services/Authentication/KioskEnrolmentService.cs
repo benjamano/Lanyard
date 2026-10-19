@@ -11,7 +11,6 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace Lanyard.Application.Services.Authentication;
@@ -27,7 +26,6 @@ public class KioskEnrolmentService(
     IClientService clientService,
     ITenantContext tenant,
     AuthenticationStateProvider authenticationStateProvider,
-    IConfiguration configuration,
     IMemoryCache cache,
     TimeProvider timeProvider,
     ILogger<KioskEnrolmentService> logger) : IKioskEnrolmentService
@@ -51,7 +49,6 @@ public class KioskEnrolmentService(
     private readonly IClientService _clientService = clientService;
     private readonly ITenantContext _tenant = tenant;
     private readonly AuthenticationStateProvider _authenticationStateProvider = authenticationStateProvider;
-    private readonly IConfiguration _configuration = configuration;
     private readonly IMemoryCache _cache = cache;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger<KioskEnrolmentService> _logger = logger;
@@ -203,60 +200,6 @@ public class KioskEnrolmentService(
         catch (Exception ex)
         {
             return Result<KioskEnrolmentStatusDTO>.Fail($"Failed to check the pairing request: {ex.Message}");
-        }
-    }
-
-    public async Task<Result<KioskCredentialIssuedDTO>> ExchangeLegacySecretAsync(Guid clientId, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            if (KioskAuthenticationHandler.GetLegacySecretMode(_configuration) != KioskLegacySecretMode.AcceptAndExchange)
-            {
-                return Result<KioskCredentialIssuedDTO>.Fail("Exchanging the shared secret is switched off. Pair this kiosk instead.");
-            }
-
-            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync(cancellationToken);
-
-            bool exists = await ctx.Clients
-                .AsNoTracking()
-                .TagWithCallSite()
-                .AnyAsync(x => x.Id == clientId, cancellationToken);
-
-            if (!exists)
-            {
-                return Result<KioskCredentialIssuedDTO>.Fail("This kiosk isn't known to the server. Pair it instead.");
-            }
-
-            // Once a kiosk has its own credential, the shared secret must never be able to get a
-            // new one for it: anyone holding the secret and the kiosk's id could otherwise take
-            // its identity and lock the real kiosk out. Revoked credentials count too - a revoked
-            // kiosk has to be paired again by an Admin.
-            bool hasHadCredential = await ctx.ClientCredentials
-                .AsNoTracking()
-                .TagWithCallSite()
-                .AnyAsync(x => x.ClientId == clientId, cancellationToken);
-
-            if (hasHadCredential)
-            {
-                _logger.LogWarning("Refused a shared-secret exchange for kiosk {ClientId}: it already has, or had, its own credential", clientId);
-
-                return Result<KioskCredentialIssuedDTO>.Fail("This kiosk already has its own credential. Pair it again if it has lost it.");
-            }
-
-            Result<IssuedKioskCredential> issued = await _credentialService.IssueAsync(clientId, ClientCredentialSource.LegacyExchange, createdByUserId: null, cancellationToken);
-
-            if (!issued.IsSuccess || issued.Data is null)
-            {
-                return Result<KioskCredentialIssuedDTO>.Fail(issued.Error ?? "Failed to issue the kiosk's credential.");
-            }
-
-            _logger.LogInformation("Kiosk {ClientId} exchanged the shared secret for its own credential {CredentialId}", clientId, issued.Data.CredentialId);
-
-            return Result<KioskCredentialIssuedDTO>.Ok(new KioskCredentialIssuedDTO(clientId, issued.Data.RawToken));
-        }
-        catch (Exception ex)
-        {
-            return Result<KioskCredentialIssuedDTO>.Fail($"Failed to exchange the shared secret: {ex.Message}");
         }
     }
 

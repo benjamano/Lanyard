@@ -39,7 +39,7 @@ else
         @if (_summary.LastAuthMethod == ClientAuthMethod.LegacySecret)
         {
             <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
-                This kiosk still signs in with the old shared secret. It switches to its own credential by itself once it updates to the latest kiosk software.
+                This kiosk last signed in with the old shared secret, which no longer works. Pair it again with Add kiosk to get it connecting.
             </FluentMessageBar>
         }
 

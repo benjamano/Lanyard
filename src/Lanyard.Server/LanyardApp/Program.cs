@@ -99,7 +99,6 @@ builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddScoped<ISecurityService, SecurityService>();
 builder.Services.AddScoped<IGdprService, GdprService>();
-builder.Services.AddSingleton<IClientSecretValidator, ClientSecretValidator>();
 builder.Services.AddSingleton<IKioskCredentialService, KioskCredentialService>();
 builder.Services.AddSingleton<IKioskMediaTokenService, KioskMediaTokenService>();
 builder.Services.AddScoped<IKioskEnrolmentService, KioskEnrolmentService>();
@@ -300,20 +299,6 @@ if (string.IsNullOrWhiteSpace(connectionString))
         "Connection string 'DefaultConnection' is not configured. Set the "
         + "ConnectionStrings__DefaultConnection environment variable (production) or run the "
         + "local docker-compose Postgres for development.");
-}
-
-// Outside Development, kiosks that haven't got their own credential yet still authenticate to the
-// kiosk endpoints and the /websocket control hub with this shared secret. While it's accepted at
-// all (Clients:LegacySecretMode isn't Reject), failing here means a misconfigured deploy never
-// reaches a serving state, instead of quietly running with the kiosk endpoints open to anyone.
-if (builder.Environment.IsDevelopment() == false
-    && KioskAuthenticationHandler.GetLegacySecretMode(builder.Configuration) != KioskLegacySecretMode.Reject
-    && string.IsNullOrWhiteSpace(builder.Configuration["Clients:SharedSecret"]))
-{
-    throw new InvalidOperationException(
-        "Clients:SharedSecret is not configured. Set the Clients__SharedSecret environment variable "
-        + "before starting the server outside Development - the client file/audio endpoints and the "
-        + "/websocket control hub must not run with kiosk authentication disabled.");
 }
 
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>

@@ -31,16 +31,11 @@ public class KioskCredentialAuthIntegrationTests
     private readonly List<string> _tempFiles = [];
 
     [TestInitialize]
-    public void Setup() => StartHost(KioskLegacySecretMode.AcceptAndExchange);
-
-    private void StartHost(KioskLegacySecretMode legacyMode)
+    public void Setup()
     {
         _baseFactory = new CustomWebApplicationFactory();
-        _factory = _baseFactory.WithWebHostBuilder(builder =>
-        {
-            builder.UseSetting("Clients:SharedSecret", SharedSecret);
-            builder.UseSetting("Clients:LegacySecretMode", legacyMode.ToString());
-        });
+        // Configured anyway, to prove the old shared secret is no longer accepted even when set.
+        _factory = _baseFactory.WithWebHostBuilder(builder => builder.UseSetting("Clients:SharedSecret", SharedSecret));
         _factory.CreateClient();
     }
 
@@ -190,33 +185,15 @@ public class KioskCredentialAuthIntegrationTests
 
         await using HubConnection connection = CreateLegacyConnection(unknown);
 
-        await AssertConnectRefusedAsync(connection, HttpStatusCode.Forbidden);
+        await AssertConnectRefusedAsync(connection, HttpStatusCode.Unauthorized);
 
         await using ApplicationDbContext ctx = await _factory.Services.GetRequiredService<ISystemDbContextFactory>().CreateDbContextAsync();
         Assert.IsFalse(await ctx.Clients.AnyAsync(x => x.Id == unknown), "The hub created a Client row for an unpaired kiosk.");
     }
 
     [TestMethod]
-    public async Task Hub_StillAcceptsAKnownKioskOnTheSharedSecret_DuringTheMigration()
+    public async Task Hub_RefusesTheSharedSecret_EvenForAKnownKiosk()
     {
-        Guid clientId = Guid.NewGuid();
-        await KioskTestSupport.RegisterKioskAsync(_factory, clientId);
-
-        await using HubConnection connection = CreateLegacyConnection(clientId);
-        await connection.StartAsync();
-
-        Client? client = await KioskTestSupport.WaitForClientAsync(_factory, clientId, x => x.MostRecentConnectionId != null);
-
-        Assert.IsNotNull(client);
-        Assert.AreEqual(ClientAuthMethod.LegacySecret, client.LastAuthMethod);
-    }
-
-    [TestMethod]
-    public async Task Hub_RefusesTheSharedSecret_OnceItIsSwitchedOff()
-    {
-        Cleanup();
-        StartHost(KioskLegacySecretMode.Reject);
-
         Guid clientId = Guid.NewGuid();
         await KioskTestSupport.RegisterKioskAsync(_factory, clientId);
 
@@ -225,24 +202,19 @@ public class KioskCredentialAuthIntegrationTests
         await AssertConnectRefusedAsync(connection, HttpStatusCode.Unauthorized);
     }
 
+
     [TestMethod]
-    public async Task Hub_IssuesAMediaToken_OnlyToACredentialedKiosk()
+    public async Task Hub_IssuesAMediaToken_ToACredentialedKiosk()
     {
         Guid credentialed = Guid.NewGuid();
         string token = await KioskTestSupport.RegisterKioskWithCredentialAsync(_factory, credentialed);
-        Guid legacy = Guid.NewGuid();
-        await KioskTestSupport.RegisterKioskAsync(_factory, legacy);
 
         await using HubConnection withCredential = KioskTestSupport.CreateCredentialConnection(_factory, token);
         await withCredential.StartAsync();
-        await using HubConnection withSecret = CreateLegacyConnection(legacy);
-        await withSecret.StartAsync();
 
         KioskMediaTokenDTO? issued = await withCredential.InvokeAsync<KioskMediaTokenDTO?>(ClientHubMethods.IssueMediaToken);
-        KioskMediaTokenDTO? refused = await withSecret.InvokeAsync<KioskMediaTokenDTO?>(ClientHubMethods.IssueMediaToken);
 
         Assert.IsFalse(string.IsNullOrEmpty(issued?.Token));
-        Assert.IsNull(refused);
     }
 
     // --- REST --------------------------------------------------------------------------------
@@ -287,11 +259,10 @@ public class KioskCredentialAuthIntegrationTests
     }
 
     [TestMethod]
-    public async Task Rest_RejectsAWrongSharedSecret()
+    public async Task Rest_RejectsTheSharedSecret_RightOrWrong()
     {
-        HttpResponseMessage response = await GetAsync("/api/files/list", legacySecret: "wrong");
-
-        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.AreEqual(HttpStatusCode.Unauthorized, (await GetAsync("/api/files/list", legacySecret: "wrong")).StatusCode);
+        Assert.AreEqual(HttpStatusCode.Unauthorized, (await GetAsync("/api/files/list", legacySecret: SharedSecret)).StatusCode);
     }
 
     [TestMethod]

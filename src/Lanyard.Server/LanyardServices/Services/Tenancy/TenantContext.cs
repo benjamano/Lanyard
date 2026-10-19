@@ -1,6 +1,5 @@
 ﻿using System.Collections.Concurrent;
 using System.Security.Claims;
-using Lanyard.Application.Services.Authentication;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.Models;
@@ -20,8 +19,7 @@ namespace Lanyard.Application.Services.Tenancy;
 //                         location claim for sessions issued before the company claim existed).
 //                         If neither resolves they see nothing: fail closed.
 //  - Kiosk            -> the kiosk's company (KioskAuthenticationHandler puts it in the same
-//                         company claim). A kiosk on the old shared secret that the server can't
-//                         identify is treated as system, as below.
+//                         company claim).
 //  - No signed-in user -> system (unfiltered). That's anonymous pages, hosted services and
 //                         startup work - the same access they had before tenancy, and none of
 //                         them act for a demo visitor.
@@ -108,7 +106,7 @@ public sealed class TenantContext(
             return;
         }
 
-        if (user?.Identity?.IsAuthenticated != true || IsUnidentifiedLegacyKiosk(user))
+        if (user?.Identity?.IsAuthenticated != true)
         {
             // Deliberately not cached. Within one request the user can appear after we're first
             // asked - cookie authentication itself creates a context before HttpContext.User is
@@ -123,14 +121,6 @@ public sealed class TenantContext(
         _companyId = ResolveCompanyId(user);
         _resolved = true;
     }
-
-    // A kiosk that presented the old shared secret without an id the server knows (an old build
-    // fetching a song, say) can't be tied to a company. It keeps the unfiltered access the shared
-    // secret always had until the secret is switched off (Clients:LegacySecretMode = Reject).
-    // A kiosk with its own credential, or a known id, carries a company claim and is filtered.
-    private static bool IsUnidentifiedLegacyKiosk(ClaimsPrincipal user) =>
-        user.Identity?.AuthenticationType == KioskAuthenticationDefaults.LegacySecretAuthenticationType
-        && user.FindFirst(LocationClaimTypes.CompanyId) is null;
 
     private ClaimsPrincipal? GetCircuitUser()
     {

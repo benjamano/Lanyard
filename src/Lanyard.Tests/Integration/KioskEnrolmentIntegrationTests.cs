@@ -110,52 +110,21 @@ public class KioskEnrolmentIntegrationTests
         Assert.AreEqual(HttpStatusCode.NotFound, (await PollAsync(started.RequestId, "someone-elses-token")).StatusCode);
     }
 
+
+
+
     [TestMethod]
-    public async Task LegacyExchange_GivesAKnownKioskACredential_Once()
+    public async Task LegacyExchange_IsGone()
     {
         Guid clientId = Guid.NewGuid();
         await KioskTestSupport.RegisterKioskAsync(_factory, clientId);
 
-        HttpResponseMessage first = await ExchangeAsync(clientId, SharedSecret);
-        HttpResponseMessage second = await ExchangeAsync(clientId, SharedSecret);
-
-        Assert.AreEqual(HttpStatusCode.OK, first.StatusCode);
-        Assert.AreEqual(HttpStatusCode.BadRequest, second.StatusCode, "The shared secret got a second credential for the same kiosk.");
-
-        KioskCredentialIssuedDTO issued = (await first.Content.ReadFromJsonAsync<Result<KioskCredentialIssuedDTO>>(JsonSerializerOptions.Web))!.Data!;
-
-        await using HubConnection connection = KioskTestSupport.CreateCredentialConnection(_factory, issued.Credential);
-        await connection.StartAsync();
-        Assert.IsNotNull(await KioskTestSupport.WaitForClientAsync(_factory, clientId, x => x.LastAuthMethod == ClientAuthMethod.Credential));
-    }
-
-    [TestMethod]
-    public async Task LegacyExchange_RefusesAnUnknownKiosk_AndAWrongSecret()
-    {
-        Assert.AreEqual(HttpStatusCode.BadRequest, (await ExchangeAsync(Guid.NewGuid(), SharedSecret)).StatusCode);
-
-        Guid known = Guid.NewGuid();
-        await KioskTestSupport.RegisterKioskAsync(_factory, known);
-        Assert.AreEqual(HttpStatusCode.Unauthorized, (await ExchangeAsync(known, "wrong-secret")).StatusCode);
-    }
-
-    [TestMethod]
-    public async Task LegacyExchange_RefusesAKioskCredential()
-    {
-        Guid clientId = Guid.NewGuid();
-        string token = await KioskTestSupport.RegisterKioskWithCredentialAsync(_factory, clientId);
-
-        using HttpRequestMessage request = new(HttpMethod.Post, "/" + KioskEnrolmentRoutes.LegacyExchange);
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-
-        Assert.AreEqual(HttpStatusCode.BadRequest, (await _factory.CreateClient().SendAsync(request)).StatusCode);
-    }
-
-    private async Task<HttpResponseMessage> ExchangeAsync(Guid clientId, string secret)
-    {
         using HttpRequestMessage request = new(HttpMethod.Post, $"/{KioskEnrolmentRoutes.LegacyExchange}?{ClientConnectionQuery.ClientId}={clientId}");
-        request.Headers.Add(ClientConnectionQuery.SecretHeader, secret);
+        request.Headers.Add(ClientConnectionQuery.SecretHeader, SharedSecret);
 
-        return await _factory.CreateClient().SendAsync(request);
+        // A 1.0.43 kiosk that still has the secret gets a failure here and falls back to pairing.
+        HttpResponseMessage response = await _factory.CreateClient().SendAsync(request);
+
+        Assert.IsFalse(response.IsSuccessStatusCode, $"The removed exchange answered {response.StatusCode}.");
     }
 }

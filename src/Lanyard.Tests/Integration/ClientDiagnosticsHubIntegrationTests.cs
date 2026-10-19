@@ -27,9 +27,9 @@ public class ClientDiagnosticsHubIntegrationTests
             .WithWebHostBuilder(builder => builder.UseSetting("Clients:SharedSecret", SharedSecret));
     }
 
-    private static HubConnection CreateKioskConnection(WebApplicationFactory<Program> factory, Guid clientId)
+    private static HubConnection CreateKioskConnection(WebApplicationFactory<Program> factory, string token)
     {
-        Uri hubUrl = new(factory.Server.BaseAddress, $"websocket?clientId={clientId}&secret={Uri.EscapeDataString(SharedSecret)}&dmxBatch=1");
+        Uri hubUrl = new(factory.Server.BaseAddress, "websocket?dmxBatch=1");
 
         return new HubConnectionBuilder()
             .WithUrl(hubUrl, options =>
@@ -37,6 +37,7 @@ public class ClientDiagnosticsHubIntegrationTests
                 // TestServer has no real sockets; long polling runs over its in-memory handler.
                 options.Transports = HttpTransportType.LongPolling;
                 options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
+                options.AccessTokenProvider = () => Task.FromResult<string?>(token);
             })
             .Build();
     }
@@ -73,8 +74,8 @@ public class ClientDiagnosticsHubIntegrationTests
     {
         await using WebApplicationFactory<Program> factory = CreateFactory();
         Guid clientId = Guid.NewGuid();
-        await KioskTestSupport.RegisterKioskAsync(factory, clientId);
-        await using HubConnection kiosk = CreateKioskConnection(factory, clientId);
+        string token = await KioskTestSupport.RegisterKioskWithCredentialAsync(factory, clientId);
+        await using HubConnection kiosk = CreateKioskConnection(factory, token);
 
         ClientLogTailRequestDTO? receivedRequest = null;
 
@@ -114,8 +115,8 @@ public class ClientDiagnosticsHubIntegrationTests
         // with nothing registered for RequestLogTail.
         await using WebApplicationFactory<Program> factory = CreateFactory();
         Guid clientId = Guid.NewGuid();
-        await KioskTestSupport.RegisterKioskAsync(factory, clientId);
-        await using HubConnection kiosk = CreateKioskConnection(factory, clientId);
+        string token = await KioskTestSupport.RegisterKioskWithCredentialAsync(factory, clientId);
+        await using HubConnection kiosk = CreateKioskConnection(factory, token);
 
         await kiosk.StartAsync();
         await WaitUntilConnectedAsync(factory, clientId);
@@ -133,8 +134,8 @@ public class ClientDiagnosticsHubIntegrationTests
         // hub's 256 KB limit; a reply over it would drop the kiosk's connection.
         await using WebApplicationFactory<Program> factory = CreateFactory();
         Guid clientId = Guid.NewGuid();
-        await KioskTestSupport.RegisterKioskAsync(factory, clientId);
-        await using HubConnection kiosk = CreateKioskConnection(factory, clientId);
+        string token = await KioskTestSupport.RegisterKioskWithCredentialAsync(factory, clientId);
+        await using HubConnection kiosk = CreateKioskConnection(factory, token);
 
         byte[] jpeg = new byte[ClientDiagnosticsService.ScreenshotMaxBytes];
         Random.Shared.NextBytes(jpeg);
@@ -184,8 +185,8 @@ public class ClientDiagnosticsHubIntegrationTests
     {
         await using WebApplicationFactory<Program> factory = CreateFactory();
         Guid clientId = Guid.NewGuid();
-        await KioskTestSupport.RegisterKioskAsync(factory, clientId);
-        await using HubConnection kiosk = CreateKioskConnection(factory, clientId);
+        string token = await KioskTestSupport.RegisterKioskWithCredentialAsync(factory, clientId);
+        await using HubConnection kiosk = CreateKioskConnection(factory, token);
 
         await kiosk.StartAsync();
         await WaitUntilConnectedAsync(factory, clientId);

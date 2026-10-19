@@ -227,7 +227,9 @@
 
     private static readonly GridSort<ClientConnectedWithCapabilitiesDTO> _sortByName = GridSort<ClientConnectedWithCapabilitiesDTO>.ByAscending(x => x.Name);
 
-    private const string SharedSecretTooltip = "Still signing in with the old shared kiosk secret. It gets its own credential automatically once it updates to the latest kiosk software.";
+    // The shared secret isn't accepted any more, so these kiosks last connected before it was
+    // switched off and can't connect again until they're paired.
+    private const string SharedSecretTooltip = "Last signed in with the old shared kiosk secret, which no longer works. Pair it again with Add kiosk.";
 
     // Update ring and target per client. Empty (no badges) if releases couldn't be loaded, which
     // must not stop the rest of the page working.
