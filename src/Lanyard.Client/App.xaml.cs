@@ -1,3 +1,4 @@
+using Lanyard.Client.Enrolment;
 using Lanyard.Client.Health;
 using Lanyard.Client.PacketSniffing;
 using Lanyard.Client.ProjectionPrograms.Offline;
@@ -47,12 +48,18 @@ public partial class App : Application
 
             Console.WriteLine("Starting...");
 
-            // The update check asks the server which version this kiosk should run, so it needs
-            // the server URL, shared secret and client ID loaded first.
             VerifyEnvironmentVariables.Check();
 
             Guid clientId = ClientIdentity.LoadOrCreateClientId();
             ClientIdentity.ApplyToEnvironment(clientId);
+
+            // Before anything that talks to the server, so the reset options (including "pair
+            // again") work even when the kiosk can't get further.
+            await StartupControls.ShowIfInterruptedAsync();
+
+            // Everything below talks to the server as this kiosk, so it needs its own credential
+            // first. A new kiosk waits here, showing its pairing code, until an Admin approves it.
+            await KioskEnrolmentStartup.EnsureCredentialAsync(clientId);
 
             if (!isDevelopment)
             {
@@ -63,8 +70,6 @@ public partial class App : Application
 
             ServiceProvider provider = ClientServiceBootstrapper.BuildServiceProvider();
             List<Action<HubConnection>> registrations = ClientServiceBootstrapper.BuildHubRegistrations(provider);
-
-            await StartupControls.ShowIfInterruptedAsync();
 
             ISignalRClient signalRClient = provider.GetRequiredService<ISignalRClient>();
             ILaserGameStatePublisher laserGameStatePublisher = provider.GetRequiredService<ILaserGameStatePublisher>();

@@ -32,6 +32,10 @@ namespace Lanyard.Infrastructure.Models
         // dismissed or answered), and whether they've asked never to see it again.
         public DateTime? FeedbackPromptLastUtc { get; set; }
         public bool FeedbackPromptOptOut { get; set; }
+        // Set the first time the user finishes or skips the course player walkthrough. Until then
+        // it starts by itself on every course they open, so a new starter sees it on their very
+        // first course whichever device they use.
+        public DateTime? CourseWalkthroughCompletedDate { get; set; }
 
         public string GetName()
         {

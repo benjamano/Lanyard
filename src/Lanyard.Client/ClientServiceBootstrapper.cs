@@ -26,7 +26,9 @@ public static class ClientServiceBootstrapper
         // Created up front because the logging provider below and the diagnostics controller
         // must share the same instance.
         LogLineBuffer logLineBuffer = new LogLineBuffer();
-        string?[] knownSecrets = [Environment.GetEnvironmentVariable("LANYARD_CLIENT_SHARED_SECRET")];
+        // LogRedactor also strips any kiosk credential and media token by its shape, so a rotated
+        // credential is covered too.
+        string?[] knownSecrets = [Environment.GetEnvironmentVariable("LANYARD_CLIENT_SHARED_SECRET"), Lanyard.Client.Security.KioskCredentials.Current];
 
         services.AddLogging(config =>
         {
@@ -90,6 +92,7 @@ public static class ClientServiceBootstrapper
         services.AddSingleton<IRemoteRestartService, RemoteRestartService>();
         services.AddSingleton<RemoteRestartController>();
         services.AddSingleton<UpdateController>();
+        services.AddSingleton<CredentialController>();
         services.AddSingleton<IAudioDeviceService, AudioDeviceService>();
         services.AddSingleton<AudioSettingsController>();
         services.AddSingleton(logLineBuffer);
@@ -118,6 +121,7 @@ public static class ClientServiceBootstrapper
             provider.GetRequiredService<RestartScheduleController>().Register,
             provider.GetRequiredService<RemoteRestartController>().Register,
             provider.GetRequiredService<UpdateController>().Register,
+            provider.GetRequiredService<CredentialController>().Register,
             provider.GetRequiredService<AudioSettingsController>().Register,
             provider.GetRequiredService<ClientDiagnosticsController>().Register,
             provider.GetRequiredService<KioskSelfTestController>().Register

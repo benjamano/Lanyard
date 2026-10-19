@@ -11,6 +11,8 @@ using Lanyard.Application.Services.MusicScheduling;
 using Lanyard.Application.Services.Chat;
 using Lanyard.Application.Services.ApplicationRoles;
 using Lanyard.Application.Services.Authentication;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.SignalR;
 using Lanyard.Application.Services.Gdpr;
 using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Training;
@@ -98,7 +100,11 @@ builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddScoped<ISecurityService, SecurityService>();
 builder.Services.AddScoped<IGdprService, GdprService>();
-builder.Services.AddSingleton<IClientSecretValidator, ClientSecretValidator>();
+builder.Services.AddSingleton<IKioskCredentialService, KioskCredentialService>();
+builder.Services.AddSingleton<IKioskMediaTokenService, KioskMediaTokenService>();
+builder.Services.AddScoped<IKioskEnrolmentService, KioskEnrolmentService>();
+builder.Services.AddScoped<IKioskSecurityService, KioskSecurityService>();
+builder.Services.AddSingleton<KioskConnectionRegistry>();
 builder.Services.AddScoped<ICurrentUserAccessor, CurrentUserAccessor>();
 builder.Services.AddScoped<IFileService, FileService>();
 
@@ -264,7 +270,13 @@ builder.Services.AddScoped<IAnnouncementService, AnnouncementService>();
 // cached songs overflow the 32 KB default and the hub drops the connection. Raised for the
 // kiosk hub only: global HubOptions would also apply to every Blazor circuit.
 builder.Services.AddSignalR()
-    .AddHubOptions<SignalRControlHub>(options => options.MaximumReceiveMessageSize = 256 * 1024);
+    .AddHubOptions<SignalRControlHub>(options =>
+    {
+        options.MaximumReceiveMessageSize = 256 * 1024;
+
+        // Gives every hub call the kiosk's company, so the tenant filter applies to it.
+        options.AddFilter<KioskHubFilter>();
+    });
 
 builder.Services.AddScoped<DragStateService>();
 
@@ -289,18 +301,6 @@ if (string.IsNullOrWhiteSpace(connectionString))
         "Connection string 'DefaultConnection' is not configured. Set the "
         + "ConnectionStrings__DefaultConnection environment variable (production) or run the "
         + "local docker-compose Postgres for development.");
-}
-
-// Outside Development, kiosk clients authenticate to the file/audio endpoints and the
-// /websocket control hub with this shared secret and nothing else - there is no user login for
-// them to fall back to. Failing here means a misconfigured deploy never reaches a serving state,
-// instead of quietly running with every kiosk endpoint open to anyone who can reach the host.
-if (builder.Environment.IsDevelopment() == false && string.IsNullOrWhiteSpace(builder.Configuration["Clients:SharedSecret"]))
-{
-    throw new InvalidOperationException(
-        "Clients:SharedSecret is not configured. Set the Clients__SharedSecret environment variable "
-        + "before starting the server outside Development - the client file/audio endpoints and the "
-        + "/websocket control hub must not run with kiosk authentication disabled.");
 }
 
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
@@ -407,7 +407,19 @@ builder.Services.Configure<SecurityStampValidatorOptions>(options =>
     };
 });
 
-builder.Services.AddAuthorization();
+// Kiosks have no user login: they authenticate with their own credential (or, until it's switched
+// off, the old shared secret). See KioskAuthenticationHandler. Never the default scheme, so a
+// kiosk can't satisfy a plain [Authorize] meant for staff.
+builder.Services.AddAuthentication()
+    .AddScheme<AuthenticationSchemeOptions, KioskAuthenticationHandler>(KioskAuthenticationDefaults.Scheme, _ => { });
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(KioskAuthenticationDefaults.HubPolicy, policy => policy
+        .AddAuthenticationSchemes(KioskAuthenticationDefaults.Scheme)
+        .RequireAuthenticatedUser()
+        .RequireClaim(KioskClaimTypes.ClientId));
+});
 
 // Configure cookie to persist login across sessions. Only applies when "Keep me signed in" is
 // ticked - otherwise it's a session cookie the browser drops on close (which on a phone is
@@ -487,6 +499,20 @@ builder.Services.AddRateLimiter(options =>
         return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = 6,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        });
+    });
+
+    // A kiosk asks for a pairing code once, and again every 15 minutes while nobody approves it.
+    // Several kiosks can share a venue's IP, so this allows a room full of them being set up at once.
+    options.AddPolicy(Lanyard.API.Controllers.KioskEnrolmentController.RateLimitPolicy, httpContext =>
+    {
+        string ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 20,
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0
         });
@@ -586,37 +612,10 @@ app.UseAuthorization();
 
 app.UseAntiforgery();
 
-// Both IClientSecretValidator and ILoggerFactory are app-wide singletons, so resolving them once
-// here - rather than via context.RequestServices inside the request delegate below - avoids a
-// per-request DI resolve on every SignalR connection attempt without changing behavior.
-IClientSecretValidator websocketGateValidator = app.Services.GetRequiredService<IClientSecretValidator>();
-ILogger websocketGateLogger = app.Services
-    .GetRequiredService<ILoggerFactory>()
-    .CreateLogger("Lanyard.Application.Services.Authentication.ClientRequestAuthorization");
-
-app.Use(async (context, next) =>
-{
-    if (context.Request.Path.StartsWithSegments("/websocket"))
-    {
-        string? providedSecret = context.Request.Query[ClientConnectionQuery.Secret].ToString();
-        string remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
-
-        // Delegates to the same decision point the client REST endpoints use
-        // (ClientRequestAuthorization.EvaluateAndLog / IClientSecretValidator.Authorize) so the
-        // unconfigured-secret case can never be decided differently here than there.
-        if (!ClientRequestAuthorization.EvaluateAndLog(websocketGateValidator, providedSecret, websocketGateLogger, remoteIp, context.Request.Path.ToString()))
-        {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            await context.Response.WriteAsync("Invalid or missing client shared secret.");
-            return;
-        }
-    }
-
-    await next();
-});
-
-// Map SignalR hub for music control
-app.MapHub<SignalRControlHub>("/websocket");
+// The kiosk control hub. Only kiosks the server knows get in (see KioskAuthenticationHandler);
+// an unknown kiosk is turned away at negotiate rather than created.
+app.MapHub<SignalRControlHub>("/websocket")
+    .RequireAuthorization(KioskAuthenticationDefaults.HubPolicy);
 
 // The "ip-fixed" limiter (25/min per IP) is a brute-force guard for the auth endpoints and is
 // applied on AuthController itself. It must not cover the file/audio/logo/certificate

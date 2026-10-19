@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Security.Claims;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
@@ -18,9 +18,11 @@ namespace Lanyard.Application.Services.Tenancy;
 //  - Signed-in user    -> their session's company (the company claim, or the company of the
 //                         location claim for sessions issued before the company claim existed).
 //                         If neither resolves they see nothing: fail closed.
-//  - No signed-in user -> system (unfiltered). That's kiosks, anonymous pages, SignalR from
-//                         kiosk clients, hosted services and startup work - the same access they
-//                         had before tenancy, and none of them act for a demo visitor.
+//  - Kiosk            -> the kiosk's company (KioskAuthenticationHandler puts it in the same
+//                         company claim).
+//  - No signed-in user -> system (unfiltered). That's anonymous pages, hosted services and
+//                         startup work - the same access they had before tenancy, and none of
+//                         them act for a demo visitor.
 public interface ITenantContext : ITenantProvider
 {
     // Lanyard operators, who may manage every company (see LanyardRoles.PlatformAdmin). Their data
@@ -91,7 +93,7 @@ public sealed class TenantContext(
 
         try
         {
-            user = GetCircuitUser() ?? httpContextAccessor.HttpContext?.User;
+            user = GetCircuitUser() ?? services.GetService<HubCallerUser>()?.User ?? httpContextAccessor.HttpContext?.User;
         }
         catch (ObjectDisposedException)
         {

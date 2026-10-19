@@ -24,23 +24,22 @@ namespace Lanyard.Tests.Integration;
 [TestClass]
 public class KioskSelfTestHubIntegrationTests
 {
-    private const string SharedSecret = "integration-test-shared-secret";
-
     private static WebApplicationFactory<Program> CreateFactory()
     {
         return new CustomWebApplicationFactory()
-            .WithWebHostBuilder(builder => builder.UseSetting("Clients:SharedSecret", SharedSecret));
+            .WithWebHostBuilder(_ => { });
     }
 
-    private static HubConnection CreateKioskConnection(WebApplicationFactory<Program> factory, Guid clientId)
+    private static HubConnection CreateKioskConnection(WebApplicationFactory<Program> factory, string token)
     {
-        Uri hubUrl = new(factory.Server.BaseAddress, $"websocket?clientId={clientId}&secret={Uri.EscapeDataString(SharedSecret)}&dmxBatch=1");
+        Uri hubUrl = new(factory.Server.BaseAddress, "websocket?dmxBatch=1");
 
         return new HubConnectionBuilder()
             .WithUrl(hubUrl, options =>
             {
                 options.Transports = HttpTransportType.LongPolling;
                 options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
+                options.AccessTokenProvider = () => Task.FromResult<string?>(token);
             })
             .Build();
     }
@@ -90,7 +89,9 @@ public class KioskSelfTestHubIntegrationTests
     {
         await using WebApplicationFactory<Program> factory = CreateFactory();
         Guid clientId = Guid.NewGuid();
-        await using HubConnection kiosk = CreateKioskConnection(factory, clientId);
+        // Registered with its own credential first: the hub only accepts kiosks that have one.
+        string token = await KioskTestSupport.RegisterKioskWithCredentialAsync(factory, clientId);
+        await using HubConnection kiosk = CreateKioskConnection(factory, token);
 
         KioskSelfTestRequestDTO? received = null;
 
@@ -140,7 +141,9 @@ public class KioskSelfTestHubIntegrationTests
         // A kiosk on a client from before the self-test: connected, nothing registered.
         await using WebApplicationFactory<Program> factory = CreateFactory();
         Guid clientId = Guid.NewGuid();
-        await using HubConnection kiosk = CreateKioskConnection(factory, clientId);
+        // Registered with its own credential first: the hub only accepts kiosks that have one.
+        string token = await KioskTestSupport.RegisterKioskWithCredentialAsync(factory, clientId);
+        await using HubConnection kiosk = CreateKioskConnection(factory, token);
 
         await kiosk.StartAsync();
         Client client = await WaitUntilConnectedAsync(factory, clientId);
@@ -159,7 +162,9 @@ public class KioskSelfTestHubIntegrationTests
         // which read as "kiosk too old" until the service checked its own token.
         await using WebApplicationFactory<Program> factory = CreateFactory();
         Guid clientId = Guid.NewGuid();
-        await using HubConnection kiosk = CreateKioskConnection(factory, clientId);
+        // Registered with its own credential first: the hub only accepts kiosks that have one.
+        string token = await KioskTestSupport.RegisterKioskWithCredentialAsync(factory, clientId);
+        await using HubConnection kiosk = CreateKioskConnection(factory, token);
 
         kiosk.On<KioskSelfTestRequestDTO, KioskSelfTestResultDTO>(ClientHubMethods.RunSelfTest, async request =>
         {

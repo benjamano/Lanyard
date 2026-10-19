@@ -64,6 +64,9 @@
             <FluentTab Header="Updates" IconStart="@(new Icons.Regular.Size16.ArrowSync())" DeferredLoading="true">
                 <ClientUpdateSettings ClientId="@ClientId" />
             </FluentTab>
+            <FluentTab Header="Security" IconStart="@(new Icons.Regular.Size16.Shield())" DeferredLoading="true">
+                <ClientSecuritySettings ClientId="@ClientId" ClientName="@_clientName" />
+            </FluentTab>
         </FluentTabs>
     </ChildContent>
     <ActionTemplate>
