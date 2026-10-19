@@ -1,0 +1,23 @@
+@page "/help/users"
+@attribute [Authorize(Roles = "Admin,Manager")]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.Users
+
+<HelpPage AreaKey="@HelpRegistry.Users">
+    <FluentTab Id="help-overview" Header="Users" IconStart="@(new Icons.Regular.Size16.People())">
+        <UsersOverviewHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-profile" Header="A Person's Profile" IconStart="@(new Icons.Regular.Size16.Person())" DeferredLoading="true">
+        <UserProfileHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-roles" Header="Roles &amp; Permissions" IconStart="@(new Icons.Regular.Size16.Key())" DeferredLoading="true">
+        <RolesHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-locations" Header="Companies &amp; Locations" IconStart="@(new Icons.Regular.Size16.Location())" DeferredLoading="true">
+        <LocationsHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-security" Header="Sign-in &amp; Security" IconStart="@(new Icons.Regular.Size16.ShieldLock())" DeferredLoading="true">
+        <SecurityHelpTab />
+    </FluentTab>
+</HelpPage>

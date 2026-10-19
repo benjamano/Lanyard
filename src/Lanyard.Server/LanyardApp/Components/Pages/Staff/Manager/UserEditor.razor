@@ -40,10 +40,13 @@ else if (user is null)
 else
 {
     <div class="user-editor-page">
-    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowLeft())"
-                  Class="mb-2" OnClick="@(() => _navigationManager.NavigateTo("/manage/users"))">
-        Back to Users
-    </FluentButton>
+    <div class="d-flex justify-content-between flex-wrap gap-2 mb-2">
+        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowLeft())"
+                      OnClick="@(() => _navigationManager.NavigateTo("/manage/users"))">
+            Back to Users
+        </FluentButton>
+        <HelpButton AreaKey="@HelpRegistry.Users" Topic="profile" />
+    </div>
 
     <FluentCard Height="auto" Class="user-editor-card">
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="2" Class="mb-3">

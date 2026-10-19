@@ -14,7 +14,10 @@
 
 <div class="account-manage-page">
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="20px">
-        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size800" Color="Color.Default">Account Management</FluentText>
+        <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center" Wrap="true">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size800" Color="Color.Default">Account Management</FluentText>
+            <HelpButton AreaKey="@HelpRegistry.Account" />
+        </FluentStack>
 
         <FluentCard Width="100%">
             <div class="account-manage-section">

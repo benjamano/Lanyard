@@ -750,7 +750,9 @@
       "Help buttons on each area's pages open the guide for what you're looking at.",
       "New My Training guide for staff: taking a course, the quiz and retries, and downloading certificates.",
       "New My Shifts guide for staff: swapping and dropping shifts, picking up open shifts, time off, availability and clocking in with a PIN or your phone.",
-      "New Rota guide for managers: building and publishing the rota, staff suggestions, shift requests, time off, timesheets, payroll export and setting up positions, contracts and clock-in terminals."
+      "New Rota guide for managers: building and publishing the rota, staff suggestions, shift requests, time off, timesheets, payroll export and setting up positions, contracts and clock-in terminals.",
+      "New guides for Users & Roles, Compliance, Onboarding & Staff Documents and Your Account (notifications, Face ID or fingerprint sign-in and two-factor authentication), each with a Help button on its pages.",
+      "Training help now says correctly that staff are emailed when a course is assigned and when it's due within 7 days."
     ]
   }
 ]

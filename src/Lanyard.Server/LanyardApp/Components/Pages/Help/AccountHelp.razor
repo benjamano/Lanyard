@@ -1,0 +1,17 @@
+@page "/help/account"
+@attribute [Authorize]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.Account
+
+<HelpPage AreaKey="@HelpRegistry.Account">
+    <FluentTab Id="help-details" Header="Your Details" IconStart="@(new Icons.Regular.Size16.Person())">
+        <AccountDetailsHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-notifications" Header="Notifications" IconStart="@(new Icons.Regular.Size16.Alert())" DeferredLoading="true">
+        <NotificationsHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-sign-in" Header="Signing In Securely" IconStart="@(new Icons.Regular.Size16.ShieldLock())" DeferredLoading="true">
+        <SignInHelpTab />
+    </FluentTab>
+</HelpPage>

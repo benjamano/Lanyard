@@ -31,6 +31,10 @@
     flex-wrap: wrap;
 }
 
+.compliance-help {
+    margin-left: auto;
+}
+
 /* One column on a phone; side by side once there's room for three readable columns. */
 .compliance-sections {
     display: grid;
