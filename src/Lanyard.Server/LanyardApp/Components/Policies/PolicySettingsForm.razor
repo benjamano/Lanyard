@@ -1,0 +1,92 @@
+@using Lanyard.Infrastructure.DTO.Policies
+
+@* The fields of a policy's settings. Used by the New Policy dialog and the Settings tab, which
+   each own the Save button and call IPolicyService themselves. *@
+
+<div class="policy-settings">
+    <FluentTextInput @bind-Value="Model.Name" @bind-Value:after="NameChangedAsync" Immediate="true" Label="Name" Required="true" Width="100%" Disabled="@Disabled"
+                     Placeholder="e.g. Fire safety policy" Maxlength="200" />
+
+    <FluentTextArea @bind-Value="Model.Description" Label="Description (optional)" Disabled="@Disabled"
+                    Placeholder="What it covers, or who it's for" Rows="3" Style="width: 100%;" />
+
+    @if (LocationOptions.Count > 1)
+    {
+        <FluentSelect TOption="LocationChoice" TValue="string" Items="@LocationOptions" OptionText="@(x => x.Name)"
+                      OptionValue="@(x => x.Value)" @bind-Value="Model.LocationValue" Disabled="@Disabled"
+                      Label="Who it's for" Style="width: 100%;" />
+    }
+    else if (LocationOptions.Count == 1)
+    {
+        <div class="policy-settings-fixed">
+            <span class="policy-settings-label">Who it's for</span>
+            <span>Everyone at @LocationOptions[0].Name</span>
+        </div>
+    }
+
+    @if (Options.Positions.Count > 0)
+    {
+        <fieldset class="policy-settings-positions" disabled="@Disabled">
+            <legend class="policy-settings-label">Only these positions (optional)</legend>
+            <p class="policy-settings-hint">Leave them all unticked and everyone @(Model.LocationValue == PolicySettingsModel.CompanyWideValue ? "in the company" : "at the location") is asked to read it.</p>
+            <div class="policy-settings-position-list">
+                @foreach (PolicyPositionOption position in Options.Positions)
+                {
+                    <FluentCheckbox Value="@Model.PositionIds.Contains(position.Id)" Disabled="@Disabled"
+                                    ValueChanged="@((bool on) => TogglePosition(position.Id, on))" Label="@position.Name" />
+                }
+            </div>
+        </fieldset>
+    }
+
+    <FluentNumberInput TValue="int" @bind-Value="Model.AcknowledgeWithinDays" Disabled="@Disabled"
+                       Min="Policy.MinAcknowledgeWithinDays" Max="Policy.MaxAcknowledgeWithinDays"
+                       Label="Days staff have to acknowledge it" Style="width: 100%;" />
+
+    <FluentSwitch @bind-Value="Model.ReacknowledgeOnSchedule" Disabled="@Disabled"
+                  Label="Ask everyone to read it again on a schedule" />
+
+    @if (Model.ReacknowledgeOnSchedule)
+    {
+        <FluentNumberInput TValue="int" @bind-Value="Model.ReacknowledgeEveryMonths" Disabled="@Disabled"
+                           Min="Policy.MinReacknowledgeEveryMonths" Max="Policy.MaxReacknowledgeEveryMonths"
+                           Label="Every how many months" Style="width: 100%;" />
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required PolicySettingsModel Model { get; set; }
+
+    [Parameter, EditorRequired]
+    public required PolicyEditorOptions Options { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    // Raised as the name is typed, so the parent's Save/Create button can enable itself.
+    [Parameter]
+    public EventCallback OnChange { get; set; }
+
+    private record LocationChoice(string Value, string Name);
+
+    private List<LocationChoice> LocationOptions =>
+    [
+        .. Options.CanChooseCompanyWide ? [new LocationChoice(PolicySettingsModel.CompanyWideValue, "Whole company")] : Array.Empty<LocationChoice>(),
+        .. Options.Locations.Select(x => new LocationChoice(x.Id.ToString(), x.Name))
+    ];
+
+    private Task NameChangedAsync() => OnChange.InvokeAsync();
+
+    private void TogglePosition(Guid positionId, bool on)
+    {
+        if (on)
+        {
+            Model.PositionIds.Add(positionId);
+        }
+        else
+        {
+            Model.PositionIds.Remove(positionId);
+        }
+    }
+}

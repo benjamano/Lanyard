@@ -1,0 +1,130 @@
+.policies-page {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 8px;
+    min-width: 0;
+}
+
+.policies-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.policies-intro {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    flex: 1 1 320px;
+}
+
+.policies-title {
+    margin: 0;
+    font-size: var(--fontSizeBase600);
+    line-height: var(--lineHeightBase600);
+    font-weight: var(--fontWeightSemibold);
+}
+
+.policies-subtitle {
+    margin: 0;
+    color: var(--colorNeutralForeground3);
+}
+
+.policies-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 40px 16px;
+    text-align: center;
+    border: 1px dashed var(--colorNeutralStroke1);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+}
+
+.policies-empty h2 {
+    margin: 0;
+    font-size: var(--fontSizeBase400);
+    font-weight: var(--fontWeightSemibold);
+}
+
+.policies-empty p {
+    margin: 0;
+    max-width: 420px;
+    color: var(--colorNeutralForeground3);
+}
+
+/* One card per row on a phone, then as many ~320px cards as fit. */
+.policies-grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+    gap: 12px;
+}
+
+.policy-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    height: 100%;
+    box-sizing: border-box;
+    padding: 14px 16px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+    color: inherit;
+    text-decoration: none;
+    min-width: 0;
+}
+
+.policy-card:hover {
+    background: var(--colorNeutralBackground1Hover);
+    border-color: var(--colorNeutralStroke1Hover);
+}
+
+.policy-card:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+    outline-offset: 2px;
+}
+
+.policy-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.policy-card-name {
+    font-size: var(--fontSizeBase400);
+    font-weight: var(--fontWeightSemibold);
+    overflow-wrap: anywhere;
+}
+
+.policy-card-meta {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+    overflow-wrap: anywhere;
+}
+
+.policy-card-draft {
+    color: var(--colorPaletteMarigoldForeground2, var(--colorNeutralForeground2));
+    font-weight: var(--fontWeightSemibold);
+}
+
+.policy-card-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.policy-card-progress-text {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground2);
+}

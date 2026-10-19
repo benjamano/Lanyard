@@ -13,6 +13,9 @@ public interface IPolicyService
 {
     Task<Result<List<PolicySummary>>> GetPoliciesAsync(LocationScope scope, CancellationToken cancellationToken = default);
 
+    // The locations and positions the create/settings form can offer this person.
+    Task<Result<PolicyEditorOptions>> GetEditorOptionsAsync(LocationScope scope, CancellationToken cancellationToken = default);
+
     Task<Result<PolicyDetail>> GetPolicyAsync(Guid policyId, LocationScope scope, CancellationToken cancellationToken = default);
 
     // Creates (request.Id null) or edits a policy's settings. Returns the policy id.

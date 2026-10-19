@@ -1,0 +1,146 @@
+@page "/manage/policies"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.Policies)]
+
+@using Lanyard.App.Components.Policies
+@using Lanyard.Application.Services.Policies
+@using Lanyard.Infrastructure.DTO.Policies
+
+@inject IPolicyService _policyService
+
+<PageTitle>Policies</PageTitle>
+
+<div class="policies-page">
+    <div class="policies-head">
+        <div class="policies-intro">
+            <h1 class="policies-title">Policies</h1>
+            <p class="policies-subtitle">Documents staff must read and acknowledge, like a fire policy or a health and safety handbook.</p>
+        </div>
+
+        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.DocumentAdd())"
+                      Disabled="@(_scope is null || _options is null)" OnClick="CreateAsync">
+            New policy
+        </FluentButton>
+    </div>
+
+    @if (_error is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@_error</FluentMessageBar>
+    }
+    else if (_policies is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" HorizontalGap="8px">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else if (_policies.Count == 0)
+    {
+        <div class="policies-empty">
+            <FluentIcon Value="@(new Icons.Regular.Size48.DocumentText())" Color="Color.Neutral" />
+            <h2>No policies yet</h2>
+            <p>Add one, upload the PDF, and everyone it applies to will be asked to read and acknowledge it.</p>
+        </div>
+    }
+    else
+    {
+        <ul class="policies-grid">
+            @foreach (PolicySummary policy in _policies)
+            {
+                <li>
+                    <a class="policy-card" href="@($"/manage/policies/{policy.Id}")">
+                        <span class="policy-card-head">
+                            <span class="policy-card-name">@policy.Name</span>
+                            @if (policy.OverdueCount > 0)
+                            {
+                                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Danger">@policy.OverdueCount overdue</FluentBadge>
+                            }
+                        </span>
+
+                        <span class="policy-card-meta">@PolicyDisplay.AudienceText(policy.ScopeName, policy.PositionNames)</span>
+
+                        @if (policy.CurrentVersionNumber == 0)
+                        {
+                            <span class="policy-card-meta policy-card-draft">Not published yet - open it to upload the PDF</span>
+                        }
+                        else
+                        {
+                            <span class="policy-card-meta">
+                                Version @policy.CurrentVersionNumber@(policy.CurrentVersionPublishedDate is DateTime published ? $" · published {PolicyDisplay.Date(published)}" : null)
+                            </span>
+
+                            <span class="policy-card-progress">
+                                <FluentProgressBar Min="0" Max="@Math.Max(1, policy.AudienceCount)" Value="@policy.UpToDateCount" Width="100%" />
+                                <span class="policy-card-progress-text">
+                                    @policy.UpToDateCount of @policy.AudienceCount up to date@(policy.OutstandingCount > 0 ? $" · {policy.OutstandingCount} to read" : null)
+                                </span>
+                            </span>
+                        }
+                    </a>
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    private List<PolicySummary>? _policies;
+    private PolicyEditorOptions? _options;
+    private LocationScope? _scope;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (!scope.IsSuccess || scope.Data is null)
+        {
+            _error = scope.Error ?? "We couldn't work out which location you're working in. Please sign in again.";
+            return;
+        }
+
+        _scope = scope.Data;
+
+        Result<PolicyEditorOptions> options = await _policyService.GetEditorOptionsAsync(_scope);
+        _options = options.Data;
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        Result<List<PolicySummary>> result = await _policyService.GetPoliciesAsync(_scope!);
+
+        if (result.IsSuccess)
+        {
+            _policies = result.Data;
+            _error = null;
+        }
+        else
+        {
+            _error = result.Error ?? "Policies couldn't be loaded.";
+        }
+    }
+
+    private async Task CreateAsync()
+    {
+        if (_scope is null || _options is null)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<CreatePolicyDialog>(options =>
+        {
+            options.Width = "560px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(CreatePolicyDialog.Scope), _scope);
+            options.Parameters.Add(nameof(CreatePolicyDialog.Options), _options);
+        });
+
+        if (result.Value is Guid policyId)
+        {
+            // Straight on to the policy, where the first PDF is published.
+            _navigationManager.NavigateTo($"/manage/policies/{policyId}?publish=1");
+        }
+    }
+}

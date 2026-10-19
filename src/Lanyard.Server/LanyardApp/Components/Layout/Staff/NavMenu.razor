@@ -108,6 +108,14 @@
                     </FluentNavItem>
                 }
 
+                @if (Has(CompanyFeature.Policies))
+                {
+                    <FluentNavItem Href="/manage/policies" IconRest="@(new Icons.Regular.Size20.DocumentCheckmark())"
+                                   IconActive="@(new Icons.Filled.Size20.DocumentCheckmark())">
+                        Policies
+                    </FluentNavItem>
+                }
+
                 <FluentNavItem Href="/manage/music-schedule" IconRest="@(new Icons.Regular.Size20.CalendarClock())"
                                IconActive="@(new Icons.Filled.Size20.CalendarClock())">
                     Music Schedule

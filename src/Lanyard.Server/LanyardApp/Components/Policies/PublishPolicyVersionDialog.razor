@@ -1,0 +1,163 @@
+@using Lanyard.Application.Services.Policies
+@using Lanyard.Infrastructure.DTO.Policies
+@using Microsoft.AspNetCore.Http
+
+@inject IPolicyService _policyService
+
+@* Upload a PDF as the policy's next version. The file is staged by FluentInputFile first, so the
+   manager can still change the summary or the re-read switch before anything is published. *@
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.ArrowUpload())" />
+            <FluentText As="@TextTag.H3">Publish version @NextVersion</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="publish-policy">
+            <FluentText Style="color: var(--colorNeutralForeground3);">@PolicyName</FluentText>
+
+            <div class="publish-policy-drop">
+                <FluentInputFile Id="policy-pdf-upload" Mode="InputFileMode.SaveToTemporaryFolder" Multiple="false"
+                                 MaximumFileCount="1" MaximumFileSize="@PolicyService.MaxFileBytes" Accept=".pdf,application/pdf"
+                                 @bind-ProgressPercent="@uploadProgressPercent" OnCompleted="@OnFileStagedAsync">
+                    <ChildContent>
+                        <label for="policy-pdf-upload">
+                            @if (stagedFile is null)
+                            {
+                                <span>Choose the PDF, or drag it here (up to @(PolicyService.MaxFileBytes / (1024 * 1024)) MB)</span>
+                            }
+                            else
+                            {
+                                <span><strong>@stagedName</strong> - choose again to replace it</span>
+                            }
+                        </label>
+                    </ChildContent>
+                </FluentInputFile>
+            </div>
+
+            <FluentTextArea @bind-Value="changeSummary" Label="What's changed (optional)" Rows="3" Style="width: 100%;"
+                            Placeholder="@(NextVersion == 1 ? "e.g. First issue" : "e.g. New assembly point by the car park")" Disabled="@isPublishing" />
+
+            @if (NextVersion > 1)
+            {
+                <FluentSwitch @bind-Value="requiresReacknowledgement" Disabled="@isPublishing"
+                              Label="Ask everyone to acknowledge it again" />
+                <FluentText Size="TextSize.Size200" Style="color: var(--colorNeutralForeground3);">
+                    @if (requiresReacknowledgement)
+                    {
+                        @($"{AudienceText} will need to read and acknowledge version {NextVersion}.")
+                    }
+                    else
+                    {
+                        @("For small fixes such as a typo: existing acknowledgements keep counting.")
+                    }
+                </FluentText>
+            }
+            else
+            {
+                <FluentText Size="TextSize.Size200" Style="color: var(--colorNeutralForeground3);">
+                    @AudienceText will be asked to read and acknowledge it.
+                </FluentText>
+            }
+
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6" Wrap="true">
+                <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@PublishAsync" Disabled="@(isPublishing || stagedFile is null)"
+                              IconStart="@(new Icons.Regular.Size20.Send())">
+                    @(isPublishing ? "Publishing..." : "Publish")
+                </FluentButton>
+                <FluentButton Appearance="ButtonAppearance.Default" OnClick="@(() => Dialog.CancelAsync())" Disabled="@isPublishing">
+                    Cancel
+                </FluentButton>
+            </FluentStack>
+        </div>
+    </ChildContent>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required Guid PolicyId { get; set; }
+
+    [Parameter, EditorRequired]
+    public required string PolicyName { get; set; }
+
+    [Parameter, EditorRequired]
+    public required int NextVersion { get; set; }
+
+    // "Everyone at Ipswich", "34 people" - who'll be asked, for the confirmation line.
+    [Parameter, EditorRequired]
+    public required string AudienceText { get; set; }
+
+    [Parameter, EditorRequired]
+    public required LocationScope Scope { get; set; }
+
+    private FileInfo? stagedFile;
+    private string? stagedName;
+    private string? stagedContentType;
+    private string? changeSummary;
+    private bool requiresReacknowledgement = true;
+    private int uploadProgressPercent;
+    private bool isPublishing;
+
+    private Task OnFileStagedAsync(IEnumerable<FluentInputFileEventArgs> files)
+    {
+        FluentInputFileEventArgs? file = files.FirstOrDefault();
+
+        if (file is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (file.ErrorMessage is not null)
+        {
+            _toastService.ShowError($"{file.Name} couldn't be uploaded: {file.ErrorMessage}");
+            return Task.CompletedTask;
+        }
+
+        stagedFile = file.LocalFile;
+        stagedName = file.Name;
+        stagedContentType = file.ContentType;
+        uploadProgressPercent = 0;
+
+        return Task.CompletedTask;
+    }
+
+    private async Task PublishAsync()
+    {
+        if (stagedFile is null || stagedName is null)
+        {
+            return;
+        }
+
+        isPublishing = true;
+
+        Result<string> userId = await _securityService.GetCurrentUserIdAsync();
+        Result<PolicyVersionInfo> result;
+
+        await using (FileStream stream = stagedFile.OpenRead())
+        {
+            IFormFile formFile = new FormFile(stream, 0, stream.Length, "file", stagedName)
+            {
+                Headers = new HeaderDictionary(),
+                ContentType = stagedContentType ?? "application/pdf"
+            };
+
+            result = await _policyService.PublishVersionAsync(PolicyId, formFile, changeSummary, requiresReacknowledgement, Scope, userId.Data ?? string.Empty);
+        }
+
+        isPublishing = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "The policy couldn't be published.");
+            return;
+        }
+
+        _toastService.ShowSuccess($"Version {result.Data!.VersionNumber} published.");
+        await Dialog.CloseAsync(true);
+    }
+}

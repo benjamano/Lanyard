@@ -1,0 +1,70 @@
+@using Lanyard.Application.Services.Policies
+@using Lanyard.Infrastructure.DTO.Policies
+
+@inject IPolicyService _policyService
+
+@* Returns the new policy's id; the caller takes the manager to its page to publish the first PDF. *@
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.DocumentAdd())" />
+            <FluentText As="@TextTag.H3">New policy</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+            <FluentText Style="color: var(--colorNeutralForeground3);">
+                Set who has to read it. You'll upload the PDF on the next screen.
+            </FluentText>
+
+            <PolicySettingsForm Model="@model" Options="@Options" Disabled="@isSaving" OnChange="@(() => { })" />
+
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6" Wrap="true">
+                <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@CreateAsync" Disabled="@(isSaving || string.IsNullOrWhiteSpace(model.Name))">
+                    @(isSaving ? "Creating..." : "Create")
+                </FluentButton>
+                <FluentButton Appearance="ButtonAppearance.Default" OnClick="@(() => Dialog.CancelAsync())" Disabled="@isSaving">
+                    Cancel
+                </FluentButton>
+            </FluentStack>
+        </FluentStack>
+    </ChildContent>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required LocationScope Scope { get; set; }
+
+    [Parameter, EditorRequired]
+    public required PolicyEditorOptions Options { get; set; }
+
+    private PolicySettingsModel model = new();
+    private bool isSaving;
+
+    protected override void OnInitialized()
+    {
+        model = PolicySettingsModel.For(Options);
+    }
+
+    private async Task CreateAsync()
+    {
+        isSaving = true;
+
+        Result<string> userId = await _securityService.GetCurrentUserIdAsync();
+        Result<Guid> result = await _policyService.SavePolicyAsync(model.ToRequest(null), Scope, userId.Data ?? string.Empty);
+
+        isSaving = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "The policy couldn't be created.");
+            return;
+        }
+
+        await Dialog.CloseAsync(result.Data);
+    }
+}
