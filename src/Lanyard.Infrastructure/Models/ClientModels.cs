@@ -120,6 +120,50 @@ public class ClientCredential
 }
 
 /// <summary>
+/// A kiosk asking to be paired. The kiosk shows the pairing code on its screen; an Admin types it
+/// in, picks a name and location, and the kiosk then collects its own credential (minted at that
+/// moment, so the raw credential is never stored). Not company-owned: nobody knows the company
+/// until an Admin approves it, so only KioskEnrolmentService reads it, through the system factory.
+/// Rows are kept (status moves on) rather than deleted.
+/// </summary>
+public class ClientEnrolmentRequest
+{
+    public Guid Id { get; set; }
+
+    // The id the kiosk generated for itself. Becomes the Client's id when approved.
+    public Guid ClientId { get; set; }
+
+    // SHA-256 of the normalised code (upper case, no dash). The code is short-lived and only
+    // useful while Pending, and is still not kept in plain text.
+    [MaxLength(64)]
+    public string PairingCodeHash { get; set; } = string.Empty;
+
+    // SHA-256 of the random token the kiosk polls with, so only that kiosk can collect the credential.
+    [MaxLength(64)]
+    public string PollTokenHash { get; set; } = string.Empty;
+
+    [MaxLength(100)]
+    public string? MachineName { get; set; }
+
+    [MaxLength(ClientVersionFormat.MaxLength)]
+    public string? ReportedVersion { get; set; }
+
+    [MaxLength(64)]
+    public string? RequestIp { get; set; }
+
+    public DateTime CreatedUtc { get; set; }
+    public DateTime ExpiresUtc { get; set; }
+
+    public ClientEnrolmentStatus Status { get; set; }
+
+    [MaxLength(450)]
+    public string? DecidedByUserId { get; set; }
+    public DateTime? DecidedUtc { get; set; }
+
+    public int? ApprovedCompanyId { get; set; }
+}
+
+/// <summary>
 /// The latest health report a kiosk sent over the hub. One row per kiosk, overwritten on every
 /// heartbeat - there is deliberately no history. A kiosk with no row has never reported (it runs
 /// a client too old to send heartbeats), which is shown differently from a silent one.

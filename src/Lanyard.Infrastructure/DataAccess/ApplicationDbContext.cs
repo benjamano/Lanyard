@@ -65,6 +65,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ClientProjectionSettings> ClientProjectionSettings { get; set; }
         public DbSet<ClientHealthSnapshot> ClientHealthSnapshots { get; set; }
         public DbSet<ClientCredential> ClientCredentials { get; set; }
+        public DbSet<ClientEnrolmentRequest> ClientEnrolmentRequests { get; set; }
         public DbSet<ClientSelfTestRun> ClientSelfTestRuns { get; set; }
         public DbSet<ClientSelfTestCheck> ClientSelfTestChecks { get; set; }
         public DbSet<ProjectionProgram> ProjectionPrograms { get; set; }
@@ -211,6 +212,12 @@ namespace Lanyard.Infrastructure.DataAccess
                     .HasForeignKey(x => x.ClientId)
                     .OnDelete(DeleteBehavior.Cascade);
                 entity.HasIndex(x => new { x.ClientId, x.IsActive });
+            });
+
+            modelBuilder.Entity<ClientEnrolmentRequest>(entity =>
+            {
+                entity.HasIndex(x => new { x.PairingCodeHash, x.Status });
+                entity.HasIndex(x => x.ClientId);
             });
 
             modelBuilder.Entity<ClientSelfTestRun>(entity =>
