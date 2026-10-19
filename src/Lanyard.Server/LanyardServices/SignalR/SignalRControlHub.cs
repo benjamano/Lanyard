@@ -63,8 +63,7 @@ public class SignalRControlHub(
         HttpContext? httpContext = Context.GetHttpContext();
 
         // The endpoint policy (KioskAuthenticationDefaults.HubPolicy) already turned away anyone
-        // who isn't a kiosk the server knows, so this is the kiosk's own id: from its credential,
-        // or, for a kiosk still on the old shared secret, the id it sent if that kiosk exists.
+        // who isn't a kiosk the server knows, so this is the kiosk's own id, from its credential.
         // Never a new id - an unknown kiosk must be paired by an Admin, not created on connect.
         Guid? authenticatedClientId = KioskRequestAuthorization.GetClientId(Context.User);
 

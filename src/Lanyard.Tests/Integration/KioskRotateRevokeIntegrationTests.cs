@@ -217,24 +217,6 @@ public class KioskRotateRevokeIntegrationTests
         }
     }
 
-    [TestMethod]
-    public async Task Revoke_ThenExchangingTheSharedSecret_IsRefused()
-    {
-        Guid clientId = Guid.NewGuid();
-        await KioskTestSupport.RegisterKioskWithCredentialAsync(_factory, clientId);
-
-        (IServiceScope scope, IKioskSecurityService service) = AsAdmin();
-        using (scope)
-        {
-            Assert.IsTrue((await service.RevokeAsync(clientId, null)).IsSuccess);
-        }
-
-        // A revoked kiosk must be paired again by an Admin, not let back in by the shared secret.
-        using HttpRequestMessage exchange = new(HttpMethod.Post, $"/{KioskEnrolmentRoutes.LegacyExchange}?{ClientConnectionQuery.ClientId}={clientId}");
-        exchange.Headers.Add(ClientConnectionQuery.SecretHeader, "integration-test-kiosk-secret");
-
-        Assert.AreEqual(HttpStatusCode.BadRequest, (await _factory.CreateClient().SendAsync(exchange)).StatusCode);
-    }
 
     [TestMethod]
     public async Task SecurityService_IsAdminOnly()

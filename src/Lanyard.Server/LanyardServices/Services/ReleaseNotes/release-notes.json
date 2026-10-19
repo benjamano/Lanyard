@@ -769,5 +769,14 @@
       "Rotate credential gives a connected kiosk a new credential and retires the old one, for example if you think it was copied. The old one stops working only once the kiosk has saved the new one, so it can't be locked out half way.",
       "Revoke disconnects a kiosk straight away and stops it connecting again. It shows a pairing code instead, and works again once an Admin pairs it. Its settings are kept."
     ]
+  },
+  {
+    "version": "1.4.18",
+    "releaseDate": "2026-10-19",
+    "summary": "The old shared kiosk password is switched off: every kiosk now signs in with its own credential.",
+    "details": [
+      "Kiosks can no longer connect with the password that used to be shared by every kiosk. Each one uses its own credential, which an Admin can rotate or revoke.",
+      "A kiosk that still showed \"Shared secret\" on Manage > Clients can't connect any more. Pair it again with Add kiosk: it keeps its settings."
+    ]
   }
 ]

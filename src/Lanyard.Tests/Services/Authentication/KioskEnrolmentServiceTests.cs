@@ -75,7 +75,7 @@ public class KioskEnrolmentServiceTests
         return factory.Object;
     }
 
-    private KioskEnrolmentService GetService(int? companyId = CompanyA, string? role = "Admin", string userId = "admin-a", string legacyMode = "AcceptAndExchange")
+    private KioskEnrolmentService GetService(int? companyId = CompanyA, string? role = "Admin", string userId = "admin-a")
     {
         Mock<ITenantContext> tenant = new();
         tenant.Setup(x => x.IsSystem).Returns(companyId is null);
@@ -92,13 +92,9 @@ public class KioskEnrolmentServiceTests
         auth.Setup(x => x.GetAuthenticationStateAsync())
             .ReturnsAsync(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"))));
 
-        IConfiguration configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["Clients:LegacySecretMode"] = legacyMode })
-            .Build();
-
         KioskCredentialService credentials = new(Factory(), _cache, _clock, NullLogger<KioskCredentialService>.Instance);
 
-        return new KioskEnrolmentService(Factory(), credentials, _clientService.Object, tenant.Object, auth.Object, configuration, _cache, _clock, NullLogger<KioskEnrolmentService>.Instance);
+        return new KioskEnrolmentService(Factory(), credentials, _clientService.Object, tenant.Object, auth.Object, _cache, _clock, NullLogger<KioskEnrolmentService>.Instance);
     }
 
     private async Task<KioskEnrolmentStartedDTO> StartAsync(Guid? clientId = null)
@@ -357,52 +353,8 @@ public class KioskEnrolmentServiceTests
         Assert.IsTrue((await GetService(userId: "admin-a2").FindPendingAsync(started.PairingCode)).IsSuccess);
     }
 
-    // --- Shared-secret exchange ---------------------------------------------------------------
 
-    [TestMethod]
-    public async Task Exchange_GivesAKnownKioskItsOwnCredential()
-    {
-        Guid clientId = Guid.NewGuid();
-        await AddClientAsync(clientId, CompanyA);
 
-        Result<KioskCredentialIssuedDTO> exchanged = await GetService().ExchangeLegacySecretAsync(clientId);
 
-        Assert.IsTrue(exchanged.IsSuccess, exchanged.Error);
 
-        await using ApplicationDbContext ctx = new(_options);
-        ClientCredential credential = await ctx.ClientCredentials.SingleAsync();
-        Assert.AreEqual(ClientCredentialSource.LegacyExchange, credential.Source);
-    }
-
-    [TestMethod]
-    public async Task Exchange_RefusesAnUnknownKiosk()
-    {
-        Assert.IsFalse((await GetService().ExchangeLegacySecretAsync(Guid.NewGuid())).IsSuccess);
-    }
-
-    [TestMethod]
-    public async Task Exchange_RefusesAKioskThatAlreadyHasACredential()
-    {
-        Guid clientId = Guid.NewGuid();
-        await AddClientAsync(clientId, CompanyA);
-
-        Assert.IsTrue((await GetService().ExchangeLegacySecretAsync(clientId)).IsSuccess);
-
-        // Someone else with the shared secret and this kiosk's id must not get a credential for it.
-        Assert.IsFalse((await GetService().ExchangeLegacySecretAsync(clientId)).IsSuccess);
-
-        await using ApplicationDbContext ctx = new(_options);
-        Assert.AreEqual(1, await ctx.ClientCredentials.CountAsync(x => x.IsActive));
-    }
-
-    [TestMethod]
-    [DataRow("Accept")]
-    [DataRow("Reject")]
-    public async Task Exchange_IsOffUnlessTheServerAllowsIt(string mode)
-    {
-        Guid clientId = Guid.NewGuid();
-        await AddClientAsync(clientId, CompanyA);
-
-        Assert.IsFalse((await GetService(legacyMode: mode).ExchangeLegacySecretAsync(clientId)).IsSuccess);
-    }
 }

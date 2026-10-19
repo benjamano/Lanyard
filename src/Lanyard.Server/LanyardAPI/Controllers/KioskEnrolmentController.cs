@@ -8,7 +8,9 @@ using Microsoft.AspNetCore.RateLimiting;
 
 namespace Lanyard.API.Controllers;
 
-// Kiosk-facing: how a kiosk gets its own credential. See KioskEnrolmentRoutes for the flow.
+// Kiosk-facing: how a kiosk gets its own credential. See KioskEnrolmentRoutes for the flow. The
+// shared-secret exchange is gone along with the shared secret: kiosks that still call it get a
+// 404 and fall back to pairing.
 [ApiController]
 public class KioskEnrolmentController(IKioskEnrolmentService enrolmentService) : ControllerBase
 {
@@ -50,33 +52,5 @@ public class KioskEnrolmentController(IKioskEnrolmentService enrolmentService) :
         Response.Headers.CacheControl = "no-store";
 
         return Ok(result);
-    }
-
-    // A kiosk the server already knows, still holding the old shared secret, swaps it for its own
-    // credential - so the existing fleet moves over without anyone visiting each kiosk.
-    [HttpPost(KioskEnrolmentRoutes.LegacyExchange)]
-    public async Task<IActionResult> ExchangeLegacySecret(CancellationToken cancellationToken)
-    {
-        KioskRequestAccess access = await KioskRequestAuthorization.AuthorizeAsync(HttpContext);
-
-        if (access == KioskRequestAccess.Denied)
-        {
-            return Challenge(KioskAuthenticationDefaults.Scheme);
-        }
-
-        // Only a shared-secret kiosk the server could identify. Staff and kiosks that already
-        // have a credential have nothing to exchange.
-        if (access != KioskRequestAccess.Kiosk
-            || User.Identity?.AuthenticationType != KioskAuthenticationDefaults.LegacySecretAuthenticationType
-            || KioskRequestAuthorization.GetClientId(User) is not Guid clientId)
-        {
-            return BadRequest(Result<KioskCredentialIssuedDTO>.Fail("Only a known kiosk using the shared secret can exchange it. Pair this kiosk instead."));
-        }
-
-        Result<KioskCredentialIssuedDTO> result = await _enrolmentService.ExchangeLegacySecretAsync(clientId, cancellationToken);
-
-        Response.Headers.CacheControl = "no-store";
-
-        return result.ToActionResult();
     }
 }

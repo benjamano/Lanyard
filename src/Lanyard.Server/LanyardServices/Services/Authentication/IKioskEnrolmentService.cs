@@ -25,9 +25,6 @@ public interface IKioskEnrolmentService
     // Fails ("not found") for an unknown request or the wrong poll token - deliberately the same.
     Task<Result<KioskEnrolmentStatusDTO>> PollAsync(Guid requestId, string? pollToken, CancellationToken cancellationToken = default);
 
-    // For a kiosk the server already knows that authenticated with the old shared secret.
-    Task<Result<KioskCredentialIssuedDTO>> ExchangeLegacySecretAsync(Guid clientId, CancellationToken cancellationToken = default);
-
     // --- Admin side (the signed-in Admin's own company) ---------------------------------------
 
     Task<Result<PendingKioskEnrolment>> FindPendingAsync(string pairingCode, CancellationToken cancellationToken = default);
