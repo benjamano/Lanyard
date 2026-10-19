@@ -130,15 +130,7 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
     // less certain just retries slowly, so a server hiccup never costs a kiosk its credential.
     private async Task HandleRejectedAsync(string clientId)
     {
-        if (Guid.TryParse(clientId, out Guid id) && await KioskEnrolmentStartup.IsCredentialRejectedAsync(id))
-        {
-            _logger.LogError("The server no longer accepts this kiosk's credential (revoked or replaced). Restarting to pair it again.");
-
-            KioskCredentials.Forget();
-
-            // The Watchdog relaunches the client straight away on this exit code.
-            Environment.Exit(RestartRequestedExitCode);
-        }
+        await RestartIfCredentialRevokedAsync();
 
         _logger.LogError(KioskCredentials.Current is null
             ? "SignalR connection refused: the server didn't accept this kiosk's shared secret. Restart the kiosk to pair it."
@@ -146,6 +138,44 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
     }
 
     private const int RestartRequestedExitCode = 75;
+
+    // How long a dropped connection is given to come back before the kiosk asks whether it was
+    // dropped because its credential was revoked. A revoke closes the connection, and the
+    // automatic reconnect then just keeps getting 401s.
+    private static readonly TimeSpan RevocationCheckDelay = TimeSpan.FromSeconds(3);
+
+    private async Task RestartIfCredentialRevokedAsync()
+    {
+        if (!Guid.TryParse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID"), out Guid clientId)
+            || !await KioskEnrolmentStartup.IsCredentialRejectedAsync(clientId))
+        {
+            return;
+        }
+
+        _logger.LogError("The server no longer accepts this kiosk's credential (revoked or replaced). Restarting to pair it again.");
+
+        KioskCredentials.Forget();
+
+        // The Watchdog relaunches the client straight away on this exit code.
+        Environment.Exit(RestartRequestedExitCode);
+    }
+
+    private async Task CheckForRevocationIfStillDisconnectedAsync()
+    {
+        try
+        {
+            await Task.Delay(RevocationCheckDelay);
+
+            if (!_isConnected)
+            {
+                await RestartIfCredentialRevokedAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("Couldn't check whether this kiosk's credential was revoked: {Message}", ex.Message);
+        }
+    }
 
     private void SetConnected(bool connected)
     {
@@ -202,6 +232,8 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
             SetConnected(false);
             _logger.LogWarning("SignalR connection lost. Attempting to reconnect...");
 
+            _ = Task.Run(CheckForRevocationIfStillDisconnectedAsync);
+
             return Task.CompletedTask;
         };
 
@@ -256,6 +288,13 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
                 _logger.LogInformation("Reconnected to SignalR server successfully after an unexpected close.");
 
                 await SendStatus();
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
+            {
+                _logger.LogWarning("Reconnect after close was refused ({StatusCode}); checking whether this kiosk was revoked.", ex.StatusCode);
+
+                await RestartIfCredentialRevokedAsync();
+                await Task.Delay(5000);
             }
             catch (Exception ex)
             {

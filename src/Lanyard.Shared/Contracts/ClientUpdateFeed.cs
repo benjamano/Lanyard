@@ -32,4 +32,9 @@ public static class ClientHubEvents
 {
     // Server -> kiosk, client result: bool, true when an update was found and is being applied.
     public const string CheckForUpdates = "CheckForUpdates";
+
+    // Server -> kiosk, client result: bool, true once the kiosk has saved the new credential it is
+    // given (a rotation). Kiosks older than 1.0.43 have no handler, so the invoke fails and the
+    // rotation is called off.
+    public const string ReceiveCredential = "ReceiveCredential";
 }

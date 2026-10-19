@@ -92,6 +92,7 @@ public static class ClientServiceBootstrapper
         services.AddSingleton<IRemoteRestartService, RemoteRestartService>();
         services.AddSingleton<RemoteRestartController>();
         services.AddSingleton<UpdateController>();
+        services.AddSingleton<CredentialController>();
         services.AddSingleton<IAudioDeviceService, AudioDeviceService>();
         services.AddSingleton<AudioSettingsController>();
         services.AddSingleton(logLineBuffer);
@@ -120,6 +121,7 @@ public static class ClientServiceBootstrapper
             provider.GetRequiredService<RestartScheduleController>().Register,
             provider.GetRequiredService<RemoteRestartController>().Register,
             provider.GetRequiredService<UpdateController>().Register,
+            provider.GetRequiredService<CredentialController>().Register,
             provider.GetRequiredService<AudioSettingsController>().Register,
             provider.GetRequiredService<ClientDiagnosticsController>().Register,
             provider.GetRequiredService<KioskSelfTestController>().Register

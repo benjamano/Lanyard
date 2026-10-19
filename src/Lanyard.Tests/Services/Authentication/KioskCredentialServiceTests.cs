@@ -268,4 +268,67 @@ public class KioskCredentialServiceTests
         Assert.IsFalse(result.IsSuccess);
         Assert.AreEqual(KioskCredentialService.CheckUnavailableError, result.Error);
     }
+
+    [TestMethod]
+    public async Task Rotation_NewCredentialOnlyWorksOnceConfirmed_ThenTheOldOneStops()
+    {
+        Guid clientId = await AddClientAsync();
+        IssuedKioskCredential old = await IssueAsync(clientId);
+        KioskCredentialService service = GetService();
+
+        Result<IssuedKioskCredential> pending = await service.BeginRotationAsync(clientId, "admin-1");
+        Assert.IsTrue(pending.IsSuccess, pending.Error);
+
+        Assert.IsFalse((await service.ValidateAsync(pending.Data!.RawToken)).IsSuccess, "A rotation that the kiosk hasn't confirmed must not work yet.");
+        Assert.IsTrue((await service.ValidateAsync(old.RawToken)).IsSuccess, "The old credential must keep working until the kiosk confirms.");
+
+        Assert.IsTrue((await service.CompleteRotationAsync(pending.Data.CredentialId, "admin-1")).IsSuccess);
+
+        Assert.IsTrue((await service.ValidateAsync(pending.Data.RawToken)).IsSuccess);
+        Assert.IsFalse((await service.ValidateAsync(old.RawToken)).IsSuccess, "The old credential still worked after the rotation.");
+    }
+
+    [TestMethod]
+    public async Task Rotation_Cancelled_KeepsTheOldCredential()
+    {
+        Guid clientId = await AddClientAsync();
+        IssuedKioskCredential old = await IssueAsync(clientId);
+        KioskCredentialService service = GetService();
+
+        IssuedKioskCredential pending = (await service.BeginRotationAsync(clientId, "admin-1")).Data!;
+        Assert.IsTrue((await service.CancelRotationAsync(pending.CredentialId, "The kiosk didn't confirm in time")).Data);
+
+        Assert.IsTrue((await service.ValidateAsync(old.RawToken)).IsSuccess);
+        Assert.IsFalse((await service.ValidateAsync(pending.RawToken)).IsSuccess);
+        Assert.IsFalse((await service.CompleteRotationAsync(pending.CredentialId, "admin-1")).IsSuccess, "A cancelled rotation can't be completed later.");
+    }
+
+    [TestMethod]
+    public async Task Rotation_NeedsAnActiveCredential()
+    {
+        Guid clientId = await AddClientAsync();
+
+        Assert.IsFalse((await GetService().BeginRotationAsync(clientId, "admin-1")).IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task RevokeAll_StopsTheCredential_EvenWhileItIsCached()
+    {
+        Guid clientId = await AddClientAsync();
+        IssuedKioskCredential issued = await IssueAsync(clientId);
+        KioskCredentialService service = GetService();
+
+        Assert.IsTrue((await service.ValidateAsync(issued.RawToken)).IsSuccess);
+
+        Result<int> revoked = await service.RevokeAllAsync(clientId, "admin-1", "PC stolen");
+
+        Assert.AreEqual(1, revoked.Data);
+        Assert.IsFalse((await service.ValidateAsync(issued.RawToken)).IsSuccess);
+        Assert.IsFalse((await service.ValidateByIdAsync(issued.CredentialId)).IsSuccess);
+
+        await using ApplicationDbContext ctx = new(_options);
+        ClientCredential row = await ctx.ClientCredentials.SingleAsync();
+        Assert.AreEqual("PC stolen", row.RevokeReason);
+        Assert.AreEqual("admin-1", row.RevokedByUserId);
+    }
 }

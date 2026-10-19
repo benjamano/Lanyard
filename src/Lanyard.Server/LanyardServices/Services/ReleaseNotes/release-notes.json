@@ -764,7 +764,10 @@
       "Pairing a PC that is already one of your kiosks, for example after it was reset, keeps all its settings.",
       "Kiosk software 1.0.43: a kiosk your server already knows switches to its own credential by itself the first time it starts, with no code needed. A new kiosk shows its pairing code full screen until an Admin approves it.",
       "The kiosk keeps its credential encrypted so only that PC can use it, and removes the old shared password from its settings file once it has switched.",
-      "Kiosks no longer put a password in the web addresses they use to play songs and audio clips. They use a short-lived pass instead, which only works for playing audio."
+      "Kiosks no longer put a password in the web addresses they use to play songs and audio clips. They use a short-lived pass instead, which only works for playing audio.",
+      "Each kiosk's settings have a new Security tab. It shows how the kiosk signs in, when its credential was issued and last used, and its history.",
+      "Rotate credential gives a connected kiosk a new credential and retires the old one, for example if you think it was copied. The old one stops working only once the kiosk has saved the new one, so it can't be locked out half way.",
+      "Revoke disconnects a kiosk straight away and stops it connecting again. It shows a pairing code instead, and works again once an Admin pairs it. Its settings are kept."
     ]
   }
 ]

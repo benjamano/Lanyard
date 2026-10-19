@@ -61,6 +61,7 @@ public class SignalRControlHubKioskHealthTests
             Mock.Of<IVideoStreamTokenService>(),
             Mock.Of<IGameResultService>(),
             Mock.Of<IKioskMediaTokenService>(),
+            new KioskConnectionRegistry(),
             kioskHealthService.Object,
             Mock.Of<IAudioClipPlaybackService>())
         {

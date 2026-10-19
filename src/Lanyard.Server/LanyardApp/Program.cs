@@ -103,6 +103,8 @@ builder.Services.AddSingleton<IClientSecretValidator, ClientSecretValidator>();
 builder.Services.AddSingleton<IKioskCredentialService, KioskCredentialService>();
 builder.Services.AddSingleton<IKioskMediaTokenService, KioskMediaTokenService>();
 builder.Services.AddScoped<IKioskEnrolmentService, KioskEnrolmentService>();
+builder.Services.AddScoped<IKioskSecurityService, KioskSecurityService>();
+builder.Services.AddSingleton<KioskConnectionRegistry>();
 builder.Services.AddScoped<ICurrentUserAccessor, CurrentUserAccessor>();
 builder.Services.AddScoped<IFileService, FileService>();
 
