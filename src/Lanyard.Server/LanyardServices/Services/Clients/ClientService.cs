@@ -272,6 +272,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
                     CreateDate = x.CreateDate,
                     ReportedClientVersion = x.ReportedClientVersion,
                     ClientVersionReportedAt = x.ClientVersionReportedAt,
+                    LastAuthMethod = x.LastAuthMethod,
                     IsCurrentlyConnected = ids.Contains(x.MostRecentConnectionId ?? ""),
                     ProjectionEnabled = ctx.ClientProjectionSettings
                         .AsNoTracking()

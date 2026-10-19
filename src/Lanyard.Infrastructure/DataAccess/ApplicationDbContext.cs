@@ -64,6 +64,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ClientRelease> ClientReleases { get; set; }
         public DbSet<ClientProjectionSettings> ClientProjectionSettings { get; set; }
         public DbSet<ClientHealthSnapshot> ClientHealthSnapshots { get; set; }
+        public DbSet<ClientCredential> ClientCredentials { get; set; }
         public DbSet<ProjectionProgram> ProjectionPrograms { get; set; }
         public DbSet<ProjectionProgramStep> ProjectionProgramSteps { get; set; }
         public DbSet<ClientAvailableScreen> ClientAvailableScreens { get; set; }
@@ -198,6 +199,15 @@ namespace Lanyard.Infrastructure.DataAccess
                     .HasForeignKey<ClientHealthSnapshot>(x => x.ClientId)
                     .OnDelete(DeleteBehavior.Cascade);
                 entity.Property(x => x.ClientVersion).HasMaxLength(ClientVersionFormat.MaxLength);
+            });
+
+            modelBuilder.Entity<ClientCredential>(entity =>
+            {
+                entity.HasOne(x => x.Client)
+                    .WithMany(x => x.Credentials)
+                    .HasForeignKey(x => x.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(x => new { x.ClientId, x.IsActive });
             });
 
             modelBuilder.Entity<DashboardWidget>()
@@ -1019,6 +1029,7 @@ namespace Lanyard.Infrastructure.DataAccess
 
             modelBuilder.Entity<ClientProjectionSettings>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientHealthSnapshot>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ClientCredential>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableScreen>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableVideoDevice>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableNetworkInterface>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);

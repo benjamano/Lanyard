@@ -43,7 +43,7 @@ public class ClientDiagnosticsHubIntegrationTests
 
     private static async Task WaitUntilConnectedAsync(WebApplicationFactory<Program> factory, Guid clientId)
     {
-        // OnConnectedAsync (which creates the client row and records the connection) can finish
+        // OnConnectedAsync (which records the connection on the client row) can finish
         // just after StartAsync returns.
         for (int attempt = 0; attempt < 50; attempt++)
         {
@@ -73,6 +73,7 @@ public class ClientDiagnosticsHubIntegrationTests
     {
         await using WebApplicationFactory<Program> factory = CreateFactory();
         Guid clientId = Guid.NewGuid();
+        await KioskTestSupport.RegisterKioskAsync(factory, clientId);
         await using HubConnection kiosk = CreateKioskConnection(factory, clientId);
 
         ClientLogTailRequestDTO? receivedRequest = null;
@@ -113,6 +114,7 @@ public class ClientDiagnosticsHubIntegrationTests
         // with nothing registered for RequestLogTail.
         await using WebApplicationFactory<Program> factory = CreateFactory();
         Guid clientId = Guid.NewGuid();
+        await KioskTestSupport.RegisterKioskAsync(factory, clientId);
         await using HubConnection kiosk = CreateKioskConnection(factory, clientId);
 
         await kiosk.StartAsync();
@@ -131,6 +133,7 @@ public class ClientDiagnosticsHubIntegrationTests
         // hub's 256 KB limit; a reply over it would drop the kiosk's connection.
         await using WebApplicationFactory<Program> factory = CreateFactory();
         Guid clientId = Guid.NewGuid();
+        await KioskTestSupport.RegisterKioskAsync(factory, clientId);
         await using HubConnection kiosk = CreateKioskConnection(factory, clientId);
 
         byte[] jpeg = new byte[ClientDiagnosticsService.ScreenshotMaxBytes];
@@ -181,6 +184,7 @@ public class ClientDiagnosticsHubIntegrationTests
     {
         await using WebApplicationFactory<Program> factory = CreateFactory();
         Guid clientId = Guid.NewGuid();
+        await KioskTestSupport.RegisterKioskAsync(factory, clientId);
         await using HubConnection kiosk = CreateKioskConnection(factory, clientId);
 
         await kiosk.StartAsync();

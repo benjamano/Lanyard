@@ -51,6 +51,8 @@ public class ClientUpdatesIntegrationTests
 
     private async Task<HubConnection> ConnectKioskAsync(Guid clientId, Action<HubConnection> register)
     {
+        await KioskTestSupport.RegisterKioskAsync(_factory, clientId);
+
         Uri hubUri = new(_factory.Server.BaseAddress,
             $"/websocket?{ClientConnectionQuery.ClientId}={clientId}&{ClientConnectionQuery.Secret}={SharedSecret}&{ClientConnectionQuery.ClientVersion}=1.0.41");
 

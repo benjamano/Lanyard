@@ -32,4 +32,11 @@ public static class ClientHubMethods
     /// <c>ClientScreenshotDTO</c>. One call per screen, so each reply stays under the hub's size limit.
     /// </summary>
     public const string CaptureProjectionWindow = "CaptureProjectionWindow";
+
+    /// <summary>
+    /// Kiosk to server, returns a <c>KioskMediaTokenDTO</c>: a short-lived token for the song and
+    /// audio-clip URLs the kiosk streams from, which can't carry its credential in a header.
+    /// Empty for a kiosk still on the old shared secret.
+    /// </summary>
+    public const string IssueMediaToken = "IssueMediaToken";
 }

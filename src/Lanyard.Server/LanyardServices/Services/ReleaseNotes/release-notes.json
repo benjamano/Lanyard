@@ -728,5 +728,15 @@
       "Game data comes from the kiosk's location. A kiosk with no location set uses all of your company's games, and shows the fallback for opening hours.",
       "A kiosk now refuses to play a projection program that belongs to a different company."
     ]
+  },
+  {
+    "version": "1.4.17",
+    "releaseDate": "2026-10-19",
+    "summary": "Each kiosk gets its own sign-in instead of one password shared by every kiosk.",
+    "details": [
+      "Kiosks are moving from one shared password to their own credential, so the server always knows which kiosk is talking to it and only ever shows it your company's music, files and screens.",
+      "Manage > Clients shows how each kiosk signed in last time. Kiosks still on the old shared password are marked \"Shared secret\". They move over by themselves once they update to the latest kiosk software, and nothing changes for them until then.",
+      "A kiosk the server has never seen is no longer added to the Clients list automatically. New kiosks will be added by pairing them with a code, coming in the next update."
+    ]
   }
 ]

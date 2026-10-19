@@ -12,7 +12,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Lanyard.Tests.Integration;
 
-// A real SignalR connection through the real pipeline (the /websocket secret gate, the hub's
+// A real SignalR connection through the real pipeline (the kiosk authentication scheme, the hub's
 // OnConnectedAsync, EF). The query keys are untyped strings on the wire, so this is what proves
 // the kiosk's ClientConnectionQuery.ClientVersion actually lands on the Client row - a mismatch
 // would otherwise just leave every kiosk on "Unknown" with no error anywhere.
@@ -41,6 +41,9 @@ public class ClientVersionReportingIntegrationTests
 
     private async Task<HubConnection> ConnectAsync(Guid clientId, string? clientVersion)
     {
+        // Registered first: the hub only accepts kiosks it already knows.
+        await KioskTestSupport.RegisterKioskAsync(_factory, clientId);
+
         string versionQuery = clientVersion is null
             ? string.Empty
             : $"&{ClientConnectionQuery.ClientVersion}={Uri.EscapeDataString(clientVersion)}";
@@ -87,7 +90,7 @@ public class ClientVersionReportingIntegrationTests
     }
 
     [TestMethod]
-    public async Task NewKiosk_ReportingVersion_IsStoredOnItsClientRow()
+    public async Task Kiosk_ReportingVersion_IsStoredOnItsClientRow()
     {
         Guid clientId = Guid.NewGuid();
 
@@ -128,7 +131,7 @@ public class ClientVersionReportingIntegrationTests
 
         Client? client = await WaitForClientAsync(clientId, _ => true);
 
-        Assert.IsNotNull(client, "The kiosk should still have been registered.");
+        Assert.IsNotNull(client, "The kiosk should still have connected.");
         Assert.IsNull(client.ReportedClientVersion);
     }
 }
