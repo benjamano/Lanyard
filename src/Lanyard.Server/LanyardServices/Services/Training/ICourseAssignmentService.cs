@@ -29,4 +29,8 @@ public interface ICourseAssignmentService
     Task<Result<bool>> RecordSectionTransitionAsync(Guid assignmentId, string requestingUserId, Guid? departedSectionId, Guid? arrivedSectionId, DateTime transitionTimeUtc);
     Task<Result<CourseTimingSummary>> GetCourseTimingSummaryAsync(Guid courseId, LocationScope scope);
     Task<Result<List<AssignmentSectionTiming>>> GetSectionTimingsForAssignmentAsync(Guid assignmentId);
+    /// <summary>True until the user has finished or skipped the course player walkthrough once.</summary>
+    Task<Result<bool>> ShouldShowCourseWalkthroughAsync(string userId);
+    /// <summary>Records that the user has seen the walkthrough. Keeps the first date if called again.</summary>
+    Task<Result<bool>> MarkCourseWalkthroughCompletedAsync(string userId);
 }

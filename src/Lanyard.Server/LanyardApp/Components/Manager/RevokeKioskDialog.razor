@@ -1,0 +1,34 @@
+<FluentDialogBody>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="18px">
+            <FluentText>
+                Revoking <strong>@ClientName</strong> disconnects it straight away and stops it connecting again. It shows a pairing code instead, and works again only once an Admin pairs it with Add kiosk.
+            </FluentText>
+            <FluentText>
+                Its settings are kept, so pairing the same PC again picks up where it left off.
+            </FluentText>
+            <FluentTextInput @bind-Value="_reason" Label="Reason (optional)" Placeholder="For example, PC stolen" Class="w-100" Maxlength="200" />
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentStack HorizontalGap="8px" HorizontalAlignment="HorizontalAlignment.End">
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ShieldDismiss())"
+                          OnClick="@ConfirmAsync">Revoke</FluentButton>
+            <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+        </FluentStack>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public string ClientName { get; set; } = "this kiosk";
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private string? _reason;
+
+    private async Task ConfirmAsync() => await Dialog.CloseAsync(_reason ?? string.Empty);
+
+    private async Task CancelAsync() => await Dialog.CancelAsync();
+}

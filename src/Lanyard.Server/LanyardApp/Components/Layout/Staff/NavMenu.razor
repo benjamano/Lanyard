@@ -7,6 +7,7 @@
 @inject ISecurityService SecurityService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IReleaseNotesService ReleaseNotesService
+@inject Lanyard.Application.Services.Feedback.IFeedbackService Feedback
 @inject ITimeOffService TimeOffService
 @inject ITimeOffEventBus TimeOffEventBus
 @inject IShiftClaimService ShiftClaimService
@@ -144,6 +145,18 @@
                                 @if (_openChatReports > 0)
                                 {
                                     <FluentCounterBadge Count="@_openChatReports" OverflowCount="99" aria-label="@($"{_openChatReports} reported messages to review")" />
+                                }
+                            </span>
+                        </FluentNavItem>
+                    }
+                    @if (_isPlatformAdmin)
+                    {
+                        <FluentNavItem Href="/manage/feedback" Match="NavLinkMatch.All">
+                            <span class="nav-item-with-count">
+                                Lanyard Feedback
+                                @if (_unreviewedFeedback > 0)
+                                {
+                                    <FluentCounterBadge Count="@_unreviewedFeedback" OverflowCount="99" aria-label="@($"{_unreviewedFeedback} feedback to review")" />
                                 }
                             </span>
                         </FluentNavItem>
@@ -302,6 +315,7 @@
     private int _pendingShiftRequests;
     private int? _shiftRequestsLocationId;
     private int _openChatReports;
+    private int _unreviewedFeedback;
 
     // Modules this user's company doesn't have (CompanyFeatureService). Read once per circuit, like
     // the roles above, so a switch flipped mid-session shows here after a reload; the route gate
@@ -384,6 +398,12 @@
                     Result<string> reportViewer = await SecurityService.GetCurrentUserIdAsync();
                     _openChatReports = reportScope.Data is null ? 0 : (await ChatModeration.CountOpenForNavAsync(reportScope.Data, reportViewer.Data)).Data;
                 }
+            }
+
+            if (_isPlatformAdmin)
+            {
+                Result<int> unreviewed = await Feedback.CountUnreviewedAsync();
+                _unreviewedFeedback = unreviewed.IsSuccess ? unreviewed.Data : 0;
             }
 
             Result<IEnumerable<ReleaseNote>> releaseNotesResult = await ReleaseNotesService.GetReleaseNotesAsync();
