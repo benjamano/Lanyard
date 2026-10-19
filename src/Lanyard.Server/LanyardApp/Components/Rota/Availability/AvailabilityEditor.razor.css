@@ -1,0 +1,68 @@
+.availability {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.availability-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.availability-header ::deep .availability-intro {
+    flex: 1 1 260px;
+    color: var(--colorNeutralForeground3);
+}
+
+.availability-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+}
+
+.availability-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.availability-item:last-child {
+    border-bottom: none;
+}
+
+.availability-main {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    min-width: 0;
+}
+
+.availability-when {
+    font-weight: 600;
+}
+
+.availability-note {
+    flex-basis: 100%;
+    color: var(--colorNeutralForeground3);
+    font-size: 0.9rem;
+    overflow-wrap: anywhere;
+}
+
+.availability-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}

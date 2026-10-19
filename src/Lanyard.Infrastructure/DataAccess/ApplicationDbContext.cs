@@ -118,6 +118,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<StaffPositionRequiredCourse> StaffPositionRequiredCourses { get; set; }
         public DbSet<ContractRequirement> ContractRequirements { get; set; }
         public DbSet<UserClockInPin> UserClockInPins { get; set; }
+        public DbSet<StaffAvailability> StaffAvailabilities { get; set; }
         public DbSet<CompanySchedulingSettings> CompanySchedulingSettings { get; set; }
         public DbSet<Shift> Shifts { get; set; }
         public DbSet<ClockInTerminal> ClockInTerminals { get; set; }
@@ -487,6 +488,16 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<UserClockInPin>()
                 .HasIndex(x => x.UserId)
                 .IsUnique();
+
+            // The person's own record (like their leave requests), so it goes with the account.
+            modelBuilder.Entity<StaffAvailability>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<StaffAvailability>()
+                .HasIndex(x => new { x.UserId, x.DayOfWeek });
 
             modelBuilder.Entity<CompanySchedulingSettings>()
                 .HasIndex(x => x.CompanyId)

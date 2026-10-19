@@ -128,6 +128,15 @@ time off, erasure keeps the decision but clears their name from it. Requests can
 reason for a rejection and notes from the requester; managers should avoid putting medical detail
 in either. Leave types and company or position allowances contain no personal data.
 
+### Availability
+
+When someone says they can't, or would rather, work (`StaffAvailability`: a weekday, a time range
+and an optional note) is their own record, set by them or a manager. It is **deleted with the
+account** (cascading foreign key; removed explicitly by GDPR erasure, at every company), and a
+manager who set someone else's has their name cleared from it on erasure. A removed window is kept
+inactive rather than deleted, so it's still covered by the above. The note is free text; it should
+say when, not why (no medical or family detail).
+
 ### Kiosk diagnostics
 
 An Admin can fetch the last 500 lines a kiosk has logged (Manage > Clients > Diagnostics). Those
