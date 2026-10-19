@@ -62,6 +62,8 @@ public static class HelpRegistry
 {
     public const string ManageTraining = "training";
     public const string MyTraining = "my-training";
+    public const string Rota = "rota";
+    public const string MyShifts = "my-shifts";
 
     public static IReadOnlyList<HelpArea> Areas { get; } =
     [
@@ -77,6 +79,38 @@ public static class HelpRegistry
             ],
             ["/training"],
             Feature: CompanyFeature.Training),
+
+        new(MyShifts,
+            "My Shifts",
+            "Your shifts, swapping and picking up shifts, time off, availability and clocking in.",
+            HelpAudience.Everyone,
+            () => new Icons.Regular.Size20.CalendarLtr(),
+            [
+                new("overview", "Overview"),
+                new("changes", "Swaps & Open Shifts"),
+                new("time-off", "Time Off"),
+                new("availability", "Availability"),
+                new("clocking", "Clocking In")
+            ],
+            ["/rota"],
+            Feature: CompanyFeature.StaffScheduling),
+
+        new(Rota,
+            "Rota",
+            "Building and publishing the rota, shift requests, time off, timesheets and payroll export.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.People(),
+            [
+                new("overview", "Overview"),
+                new("building", "Building the Rota"),
+                new("requests", "Shift Requests"),
+                new("time-off", "Time Off"),
+                new("timesheets", "Timesheets & Payroll"),
+                new("setup", "Setting Up")
+            ],
+            ["/manage/rota"],
+            Roles: "Admin,Manager",
+            Feature: CompanyFeature.StaffScheduling),
 
         new(ManageTraining,
             "Training",

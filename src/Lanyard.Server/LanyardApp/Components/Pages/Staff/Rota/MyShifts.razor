@@ -19,9 +19,12 @@
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16px">
         <div class="my-shifts-header">
             <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size700">My Shifts</FluentText>
-            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.CalendarAdd())" OnClick="OpenCalendarFeedAsync">
-                Add to calendar
-            </FluentButton>
+            <div class="my-shifts-header-actions">
+                <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.CalendarAdd())" OnClick="OpenCalendarFeedAsync">
+                    Add to calendar
+                </FluentButton>
+                <HelpButton AreaKey="@HelpRegistry.MyShifts" Topic="@HelpTopicForActiveTab" />
+            </div>
         </div>
         <FluentTabs @bind-ActiveTabId="activeTabId">
             <FluentTab Id="shifts" Header="Upcoming shifts" IconStart="@(new Icons.Regular.Size20.CalendarLtr())">
@@ -58,6 +61,16 @@
 
 @code {
     private string? activeTabId;
+
+    // Maps each tab to the My Shifts help topic that explains it.
+    private string HelpTopicForActiveTab => activeTabId switch
+    {
+        "open" => "changes",
+        "hours" => "clocking",
+        "time-off" => "time-off",
+        "availability" => "availability",
+        _ => "overview"
+    };
     private string? currentUserId;
     private MyShiftsList? shiftsList;
 

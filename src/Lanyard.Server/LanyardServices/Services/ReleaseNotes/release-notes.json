@@ -748,7 +748,9 @@
       "A kiosk now refuses to play a projection program that belongs to a different company.",
       "New Help area: choose Help in the menu to see guides for every part of Lanyard you can use. Search them, or jump straight to a topic.",
       "Help buttons on each area's pages open the guide for what you're looking at.",
-      "New My Training guide for staff: taking a course, the quiz and retries, and downloading certificates."
+      "New My Training guide for staff: taking a course, the quiz and retries, and downloading certificates.",
+      "New My Shifts guide for staff: swapping and dropping shifts, picking up open shifts, time off, availability and clocking in with a PIN or your phone.",
+      "New Rota guide for managers: building and publishing the rota, staff suggestions, shift requests, time off, timesheets, payroll export and setting up positions, contracts and clock-in terminals."
     ]
   }
 ]

@@ -40,6 +40,8 @@
                       Disabled="@(locationId is null || companyId is null)" OnClick="@OpenRecordAsync">
             Record time off
         </FluentButton>
+
+        <HelpButton AreaKey="@HelpRegistry.Rota" Topic="time-off" />
     </div>
 
     @if (loadError is not null)
