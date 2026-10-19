@@ -761,7 +761,10 @@
       "A kiosk the server has never seen is no longer added to the Clients list automatically. Add a new kiosk by pairing it instead.",
       "To pair a kiosk, start Lanyard Client on the PC and it shows an 8-character pairing code. On Manage > Clients, press Add kiosk and type the code in. You'll see the PC's name, IP address and software version, so you can check it's the right one. Give it a name, pick its location and press Approve. It connects by itself a few seconds later.",
       "Codes last 15 minutes. You can also press Reject if a code isn't one you expected. Only Admins can pair kiosks, and only into the company they're signed in to.",
-      "Pairing a PC that is already one of your kiosks, for example after it was reset, keeps all its settings."
+      "Pairing a PC that is already one of your kiosks, for example after it was reset, keeps all its settings.",
+      "Kiosk software 1.0.43: a kiosk your server already knows switches to its own credential by itself the first time it starts, with no code needed. A new kiosk shows its pairing code full screen until an Admin approves it.",
+      "The kiosk keeps its credential encrypted so only that PC can use it, and removes the old shared password from its settings file once it has switched.",
+      "Kiosks no longer put a password in the web addresses they use to play songs and audio clips. They use a short-lived pass instead, which only works for playing audio."
     ]
   }
 ]

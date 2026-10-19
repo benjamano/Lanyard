@@ -117,6 +117,12 @@ public class KioskAuthenticationHandler(
     {
         Result<KioskIdentity> result = await credentialService.ValidateAsync(token, Context.RequestAborted);
 
+        if (result.Error == KioskCredentialService.CheckUnavailableError)
+        {
+            // A 500, not a 401: the kiosk must keep its credential and simply try again.
+            throw new InvalidOperationException(KioskCredentialService.CheckUnavailableError);
+        }
+
         if (!result.IsSuccess || result.Data is null)
         {
             _credentialRejected = true;
@@ -136,6 +142,11 @@ public class KioskAuthenticationHandler(
         Result<KioskIdentity> result = credentialId.IsSuccess
             ? await credentialService.ValidateByIdAsync(credentialId.Data, Context.RequestAborted)
             : Result<KioskIdentity>.Fail(credentialId.Error ?? "Invalid media token.");
+
+        if (result.Error == KioskCredentialService.CheckUnavailableError)
+        {
+            throw new InvalidOperationException(KioskCredentialService.CheckUnavailableError);
+        }
 
         if (!result.IsSuccess || result.Data is null)
         {

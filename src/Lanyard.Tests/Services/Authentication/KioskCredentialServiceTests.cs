@@ -254,4 +254,18 @@ public class KioskCredentialServiceTests
         Assert.AreEqual(CompanyId, (await GetService().GetClientCompanyIdAsync(clientId)).Data);
         Assert.IsFalse((await GetService().GetClientCompanyIdAsync(Guid.NewGuid())).IsSuccess);
     }
+
+    [TestMethod]
+    public async Task Validate_ReportsADatabaseFailure_AsUnavailable_NotAsAnInvalidCredential()
+    {
+        Mock<ISystemDbContextFactory> broken = new();
+        broken.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("database is down"));
+
+        KioskCredentialService service = new(broken.Object, _cache, _clock, NullLogger<KioskCredentialService>.Instance);
+
+        Result<KioskIdentity> result = await service.ValidateAsync(KioskCredentialService.FormatToken(Guid.NewGuid(), "secret"));
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual(KioskCredentialService.CheckUnavailableError, result.Error);
+    }
 }

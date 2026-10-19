@@ -34,6 +34,11 @@ public class KioskCredentialService(
 
     private const int SecretBytes = 32;
 
+    // The credential couldn't be checked at all (the database didn't answer). Not the same as a
+    // dead credential: KioskAuthenticationHandler fails the request without telling the kiosk its
+    // credential is invalid, so a database blip never makes a kiosk throw its credential away.
+    public const string CheckUnavailableError = "The kiosk credential couldn't be checked right now.";
+
     private readonly ISystemDbContextFactory _factory = factory;
     private readonly IMemoryCache _cache = cache;
     private readonly TimeProvider _timeProvider = timeProvider;
@@ -252,7 +257,8 @@ public class KioskCredentialService(
         }
         catch (Exception ex)
         {
-            return Result<CachedCredential>.Fail($"Failed to check the kiosk credential: {ex.Message}");
+            _logger.LogError(ex, "Failed to check kiosk credential {CredentialId}", credentialId);
+            return Result<CachedCredential>.Fail(CheckUnavailableError);
         }
     }
 

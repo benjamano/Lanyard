@@ -26,7 +26,9 @@ public static class ClientServiceBootstrapper
         // Created up front because the logging provider below and the diagnostics controller
         // must share the same instance.
         LogLineBuffer logLineBuffer = new LogLineBuffer();
-        string?[] knownSecrets = [Environment.GetEnvironmentVariable("LANYARD_CLIENT_SHARED_SECRET")];
+        // LogRedactor also strips any kiosk credential and media token by its shape, so a rotated
+        // credential is covered too.
+        string?[] knownSecrets = [Environment.GetEnvironmentVariable("LANYARD_CLIENT_SHARED_SECRET"), Lanyard.Client.Security.KioskCredentials.Current];
 
         services.AddLogging(config =>
         {
