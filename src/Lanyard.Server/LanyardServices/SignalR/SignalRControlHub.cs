@@ -4,6 +4,7 @@ using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Clients;
 using Lanyard.Application.Services.VideoStreaming;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.DTO.Dmx;
 using Lanyard.Infrastructure.DTO.VideoDevices;
 using Lanyard.Infrastructure.DTO.ZoneScoreboard;
@@ -32,12 +33,12 @@ public class SignalRControlHub(
     IClientZoneScoreboardService clientZoneScoreboardService,
     IVideoStreamTokenService videoStreamTokenService,
     IGameResultService gameResultService,
-    IClientSecretValidator clientSecretValidator,
+    IKioskMediaTokenService mediaTokenService,
     IKioskHealthService kioskHealthService,
     IAudioClipPlaybackService audioClipPlaybackService) : Hub, ISignalRProjectionControlHub
 {
     private readonly ILogger<SignalRControlHub> _logger = logger;
-    private readonly IClientSecretValidator _clientSecretValidator = clientSecretValidator;
+    private readonly IKioskMediaTokenService _mediaTokenService = mediaTokenService;
 
     private readonly MusicPlayerService _playerService = playerService;
     private readonly IClientService _clientService = clientService;
@@ -59,33 +60,28 @@ public class SignalRControlHub(
     {
         HttpContext? httpContext = Context.GetHttpContext();
 
-        if (string.IsNullOrEmpty(httpContext?.Request.Query[ClientConnectionQuery.ClientId].ToString()) == true)
+        // The endpoint policy (KioskAuthenticationDefaults.HubPolicy) already turned away anyone
+        // who isn't a kiosk the server knows, so this is the kiosk's own id: from its credential,
+        // or, for a kiosk still on the old shared secret, the id it sent if that kiosk exists.
+        // Never a new id - an unknown kiosk must be paired by an Admin, not created on connect.
+        Guid? authenticatedClientId = KioskRequestAuthorization.GetClientId(Context.User);
+
+        if (authenticatedClientId is not Guid clientId)
         {
-            _logger.LogWarning("Client connected without an ID, disconnecting");
+            _logger.LogWarning("Kiosk connection {ConnectionId} has no known client id, disconnecting. A new kiosk must be paired before it can connect", Context.ConnectionId);
 
             Context.Abort();
             return;
         }
 
-        // Kiosk clients have no interactive user login, so they authenticate with the shared
-        // secret. Delegates to the same decision point the client REST endpoints use
-        // (ClientRequestAuthorization.EvaluateAndLog / IClientSecretValidator.Authorize) so the
-        // unconfigured-secret case can never be decided differently here than there.
-        string providedSecret = httpContext?.Request.Query[ClientConnectionQuery.Secret].ToString() ?? string.Empty;
-        string connectingIp = httpContext?.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
+        bool usesCredential = Context.User?.Identity?.AuthenticationType == KioskAuthenticationDefaults.CredentialAuthenticationType;
 
-        if (!ClientRequestAuthorization.EvaluateAndLog(_clientSecretValidator, providedSecret, _logger, connectingIp, "/websocket"))
+        string? claimedClientId = httpContext?.Request.Query[ClientConnectionQuery.ClientId].ToString();
+
+        if (usesCredential && !string.IsNullOrEmpty(claimedClientId) && (!Guid.TryParse(claimedClientId, out Guid claimed) || claimed != clientId))
         {
-            Context.Abort();
-            return;
-        }
-
-        if (!Guid.TryParse(httpContext?.Request.Query[ClientConnectionQuery.ClientId].ToString(), out Guid clientId))
-        {
-            _logger.LogWarning("Client connected with a malformed client ID, disconnecting");
-
-            Context.Abort();
-            return;
+            // Not trusted either way - the credential decides - but worth knowing about.
+            _logger.LogWarning("Kiosk {ClientId} ({ConnectionId}) sent a different client id {ClaimedClientId} from its credential's; using the credential's", clientId, Context.ConnectionId, claimedClientId);
         }
 
         string clientIp = httpContext?.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
@@ -102,65 +98,43 @@ public class SignalRControlHub(
 
         Result<Client?> result = await _clientService.GetClientFromIdAsync(clientId);
 
-        Client client = new();
-
         if (!result.IsSuccess || result.Data == null)
         {
-            _logger.LogWarning("Client connected with an unknown ID {ClientId} ({IpAddress}), creating a new client entry", clientId, clientIp);
+            // Authenticated a moment ago, so the row has just gone (or the read failed).
+            _logger.LogWarning("Kiosk {ClientId} ({ConnectionId}) authenticated but its client record couldn't be loaded, disconnecting: {Error}", clientId, Context.ConnectionId, result.Error);
 
-            Client newClient = new()
-            {
-                Id = clientId,
-                Name = "New Client",
-                Notes = "",
-                MostRecentConnectionId = Context.ConnectionId,
-                MostRecentIpAddress = clientIp,
-                CreateDate = DateTime.UtcNow,
-                LastLogin = DateTime.UtcNow
-            };
-
-            LogClientVersionReport(clientId, ClientVersionReport.Apply(newClient, rawClientVersion, DateTime.UtcNow), rawClientVersion);
-
-            Result<Client?> createResult = await _clientService.CreateClientAsync(newClient);
-
-            if (!createResult.IsSuccess || createResult.Data == null)
-            {
-                _logger.LogError("Failed to create new client entry for ID {ClientId}: {Error}", clientId, createResult.Error);
-
-                Context.Abort();
-                return;
-            }
-
-            client = createResult.Data!;
+            Context.Abort();
+            return;
         }
-        else
+
+        Client client = result.Data;
+
+        client.LastUpdateDate = DateTime.UtcNow;
+        client.MostRecentConnectionId = Context.ConnectionId;
+        client.MostRecentIpAddress = clientIp;
+        client.LastLogin = DateTime.UtcNow;
+        client.LastAuthMethod = usesCredential ? ClientAuthMethod.Credential : ClientAuthMethod.LegacySecret;
+
+        LogClientVersionReport(clientId, ClientVersionReport.Apply(client, rawClientVersion, DateTime.UtcNow), rawClientVersion);
+
+        Result<Client?> updateResult = await _clientService.UpdateClientAsync(client);
+
+        if (!updateResult.IsSuccess)
         {
-            client = result.Data!;
+            _logger.LogError("Failed to update client entry for ID {ClientId}: {Error}", clientId, updateResult.Error);
 
-            client.LastUpdateDate = DateTime.UtcNow;
-            client.MostRecentConnectionId = Context.ConnectionId;
-            client.MostRecentIpAddress = clientIp;
-            client.LastLogin = DateTime.UtcNow;
-
-            LogClientVersionReport(clientId, ClientVersionReport.Apply(client, rawClientVersion, DateTime.UtcNow), rawClientVersion);
-
-            Result<Client?> updateResult = await _clientService.UpdateClientAsync(client);
-
-            if (!updateResult.IsSuccess)
-            {
-                _logger.LogError("Failed to update client entry for ID {ClientId}: {Error}", clientId, updateResult.Error);
-
-                Context.Abort();
-                return;
-            }
-
-            await SendProjectionProgramInfoToClientAsync(client.Id);
-            await SendMusicSettingsToClientAsync(client);
-            await SendDmxSettingsToClientAsync(client);
-            await SendZoneScoreboardSettingsToClientAsync(client);
-            await SendRestartScheduleToClientAsync(client);
-            await SendAudioSettingsToClientAsync(client);
+            Context.Abort();
+            return;
         }
+
+        _logger.LogInformation("Kiosk {ClientId} ({ConnectionId}) authenticated with {AuthMethod}", clientId, Context.ConnectionId, client.LastAuthMethod);
+
+        await SendProjectionProgramInfoToClientAsync(client.Id);
+        await SendMusicSettingsToClientAsync(client);
+        await SendDmxSettingsToClientAsync(client);
+        await SendZoneScoreboardSettingsToClientAsync(client);
+        await SendRestartScheduleToClientAsync(client);
+        await SendAudioSettingsToClientAsync(client);
 
         string musicGroup = MusicGroupFor(client.CompanyId);
         Context.Items[MusicGroupItemKey] = musicGroup;
@@ -757,5 +731,24 @@ public class SignalRControlHub(
         }
 
         return _videoStreamTokenService.IssueViewerToken(getClientResult.Data);
+    }
+
+    // ClientHubMethods.IssueMediaToken. Only for a kiosk with its own credential: the token stands
+    // in for that credential, and dies with it.
+    public KioskMediaTokenDTO? IssueMediaToken()
+    {
+        Guid? clientId = KioskRequestAuthorization.GetClientId(Context.User);
+        Guid? credentialId = KioskRequestAuthorization.GetCredentialId(Context.User);
+
+        if (clientId is not Guid kioskId || credentialId is not Guid kioskCredentialId
+            || !int.TryParse(Context.User?.FindFirst(LocationClaimTypes.CompanyId)?.Value, out int companyId))
+        {
+            _logger.LogWarning("Connection {ConnectionId} asked for a media token without a kiosk credential", Context.ConnectionId);
+            return null;
+        }
+
+        string token = _mediaTokenService.Issue(new KioskIdentity(kioskId, companyId, kioskCredentialId));
+
+        return new KioskMediaTokenDTO(token, DateTime.UtcNow.Add(_mediaTokenService.Lifetime));
     }
 }

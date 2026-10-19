@@ -98,7 +98,7 @@ public class SignalRControlHubGameCaptureTests
             Mock.Of<IClientZoneScoreboardService>(),
             Mock.Of<IVideoStreamTokenService>(),
             gameResultServiceMock.Object,
-            Mock.Of<IClientSecretValidator>(),
+            Mock.Of<IKioskMediaTokenService>(),
             Mock.Of<IKioskHealthService>(),
             Mock.Of<IAudioClipPlaybackService>())
         {

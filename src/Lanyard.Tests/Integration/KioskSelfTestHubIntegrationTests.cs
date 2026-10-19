@@ -90,6 +90,8 @@ public class KioskSelfTestHubIntegrationTests
     {
         await using WebApplicationFactory<Program> factory = CreateFactory();
         Guid clientId = Guid.NewGuid();
+        // Registered first: the hub only accepts kiosks it already knows.
+        await KioskTestSupport.RegisterKioskAsync(factory, clientId);
         await using HubConnection kiosk = CreateKioskConnection(factory, clientId);
 
         KioskSelfTestRequestDTO? received = null;
@@ -140,6 +142,8 @@ public class KioskSelfTestHubIntegrationTests
         // A kiosk on a client from before the self-test: connected, nothing registered.
         await using WebApplicationFactory<Program> factory = CreateFactory();
         Guid clientId = Guid.NewGuid();
+        // Registered first: the hub only accepts kiosks it already knows.
+        await KioskTestSupport.RegisterKioskAsync(factory, clientId);
         await using HubConnection kiosk = CreateKioskConnection(factory, clientId);
 
         await kiosk.StartAsync();
@@ -159,6 +163,8 @@ public class KioskSelfTestHubIntegrationTests
         // which read as "kiosk too old" until the service checked its own token.
         await using WebApplicationFactory<Program> factory = CreateFactory();
         Guid clientId = Guid.NewGuid();
+        // Registered first: the hub only accepts kiosks it already knows.
+        await KioskTestSupport.RegisterKioskAsync(factory, clientId);
         await using HubConnection kiosk = CreateKioskConnection(factory, clientId);
 
         kiosk.On<KioskSelfTestRequestDTO, KioskSelfTestResultDTO>(ClientHubMethods.RunSelfTest, async request =>

@@ -750,5 +750,15 @@
       "The self-test plays a short beep so someone by the kiosk can hear the speakers work, but skips it while music or an audio clip is playing. It can also flash every light for a second, but only if you ask and no lighting scene is running.",
       "Self-test results are kept for 90 days, so you can compare a kiosk with how it was last week. The kiosk's Health tab shows when it was last tested."
     ]
+  },
+  {
+    "version": "1.4.17",
+    "releaseDate": "2026-10-19",
+    "summary": "Each kiosk gets its own sign-in instead of one password shared by every kiosk.",
+    "details": [
+      "Kiosks are moving from one shared password to their own credential, so the server always knows which kiosk is talking to it and only ever shows it your company's music, files and screens.",
+      "Manage > Clients shows how each kiosk signed in last time. Kiosks still on the old shared password are marked \"Shared secret\". They move over by themselves once they update to the latest kiosk software, and nothing changes for them until then.",
+      "A kiosk the server has never seen is no longer added to the Clients list automatically. New kiosks will be added by pairing them with a code, coming in the next update."
+    ]
   }
 ]

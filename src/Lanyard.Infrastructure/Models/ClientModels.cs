@@ -1,3 +1,4 @@
+using Lanyard.Infrastructure.Enum;
 using Lanyard.Shared.Contracts;
 using Lanyard.Shared.Enum;
 using System.ComponentModel.DataAnnotations;
@@ -69,6 +70,53 @@ public class Client : ICompanyOwned
 
     [MaxLength(ClientVersionFormat.MaxLength)]
     public string? PinnedClientVersion { get; set; }
+
+    // How the kiosk authenticated on its latest hub connection. Null until it connects once after
+    // per-kiosk credentials shipped. Only SignalRControlHub.OnConnectedAsync writes it.
+    public ClientAuthMethod? LastAuthMethod { get; set; }
+
+    public List<ClientCredential> Credentials { get; set; } = [];
+}
+
+/// <summary>
+/// A kiosk's own secret, so the server knows which kiosk is calling rather than trusting the id it
+/// claims. Only a SHA-256 hash is kept: the raw value goes to the kiosk once, when it is issued.
+/// A kiosk has at most one active credential (ActivatedUtc set) plus, while a rotation is waiting
+/// for the kiosk to confirm it saved the new one, one pending credential (ActivatedUtc null).
+/// Never deleted: revoking sets RevokedUtc and IsActive = false, which keeps the history.
+/// </summary>
+public class ClientCredential
+{
+    public Guid Id { get; set; }
+
+    public Guid ClientId { get; set; }
+    public Client? Client { get; set; }
+
+    [MaxLength(64)]
+    public string SecretHash { get; set; } = string.Empty;
+
+    public ClientCredentialSource Source { get; set; }
+
+    public DateTime CreatedUtc { get; set; }
+
+    // The Admin who paired or rotated it. Null when a kiosk exchanged the legacy shared secret.
+    [MaxLength(450)]
+    public string? CreatedByUserId { get; set; }
+
+    public DateTime? ActivatedUtc { get; set; }
+
+    // Throttled (see KioskCredentialService), so it is "roughly when", not an audit trail.
+    public DateTime? LastUsedUtc { get; set; }
+
+    public DateTime? RevokedUtc { get; set; }
+
+    [MaxLength(450)]
+    public string? RevokedByUserId { get; set; }
+
+    [MaxLength(200)]
+    public string? RevokeReason { get; set; }
+
+    public bool IsActive { get; set; } = true;
 }
 
 /// <summary>

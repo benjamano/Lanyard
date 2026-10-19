@@ -15,6 +15,8 @@ namespace Lanyard.Application.Services.Authentication
     /// so this REST path and the SignalR hub's connection-gating middleware (in Program.cs) can never
     /// decide the unconfigured-secret case differently.
     /// </summary>
+    // No longer called: kiosk endpoints use KioskRequestAuthorization and the hub uses the Kiosk
+    // authentication scheme. Removed along with the shared secret (kiosk enrolment PR 5/5).
     public static class ClientRequestAuthorization
     {
         public const string SecretHeaderName = ClientConnectionQuery.SecretHeader;

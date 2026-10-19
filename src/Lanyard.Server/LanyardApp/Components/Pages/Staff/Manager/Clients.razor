@@ -8,6 +8,7 @@
 @using Lanyard.Application.Services.Clients
 @using Lanyard.Shared.Contracts
 @using Lanyard.Shared.Enum
+@using Lanyard.Infrastructure.Enum
 @using System.Globalization
 
 @implements IDisposable
@@ -39,11 +40,40 @@
             </FluentStack>
         </div>
     }
+    @if (_legacySecretCount > 0 || _credentialCount > 0)
+    {
+        <div class="clients-version-summary">
+            <span class="clients-muted">Kiosk sign-in</span>
+            <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="8px" VerticalGap="8px">
+                <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Success"
+                             Title="Kiosks that signed in with their own credential last time they connected">
+                    Own credential · @_credentialCount
+                </FluentBadge>
+                @if (_legacySecretCount > 0)
+                {
+                    <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Warning"
+                                 Title="@SharedSecretTooltip">
+                        Shared secret · @_legacySecretCount
+                    </FluentBadge>
+                }
+            </FluentStack>
+        </div>
+    }
     <div class="clients-grid-wrapper">
         <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="minmax(0, 0.6fr) minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(125px, 1.1fr) minmax(0, 1.1fr) 224px" Class="clients-grid">
             <ChildContent>
                 <PropertyColumn Property="x => x.Id" Title="Client ID" Class="clients-col-id"/>
-                <PropertyColumn Sortable="true" Property="x => x.Name" Title="Name" />
+                <TemplateColumn Title="Name" Sortable="true" SortBy="@_sortByName">
+                    <div class="clients-name-cell">
+                        <span class="clients-name-text">@context.Name</span>
+                        @if (context.LastAuthMethod == ClientAuthMethod.LegacySecret)
+                        {
+                            <span class="clients-signin-warning" title="@SharedSecretTooltip" role="img" aria-label="Signs in with the shared secret">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Color="Color.Warning" />
+                            </span>
+                        }
+                    </div>
+                </TemplateColumn>
                 <PropertyColumn Property="x => x.MostRecentIpAddress" Title="IP Address" Class="clients-col-ip"/>
                 <TemplateColumn Title="Version" Class="clients-col-version">
                     <div class="clients-version-cell">
@@ -127,6 +157,10 @@
                     <div class="clients-phone-meta">
                         <span class="@(client.ReportedClientVersion is null ? "clients-muted" : null)">@VersionLabel(client.ReportedClientVersion)</span>
                         <ClientUpdateRingBadges Target="@TargetFor(client.Id)" />
+                        @if (client.LastAuthMethod == ClientAuthMethod.LegacySecret)
+                        {
+                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Warning" Title="@SharedSecretTooltip">Shared secret</FluentBadge>
+                        }
                         <span>·</span>
                         <KioskHealthBadge Health="@_health.GetValueOrDefault(client.Id)" IsConnected="@client.IsCurrentlyConnected" />
                         @if (client.LastLogin is DateTime lastLogin)
@@ -191,6 +225,15 @@
     private sealed record ClientVersionCount(string? Version, int Count);
 
     private List<ClientVersionCount> _versionCounts = [];
+
+    // How the kiosks signed in on their latest connection. Kiosks that haven't connected since
+    // per-kiosk credentials shipped aren't counted either way.
+    private int _credentialCount;
+    private int _legacySecretCount;
+
+    private static readonly GridSort<ClientConnectedWithCapabilitiesDTO> _sortByName = GridSort<ClientConnectedWithCapabilitiesDTO>.ByAscending(x => x.Name);
+
+    private const string SharedSecretTooltip = "Still signing in with the old shared kiosk secret. It gets its own credential automatically once it updates to the latest kiosk software.";
 
     // Update ring and target per client. Empty (no badges) if releases couldn't be loaded, which
     // must not stop the rest of the page working.
@@ -268,6 +311,8 @@
             clients = result.Data!;
             _sortedClients = clients.OrderBy(x => x.Name).ToList().AsQueryable();
             _versionCounts = BuildVersionCounts(clients);
+            _credentialCount = clients.Count(x => x.LastAuthMethod == ClientAuthMethod.Credential);
+            _legacySecretCount = clients.Count(x => x.LastAuthMethod == ClientAuthMethod.LegacySecret);
 
             Result<IReadOnlyDictionary<Guid, ClientUpdateTargetDTO>> targets = await _updatePolicyService.GetTargetsAsync();
 
