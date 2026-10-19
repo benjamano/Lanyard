@@ -111,6 +111,22 @@ public class ClientHealthSnapshot
     public DateTime? OfflineCacheSyncedUtc { get; set; }
     public DateTime? LastOfflineStartedUtc { get; set; }
     public DateTime? LastOfflineEndedUtc { get; set; }
+
+    // Alert state, written only by KioskAlertMonitorHostedService (heartbeats never touch it). Kept
+    // in the database so a redeploy neither repeats an alert nor forgets to say a kiosk is back.
+
+    /// <summary>
+    /// Set once an "offline" alert has gone out: when that outage started, so "back online" can say
+    /// how long it lasted. Cleared once the kiosk is back.
+    /// </summary>
+    public DateTime? OfflineAlertedSinceUtc { get; set; }
+
+    /// <summary>When the kiosk was first seen degraded this time; cleared once it's healthy.</summary>
+    public DateTime? DegradedSinceUtc { get; set; }
+
+    /// <summary>The problems already alerted for, one per line, so only a new one alerts again.</summary>
+    [MaxLength(500)]
+    public string? AttentionAlertReasons { get; set; }
 }
 
 public class ClientProjectionSettings

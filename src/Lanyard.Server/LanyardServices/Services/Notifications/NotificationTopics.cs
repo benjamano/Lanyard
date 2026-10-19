@@ -8,7 +8,8 @@ public enum NotificationTopicGroup
     Cover,
     TimeOff,
     Chat,
-    Announcements
+    Announcements,
+    Kiosks
 }
 
 // How one topic is described in Notification settings, and what someone gets before they have
@@ -73,7 +74,14 @@ public static class NotificationTopics
         // Only sent when the manager posting it ticks "Email and notify staff", so it is rare and
         // meant to be read: on by both channels.
         new(NotificationTopic.Announcement, NotificationTopicGroup.Announcements,
-            "Announcements", "Your managers send out an announcement for your location.", DefaultPush: true, DefaultEmail: true, ManagerOnly: false)
+            "Announcements", "Your managers send out an announcement for your location.", DefaultPush: true, DefaultEmail: true, ManagerOnly: false),
+
+        // Sent by KioskAlertMonitorHostedService during the location's opening hours. A kiosk
+        // being down is worth an email; one that needs attention is not urgent, so push only.
+        new(NotificationTopic.KioskOffline, NotificationTopicGroup.Kiosks,
+            "Kiosk offline", "A kiosk at your location stops responding, and when it's back.", DefaultPush: true, DefaultEmail: true, ManagerOnly: true),
+        new(NotificationTopic.KioskNeedsAttention, NotificationTopicGroup.Kiosks,
+            "Kiosk needs attention", "A kiosk has had a problem for 10 minutes, such as low disk space or its lighting not connected.", DefaultPush: true, DefaultEmail: false, ManagerOnly: true)
     ];
 
     public static NotificationTopicInfo Get(NotificationTopic topic) =>
@@ -94,6 +102,7 @@ public static class NotificationTopics
         NotificationTopicGroup.TimeOff => "Time off",
         NotificationTopicGroup.Chat => "Chat",
         NotificationTopicGroup.Announcements => "Announcements",
+        NotificationTopicGroup.Kiosks => "Kiosks",
         _ => group.ToString()
     };
 }

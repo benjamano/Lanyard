@@ -1130,12 +1130,19 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<Guid>("ClientId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AttentionAlertReasons")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<string>("ClientVersion")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
                     b.Property<double?>("CpuPercent")
                         .HasColumnType("double precision");
+
+                    b.Property<DateTime?>("DegradedSinceUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<bool>("DmxConfigured")
                         .HasColumnType("boolean");
@@ -1160,6 +1167,9 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Property<double?>("MemoryPercent")
                         .HasColumnType("double precision");
+
+                    b.Property<DateTime?>("OfflineAlertedSinceUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<long?>("OfflineCacheBytes")
                         .HasColumnType("bigint");
