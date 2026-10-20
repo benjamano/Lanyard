@@ -432,3 +432,6 @@ docs/
 TestResults/
 coverage-report/
 .tools/
+
+# Local File Manager uploads (Development stores them on disk). Never commit real files.
+src/Lanyard.Server/LanyardApp/UploadedFiles/
