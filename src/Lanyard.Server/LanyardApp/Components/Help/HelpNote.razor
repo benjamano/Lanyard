@@ -1,0 +1,11 @@
+@* A highlighted tip or warning inside a help tab. *@
+
+<FluentMessageBar Intent="@Intent">
+    @ChildContent
+</FluentMessageBar>
+
+@code {
+    [Parameter] public MessageBarIntent Intent { get; set; } = MessageBarIntent.Info;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

@@ -1,0 +1,43 @@
+@* Shell for every help page: title, a link back to the hub, and the topic tabs. The page supplies
+   one FluentTab per topic in its HelpRegistry entry, with Id="@area.Topics[n].TabId". *@
+
+<PageTitle>@Area.Title Help</PageTitle>
+
+<FluentCard Height="auto">
+    <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12" Wrap="true">
+        <FluentText As="TextTag.H4" Size="TextSize.Size500">@Area.Title Help</FluentText>
+        <FluentSpacer />
+        <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.ArrowLeft())"
+                      OnClick="@(() => _navigationManager.NavigateTo("/help"))">
+            All help
+        </FluentButton>
+    </FluentStack>
+
+    <div class="help-summary"><FluentText>@Area.Summary</FluentText></div>
+
+    <div class="help-tabs-host">
+        <FluentTabs @bind-ActiveTabId="activeTabId" Orientation="Orientation.Horizontal" Size="TabsSize.Medium">
+            @ChildContent
+        </FluentTabs>
+    </div>
+</FluentCard>
+
+@code {
+    [Parameter, EditorRequired] public string AreaKey { get; set; } = string.Empty;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [SupplyParameterFromQuery(Name = "topic")]
+    public string? Topic { get; set; }
+
+    private HelpArea Area => HelpRegistry.Get(AreaKey);
+
+    private string? activeTabId;
+
+    protected override void OnParametersSet()
+    {
+        // Only seed from the query string once - after that, tab clicks own this field via
+        // @bind-ActiveTabId, and re-applying Topic on every render would snap the tab back.
+        activeTabId ??= (Area.Topics.FirstOrDefault(t => t.Key == Topic) ?? Area.Topics[0]).TabId;
+    }
+}
