@@ -59,9 +59,10 @@
                     {
                         <TimeOffChip Request="@timeOff" Compact="true" />
                     }
+                    <UnavailableNote Windows="@row.UnavailableOn(day)" Compact="true" />
                     @foreach (Shift shift in row.Shifts.Where(s => s.LocalDate() == day))
                     {
-                        <ShiftChip Shift="@shift" Compact="true" OnClick="@OnEdit" />
+                        <ShiftChip Shift="@shift" Compact="true" OnClick="@OnEdit" TrainingGaps="@View.TrainingGapsFor(shift)" />
                     }
                     @if (row.IsLocationMember)
                     {

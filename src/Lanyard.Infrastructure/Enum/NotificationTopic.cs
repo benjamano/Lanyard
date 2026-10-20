@@ -19,5 +19,8 @@ public enum NotificationTopic
     ChatReport = 11,
     ChatReportReviewed = 12,
     ChannelMessage = 13,
-    PinnedPost = 14
+    PinnedPost = 14,
+    Announcement = 15,
+    KioskOffline = 16,
+    KioskNeedsAttention = 17
 }

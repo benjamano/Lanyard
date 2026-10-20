@@ -103,6 +103,9 @@ Run `dotnet build LanyardApp.sln` and `dotnet test src/Lanyard.Tests/Lanyard.Tes
 ### Release notes — update whenever a change is user-noticeable
 If a change would be noticeable to a user (new feature, behaviour change, visible bug fix, new email, new UI element, etc. — not internal refactors, test-only changes, or dev-tooling tweaks), add an entry to `src/Lanyard.Server/LanyardServices/Services/ReleaseNotes/release-notes.json` describing it, and bump `<Version>` in `src/Lanyard.Server/LanyardApp/Lanyard.App.csproj` to match the new release-notes entry's `version`. Do this as part of the same piece of work — don't wait to be asked.
 
+### Help pages — add or update one whenever a feature changes
+Every area of the app has a help page (the `/help` hub lists them). When you add a page, or change what users see or do in an area, add or update that area's help in the same piece of work: the tab content under `Components/Help/<Area>/`, the page at `/help/<key>` in `Components/Pages/Help/`, the area's `HelpRegistry` entry (`LanyardApp/Help/HelpRegistry.cs`), and a `HelpButton` on the area's main pages. Write it from the real UI: name the buttons and fields people actually see, and never describe behaviour the code doesn't have. `HelpCoverageTests` fails for any routed page that no help area covers. Details are in the `help-pages` skill.
+
 ### UI screenshots go on the PR
 
 If a change is user-noticeable UI, its PR must carry the screenshots — phone (390x844) and desktop (1440x900). Publish them with `.claude/scripts/publish-screenshots.sh`; see the `verify` skill for the capture-and-publish loop.
@@ -125,4 +128,4 @@ Every `@page` needs `@attribute [Authorize]`/`[Authorize(Roles = "...")]` or `@a
 
 ## Deep-Dive Skills
 
-Topic deep-dives (DMX, automation, dashboards, routes, charts, Fluent UI, testing, client release) live in `.claude/skills/` and load on demand — check the skill list before touching those areas.
+Topic deep-dives (DMX, automation, dashboards, routes, charts, Fluent UI, testing, client release, help pages) live in `.claude/skills/` and load on demand — check the skill list before touching those areas.

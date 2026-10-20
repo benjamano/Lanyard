@@ -44,7 +44,7 @@ public class AutomationEngineServiceTests
         return new AutomationEngineService(
             GetFactory(options),
             executors,
-            NullLogger<AutomationEngineService>.Instance);
+            new LaserGameStatusStore(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
     }
 
     // The engine reads its enabled flag from AppSettings on the first ProcessTransitionAsync and

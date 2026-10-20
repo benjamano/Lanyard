@@ -18,7 +18,8 @@ internal static class DemoDataWiper
 
         await EnsureIsDemoCompanyAsync(ctx, demoCompanyId, ct);
 
-        // Training
+        // Training (the position requirements point at courses, so they go first)
+        await ctx.StaffPositionRequiredCourses.ExecuteDeleteAsync(ct);
         await ctx.CourseQuizAttemptAnswers.ExecuteDeleteAsync(ct);
         await ctx.CourseQuizAttempts.ExecuteDeleteAsync(ct);
         await ctx.CourseSectionProgresses.ExecuteDeleteAsync(ct);
@@ -41,9 +42,11 @@ internal static class DemoDataWiper
         await ctx.Shifts.ExecuteDeleteAsync(ct);
         await ctx.ClockInTerminals.ExecuteDeleteAsync(ct);
         await ctx.LocationSchedulingSettings.ExecuteDeleteAsync(ct);
+        await ctx.LocationOpeningHours.ExecuteDeleteAsync(ct);
         await ctx.TimeOffRequests.ExecuteDeleteAsync(ct);
         await ctx.TimeOffAllowances.ExecuteDeleteAsync(ct);
         await ctx.TimeOffTypes.ExecuteDeleteAsync(ct);
+        await ctx.StaffAvailabilities.ExecuteDeleteAsync(ct);
         await ctx.UserPositions.ExecuteDeleteAsync(ct);
         await ctx.ContractRequirements.ExecuteDeleteAsync(ct);
         await ctx.StaffPositions.ExecuteDeleteAsync(ct);
@@ -64,6 +67,7 @@ internal static class DemoDataWiper
         await ctx.AutomationRuleActionExecutions.ExecuteDeleteAsync(ct);
         await ctx.AutomationRuleExecutions.ExecuteDeleteAsync(ct);
         await ctx.AutomationRuleActions.ExecuteDeleteAsync(ct);
+        await ctx.AutomationRuleConditions.ExecuteDeleteAsync(ct);
         await ctx.AutomationRules.ExecuteDeleteAsync(ct);
 
         // DMX, game results, projection, kiosks
@@ -71,6 +75,11 @@ internal static class DemoDataWiper
         await ctx.DmxSceneSteps.ExecuteDeleteAsync(ct);
         await ctx.DmxScenes.ExecuteDeleteAsync(ct);
         await ctx.DmxFixtures.ExecuteDeleteAsync(ct);
+        // This context can also see the shared built-in definitions, so only delete the company's own.
+        await ctx.DmxFixtureModeChannelColorRanges.Where(x => x.ModeChannel!.Mode!.Definition!.CompanyId != null).ExecuteDeleteAsync(ct);
+        await ctx.DmxFixtureModeChannels.Where(x => x.Mode!.Definition!.CompanyId != null).ExecuteDeleteAsync(ct);
+        await ctx.DmxFixtureModes.Where(x => x.Definition!.CompanyId != null).ExecuteDeleteAsync(ct);
+        await ctx.DmxFixtureDefinitions.Where(x => x.CompanyId != null).ExecuteDeleteAsync(ct);
         await ctx.GameResultPlayerScores.ExecuteDeleteAsync(ct);
         await ctx.GameResults.ExecuteDeleteAsync(ct);
         await ctx.ClientProjectionSettings.ExecuteDeleteAsync(ct);
@@ -85,7 +94,9 @@ internal static class DemoDataWiper
         await ctx.ZoneScoreboardSettings.ExecuteDeleteAsync(ct);
         await ctx.Clients.ExecuteDeleteAsync(ct);
 
-        // Music
+        // Music (dayparts point at playlists, so they go first)
+        await ctx.MusicDayparts.ExecuteDeleteAsync(ct);
+        await ctx.MusicSchedules.ExecuteDeleteAsync(ct);
         await ctx.PlaylistSongMembers.ExecuteDeleteAsync(ct);
         await ctx.Playlists.ExecuteDeleteAsync(ct);
         await ctx.Songs.ExecuteDeleteAsync(ct);

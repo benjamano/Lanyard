@@ -1,0 +1,229 @@
+@using Lanyard.Application.Services.MusicScheduling
+
+@inject IMusicScheduleService _musicScheduleService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.MusicNote2())" />
+            <FluentText As="@TextTag.H3">@(Daypart is null ? "Add part of the day" : "Edit part of the day")</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="daypart-dialog">
+            <FluentTextInput @bind-Value="name" Label="Name" Required="true" Width="100%"
+                             Placeholder="e.g. Before opening" />
+
+            <div class="daypart-field">
+                <FluentText Weight="TextWeight.Semibold">Days</FluentText>
+                <div class="daypart-days">
+                    @foreach (DayOfWeek day in MusicDaypartRules.WeekOrder)
+                    {
+                        DayOfWeek capturedDay = day;
+                        <FluentCheckbox Value="@days.Contains(capturedDay)"
+                                        ValueChanged="@((bool ticked) => ToggleDay(capturedDay, ticked))"
+                                        Label="@(capturedDay.ToString()[..3])" />
+                    }
+                </div>
+            </div>
+
+            <div class="daypart-times">
+                <AnyTimePicker TValue="TimeOnly?" @bind-Value="startTime" Label="Starts (UK time)" />
+                <AnyTimePicker TValue="TimeOnly?" @bind-Value="endTime" Label="Ends" />
+            </div>
+            @if (EndsNextDay)
+            {
+                <FluentText Class="daypart-hint">Ends the next day, after midnight. The days above are the days it starts.</FluentText>
+            }
+
+            <FluentSelect TOption="string" TValue="string" @bind-Value="playlistValue" Label="Playlist" Width="100%">
+                <FluentOption Value="@MusicOffValue">Music off (pause)</FluentOption>
+                @foreach (Playlist playlist in Playlists)
+                {
+                    <FluentOption Value="@playlist.Id.ToString()">@playlist.Name</FluentOption>
+                }
+            </FluentSelect>
+            @if (SelectedPlaylistIsEmpty)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                    This playlist has no songs yet, so nothing will play. Add some songs to it on the Music page.
+                </FluentMessageBar>
+            }
+
+            @if (playlistValue != MusicOffValue)
+            {
+                <div class="daypart-field">
+                    <FluentSwitch @bind-Value="setsVolume" Label="Set the volume" />
+                    @if (setsVolume)
+                    {
+                        <div class="daypart-volume">
+                            <FluentSlider TValue="int" Min="0" Max="100" Step="5" @bind-Value="volume" Class="daypart-volume-slider" />
+                            <FluentText Weight="TextWeight.Semibold" Class="daypart-volume-value">@volume%</FluentText>
+                        </div>
+                    }
+                    else
+                    {
+                        <FluentText Class="daypart-hint">Each kiosk keeps the volume it's already at.</FluentText>
+                    }
+                </div>
+            }
+
+            @if (errorMessage is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
+            }
+
+            <div class="daypart-actions">
+                <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@SaveAsync" Disabled="@isSaving">
+                    @(isSaving ? "Saving..." : (Daypart is null ? "Add" : "Save"))
+                </FluentButton>
+                <FluentButton Appearance="ButtonAppearance.Default" OnClick="@CancelAsync" Disabled="@isSaving">
+                    Cancel
+                </FluentButton>
+                @if (Daypart is not null)
+                {
+                    <span class="daypart-actions-spacer"></span>
+                    <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.Delete())"
+                                  OnClick="@RequestDeleteAsync" Disabled="@isSaving">
+                        Delete
+                    </FluentButton>
+                }
+            </div>
+        </div>
+    </ChildContent>
+</FluentDialogBody>
+
+@code {
+    private const string MusicOffValue = "off";
+
+    // What the dialog closes with when Delete is pressed; the page asks to confirm and deletes.
+    public const string DeleteRequested = "delete";
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required int LocationId { get; set; }
+
+    // Null = add. When editing, the fields are copied out so cancelling never changes the page's copy.
+    [Parameter]
+    public MusicDaypart? Daypart { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<Playlist> Playlists { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyDictionary<Guid, int> PlaylistSongCounts { get; set; } = new Dictionary<Guid, int>();
+
+    private string name = string.Empty;
+    private HashSet<DayOfWeek> days = [];
+    private TimeOnly? startTime = new TimeOnly(9, 0);
+    private TimeOnly? endTime = new TimeOnly(12, 0);
+    private string playlistValue = MusicOffValue;
+    private bool setsVolume;
+    private int volume = 50;
+    private string? errorMessage;
+    private bool isSaving;
+
+    private bool EndsNextDay => startTime is TimeOnly start && endTime is TimeOnly end && end < start;
+
+    private bool SelectedPlaylistIsEmpty =>
+        Guid.TryParse(playlistValue, out Guid id) && PlaylistSongCounts.GetValueOrDefault(id) == 0;
+
+    protected override void OnInitialized()
+    {
+        if (Daypart is null)
+        {
+            days = [.. MusicDaypartRules.WeekOrder];
+            playlistValue = Playlists.FirstOrDefault()?.Id.ToString() ?? MusicOffValue;
+            return;
+        }
+
+        name = Daypart.Name;
+        days = AutomationScheduleDays.TryParse(Daypart.DaysOfWeek, out List<DayOfWeek> parsed) ? [.. parsed] : [];
+        startTime = Daypart.StartTime;
+        endTime = Daypart.EndTime;
+        playlistValue = Daypart.PlaylistId?.ToString() ?? MusicOffValue;
+        setsVolume = Daypart.Volume is not null;
+        volume = Daypart.Volume ?? 50;
+    }
+
+    private void ToggleDay(DayOfWeek day, bool ticked)
+    {
+        if (ticked)
+        {
+            days.Add(day);
+        }
+        else
+        {
+            days.Remove(day);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        errorMessage = null;
+
+        if (startTime is not TimeOnly start || endTime is not TimeOnly end)
+        {
+            errorMessage = "Pick a start and an end time.";
+            return;
+        }
+
+        Guid? playlistId = Guid.TryParse(playlistValue, out Guid parsedPlaylist) ? parsedPlaylist : null;
+
+        MusicDaypart toSave = new()
+        {
+            Id = Daypart?.Id ?? Guid.Empty,
+            Name = name,
+            DaysOfWeek = AutomationScheduleDays.Serialize(days),
+            // Seconds would make two "09:00"s that look the same fail to line up.
+            StartTime = new TimeOnly(start.Hour, start.Minute),
+            EndTime = new TimeOnly(end.Hour, end.Minute),
+            PlaylistId = playlistId,
+            Volume = playlistId is not null && setsVolume ? volume : null
+        };
+
+        // Checked here too so a mistake shows straight away rather than after a round trip.
+        errorMessage = MusicDaypartRules.Validate(toSave);
+        if (errorMessage is not null)
+        {
+            return;
+        }
+
+        isSaving = true;
+
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+        Result<string> userResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null || !userResult.IsSuccess || userResult.Data is null)
+        {
+            isSaving = false;
+            errorMessage = "Couldn't work out who you are. Refresh the page and sign in again.";
+            return;
+        }
+
+        Result<MusicDaypart> result = await _musicScheduleService.SaveDaypartAsync(scopeResult.Data, LocationId, toSave, userResult.Data);
+
+        isSaving = false;
+
+        if (!result.IsSuccess)
+        {
+            errorMessage = result.Error;
+            return;
+        }
+
+        _toastService.ShowSuccess(Daypart is null ? "Added to the schedule." : "Schedule updated.");
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task RequestDeleteAsync()
+    {
+        await Dialog.CloseAsync(DeleteRequested);
+    }
+
+    private async Task CancelAsync()
+    {
+        await Dialog.CancelAsync();
+    }
+}

@@ -20,8 +20,8 @@ namespace Lanyard.API.Controllers
             _userManager = userManager;
         }
 
-        // Cookie auth only, deliberately not ClientRequestAuthorization: that helper exists
-        // to let kiosk clients through on a shared secret, which has no business fetching
+        // Cookie auth only, deliberately not KioskRequestAuthorization: that helper exists
+        // to let kiosk clients through, and a kiosk has no business fetching
         // somebody's personal training record. The ownership check itself lives in the
         // service, so this endpoint can only ever return the caller's own certificate.
         [HttpGet("assignments/{assignmentId:guid}/certificate")]

@@ -1,0 +1,32 @@
+@using Lanyard.Shared.Enum
+
+@* Small markers next to a kiosk's version: its update ring when it isn't Stable, and an arrow to the
+   version it should be on when it's running something else. *@
+@if (Target is not null)
+{
+    @if (Target.Ring == ClientUpdateRing.Canary)
+    {
+        <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative" Title="Gets new releases before everyone else">Canary</FluentBadge>
+    }
+    else if (Target.Ring == ClientUpdateRing.Pinned)
+    {
+        <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Subtle" Title="@($"Pinned to v{Target.PinnedVersion}")">Pinned</FluentBadge>
+    }
+
+    @if (Target.IsOffTarget)
+    {
+        <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Warning"
+                     Title="@($"Should be on v{Target.TargetVersion}. It moves on its next restart.")">
+            → v@(Target.TargetVersion)
+        </FluentBadge>
+    }
+    else if (Target.Problem is not null && Target.Ring == ClientUpdateRing.Pinned)
+    {
+        <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Danger" Title="@Target.Problem">Check pin</FluentBadge>
+    }
+}
+
+@code {
+    [Parameter]
+    public ClientUpdateTargetDTO? Target { get; set; }
+}

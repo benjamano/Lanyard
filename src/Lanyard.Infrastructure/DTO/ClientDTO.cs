@@ -39,3 +39,32 @@ public class ClientAudioSettingsDTO
     public string? PreferredDeviceId { get; set; }
     public string? PreferredDeviceName { get; set; }
 }
+
+// What a kiosk is set to run and what that resolves to right now.
+public class ClientUpdateTargetDTO
+{
+    public Guid ClientId { get; set; }
+    public ClientUpdateRing Ring { get; set; }
+    public string? PinnedVersion { get; set; }
+    public string? ReportedVersion { get; set; }
+
+    // Null when there's nothing to move to - the kiosk then stays on whatever it runs.
+    public string? TargetVersion { get; set; }
+
+    // Why there is no target, in words an admin can act on (e.g. the pinned release was withdrawn).
+    public string? Problem { get; set; }
+
+    // True when the kiosk has reported a version and it isn't the one it should be on.
+    public bool IsOffTarget => TargetVersion is not null && ReportedVersion is not null && ReportedVersion != TargetVersion;
+}
+
+// One kiosk release as the Kiosk Releases page shows it.
+public class ClientReleaseOverviewDTO
+{
+    public required ClientRelease Release { get; set; }
+
+    public bool IsStable { get; set; }
+
+    // How many PCs, across every company, last reported running this version.
+    public int ReportedPcCount { get; set; }
+}

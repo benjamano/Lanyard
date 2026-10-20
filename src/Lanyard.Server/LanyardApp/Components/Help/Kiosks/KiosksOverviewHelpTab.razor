@@ -1,0 +1,50 @@
+<HelpTab>
+    <FluentText>
+        A kiosk (or client) is a venue PC running the Lanyard Client. It plays music, shows projection programs,
+        drives DMX lighting and reads the laser game. <a href="/manage/clients">Clients</a> lists every kiosk and is
+        Admin-only.
+    </FluentText>
+
+    <HelpSection Title="The list">
+        <ul>
+            <li><strong>Kiosk versions</strong> at the top counts how many PCs are on each version.</li>
+            <li>Each kiosk shows its name, IP address, <strong>Version</strong> (and update ring), <strong>Last Login</strong>,
+                <strong>Capabilities</strong> (Projection, DMX), <strong>Health</strong> and, while connected, how long
+                it's been on.</li>
+        </ul>
+    </HelpSection>
+
+    <HelpSection Title="Health">
+        <ul>
+            <li><strong>Healthy</strong>: everything is fine.</li>
+            <li><strong>Degraded</strong>: it's running, but something needs a look. Hover to see why: low disk space,
+                high CPU or memory, the DMX device not open, the preferred audio device missing, zone scoreboard
+                capture stopped, or offline fallback not ready.</li>
+            <li><strong>Unresponsive</strong>: it has stopped sending heartbeats without closing properly (hung, crashed
+                or network down).</li>
+            <li><strong>Offline</strong>: unresponsive for long enough to count as down.</li>
+            <li><strong>Disconnected</strong>: it closed properly, for example it was shut down.</li>
+            <li><strong>No data</strong>: the client is too old to report health. It updates the next time it restarts.</li>
+        </ul>
+        <FluentText>
+            During the location's opening hours, its Managers and the company's Admins are notified when a kiosk
+            goes offline, when it's back, and when it stays degraded. People can turn these off under
+            Notifications on their account page. The Kiosk Health dashboard widget shows the same thing.
+        </FluentText>
+    </HelpSection>
+
+    <HelpSection Title="Actions">
+        <ul>
+            <li><strong>Settings</strong>: see the next tab.</li>
+            <li><strong>Restart</strong>: choose <strong>Restart Lanyard Client</strong> (usually back within a few seconds)
+                or <strong>Restart the whole PC</strong> (after a 10-second warning; can take a few minutes).</li>
+            <li><strong>Diagnostics</strong>: fetch the kiosk's recent log for troubleshooting. Passwords and tokens are
+                hidden.</li>
+            <li><strong>Screens</strong>: <strong>Capture screens</strong> to see what each projected screen is showing right now.</li>
+        </ul>
+        <FluentText>
+            Restart, Diagnostics and Screens only work while the kiosk is connected. Logs and screenshots are kept
+            for 10 minutes and only Admins can see them.
+        </FluentText>
+    </HelpSection>
+</HelpTab>

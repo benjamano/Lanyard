@@ -11,10 +11,7 @@
     <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center"
                  Wrap="true">
         <FluentText As="TextTag.H4" Size="TextSize.Size500">Training Dashboard</FluentText>
-        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.QuestionCircle())"
-                      OnClick="@(() => _navigationManager.NavigateTo($"/manage/training/help?topic={HelpTopicForActiveTab}"))">
-            Help
-        </FluentButton>
+        <HelpButton AreaKey="@HelpRegistry.ManageTraining" Topic="@HelpTopicForActiveTab" />
     </FluentStack>
 
     <div class="training-tabs-host">
@@ -39,7 +36,24 @@
 </FluentCard>
 
 @code {
+    // Lets a link land on a tab, e.g. the compliance widget's overdue-training names.
+    [SupplyParameterFromQuery(Name = "tab")]
+    public string? Tab { get; set; }
+
     private string? activeTabId;
+
+    protected override void OnParametersSet()
+    {
+        // Seeded once - after that, tab clicks own this via @bind-ActiveTabId.
+        activeTabId ??= Tab switch
+        {
+            "by-person" => "dash-by-person",
+            "auto-assign" => "dash-auto-assign",
+            "timing" => "dash-timing",
+            "analytics" => "dash-analytics",
+            _ => "dash-by-course"
+        };
+    }
 
     // Maps each dashboard tab to the Training Help topic that documents it.
     private string HelpTopicForActiveTab => activeTabId switch

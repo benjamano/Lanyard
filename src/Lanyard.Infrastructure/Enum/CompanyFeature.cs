@@ -19,6 +19,9 @@ public enum CompanyFeature
     // The Announcements page and widget.
     Announcements = 5,
 
+    // Demand and staffing insights: the Insights page and its dashboard widget.
+    Insights = 6,
+
     // Party bookings and the documents printed for each party.
-    Parties = 6
+    Parties = 7
 }

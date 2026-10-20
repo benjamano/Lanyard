@@ -5,6 +5,10 @@
 @using Lanyard.Application.Services.Authentication
 
 <div class="p-2">
+    <div class="d-flex justify-content-end">
+        <HelpButton AreaKey="@HelpRegistry.Users" Topic="roles" />
+    </div>
+
     <UserRolesManager @ref="_userRoleManager" />
 
     @if (isAdmin)

@@ -1,12 +1,15 @@
 @page "/rota"
 @page "/rota/time-off"
 @page "/rota/open"
+@page "/rota/availability"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @attribute [RequiresFeature(CompanyFeature.StaffScheduling)]
 
 @using Lanyard.App.Components.Rota
 @using Lanyard.App.Components.Rota.TimeOff
 @using Lanyard.App.Components.Rota.Claims
+@using Lanyard.App.Components.Rota.CalendarFeed
+@using Lanyard.App.Components.Rota.Availability
 @using Microsoft.AspNetCore.Components.Routing
 @implements IDisposable
 
@@ -14,7 +17,15 @@
 
 <div class="p-2 my-shifts-page">
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16px">
-        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size700">My Shifts</FluentText>
+        <div class="my-shifts-header">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size700">My Shifts</FluentText>
+            <div class="my-shifts-header-actions">
+                <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.CalendarAdd())" OnClick="OpenCalendarFeedAsync">
+                    Add to calendar
+                </FluentButton>
+                <HelpButton AreaKey="@HelpRegistry.MyShifts" Topic="@HelpTopicForActiveTab" />
+            </div>
+        </div>
         <FluentTabs @bind-ActiveTabId="activeTabId">
             <FluentTab Id="shifts" Header="Upcoming shifts" IconStart="@(new Icons.Regular.Size20.CalendarLtr())">
                 <div class="pt-3">
@@ -36,22 +47,44 @@
                     <MyTimeOffPanel />
                 </div>
             </FluentTab>
+            <FluentTab Id="availability" Header="Availability" IconStart="@(new Icons.Regular.Size20.CalendarClock())" DeferredLoading="true">
+                <div class="pt-3">
+                    @if (currentUserId is not null)
+                    {
+                        <AvailabilityEditor UserId="@currentUserId" />
+                    }
+                </div>
+            </FluentTab>
         </FluentTabs>
     </FluentStack>
 </div>
 
 @code {
     private string? activeTabId;
+
+    // Maps each tab to the My Shifts help topic that explains it.
+    private string HelpTopicForActiveTab => activeTabId switch
+    {
+        "open" => "changes",
+        "hours" => "clocking",
+        "time-off" => "time-off",
+        "availability" => "availability",
+        _ => "overview"
+    };
+    private string? currentUserId;
     private MyShiftsList? shiftsList;
 
     // /rota/time-off opens straight on the Time off tab (it's what the nav's "Time Off" link and any
     // "your request was decided" link point at). /rota and /rota/time-off are the same component,
     // so moving between them reuses this instance without re-initialising it - the tab follows the
     // address on every navigation instead. Clicking a tab doesn't navigate, so it never snaps back.
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         activeTabId = TabFor(_navigationManager.Uri);
         _navigationManager.LocationChanged += OnLocationChanged;
+
+        Result<string> userId = await _securityService.GetCurrentUserIdAsync();
+        currentUserId = userId.IsSuccess ? userId.Data : null;
     }
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
@@ -71,7 +104,18 @@
 
         return path.EndsWith("/time-off", StringComparison.OrdinalIgnoreCase) ? "time-off"
             : path.EndsWith("/open", StringComparison.OrdinalIgnoreCase) ? "open"
+            : path.EndsWith("/availability", StringComparison.OrdinalIgnoreCase) ? "availability"
             : "shifts";
+    }
+
+    private async Task OpenCalendarFeedAsync()
+    {
+        await _dialogService.ShowDialogAsync<CalendarFeedDialog>(options =>
+        {
+            options.Header.Title = "Add your shifts to your calendar";
+            options.Width = "520px";
+            options.Modal = true;
+        });
     }
 
     public void Dispose() => _navigationManager.LocationChanged -= OnLocationChanged;

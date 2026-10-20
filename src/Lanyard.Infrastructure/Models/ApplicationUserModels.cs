@@ -28,6 +28,15 @@ namespace Lanyard.Infrastructure.Models
         public DateTime? InvitedDate { get; set; }
         public DateTime? PasswordSetDate { get; set; }
 
+        // The occasional "how would you rate Lanyard?" prompt: when it last appeared (shown,
+        // dismissed or answered), and whether they've asked never to see it again.
+        public DateTime? FeedbackPromptLastUtc { get; set; }
+        public bool FeedbackPromptOptOut { get; set; }
+        // Set the first time the user finishes or skips the course player walkthrough. Until then
+        // it starts by itself on every course they open, so a new starter sees it on their very
+        // first course whichever device they use.
+        public DateTime? CourseWalkthroughCompletedDate { get; set; }
+
         public string GetName()
         {
             return FirstName + " " + LastName;

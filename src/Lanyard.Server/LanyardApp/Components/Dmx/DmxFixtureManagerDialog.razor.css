@@ -1,0 +1,140 @@
+.fixture-manager {
+    width: 100%;
+}
+
+.fixture-manager ::deep .fixture-add-card {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Phone first: each field on its own full-width line, side by side once there's room. */
+.fixture-form-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+
+.fixture-form-row ::deep .fixture-name-input,
+.fixture-form-row ::deep .fixture-name-input fluent-text-input {
+    width: 100%;
+    max-width: none;
+}
+
+@media (min-width: 600px) {
+    .fixture-form-row {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: flex-end;
+    }
+
+    .fixture-form-row ::deep .fixture-name-input,
+    .fixture-form-row ::deep .fixture-name-input fluent-text-input {
+        width: 180px;
+    }
+}
+
+.fixture-manager ::deep .fixture-footprint-hint {
+    color: var(--colorNeutralForeground3);
+}
+
+.fixture-manager ::deep .fixture-footprint-hint-error {
+    color: var(--colorStatusDangerForeground1);
+}
+
+.fixture-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+}
+
+.fixture-list-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.fixture-list-item:last-child {
+    border-bottom: none;
+}
+
+.fixture-list-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.fixture-list-name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.fixture-list-meta {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+    overflow-wrap: anywhere;
+}
+
+.fixture-list-warning {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: var(--fontSizeBase200);
+    color: var(--colorStatusWarningForeground1);
+}
+
+.fixture-list-actions {
+    display: flex;
+    gap: 4px;
+    flex: 0 0 auto;
+}
+
+.fixture-manager ::deep .fixture-type-select {
+    width: 100%;
+    max-width: none;
+}
+
+@media (min-width: 600px) {
+    .fixture-manager ::deep .fixture-type-select {
+        width: 360px;
+    }
+}
+
+/* Three radios don't fit side by side on a phone; let them wrap. */
+.fixture-manager ::deep .fixture-source fluent-radio-group {
+    flex-wrap: wrap;
+    row-gap: 4px;
+}
+
+/* Same drop-zone centring as UploadStaffDocumentDialog.razor.css: the idle progress bar is only
+   visibility:hidden, so the label is taken out of flow and the container given a real size. */
+.fixture-upload {
+    width: 100%;
+}
+
+.fixture-upload ::deep .fluent-inputfile-container {
+    width: 100%;
+    min-height: 72px;
+}
+
+.fixture-upload ::deep .inputfile-content {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 72px;
+}
+
+.fixture-upload ::deep .inputfile-content label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    margin: 0;
+    text-align: center;
+}

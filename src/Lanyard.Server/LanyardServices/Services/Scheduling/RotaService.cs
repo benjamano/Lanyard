@@ -137,6 +137,9 @@ public class RotaService(
                 (await TimeOffService.LiveTimeOffQuery(ctx, rowIds, firstWeek, afterLastWeek.AddDays(-1)).ToListAsync())
                 .ToLookup(x => x.UserId);
 
+            ILookup<string, StaffAvailability> availabilityByUser =
+                (await StaffAvailabilityService.ForUsers(ctx, rowIds, companyId).ToListAsync()).ToLookup(x => x.UserId);
+
             List<StaffPosition> positions = await ctx.StaffPositions
                 .AsNoTracking()
                 .TagWithCallSite()
@@ -144,6 +147,11 @@ public class RotaService(
                 .OrderBy(x => x.SortOrder)
                 .ThenBy(x => x.Name)
                 .ToListAsync();
+
+            // Upcoming assigned shifts whose person is missing the position's required training -
+            // badged on the rota, not blocked. Two queries at most for the whole range.
+            Dictionary<Guid, List<TrainingGap>> trainingGaps = await TrainingGapsAsync(ctx,
+                locationShifts.Where(x => x.IsActive && x.UserId is not null && x.EndUtc > DateTime.UtcNow).ToList());
 
             // Grouped once up front - each shift's venue-local week is worked out a single time,
             // instead of once per (person, week) pair inside the loops below.
@@ -208,7 +216,8 @@ public class RotaService(
                     warnings,
                     isMember)
                 {
-                    TimeOff = userTimeOff
+                    TimeOff = userTimeOff,
+                    Availability = availabilityByUser[user.Id].ToList()
                 });
             }
 
@@ -241,7 +250,8 @@ public class RotaService(
                 pendingUserIds.Where(x => x is not null).Distinct().Count())
             {
                 OpenShifts = locationShifts.Where(x => x.UserId is null && x.IsActive).ToList(),
-                UnpublishedOpenShiftCount = pendingUserIds.Count(x => x is null)
+                UnpublishedOpenShiftCount = pendingUserIds.Count(x => x is null),
+                TrainingGapsByShift = trainingGaps
             });
         }
         catch (Exception ex)
@@ -331,6 +341,18 @@ public class RotaService(
                 {
                     warnings.Add($"This person doesn't normally work as {position.Name}.");
                 }
+                else if (shift.UserId is string assigneeId && position.IsActive)
+                {
+                    // Only a warning here: staff can't pick the shift up themselves without the
+                    // training, but a manager rostering them directly is making that call.
+                    ShiftClaimRules.TrainingSnapshot training = await ShiftClaimRules.LoadTrainingAsync(ctx, [assigneeId], [positionId]);
+                    List<TrainingGap> gaps = training.GapsFor(assigneeId, shift);
+
+                    if (gaps.Count > 0)
+                    {
+                        warnings.Add(TrainingWarning(gaps));
+                    }
+                }
             }
 
             // Reassigning a published shift is really "take it off one person, give it to
@@ -360,6 +382,17 @@ public class RotaService(
                 warnings.Add(timeOff.Status == TimeOffStatus.Approved
                     ? $"This person has approved {typeName} on {shiftDay.ToString("ddd d MMM", RotaFormat.Uk)}."
                     : $"This person has asked for {typeName} on {shiftDay.ToString("ddd d MMM", RotaFormat.Uk)} (not decided yet).");
+            }
+
+            // Likewise a time they've said they can't work: the manager may have agreed it with them.
+            if (shift.UserId is string personId)
+            {
+                List<StaffAvailability> availability = await StaffAvailabilityService.ForUsers(ctx, [personId], location.CompanyId).ToListAsync();
+
+                if (StaffAvailabilityRules.Conflict(availability, shift.StartUtc, shift.EndUtc) is StaffAvailability unavailable)
+                {
+                    warnings.Add($"This person has said they can't work {StaffAvailabilityRules.Describe(unavailable)}.");
+                }
             }
 
             DateTime now = DateTime.UtcNow;
@@ -734,9 +767,7 @@ public class RotaService(
             foreach (Shift shift in pending.Where(x => x.UserId is null))
             {
                 shift.RemovalPending = false;
-                shift.PublishedDateUtc = now;
-                shift.PublishedByUserId = actingUserId;
-                shift.PublishedStartUtc = shift.StartUtc;
+                shift.MarkPublished(now, actingUserId);
             }
 
             foreach (IGrouping<string, Shift> group in pending.Where(x => x.UserId is not null).GroupBy(x => x.UserId!))
@@ -761,9 +792,7 @@ public class RotaService(
                             break;
                     }
 
-                    shift.PublishedDateUtc = now;
-                    shift.PublishedByUserId = actingUserId;
-                    shift.PublishedStartUtc = shift.StartUtc;
+                    shift.MarkPublished(now, actingUserId);
                 }
 
                 changes.Add(new PublishedChange(group.Key, added, changed, removed));
@@ -771,7 +800,10 @@ public class RotaService(
 
             await ctx.SaveChangesAsync();
 
-            PublishResult result = new(changes) { OpenedShifts = opened };
+            Dictionary<Guid, List<TrainingGap>> trainingGaps = await TrainingGapsAsync(ctx,
+                changes.SelectMany(x => x.New.Concat(x.Changed)).Where(x => x.EndUtc > now).ToList());
+
+            PublishResult result = new(changes) { OpenedShifts = opened, ShiftsMissingTraining = trainingGaps.Count };
 
             // One email per person, listing only their own shifts that changed - so a last-minute
             // edit reaches just the people it touches. Queued, so the publish never waits on it.
@@ -875,7 +907,61 @@ public class RotaService(
             && ((x.IsActive && (x.PublishedDateUtc == null || x.UpdateDate > x.PublishedDateUtc))
                 || (!x.IsActive && x.RemovalPending)));
 
-    private static string? ValidateTimes(DateTime startUtc, DateTime endUtc, int breakMinutes)
+    // The required training each of these (assigned) shifts' people is missing, keyed by shift;
+    // shifts with no gap are left out.
+    private static async Task<Dictionary<Guid, List<TrainingGap>>> TrainingGapsAsync(ApplicationDbContext ctx, IReadOnlyCollection<Shift> shifts)
+    {
+        List<Shift> positioned = shifts.Where(x => x.UserId is not null && x.StaffPositionId is not null).ToList();
+
+        if (positioned.Count == 0)
+        {
+            return [];
+        }
+
+        ShiftClaimRules.TrainingSnapshot training = await ShiftClaimRules.LoadTrainingAsync(ctx,
+            positioned.Select(x => x.UserId!).ToList(),
+            positioned.Select(x => x.StaffPositionId!.Value).ToList());
+
+        Dictionary<Guid, List<TrainingGap>> gaps = [];
+
+        foreach (Shift shift in positioned)
+        {
+            List<TrainingGap> missing = training.GapsFor(shift.UserId!, shift);
+
+            if (missing.Count > 0)
+            {
+                gaps[shift.Id] = missing;
+            }
+        }
+
+        return gaps;
+    }
+
+    // "This person hasn't done Fire Safety training." / "This person's Fire Safety training runs
+    // out before this shift."
+    public static string TrainingWarning(IReadOnlyList<TrainingGap> gaps)
+    {
+        List<TrainingGap> missing = gaps.Where(x => !x.Lapsed).ToList();
+        List<TrainingGap> lapsed = gaps.Where(x => x.Lapsed).ToList();
+        List<string> parts = [];
+
+        if (missing.Count > 0)
+        {
+            parts.Add($"This person hasn't done {JoinCourseNames(missing)} training.");
+        }
+
+        if (lapsed.Count > 0)
+        {
+            parts.Add($"{(missing.Count > 0 ? "Their" : "This person's")} {JoinCourseNames(lapsed)} training runs out before this shift.");
+        }
+
+        return string.Join(" ", parts);
+    }
+
+    private static string JoinCourseNames(List<TrainingGap> gaps) =>
+        gaps.Count == 1 ? gaps[0].CourseName : $"{string.Join(", ", gaps.Take(gaps.Count - 1).Select(x => x.CourseName))} and {gaps[^1].CourseName}";
+
+    internal static string? ValidateTimes(DateTime startUtc, DateTime endUtc, int breakMinutes)
     {
         if (endUtc <= startUtc)
         {

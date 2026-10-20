@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.AudioClips;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Clients;
@@ -51,7 +52,8 @@ public class SignalRControlHubDisconnectTests
         Guid clientId,
         string disconnectingConnectionId,
         string currentMostRecentConnectionId,
-        out ILaserGameStatusStore statusStore)
+        out ILaserGameStatusStore statusStore,
+        out Mock<IClientService> clientService)
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         ISystemDbContextFactory factory = GetFactory(options);
@@ -68,8 +70,10 @@ public class SignalRControlHubDisconnectTests
             .ReturnsAsync(Result<Guid>.Ok(clientId));
         clientServiceMock.Setup(x => x.GetClientFromIdAsync(clientId))
             .ReturnsAsync(Result<Client?>.Ok(client));
-        clientServiceMock.Setup(x => x.UpdateClientAsync(It.IsAny<Client>()))
-            .ReturnsAsync((Client c) => Result<Client?>.Ok(c));
+        clientServiceMock.Setup(x => x.RecordDisconnectAsync(clientId, It.IsAny<string>(), It.IsAny<DateTime>()))
+            .ReturnsAsync((Guid _, string connectionId, DateTime _) => Result<bool>.Ok(connectionId == currentMostRecentConnectionId));
+
+        clientService = clientServiceMock;
 
         statusStore = new LaserGameStatusStore();
 
@@ -80,7 +84,7 @@ public class SignalRControlHubDisconnectTests
             NullLogger<MusicPlayerService>.Instance);
 
         AutomationEngineService automationEngineService = new(
-            factory, [], NullLogger<AutomationEngineService>.Instance);
+            factory, [], new LaserGameStatusStore(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
 
         SignalRProjectionControlHubEvents hubEvents = new(Mock.Of<IServiceScopeFactory>());
 
@@ -99,7 +103,10 @@ public class SignalRControlHubDisconnectTests
             Mock.Of<IClientZoneScoreboardService>(),
             Mock.Of<IVideoStreamTokenService>(),
             Mock.Of<IGameResultService>(),
-            Mock.Of<IClientSecretValidator>())
+            Mock.Of<IKioskMediaTokenService>(),
+            new KioskConnectionRegistry(),
+            Mock.Of<IKioskHealthService>(),
+            Mock.Of<IAudioClipPlaybackService>())
         {
             Context = hubCallerContextMock.Object,
             Groups = Mock.Of<IGroupManager>()
@@ -114,7 +121,7 @@ public class SignalRControlHubDisconnectTests
         // The client has already reconnected on CurrentConnectionId by the time
         // StaleConnectionId's disconnect event fires - the exact race a flaky reconnect
         // produces.
-        SignalRControlHub hub = BuildHub(clientId, StaleConnectionId, CurrentConnectionId, out ILaserGameStatusStore statusStore);
+        SignalRControlHub hub = BuildHub(clientId, StaleConnectionId, CurrentConnectionId, out ILaserGameStatusStore statusStore, out _);
 
         statusStore.UpdateStatus(clientId, new LaserGameStatusDTO
         {
@@ -139,7 +146,7 @@ public class SignalRControlHubDisconnectTests
 
         // The disconnecting connection is still the client's one and only connection - a
         // genuine disconnect, so the status should be cleared.
-        SignalRControlHub hub = BuildHub(clientId, CurrentConnectionId, CurrentConnectionId, out ILaserGameStatusStore statusStore);
+        SignalRControlHub hub = BuildHub(clientId, CurrentConnectionId, CurrentConnectionId, out ILaserGameStatusStore statusStore, out _);
 
         statusStore.UpdateStatus(clientId, new LaserGameStatusDTO
         {
@@ -154,5 +161,18 @@ public class SignalRControlHubDisconnectTests
         Assert.IsFalse(
             statusStore.TryGetStatus(clientId, out _),
             "Disconnecting the client's actual current connection should clear its status.");
+    }
+
+    [TestMethod]
+    public async Task OnDisconnectedAsync_RecordsTheDisconnectWithoutRewritingTheClientRow()
+    {
+        Guid clientId = Guid.NewGuid();
+        SignalRControlHub hub = BuildHub(clientId, StaleConnectionId, CurrentConnectionId, out _, out Mock<IClientService> clientService);
+
+        await hub.OnDisconnectedAsync(null);
+
+        // The old whole-row write lost a reconnect that landed between its read and its write.
+        clientService.Verify(x => x.RecordDisconnectAsync(clientId, StaleConnectionId, It.IsAny<DateTime>()), Times.Once);
+        clientService.Verify(x => x.UpdateClientAsync(It.IsAny<Client>()), Times.Never);
     }
 }

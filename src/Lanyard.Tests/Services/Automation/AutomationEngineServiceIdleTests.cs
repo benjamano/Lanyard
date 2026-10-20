@@ -40,7 +40,7 @@ public class AutomationEngineServiceIdleTests
         params IActionExecutor[] executors)
     {
         return new AutomationEngineService(
-            GetFactory(options), executors, NullLogger<AutomationEngineService>.Instance);
+            GetFactory(options), executors, new LaserGameStatusStore(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
     }
 
     // The engine reads its enabled flag from AppSettings on first use and overwrites whatever
@@ -442,7 +442,7 @@ public class AutomationEngineServiceIdleTests
                 ? Task.FromException<ApplicationDbContext>(new InvalidOperationException("database unavailable"))
                 : Task.FromResult(new ApplicationDbContext(options)));
 
-        AutomationEngineService engine = new(factoryMock.Object, [], NullLogger<AutomationEngineService>.Instance);
+        AutomationEngineService engine = new(factoryMock.Object, [], new LaserGameStatusStore(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
 
         await engine.ProcessIdleRulesAsync(DateTime.UtcNow, CancellationToken.None);
         Assert.IsFalse(engine.IsEnabled, "A failed read leaves the engine disabled for that evaluation.");

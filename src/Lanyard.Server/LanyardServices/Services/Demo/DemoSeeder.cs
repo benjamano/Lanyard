@@ -216,12 +216,12 @@ public sealed class DemoSeeder(DbContextOptions<ApplicationDbContext> options, U
 
         SeedRota(ctx, locations, positions, random);
         SeedTimeOff(ctx, companyId, locations);
-        SeedTraining(ctx, locations);
+        SeedTraining(ctx, locations, positions);
         SeedAnnouncements(ctx, locations);
         SeedStaffDocumentTypes(ctx, companyId);
         SeedOnboarding(ctx, companyId);
         SeedChat(ctx, companyId, locations);
-        (Client arena, Client cafe) = SeedKiosks(ctx);
+        (Client arena, Client cafe) = SeedKiosks(ctx, locations[Riverside]);
         SeedMusic(ctx);
         DmxScene gameOn = SeedDmx(ctx, arena);
         SeedAutomation(ctx, arena, gameOn);
@@ -257,13 +257,39 @@ public sealed class DemoSeeder(DbContextOptions<ApplicationDbContext> options, U
         foreach (Location location in locations.Values)
         {
             ctx.LocationSchedulingSettings.Add(new LocationSchedulingSettings { Id = Guid.NewGuid(), LocationId = location.Id, ClaimsNeedApproval = true, UpdateDate = Now });
+            SeedOpeningHours(ctx, location);
         }
 
         ctx.ContractRequirements.Add(new ContractRequirement { Id = Guid.NewGuid(), CompanyId = companyId, MinHoursPerWeek = 8, MaxHoursPerWeek = 40, UpdateDate = Now });
     }
 
-    // Two published weeks (this and next), a draft week after that for the Publish button, a
-    // couple of open shifts to pick up, and clock-ins for the days already worked this week.
+    // A typical family entertainment centre week: late on Friday and Saturday, early on Sunday.
+    private void SeedOpeningHours(ApplicationDbContext ctx, Location location)
+    {
+        foreach (DayOfWeek day in Enum.GetValues<DayOfWeek>())
+        {
+            (TimeOnly open, TimeOnly close) = day switch
+            {
+                DayOfWeek.Friday or DayOfWeek.Saturday => (new TimeOnly(10, 0), new TimeOnly(23, 0)),
+                DayOfWeek.Sunday => (new TimeOnly(10, 0), new TimeOnly(18, 0)),
+                _ => (new TimeOnly(10, 0), new TimeOnly(21, 0))
+            };
+
+            ctx.LocationOpeningHours.Add(new LocationOpeningHours
+            {
+                LocationId = location.Id,
+                DayOfWeek = day,
+                OpensAt = open,
+                ClosesAt = close,
+                IsActive = true,
+                CreateDate = Now
+            });
+        }
+    }
+
+    // Four weeks of history, two published weeks (this and next), a draft week after that for the
+    // Publish button, a couple of open shifts to pick up, and clock-ins for every shift already
+    // worked - the history is what gives the Insights page something to compare.
     private void SeedRota(ApplicationDbContext ctx, Dictionary<string, Location> locations, Dictionary<string, StaffPosition> positions, Random random)
     {
         DateOnly today = RotaTime.Today(Now);
@@ -290,13 +316,15 @@ public sealed class DemoSeeder(DbContextOptions<ApplicationDbContext> options, U
 
         List<(Shift Shift, bool Worked)> worked = [];
 
-        for (int day = 0; day < 21; day++)
+        const int historyDays = 28;
+
+        for (int day = -historyDays; day < 21; day++)
         {
             DateOnly date = weekStart.AddDays(day);
             bool published = day < 14;
 
-            worked.AddRange(AddDay(ctx, locations[Riverside], positions, riversidePattern, date, day, published, random));
-            worked.AddRange(AddDay(ctx, locations[Harbourside], positions, harboursidePattern, date, day, published, random));
+            worked.AddRange(AddDay(ctx, locations[Riverside], positions, riversidePattern, date, day + historyDays, published, random));
+            worked.AddRange(AddDay(ctx, locations[Harbourside], positions, harboursidePattern, date, day + historyDays, published, random));
         }
 
         // Up for grabs next week: one open to anyone, one only for marshals.
@@ -402,6 +430,9 @@ public sealed class DemoSeeder(DbContextOptions<ApplicationDbContext> options, U
             PublishedDateUtc = published ? Now.AddDays(-7) : null,
             PublishedByUserId = published ? DemoAccounts.ManagerUserId : null,
             PublishedStartUtc = published ? startUtc : null,
+            PublishedEndUtc = published ? RotaTime.ToUtc(date, end) : null,
+            PublishedStaffPositionId = published ? position.Id : null,
+            PublishedBreakMinutes = published ? 0 : null,
         };
     }
 
@@ -449,7 +480,7 @@ public sealed class DemoSeeder(DbContextOptions<ApplicationDbContext> options, U
         };
     }
 
-    private void SeedTraining(ApplicationDbContext ctx, Dictionary<string, Location> locations)
+    private void SeedTraining(ApplicationDbContext ctx, Dictionary<string, Location> locations, Dictionary<string, StaffPosition> positions)
     {
         Course fire = NewCourse("Fire Safety Essentials", "What to do if the alarm goes off, and how to keep the building safe every day.", null, isShared: true, recurrenceMonths: 12,
             [
@@ -484,6 +515,18 @@ public sealed class DemoSeeder(DbContextOptions<ApplicationDbContext> options, U
 
         DateTime now = Now;
 
+        // Marshals need the marshalling course before they can pick up a Riverside marshal shift.
+        // Sam and Ben have done it (Sam's pending pickup stays valid); the demo staff account
+        // hasn't finished it yet, so Up for grabs shows the open marshal shift with its link.
+        ctx.StaffPositionRequiredCourses.Add(new StaffPositionRequiredCourse
+        {
+            Id = Guid.NewGuid(),
+            StaffPositionId = positions["Marshal"].Id,
+            CourseId = marshalling.Id,
+            CreatedByUserId = DemoAccounts.ManagerUserId,
+            CreateDate = now.AddDays(-30),
+        });
+
         foreach (Person person in People.Where(p => p.Locations.Contains(Riverside)))
         {
             int n = Array.IndexOf(People, person);
@@ -499,7 +542,7 @@ public sealed class DemoSeeder(DbContextOptions<ApplicationDbContext> options, U
 
             if (person.Position is "Marshal" || person.Id == DemoAccounts.StaffUserId)
             {
-                Assign(ctx, marshalling, person.Id, locations[Riverside].Id, n % 2 == 0 ? AssignmentState.InProgress : AssignmentState.NotStarted, now);
+                Assign(ctx, marshalling, person.Id, locations[Riverside].Id, person.Id == DemoAccounts.StaffUserId ? AssignmentState.InProgress : AssignmentState.Completed, now);
             }
 
             if (person.Position is "Café" or "Party host")
@@ -698,11 +741,14 @@ public sealed class DemoSeeder(DbContextOptions<ApplicationDbContext> options, U
         }
     }
 
-    private (Client Arena, Client Cafe) SeedKiosks(ApplicationDbContext ctx)
+    private (Client Arena, Client Cafe) SeedKiosks(ApplicationDbContext ctx, Location riverside)
     {
         // Offline "kiosks": the venue PCs a real site would have. There's no hardware behind them.
         Client arena = new() { Id = Guid.NewGuid(), Name = "Riverside arena PC", Notes = "Drives the arena lights, music and scoreboard.", CreateDate = Now.AddDays(-90), LastLogin = Now.AddDays(-1), LastDisconnectDate = Now.AddDays(-1).AddHours(8) };
         Client cafe = new() { Id = Guid.NewGuid(), Name = "Riverside café PC", Notes = "Café music and the menu screen.", CreateDate = Now.AddDays(-90), LastLogin = Now.AddDays(-1), LastDisconnectDate = Now.AddDays(-1).AddHours(8) };
+        // Both sit at Riverside, so its music schedule and Insights page pick up the arena's games.
+        arena.LocationId = riverside.Id;
+        cafe.LocationId = riverside.Id;
         ctx.Clients.AddRange(arena, cafe);
 
         return (arena, cafe);
@@ -745,7 +791,7 @@ public sealed class DemoSeeder(DbContextOptions<ApplicationDbContext> options, U
     {
         for (int i = 0; i < 4; i++)
         {
-            ctx.DmxFixtures.Add(new DmxFixture { Id = Guid.NewGuid(), ClientId = arena.Id, Name = $"Arena par {i + 1}", StartChannel = 1 + (i * 3), FixtureType = DmxFixtureType.Rgb, IsActive = true, CreateDate = Now, CreateByUserId = DemoAccounts.AdminUserId });
+            ctx.DmxFixtures.Add(new DmxFixture { Id = Guid.NewGuid(), ClientId = arena.Id, Name = $"Arena par {i + 1}", StartChannel = 1 + (i * 3), FixtureModeId = BuiltInDmxFixtureDefinitions.RgbModeId, IsActive = true, CreateDate = Now, CreateByUserId = DemoAccounts.AdminUserId });
         }
 
         DmxScene standby = NewScene(arena, "Arena standby", loop: false, bpmSync: false, [[(0, 40, 120)]]);
@@ -806,34 +852,73 @@ public sealed class DemoSeeder(DbContextOptions<ApplicationDbContext> options, U
         ctx.AutomationRules.Add(rule);
     }
 
-    // A month of laser tag games in the arena, for the Hall of Fame widget.
+    // A month of laser tag games in the arena during opening hours, for the Hall of Fame widget and
+    // the Insights page: quiet weekday mornings, busier after school, and busiest on weekend
+    // afternoons, with Saturday afternoon deliberately busier than the rota allows for.
     private void SeedGameResults(ApplicationDbContext ctx, Client arena, Random random)
     {
+        DateOnly today = RotaTime.Today(Now);
+
         for (int day = 0; day < 30; day++)
         {
-            int games = random.Next(1, 4);
-
-            for (int g = 0; g < games; g++)
+            DateOnly date = today.AddDays(-day);
+            bool weekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+            int closesAt = date.DayOfWeek switch
             {
-                GameResult result = new() { Id = Guid.NewGuid(), ClientId = arena.Id, PlayedAtUtc = Now.AddDays(-day).AddHours(-(g * 2) - 1), DurationSeconds = 900 };
-                int players = random.Next(6, 11);
+                DayOfWeek.Friday or DayOfWeek.Saturday => 23,
+                DayOfWeek.Sunday => 18,
+                _ => 21
+            };
 
-                for (int p = 0; p < players; p++)
+            for (int hour = 10; hour < closesAt; hour++)
+            {
+                // Roughly in step with the rota, which is heaviest from late morning to early evening.
+                int busy = (weekend, hour) switch
                 {
-                    result.PlayerScores.Add(new GameResultPlayerScore
-                    {
-                        Id = Guid.NewGuid(),
-                        GameResultId = result.Id,
-                        GunId = p + 1,
-                        Score = random.Next(800, 9500),
-                        Accuracy = random.Next(12, 68),
-                        Team = p % 2 == 0 ? Team.Red : Team.Green,
-                    });
-                }
+                    (true, >= 12 and < 17) => date.DayOfWeek == DayOfWeek.Saturday ? 7 : 5,
+                    (true, < 12) => 3,
+                    (true, _) => 2,
+                    (false, < 12) => 2,
+                    (false, < 16) => 3,
+                    (false, < 20) => 4,
+                    _ => 1
+                };
+                int games = Math.Max(0, busy + random.Next(-1, 2));
 
-                ctx.GameResults.Add(result);
+                for (int g = 0; g < games; g++)
+                {
+                    DateTime playedAt = RotaTime.ToUtc(date, new TimeOnly(hour, Math.Min(59, 15 + g * 7)));
+
+                    if (playedAt > Now)
+                    {
+                        continue;
+                    }
+
+                    SeedGame(ctx, arena, playedAt, random);
+                }
             }
         }
+    }
+
+    private static void SeedGame(ApplicationDbContext ctx, Client arena, DateTime playedAtUtc, Random random)
+    {
+        GameResult result = new() { Id = Guid.NewGuid(), ClientId = arena.Id, PlayedAtUtc = playedAtUtc, DurationSeconds = 900 };
+        int players = random.Next(6, 11);
+
+        for (int p = 0; p < players; p++)
+        {
+            result.PlayerScores.Add(new GameResultPlayerScore
+            {
+                Id = Guid.NewGuid(),
+                GameResultId = result.Id,
+                GunId = p + 1,
+                Score = random.Next(800, 9500),
+                Accuracy = random.Next(12, 68),
+                Team = p % 2 == 0 ? Team.Red : Team.Green,
+            });
+        }
+
+        ctx.GameResults.Add(result);
     }
 
     // The company's home screen: set as the organisation default, so every demo account lands on it.

@@ -5,10 +5,12 @@ using Lanyard.Infrastructure.DTO.Dmx;
 using Lanyard.Infrastructure.DTO.VideoDevices;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.Models.Dmx;
+using Lanyard.Shared.Contracts;
 using Lanyard.Shared.DTO;
 using Lanyard.Shared.Enum;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -142,6 +144,23 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
 
             ctx.Clients.Update(updatedClient);
 
+            // Callers here write back a whole Client they loaded earlier (the settings tabs, the
+            // hub on every connect), so a stale copy would quietly undo an admin's update setting.
+            // Those two columns are owned by ClientUpdatePolicyService.SetUpdateRingAsync alone.
+            EntityEntry<Client> entry = ctx.Entry(updatedClient);
+            entry.Property(x => x.UpdateRing).IsModified = false;
+            entry.Property(x => x.PinnedClientVersion).IsModified = false;
+
+            // Same for the offline fallback settings, owned by UpdateOfflineFallbackSettingsAsync.
+            entry.Property(x => x.OfflineFallbackEnabled).IsModified = false;
+            entry.Property(x => x.OfflineAfterSeconds).IsModified = false;
+            entry.Property(x => x.ProjectionCacheLimitMb).IsModified = false;
+
+            // And the location, owned by SetClientLocationAsync, and the music schedule override,
+            // owned by MusicScheduleEngine.
+            entry.Property(x => x.LocationId).IsModified = false;
+            entry.Property(x => x.MusicScheduleOverrideUntilUtc).IsModified = false;
+
             await ctx.SaveChangesAsync();
 
             // Keep both cached connection-ID lookups in sync immediately, otherwise a
@@ -161,6 +180,43 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
         {
             _logger.LogError(ex, "Error updating client {ClientId}", updatedClient.Id);
             return Result<Client?>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<bool>> RecordDisconnectAsync(Guid clientId, string connectionId, DateTime disconnectedAtUtc)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            // One conditional UPDATE, so the check and the write can't be split by a reconnect.
+            if (ctx.Database.IsRelational())
+            {
+                int updated = await ctx.Clients
+                    .Where(x => x.Id == clientId && x.MostRecentConnectionId == connectionId)
+                    .ExecuteUpdateAsync(x => x.SetProperty(c => c.LastDisconnectDate, disconnectedAtUtc));
+
+                return Result<bool>.Ok(updated > 0);
+            }
+
+            // EF InMemory (tests) has no ExecuteUpdate. A tracked change still only writes the
+            // one column.
+            Client? client = await ctx.Clients.FirstOrDefaultAsync(x => x.Id == clientId);
+
+            if (client == null || client.MostRecentConnectionId != connectionId)
+            {
+                return Result<bool>.Ok(false);
+            }
+
+            client.LastDisconnectDate = disconnectedAtUtc;
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error recording the disconnect of client {ClientId}", clientId);
+            return Result<bool>.Fail(ex.Message);
         }
     }
 
@@ -202,6 +258,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             IEnumerable<ClientConnectedDTO> clients = await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
                 .Select(x=> new ClientConnectedDTO
                 {
                     Id = x.Id,
@@ -213,6 +271,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
                     LastUpdateDate = x.LastUpdateDate,
                     LastDisconnectDate = x.LastDisconnectDate,
                     CreateDate = x.CreateDate,
+                    ReportedClientVersion = x.ReportedClientVersion,
+                    ClientVersionReportedAt = x.ClientVersionReportedAt,
                     IsCurrentlyConnected = ids.Contains(x.MostRecentConnectionId ?? "")
                 })
                 .ToListAsync();
@@ -234,6 +294,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             IEnumerable<ClientConnectedWithCapabilitiesDTO> clients = await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
                 .Select(x => new ClientConnectedWithCapabilitiesDTO
                 {
                     Id = x.Id,
@@ -245,6 +307,9 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
                     LastUpdateDate = x.LastUpdateDate,
                     LastDisconnectDate = x.LastDisconnectDate,
                     CreateDate = x.CreateDate,
+                    ReportedClientVersion = x.ReportedClientVersion,
+                    ClientVersionReportedAt = x.ClientVersionReportedAt,
+                    LastAuthMethod = x.LastAuthMethod,
                     IsCurrentlyConnected = ids.Contains(x.MostRecentConnectionId ?? ""),
                     ProjectionEnabled = ctx.ClientProjectionSettings
                         .AsNoTracking()
@@ -278,10 +343,12 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
 
             IEnumerable<ClientProjectionSettings> projectionSettings = await ctx.ClientProjectionSettings
                 .AsNoTracking()
+                .TagWithCallSite()
                 .Where(x=> x.ClientId == clientId)
                 .Where(x => x.IsActive)
                 .Include(x=> x.ProjectionProgram)
-                    .ThenInclude(x=> x!.ProjectionProgramSteps)
+                    // Soft-deleted steps must not reach kiosks, or a removed step keeps playing.
+                    .ThenInclude(x=> x!.ProjectionProgramSteps.Where(s => s.IsActive))
                         .ThenInclude(x=> x.ParameterValues)
                             .ThenInclude(x=> x.Parameter)
                 .ToListAsync();
@@ -523,7 +590,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
 
             foreach (ClientProjectionSettings setting in settings)
             {
-                if (setting.ProjectionProgram == null)
+                // A deleted program's assignment row can outlive it; don't send it to the kiosk.
+                if (setting.ProjectionProgram == null || !setting.ProjectionProgram.IsActive)
                 {
                     continue;
                 }
@@ -598,6 +666,117 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
         catch (Exception ex)
         {
             return Result<IEnumerable<ClientProjectionSettingsDTO>>.Fail(ex.Message);
+        }
+    }
+
+    // Re-sends a kiosk its ambient programs. The kiosk leaves windows already showing the same
+    // program alone, so this doesn't restart anything; it also prompts the kiosk to refetch its
+    // offline manifest.
+    private async Task SendProjectionProgramsToClientAsync(Client client)
+    {
+        if (string.IsNullOrEmpty(client.MostRecentConnectionId))
+        {
+            return;
+        }
+
+        Result<IEnumerable<ClientProjectionSettings>> result = await GetClientProjectionSettingsAsync(client.Id);
+
+        if (!result.IsSuccess)
+        {
+            return;
+        }
+
+        Result<IEnumerable<ClientProjectionSettingsDTO>> resultDto = ConvertIntoClientProjectionSettingsDTO(result.Data!);
+
+        if (!resultDto.IsSuccess || resultDto.Data == null)
+        {
+            return;
+        }
+
+        await _hubContext.Clients.Client(client.MostRecentConnectionId).SendAsync("ReceiveProjectionPrograms", resultDto.Data);
+    }
+
+    public async Task<Result<bool>> UpdateOfflineFallbackSettingsAsync(Guid clientId, bool enabled, int offlineAfterSeconds, int cacheLimitMb)
+    {
+        if (offlineAfterSeconds < KioskOfflineLimits.MinOfflineAfterSeconds || offlineAfterSeconds > KioskOfflineLimits.MaxOfflineAfterSeconds)
+        {
+            return Result<bool>.Fail($"Switch to offline after must be between {KioskOfflineLimits.MinOfflineAfterSeconds} and {KioskOfflineLimits.MaxOfflineAfterSeconds} seconds.");
+        }
+
+        if (cacheLimitMb < KioskOfflineLimits.MinCacheLimitMb)
+        {
+            return Result<bool>.Fail($"Cache limit must be at least {KioskOfflineLimits.MinCacheLimitMb} MB.");
+        }
+
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Client? client = await ctx.Clients.FirstOrDefaultAsync(x => x.Id == clientId);
+
+            if (client == null)
+            {
+                return Result<bool>.Fail("Client not found.");
+            }
+
+            client.OfflineFallbackEnabled = enabled;
+            client.OfflineAfterSeconds = offlineAfterSeconds;
+            client.ProjectionCacheLimitMb = cacheLimitMb;
+
+            await ctx.SaveChangesAsync();
+
+            _logger.LogInformation("Updated offline fallback for client {ClientId}: enabled {Enabled}, after {OfflineAfterSeconds}s, cache {CacheLimitMb}MB", clientId, enabled, offlineAfterSeconds, cacheLimitMb);
+
+            await SendProjectionProgramsToClientAsync(client);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating offline fallback settings for client {ClientId}", clientId);
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<bool>> SetClientLocationAsync(Guid clientId, int? locationId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Client? client = await ctx.Clients.FirstOrDefaultAsync(x => x.Id == clientId);
+
+            if (client == null)
+            {
+                return Result<bool>.Fail("Client not found.");
+            }
+
+            // Locations have no tenant filter, so the company has to be checked here.
+            if (locationId is int id)
+            {
+                bool isOwnLocation = await ctx.Locations
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .AnyAsync(x => x.Id == id && x.CompanyId == client.CompanyId && x.IsActive);
+
+                if (!isOwnLocation)
+                {
+                    return Result<bool>.Fail("That location isn't one of this company's active locations.");
+                }
+            }
+
+            client.LocationId = locationId;
+
+            await ctx.SaveChangesAsync();
+
+            _logger.LogInformation("Set location of client {ClientId} to {LocationId}", clientId, locationId);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting the location of client {ClientId}", clientId);
+            return Result<bool>.Fail(ex.Message);
         }
     }
 
@@ -681,26 +860,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
 
             foreach (Client client in clients)
             {
-                Result<IEnumerable<ClientProjectionSettings>> result = await GetClientProjectionSettingsAsync(client.Id);
-
-                if (!result.IsSuccess)
-                {
-                    continue;
-                }
-
-                Result<IEnumerable<ClientProjectionSettingsDTO>> resultDto = ConvertIntoClientProjectionSettingsDTO(result.Data!);
-
-                if (!resultDto.IsSuccess || resultDto.Data == null)
-                {
-                    continue;
-                }
-
-                if (string.IsNullOrEmpty(client.MostRecentConnectionId)) 
-                {
-                    continue;
-                }
-
-                await _hubContext.Clients.Client(client.MostRecentConnectionId).SendAsync("ReceiveProjectionPrograms", resultDto.Data);
+                await SendProjectionProgramsToClientAsync(client);
             }
 
             return Result<bool>.Ok(true);
@@ -1170,6 +1330,69 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error sending {RestartType} restart command to client {ClientId}", restartType, clientId);
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    // The kiosk only fetches its feed before answering (the download carries on afterwards), so
+    // this is the time for one round trip to the server plus a little slack.
+    private static readonly TimeSpan UpdateCheckAcknowledgementTimeout = TimeSpan.FromSeconds(30);
+
+    public async Task<Result<bool>> RequestUpdateCheckAsync(Guid clientId)
+    {
+        try
+        {
+            Result<Client?> getResult = await GetClientFromIdAsync(clientId);
+
+            if (!getResult.IsSuccess || getResult.Data == null)
+            {
+                return Result<bool>.Fail("Failed to get client.");
+            }
+
+            Result<bool> connectedResult = await IsClientConnectedAsync(clientId);
+
+            if (!connectedResult.IsSuccess)
+            {
+                return Result<bool>.Fail(connectedResult.Error!);
+            }
+
+            string? connectionId = getResult.Data.MostRecentConnectionId;
+
+            if (!connectedResult.Data || string.IsNullOrEmpty(connectionId))
+            {
+                return Result<bool>.Fail("Client is not currently connected. It will check for updates the next time it starts.");
+            }
+
+            _logger.LogInformation("Asking client {ClientId} to check for updates", clientId);
+
+            bool updating;
+
+            using (CancellationTokenSource timeout = new(UpdateCheckAcknowledgementTimeout))
+            {
+                try
+                {
+                    updating = await _hubContext.Clients.Client(connectionId).InvokeAsync<bool>(ClientHubEvents.CheckForUpdates, timeout.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger.LogWarning("Client {ClientId} did not answer the update check in time", clientId);
+                    return Result<bool>.Fail("The client didn't answer in time. Try again, or restart it.");
+                }
+                catch (HubException ex)
+                {
+                    // No CheckForUpdates handler: a kiosk older than this feature.
+                    _logger.LogWarning("Client {ClientId} rejected the update check: {Error}", clientId, ex.Message);
+                    return Result<bool>.Fail("This client's version can't check for updates on request. Restart it instead; it checks every time it starts.");
+                }
+            }
+
+            _logger.LogInformation("Client {ClientId} answered the update check: {Updating}", clientId, updating ? "updating" : "already on its target version");
+
+            return Result<bool>.Ok(updating);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error asking client {ClientId} to check for updates", clientId);
             return Result<bool>.Fail(ex.Message);
         }
     }

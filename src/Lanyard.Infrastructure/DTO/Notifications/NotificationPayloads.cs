@@ -90,4 +90,30 @@ public record ChatReportedPayload(int LocationId) : NotificationPayload(Location
 // For the person who reported a message: a manager has dealt with it (not what they did).
 public record ChatReportReviewedPayload(int LocationId) : NotificationPayload(LocationId);
 
+// A manager posted an announcement and chose to send it out to everyone at its location. Carries
+// the full text: an announcement is meant to be read, and the email is often where it is read.
+public record AnnouncementPayload(int LocationId, string LocationName, Guid AnnouncementId, string Title, string Body, string? AuthorName)
+    : NotificationPayload(LocationId);
+
+// For managers and Admins: a kiosk has been down long enough to count as offline. LocationId is 0
+// for a kiosk with no location set. DownSince is already in venue time ("14:02", or with the day
+// when it wasn't today), Url differs for Managers, who can't open the Clients page.
+public record KioskOfflinePayload(
+    int LocationId,
+    Guid ClientId,
+    string ClientName,
+    string? LocationName,
+    string DownSince,
+    bool ShutDownCleanly,
+    bool OfflineCopyReady,
+    string Url) : NotificationPayload(LocationId);
+
+// Sent only after a KioskOfflinePayload went out for the same outage.
+public record KioskBackOnlinePayload(int LocationId, Guid ClientId, string ClientName, string? LocationName, int DownForMinutes, string Url)
+    : NotificationPayload(LocationId);
+
+// A kiosk has been degraded for a while; Reasons are the health page's own wording.
+public record KioskNeedsAttentionPayload(int LocationId, Guid ClientId, string ClientName, string? LocationName, List<string> Reasons, string Url)
+    : NotificationPayload(LocationId);
+
 public record NotificationJob(string UserId, NotificationTopic Topic, NotificationPayload Payload);

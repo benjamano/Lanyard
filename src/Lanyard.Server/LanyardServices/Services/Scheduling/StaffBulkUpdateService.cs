@@ -11,12 +11,14 @@ namespace Lanyard.Application.Services.Scheduling;
 
 public class StaffBulkUpdateService(
     IDbContextFactory<ApplicationDbContext> factory,
+    IRequiredTrainingService requiredTrainingService,
     ILogger<StaffBulkUpdateService> logger) : IStaffBulkUpdateService
 {
     // How many names an "X, Y and 3 others can't..." error lists before summarising.
     private const int NamesInError = 3;
 
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly IRequiredTrainingService _requiredTrainingService = requiredTrainingService;
     private readonly ILogger<StaffBulkUpdateService> _logger = logger;
 
     public async Task<Result<List<StaffRotaSummary>>> GetStaffAsync(LocationScope scope, int companyId, int locationId)
@@ -106,7 +108,7 @@ public class StaffBulkUpdateService(
         }
     }
 
-    public async Task<Result<int>> ApplyPositionsAsync(LocationScope scope, int companyId, int locationId, List<string> userIds, BulkPositionChange change)
+    public async Task<Result<BulkPositionsApplied>> ApplyPositionsAsync(LocationScope scope, int companyId, int locationId, List<string> userIds, BulkPositionChange change, string actingUserId)
     {
         try
         {
@@ -115,13 +117,13 @@ public class StaffBulkUpdateService(
 
             if (positionIds.Count == 0 && change.Mode != BulkPositionMode.Replace)
             {
-                return Result<int>.Fail("Pick at least one position.");
+                return Result<BulkPositionsApplied>.Fail("Pick at least one position.");
             }
 
             if (change.PrimaryPositionId is Guid wantedPrimary
                 && (change.Mode == BulkPositionMode.Remove || !positionIds.Contains(wantedPrimary)))
             {
-                return Result<int>.Fail("The primary position must be one of the positions being given.");
+                return Result<BulkPositionsApplied>.Fail("The primary position must be one of the positions being given.");
             }
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
@@ -130,14 +132,14 @@ public class StaffBulkUpdateService(
 
             if (accessError is not null)
             {
-                return Result<int>.Fail(accessError);
+                return Result<BulkPositionsApplied>.Fail(accessError);
             }
 
             Result<List<string>> members = await CheckMembersAsync(ctx, locationId, userIds);
 
             if (!members.IsSuccess)
             {
-                return Result<int>.Fail(members.Error!);
+                return Result<BulkPositionsApplied>.Fail(members.Error!);
             }
 
             List<string> ids = members.Data!;
@@ -150,7 +152,7 @@ public class StaffBulkUpdateService(
 
             if (positionIds.Any(id => !companyPositions.Any(p => p.Id == id && p.IsActive)))
             {
-                return Result<int>.Fail("One or more of the selected positions no longer exists.");
+                return Result<BulkPositionsApplied>.Fail("One or more of the selected positions no longer exists.");
             }
 
             Dictionary<Guid, StaffPosition> positionById = companyPositions.ToDictionary(x => x.Id);
@@ -221,7 +223,7 @@ public class StaffBulkUpdateService(
 
             if (changedPeople == 0)
             {
-                return Result<int>.Ok(0);
+                return Result<BulkPositionsApplied>.Ok(new BulkPositionsApplied(0, RequiredTrainingAssignResult.Empty));
             }
 
             // Two saves in one transaction: the partial unique index allows one primary per
@@ -255,12 +257,31 @@ public class StaffBulkUpdateService(
             _logger.LogInformation("Bulk {Mode} of {PositionCount} positions changed {ChangedCount} of {SelectedCount} staff at company {CompanyId}",
                 change.Mode, positionIds.Count, changedPeople, ids.Count, companyId);
 
-            return Result<int>.Ok(changedPeople);
+            // Saved and committed - training for the new positions follows, and a failure there is
+            // logged rather than reported as a failed bulk change.
+            RequiredTrainingAssignResult training = RequiredTrainingAssignResult.Empty;
+
+            if (toAdd.Count > 0)
+            {
+                Result<RequiredTrainingAssignResult> assigned = await _requiredTrainingService.AssignMissingAsync(
+                    scope, actingUserId, toAdd.Select(x => (x.UserId, x.StaffPositionId)).ToList());
+
+                if (assigned.IsSuccess && assigned.Data is not null)
+                {
+                    training = assigned.Data;
+                }
+                else
+                {
+                    _logger.LogWarning("Bulk positions saved at company {CompanyId}, but assigning their required training failed: {Error}", companyId, assigned.Error);
+                }
+            }
+
+            return Result<BulkPositionsApplied>.Ok(new BulkPositionsApplied(changedPeople, training));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to bulk update positions at company {CompanyId}", companyId);
-            return Result<int>.Fail($"Failed to update positions: {ex.Message}");
+            return Result<BulkPositionsApplied>.Fail($"Failed to update positions: {ex.Message}");
         }
     }
 

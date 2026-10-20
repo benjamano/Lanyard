@@ -1,0 +1,15 @@
+@page "/help/onboarding"
+@attribute [Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.Onboarding)]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.Onboarding
+
+<HelpPage AreaKey="@HelpRegistry.Onboarding">
+    <FluentTab Id="help-welcome" Header="Welcome Email" IconStart="@(new Icons.Regular.Size16.Mail())">
+        <WelcomeEmailHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-documents" Header="Staff Documents" IconStart="@(new Icons.Regular.Size16.DocumentBulletList())" DeferredLoading="true">
+        <StaffDocumentsHelpTab />
+    </FluentTab>
+</HelpPage>

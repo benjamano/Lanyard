@@ -33,6 +33,9 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Services\ReleaseNotes\release-notes.json" />
+    <!-- Open Fixture Library snapshot (MIT): the licence has to travel with the data. -->
+    <EmbeddedResource Include="Services\Dmx\Ofl\ofl-snapshot.json.gz" LogicalName="Lanyard.Services.Services.Dmx.Ofl.ofl-snapshot.json.gz" />
+    <EmbeddedResource Include="Services\Dmx\Ofl\open-fixture-library-LICENSE.txt" LogicalName="Lanyard.Services.Services.Dmx.Ofl.open-fixture-library-LICENSE.txt" />
     <!-- The handwriting-style face used for text printed onto party voucher and feedback artwork.
          Apache 2.0 (Resources\Fonts\Chewy-LICENSE.txt). -->
     <EmbeddedResource Include="Resources\Fonts\Chewy-Regular.ttf" LogicalName="Lanyard.Fonts.Chewy-Regular.ttf" />

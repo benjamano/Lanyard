@@ -1,0 +1,27 @@
+@page "/help/rota"
+@attribute [Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.StaffScheduling)]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.Rota
+
+<HelpPage AreaKey="@HelpRegistry.Rota">
+    <FluentTab Id="help-overview" Header="Overview" IconStart="@(new Icons.Regular.Size16.Info())">
+        <RotaOverviewHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-building" Header="Building the Rota" IconStart="@(new Icons.Regular.Size16.CalendarEdit())" DeferredLoading="true">
+        <BuildingRotaHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-requests" Header="Shift Requests" IconStart="@(new Icons.Regular.Size16.PeopleSwap())" DeferredLoading="true">
+        <ShiftRequestsHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-time-off" Header="Time Off" IconStart="@(new Icons.Regular.Size16.CalendarPerson())" DeferredLoading="true">
+        <TimeOffHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-timesheets" Header="Timesheets &amp; Payroll" IconStart="@(new Icons.Regular.Size16.Clock())" DeferredLoading="true">
+        <TimesheetsHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-setup" Header="Setting Up" IconStart="@(new Icons.Regular.Size16.Settings())" DeferredLoading="true">
+        <RotaSetupHelpTab />
+    </FluentTab>
+</HelpPage>

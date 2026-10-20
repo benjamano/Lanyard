@@ -1,4 +1,9 @@
-﻿using Lanyard.Shared.DTO;
+﻿using Lanyard.Client.Enrolment;
+using Lanyard.Client.Security;
+using Lanyard.Shared.Contracts;
+using Lanyard.Shared.SignalR;
+using Lanyard.Shared.DTO;
+using AutoUpdater = Lanyard.Client.AutoUpdate.AutoUpdate;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Logging;
 using NAudio.CoreAudioApi;
@@ -27,16 +32,27 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
     {
         string serverUrl = Environment.GetEnvironmentVariable("LANYARD_SERVER_URL")! + "/websocket";
         string clientId = Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!;
-        string? sharedSecret = Environment.GetEnvironmentVariable("LANYARD_CLIENT_SHARED_SECRET");
         bool allowInsecureSsl = ShouldAllowInsecureSsl();
 
-        string secretQuery = string.IsNullOrWhiteSpace(sharedSecret)
+        // The kiosk's own credential goes in the Authorization header (AccessTokenProvider, in
+        // BuildConnection), never the URL. Only a kiosk still on the old shared secret puts that
+        // in the query string, as every kiosk did before 1.0.43.
+        string? legacySecret = KioskCredentials.Current is null ? KioskCredentials.LegacySecret : null;
+
+        string secretQuery = legacySecret is null
             ? string.Empty
-            : $"&secret={Uri.EscapeDataString(sharedSecret)}";
+            : $"&{ClientConnectionQuery.Secret}={Uri.EscapeDataString(legacySecret)}";
+
+        // Lets the server show which build each kiosk runs. Left off entirely for a dev build
+        // that isn't a Velopack install, so the server keeps "unknown" rather than a fake value.
+        string? clientVersion = AutoUpdater.GetCurrentVersion();
+        string versionQuery = string.IsNullOrWhiteSpace(clientVersion)
+            ? string.Empty
+            : $"&{ClientConnectionQuery.ClientVersion}={Uri.EscapeDataString(clientVersion)}";
 
         // dmxBatch=1 tells the server this client handles "ReceiveDmxChannelValues". Clients
         // older than 1.0.40 don't send it, and the server falls back to one message per channel.
-        string url = serverUrl + $"?clientId={clientId}{secretQuery}&dmxBatch=1";
+        string url = serverUrl + $"?{ClientConnectionQuery.ClientId}={clientId}{secretQuery}&{ClientConnectionQuery.DmxBatch}=1{versionQuery}";
 
         _logger.LogInformation("Waiting 5 seconds to start the SignalR connection.");
 
@@ -47,10 +63,17 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
             _logger.LogWarning("LANYARD_CLIENT_ALLOW_INSECURE_SSL is enabled. TLS certificate validation is disabled for the SignalR connection.");
         }
 
-        await Task.Delay(5000);
+        await Task.Delay(ConnectRetryDelay.Initial);
+
+        // Never throws: a kiosk that can't reach the server must keep running (and keep trying),
+        // not fall through to App's fatal-startup Environment.Exit. Previously only
+        // HttpRequestException was caught, so a negotiate timeout or WebSocket fault killed the process.
+        int failedAttempts = 0;
 
         while (_isConnected == false)
         {
+            bool unauthorized = false;
+
             try
             {
                 HubConnection? previous = _connection;
@@ -66,35 +89,110 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
 
                 await _connection.StartAsync();
 
-                _isConnected = true;
+                SetConnected(true);
 
                 await SendStatus();
             }
-            catch (HttpRequestException ex)
+            catch (HttpRequestException ex) when (ex.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
             {
-                // The server rejects an invalid/missing shared secret with 401 at the negotiate
-                // stage. This is a configuration problem that retrying cannot fix, so stop entirely
-                // (log once) instead of spamming reconnect attempts. Restart the client after fixing
-                // LANYARD_CLIENT_SHARED_SECRET to match the server's Clients:SharedSecret.
-                if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-                {
-                    _logger.LogError("SignalR connection refused (401 Unauthorized): the server rejected this "
-                        + "client's shared secret. Ensure LANYARD_CLIENT_SHARED_SECRET matches the server's "
-                        + "Clients:SharedSecret, then restart the client. Not retrying.");
-                    return;
-                }
+                unauthorized = true;
 
-                _logger.LogError("Error initializing SignalR connection: {Message}", ex.Message);
+                await HandleRejectedAsync(clientId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Error initializing SignalR connection: {ExceptionType}: {Message}", ex.GetType().Name, ex.Message);
 
                 if (ex.Message.Contains("SSL", StringComparison.OrdinalIgnoreCase) ||
                     ex.Message.Contains("certificate", StringComparison.OrdinalIgnoreCase))
                 {
                     _logger.LogWarning("TLS certificate validation failed. For LAN/dev testing, either set LANYARD_SERVER_URL to http://<server-ip>:5096 or set LANYARD_CLIENT_ALLOW_INSECURE_SSL=true on trusted networks.");
                 }
-
-                _logger.LogInformation("Retrying in 5 seconds...");
-                await Task.Delay(5000);
             }
+
+            if (_isConnected)
+            {
+                break;
+            }
+
+            failedAttempts++;
+            TimeSpan delay = ConnectRetryDelay.For(failedAttempts, unauthorized);
+
+            _logger.LogInformation("Retrying SignalR connection in {DelaySeconds} seconds (attempt {Attempt})", delay.TotalSeconds, failedAttempts);
+            await Task.Delay(delay);
+        }
+    }
+
+    public event Action<bool>? ConnectionStateChanged;
+
+    // The server turned the connection away. If it says this kiosk's credential is dead (revoked
+    // by an Admin, or replaced), forget it and restart: startup then shows a pairing code. Anything
+    // less certain just retries slowly, so a server hiccup never costs a kiosk its credential.
+    private async Task HandleRejectedAsync(string clientId)
+    {
+        await RestartIfCredentialRevokedAsync();
+
+        _logger.LogError(KioskCredentials.Current is null
+            ? "SignalR connection refused: the server didn't accept this kiosk's shared secret. Restart the kiosk to pair it."
+            : "SignalR connection refused, but the server didn't say the credential is invalid. Retrying.");
+    }
+
+    private const int RestartRequestedExitCode = 75;
+
+    // How long a dropped connection is given to come back before the kiosk asks whether it was
+    // dropped because its credential was revoked. A revoke closes the connection, and the
+    // automatic reconnect then just keeps getting 401s.
+    private static readonly TimeSpan RevocationCheckDelay = TimeSpan.FromSeconds(3);
+
+    private async Task RestartIfCredentialRevokedAsync()
+    {
+        if (!Guid.TryParse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID"), out Guid clientId)
+            || !await KioskEnrolmentStartup.IsCredentialRejectedAsync(clientId))
+        {
+            return;
+        }
+
+        _logger.LogError("The server no longer accepts this kiosk's credential (revoked or replaced). Restarting to pair it again.");
+
+        KioskCredentials.Forget();
+
+        // The Watchdog relaunches the client straight away on this exit code.
+        Environment.Exit(RestartRequestedExitCode);
+    }
+
+    private async Task CheckForRevocationIfStillDisconnectedAsync()
+    {
+        try
+        {
+            await Task.Delay(RevocationCheckDelay);
+
+            if (!_isConnected)
+            {
+                await RestartIfCredentialRevokedAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("Couldn't check whether this kiosk's credential was revoked: {Message}", ex.Message);
+        }
+    }
+
+    private void SetConnected(bool connected)
+    {
+        if (_isConnected == connected)
+        {
+            return;
+        }
+
+        _isConnected = connected;
+
+        try
+        {
+            ConnectionStateChanged?.Invoke(connected);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "A ConnectionStateChanged handler threw");
         }
     }
 
@@ -103,6 +201,9 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
         HubConnection connection = new HubConnectionBuilder()
             .WithUrl(url, options =>
             {
+                // Asked again on every connect and reconnect, so a rotated credential is picked up.
+                options.AccessTokenProvider = () => Task.FromResult(KioskCredentials.Current);
+
                 if (allowInsecureSsl && url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                 {
                     options.HttpMessageHandlerFactory = handler =>
@@ -128,8 +229,10 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
 
         connection.Reconnecting += (error) =>
         {
-            _isConnected = false;
+            SetConnected(false);
             _logger.LogWarning("SignalR connection lost. Attempting to reconnect...");
+
+            _ = Task.Run(CheckForRevocationIfStillDisconnectedAsync);
 
             return Task.CompletedTask;
         };
@@ -138,6 +241,8 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
         {
             _logger.LogInformation("SignalR connection reestablished. Connection ID: {ConnectionId}", connectionId);
 
+            SetConnected(true);
+
             await SendStatus();
         };
 
@@ -145,6 +250,8 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
         {
             register(connection);
         }
+
+        KioskMediaTokens.Issuer = () => connection.InvokeAsync<KioskMediaTokenDTO?>(ClientHubMethods.IssueMediaToken);
 
         return connection;
     }
@@ -158,7 +265,7 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
     /// </summary>
     private async Task HandleClosedAsync(Exception? error, string url, bool allowInsecureSsl, List<Action<HubConnection>> registrations)
     {
-        _isConnected = false;
+        SetConnected(false);
         _logger.LogWarning(error, "SignalR connection closed unexpectedly outside automatic reconnect. Rebuilding connection.");
 
         while (_isConnected == false)
@@ -176,11 +283,18 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
 
                 await _connection.StartAsync();
 
-                _isConnected = true;
+                SetConnected(true);
 
                 _logger.LogInformation("Reconnected to SignalR server successfully after an unexpected close.");
 
                 await SendStatus();
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
+            {
+                _logger.LogWarning("Reconnect after close was refused ({StatusCode}); checking whether this kiosk was revoked.", ex.StatusCode);
+
+                await RestartIfCredentialRevokedAsync();
+                await Task.Delay(5000);
             }
             catch (Exception ex)
             {
@@ -366,6 +480,18 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
     public async Task SendLaserGameStatusAsync(LaserGameStatusDTO status)
     {
         await _connection!.InvokeAsync("UpdateLaserGameStatus", status);
+    }
+
+    public bool IsConnected => _connection?.State == HubConnectionState.Connected;
+
+    public async Task<bool> ReportKioskHealthAsync(KioskHealthReportDTO report)
+    {
+        if (_connection is null || _connection.State != HubConnectionState.Connected)
+        {
+            return false;
+        }
+
+        return await _connection.InvokeAsync<bool>("ReportKioskHealth", report);
     }
 
     public async Task<string> IssueKioskTokenAsync()

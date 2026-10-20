@@ -1,0 +1,18 @@
+@page "/help/my-training"
+@attribute [Authorize]
+@attribute [RequiresFeature(CompanyFeature.Training)]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.MyTraining
+
+<HelpPage AreaKey="@HelpRegistry.MyTraining">
+    <FluentTab Id="help-overview" Header="Overview" IconStart="@(new Icons.Regular.Size16.Info())">
+        <MyTrainingOverviewHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-taking" Header="Taking a Course" IconStart="@(new Icons.Regular.Size16.BookOpen())" DeferredLoading="true">
+        <TakingCourseHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-results" Header="Results &amp; Certificates" IconStart="@(new Icons.Regular.Size16.Certificate())" DeferredLoading="true">
+        <ResultsHelpTab />
+    </FluentTab>
+</HelpPage>

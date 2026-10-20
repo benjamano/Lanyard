@@ -4,14 +4,21 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Lanyard.App;
 using Lanyard.App.Components;
 using Lanyard.Application.Services;
+using Lanyard.Application.Services.Feedback;
 using Lanyard.Application.Services.Announcements;
+using Lanyard.Application.Services.AudioClips;
+using Lanyard.Application.Services.MusicScheduling;
 using Lanyard.Application.Services.Chat;
 using Lanyard.Application.Services.ApplicationRoles;
 using Lanyard.Application.Services.Authentication;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.SignalR;
 using Lanyard.Application.Services.Gdpr;
 using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Training;
 using Lanyard.Application.Services.StaffDocuments;
+using Lanyard.Application.Services.Compliance;
+using Lanyard.Application.Services.Insights;
 using Lanyard.Application.Services.Onboarding;
 using Lanyard.Application.Services.Notifications;
 using Lanyard.Application.Services.Parties;
@@ -22,9 +29,13 @@ using Lanyard.Application.Services.Tenancy;
 using Lanyard.Application.Services.Demo;
 using Lanyard.Application.Services.Time;
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Projection.Bindings;
 using Lanyard.Application.Services.Features;
 using Lanyard.Application.Services.Branding;
+using Lanyard.Application.Services.Dmx;
+using Lanyard.Application.Services.Dmx.Ofl;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Shared.Contracts;
 using Lanyard.Shared.DTO;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -42,6 +53,7 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Components.Server.Circuits;
 using Lanyard.Application.Services.Clients;
+using Lanyard.Application.Services.ClientReleases;
 using Lanyard.Application.Services.VideoStreaming;
 using Lanyard.App.Components.Layout;
 using OpenTelemetry;
@@ -89,7 +101,11 @@ builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddScoped<ISecurityService, SecurityService>();
 builder.Services.AddScoped<IGdprService, GdprService>();
-builder.Services.AddSingleton<IClientSecretValidator, ClientSecretValidator>();
+builder.Services.AddSingleton<IKioskCredentialService, KioskCredentialService>();
+builder.Services.AddSingleton<IKioskMediaTokenService, KioskMediaTokenService>();
+builder.Services.AddScoped<IKioskEnrolmentService, KioskEnrolmentService>();
+builder.Services.AddScoped<IKioskSecurityService, KioskSecurityService>();
+builder.Services.AddSingleton<KioskConnectionRegistry>();
 builder.Services.AddScoped<ICurrentUserAccessor, CurrentUserAccessor>();
 builder.Services.AddScoped<IFileService, FileService>();
 
@@ -101,8 +117,26 @@ if (!builder.Environment.IsDevelopment())
 }
 builder.Services.AddScoped<ApplicationRolesService>();
 builder.Services.AddScoped<IPlaylistService, PlaylistService>();
+builder.Services.AddScoped<IMusicScheduleService, MusicScheduleService>();
+// Singleton: it remembers what it last applied to each kiosk between ticks.
+builder.Services.AddSingleton<IMusicScheduleEngine, MusicScheduleEngine>();
+builder.Services.AddSingleton<IAudioClipPlaybackService, AudioClipPlaybackService>();
+builder.Services.AddScoped<IAudioClipService, AudioClipService>();
+builder.Services.AddScoped<IAudioClipScheduleService, AudioClipScheduleService>();
+builder.Services.AddSingleton<IAudioClipScheduleEngine, AudioClipScheduleEngine>();
+builder.Services.AddHostedService<AudioClipScheduleHostedService>();
+builder.Services.AddHostedService<MusicScheduleHostedService>();
 builder.Services.AddScoped<IMusicService, MusicService>();
 builder.Services.AddScoped<IClientService, ClientService>();
+builder.Services.AddHttpClient<IGitHubClientReleaseSource, GitHubClientReleaseSource>(client => client.Timeout = TimeSpan.FromSeconds(20));
+builder.Services.AddScoped<IClientReleaseCatalogService, ClientReleaseCatalogService>();
+builder.Services.AddScoped<IClientUpdatePolicyService, ClientUpdatePolicyService>();
+builder.Services.AddScoped<IClientReleaseAdminService, ClientReleaseAdminService>();
+builder.Services.AddScoped<IClientDiagnosticsService, ClientDiagnosticsService>();
+builder.Services.AddScoped<IKioskSelfTestService, KioskSelfTestService>();
+builder.Services.AddScoped<IKioskHealthService, KioskHealthService>();
+builder.Services.AddScoped<IKioskOfflineManifestService, KioskOfflineManifestService>();
+builder.Services.Configure<KioskHealthOptions>(builder.Configuration.GetSection(KioskHealthOptions.SectionName));
 builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>();
 builder.Services.AddScoped<ICourseService, CourseService>();
 builder.Services.AddScoped<ICourseAssignmentService, CourseAssignmentService>();
@@ -110,6 +144,7 @@ builder.Services.AddScoped<ITrainingAnalyticsService, TrainingAnalyticsService>(
 builder.Services.AddScoped<ITrainingBrandingResolver, TrainingBrandingResolver>();
 builder.Services.AddScoped<ICertificateService, CertificateService>();
 builder.Services.AddScoped<ICompanyLocationService, CompanyLocationService>();
+builder.Services.AddScoped<ILocationOpeningHoursService, LocationOpeningHoursService>();
 builder.Services.AddScoped<IAppIconService, AppIconService>();
 builder.Services.AddScoped<ICurrentLocationContext, CurrentLocationContextService>();
 builder.Services.AddScoped<ICompanyFeatureService, CompanyFeatureService>();
@@ -117,13 +152,18 @@ builder.Services.AddScoped<ITwoFactorPolicyService, TwoFactorPolicyService>();
 builder.Services.AddScoped<IPasskeyService, PasskeyService>();
 builder.Services.AddScoped<IStaffDocumentTypeService, StaffDocumentTypeService>();
 builder.Services.AddScoped<IStaffDocumentService, StaffDocumentService>();
+builder.Services.AddScoped<IComplianceService, ComplianceService>();
+builder.Services.AddScoped<IDemandInsightsService, DemandInsightsService>();
 builder.Services.AddScoped<IOnboardingService, OnboardingService>();
 builder.Services.AddScoped<IStaffPositionService, StaffPositionService>();
+builder.Services.AddScoped<IRequiredTrainingService, RequiredTrainingService>();
 builder.Services.AddScoped<IContractRequirementService, ContractRequirementService>();
 builder.Services.AddScoped<IStaffBulkUpdateService, StaffBulkUpdateService>();
 builder.Services.AddScoped<IClockInPinService, ClockInPinService>();
 builder.Services.AddScoped<ISchedulingSettingsService, SchedulingSettingsService>();
 builder.Services.AddScoped<IRotaService, RotaService>();
+builder.Services.AddScoped<IShiftSuggestionService, ShiftSuggestionService>();
+builder.Services.AddScoped<IStaffAvailabilityService, StaffAvailabilityService>();
 builder.Services.AddScoped<IPartyBookingService, PartyBookingService>();
 builder.Services.AddScoped<IPartySettingsService, PartySettingsService>();
 builder.Services.AddScoped<IPartyTemplateService, PartyTemplateService>();
@@ -139,11 +179,14 @@ builder.Services.AddSingleton<IChatPresence, ChatPresence>();
 builder.Services.AddSingleton<IChatTyping, ChatTyping>();
 builder.Services.AddScoped<IChatService, ChatService>();
 builder.Services.AddScoped<IChatModerationService, ChatModerationService>();
+builder.Services.AddScoped<IFeedbackService, FeedbackService>();
 builder.Services.AddHostedService<ChatDigestHostedService>();
 builder.Services.AddHostedService<ChatRetentionHostedService>();
 builder.Services.AddScoped<ChatUnreadTracker>();
 builder.Services.AddScoped<IClockInTerminalService, ClockInTerminalService>();
+builder.Services.AddScoped<ICalendarFeedService, CalendarFeedService>();
 builder.Services.AddScoped<ITimeEntryService, TimeEntryService>();
+builder.Services.AddScoped<ITimesheetExportService, TimesheetExportService>();
 builder.Services.AddScoped<ITimeOffPolicyService, TimeOffPolicyService>();
 builder.Services.AddScoped<ITimeOffService, TimeOffService>();
 builder.Services.AddHostedService<CourseRecurrenceHostedService>();
@@ -171,14 +214,21 @@ builder.Services.AddScoped<ISignalRProjectionControlHub, SignalRControlHub>();
 builder.Services.AddScoped<ITimeService, TimeService>();
 builder.Services.AddScoped<IDmxSceneService, DmxSceneService>();
 builder.Services.AddScoped<IDmxFixtureService, DmxFixtureService>();
+builder.Services.AddScoped<IDmxFixtureDefinitionService, DmxFixtureDefinitionService>();
+// The Open Fixture Library snapshot is read-only and the same for everyone: load and index it once.
+builder.Services.AddSingleton<IOflFixtureParser, OflFixtureParser>();
+builder.Services.AddSingleton<IOflCatalogueService, OflCatalogueService>();
 
 builder.Services.AddSingleton<ILaserGameStatusStore, LaserGameStatusStore>();
+builder.Services.AddSingleton<IClientDiagnosticsStore, ClientDiagnosticsStore>();
 builder.Services.AddScoped<IGameResultService, GameResultService>();
 builder.Services.AddSingleton<SignalRProjectionControlHubEvents>();
 builder.Services.AddSingleton<IVideoStreamTokenService, VideoStreamTokenService>();
 builder.Services.AddSingleton<IVideoStreamSignalingService, VideoStreamSignalingService>();
 builder.Services.Configure<VideoStreamingOptions>(builder.Configuration.GetSection("VideoStreaming"));
 builder.Services.AddSingleton<MusicPlayerService>();
+// Same instance either way - playback state lives in the singleton, so the interface must not get its own.
+builder.Services.AddSingleton<IMusicPlayerService>(sp => sp.GetRequiredService<MusicPlayerService>());
 builder.Services.AddScoped<ISongAnalysisService, SongAnalysisService>();
 builder.Services.AddSingleton<ISongAnalysisQueue, SongAnalysisQueue>();
 builder.Services.AddSingleton<IBeatClockService, BeatClockService>();
@@ -187,6 +237,13 @@ builder.Services.AddSingleton<DmxService>();
 builder.Services.AddSingleton<IDmxService>(sp => sp.GetRequiredService<DmxService>());
 builder.Services.AddSingleton<IDmxClientService>(sp => sp.GetRequiredService<DmxService>());
 builder.Services.AddSingleton<IDmxSceneRunnerService, DmxSceneRunnerService>();
+
+// Data sources a projection parameter can be bound to. Every key in ProjectionBindingCatalogue needs
+// one here, or that binding silently shows its fallback forever (a test checks the two match).
+builder.Services.AddSingleton<IProjectionBindingSource, LastGameWinnerBindingSource>();
+builder.Services.AddSingleton<IProjectionBindingSource, TopScoreTodayBindingSource>();
+builder.Services.AddSingleton<IProjectionBindingSource, OpeningHoursTodayBindingSource>();
+builder.Services.AddSingleton<IProjectionBindingResolver, ProjectionBindingResolver>();
 
 builder.Services.AddSingleton<IProjectionProgramRunnerService, ProjectionProgramRunnerService>();
 builder.Services.AddHostedService<ProjectionProgramCompletionListener>();
@@ -197,13 +254,18 @@ builder.Services.AddSingleton<IActionExecutor, StartProjectionProgramActionExecu
 builder.Services.AddSingleton<IActionExecutor, StopProjectionProgramActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, DmxSceneControlActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, ProjectionProgramControlActionExecutor>();
+builder.Services.AddSingleton<IActionExecutor, AudioClipActionExecutor>();
 builder.Services.AddScoped<IAutomationRuleService, AutomationRuleService>();
 builder.Services.AddScoped<IAutomationLogService, AutomationLogService>();
 builder.Services.AddHostedService<AutomationEngineHostedService>();
+builder.Services.AddHostedService<GameDataTriggerHostedService>();
 builder.Services.Configure<AutomationExecutionLogOptions>(builder.Configuration.GetSection(AutomationExecutionLogOptions.SectionName));
 builder.Services.AddHostedService<AutomationExecutionRetentionHostedService>();
+builder.Services.Configure<KioskSelfTestOptions>(builder.Configuration.GetSection(KioskSelfTestOptions.SectionName));
+builder.Services.AddHostedService<KioskSelfTestRetentionHostedService>();
 builder.Services.AddHostedService<IdleTriggerHostedService>();
 builder.Services.AddHostedService<ScheduledTriggerHostedService>();
+builder.Services.AddHostedService<KioskAlertMonitorHostedService>();
 
 builder.Services.AddScoped<IClientZoneScoreboardService, ClientZoneScoreboardService>();
 
@@ -213,7 +275,13 @@ builder.Services.AddScoped<IAnnouncementService, AnnouncementService>();
 // cached songs overflow the 32 KB default and the hub drops the connection. Raised for the
 // kiosk hub only: global HubOptions would also apply to every Blazor circuit.
 builder.Services.AddSignalR()
-    .AddHubOptions<SignalRControlHub>(options => options.MaximumReceiveMessageSize = 256 * 1024);
+    .AddHubOptions<SignalRControlHub>(options =>
+    {
+        options.MaximumReceiveMessageSize = 256 * 1024;
+
+        // Gives every hub call the kiosk's company, so the tenant filter applies to it.
+        options.AddFilter<KioskHubFilter>();
+    });
 
 builder.Services.AddScoped<DragStateService>();
 
@@ -240,18 +308,6 @@ if (string.IsNullOrWhiteSpace(connectionString))
         + "local docker-compose Postgres for development.");
 }
 
-// Outside Development, kiosk clients authenticate to the file/audio endpoints and the
-// /websocket control hub with this shared secret and nothing else - there is no user login for
-// them to fall back to. Failing here means a misconfigured deploy never reaches a serving state,
-// instead of quietly running with every kiosk endpoint open to anyone who can reach the host.
-if (builder.Environment.IsDevelopment() == false && string.IsNullOrWhiteSpace(builder.Configuration["Clients:SharedSecret"]))
-{
-    throw new InvalidOperationException(
-        "Clients:SharedSecret is not configured. Set the Clients__SharedSecret environment variable "
-        + "before starting the server outside Development - the client file/audio endpoints and the "
-        + "/websocket control hub must not run with kiosk authentication disabled.");
-}
-
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString, b =>
     {
@@ -275,6 +331,7 @@ builder.Services.Configure<DemoOptions>(builder.Configuration.GetSection(DemoOpt
 builder.Services.AddSingleton<IDemoDirectory, DemoDirectory>();
 builder.Services.AddScoped<IDemoGuard, DemoGuard>();
 builder.Services.AddScoped<Lanyard.App.Components.Demo.DemoBrandingState>();
+builder.Services.AddScoped<Lanyard.App.Components.Notifications.CornerPromptCoordinator>();
 builder.Services.AddScoped<IWebsiteBrandingService, WebsiteBrandingService>();
 // Fetches websites demo visitors paste in: public internet only (PublicAddressGuard), briefly.
 builder.Services.AddHttpClient(WebsiteBrandingService.HttpClientName, client =>
@@ -355,7 +412,19 @@ builder.Services.Configure<SecurityStampValidatorOptions>(options =>
     };
 });
 
-builder.Services.AddAuthorization();
+// Kiosks have no user login: they authenticate with their own credential (or, until it's switched
+// off, the old shared secret). See KioskAuthenticationHandler. Never the default scheme, so a
+// kiosk can't satisfy a plain [Authorize] meant for staff.
+builder.Services.AddAuthentication()
+    .AddScheme<AuthenticationSchemeOptions, KioskAuthenticationHandler>(KioskAuthenticationDefaults.Scheme, _ => { });
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(KioskAuthenticationDefaults.HubPolicy, policy => policy
+        .AddAuthenticationSchemes(KioskAuthenticationDefaults.Scheme)
+        .RequireAuthenticatedUser()
+        .RequireClaim(KioskClaimTypes.ClientId));
+});
 
 // Configure cookie to persist login across sessions. Only applies when "Keep me signed in" is
 // ticked - otherwise it's a session cookie the browser drops on close (which on a phone is
@@ -440,6 +509,20 @@ builder.Services.AddRateLimiter(options =>
         });
     });
 
+    // A kiosk asks for a pairing code once, and again every 15 minutes while nobody approves it.
+    // Several kiosks can share a venue's IP, so this allows a room full of them being set up at once.
+    options.AddPolicy(Lanyard.API.Controllers.KioskEnrolmentController.RateLimitPolicy, httpContext =>
+    {
+        string ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 20,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        });
+    });
+
     // The homepage contact form emails a real inbox, so a handful of messages per visitor is plenty.
     options.AddPolicy(Lanyard.API.Controllers.ContactController.RateLimitPolicy, httpContext =>
     {
@@ -449,6 +532,18 @@ builder.Services.AddRateLimiter(options =>
         {
             PermitLimit = 5,
             Window = TimeSpan.FromMinutes(15),
+            QueueLimit = 0
+        });
+    });
+
+    // Per feed, not per address: Google and Apple poll every subscriber's calendar from a shared
+    // pool of addresses. A real calendar app polls at most a few times an hour.
+    options.AddPolicy(Lanyard.API.Controllers.CalendarFeedController.RateLimitPolicy, httpContext =>
+    {
+        return RateLimitPartition.GetFixedWindowLimiter(Lanyard.API.Controllers.CalendarFeedController.PartitionKey(httpContext), _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 30,
+            Window = TimeSpan.FromHours(1),
             QueueLimit = 0
         });
     });
@@ -522,37 +617,10 @@ app.UseAuthorization();
 
 app.UseAntiforgery();
 
-// Both IClientSecretValidator and ILoggerFactory are app-wide singletons, so resolving them once
-// here - rather than via context.RequestServices inside the request delegate below - avoids a
-// per-request DI resolve on every SignalR connection attempt without changing behavior.
-IClientSecretValidator websocketGateValidator = app.Services.GetRequiredService<IClientSecretValidator>();
-ILogger websocketGateLogger = app.Services
-    .GetRequiredService<ILoggerFactory>()
-    .CreateLogger("Lanyard.Application.Services.Authentication.ClientRequestAuthorization");
-
-app.Use(async (context, next) =>
-{
-    if (context.Request.Path.StartsWithSegments("/websocket"))
-    {
-        string? providedSecret = context.Request.Query["secret"].ToString();
-        string remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
-
-        // Delegates to the same decision point the client REST endpoints use
-        // (ClientRequestAuthorization.EvaluateAndLog / IClientSecretValidator.Authorize) so the
-        // unconfigured-secret case can never be decided differently here than there.
-        if (!ClientRequestAuthorization.EvaluateAndLog(websocketGateValidator, providedSecret, websocketGateLogger, remoteIp, context.Request.Path.ToString()))
-        {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            await context.Response.WriteAsync("Invalid or missing client shared secret.");
-            return;
-        }
-    }
-
-    await next();
-});
-
-// Map SignalR hub for music control
-app.MapHub<SignalRControlHub>("/websocket");
+// The kiosk control hub. Only kiosks the server knows get in (see KioskAuthenticationHandler);
+// an unknown kiosk is turned away at negotiate rather than created.
+app.MapHub<SignalRControlHub>("/websocket")
+    .RequireAuthorization(KioskAuthenticationDefaults.HubPolicy);
 
 // The "ip-fixed" limiter (25/min per IP) is a brute-force guard for the auth endpoints and is
 // applied on AuthController itself. It must not cover the file/audio/logo/certificate

@@ -1,0 +1,192 @@
+@page "/manage/compliance"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+
+@* No [RequiresFeature]: this page spans Training and Onboarding, so each section hides itself when
+   the company doesn't have its module instead. *@
+
+@using Lanyard.App.Components.Compliance
+@using Lanyard.Application.Services.Compliance
+@using Lanyard.Infrastructure.DTO.Compliance
+
+@inject IComplianceService _complianceService
+@inject ICompanyFeatureService _companyFeatureService
+
+<PageTitle>Compliance</PageTitle>
+
+<div class="compliance-page">
+    <div class="compliance-intro">
+        <h1 class="compliance-title">Compliance</h1>
+        <p class="compliance-subtitle">
+            Overdue training, and staff documents that have expired or expire soon@(_summary is null ? "." : $", for {_summary.LocationName}.")
+        </p>
+    </div>
+
+    <div class="compliance-toolbar">
+        @if (_isAdmin)
+        {
+            <FluentSelect TOption="LocationOption" TValue="string" Items="@_locationOptions" OptionText="@(x => x.Name)"
+                          OptionValue="@(x => x.Value)" Value="@(_locationId?.ToString() ?? AllLocationsValue)"
+                          ValueChanged="@OnLocationChangedAsync" Label="Location" Width="260px" />
+        }
+
+        <FluentNumberInput TValue="int" Value="@_days" ValueChanged="@OnDaysChangedAsync"
+                           Min="ComplianceQuery.MinExpiryWindowDays" Max="ComplianceQuery.MaxExpiryWindowDays"
+                           Label="Documents expiring within (days)" />
+
+        <div class="compliance-help">
+            <HelpButton AreaKey="@HelpRegistry.Compliance" />
+        </div>
+    </div>
+
+    @if (_error is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@_error</FluentMessageBar>
+    }
+    else if (_summary is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" HorizontalGap="8px">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else if (OrderedSections.Count == 0)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+            Training and onboarding are both switched off for your company, so there's nothing to show here.
+        </FluentMessageBar>
+    }
+    else
+    {
+        <div class="compliance-sections">
+            @foreach (ComplianceSection section in OrderedSections)
+            {
+                string headingId = $"compliance-{ComplianceDisplay.QueryKey(section.Kind)}";
+
+                <section class="compliance-section @(section.Kind == _focusedSection ? "is-focused" : null)" aria-labelledby="@headingId">
+                    <div class="compliance-section-head">
+                        <h2 id="@headingId" class="compliance-section-title">@ComplianceDisplay.Label(section.Kind)</h2>
+                        <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@ComplianceDisplay.Color(section.Kind, section.ItemCount)">
+                            @section.ItemCount
+                        </FluentBadge>
+                    </div>
+
+                    @if (section.Rows.Count == 0)
+                    {
+                        <p class="compliance-none">Nothing outstanding.</p>
+                    }
+                    else
+                    {
+                        <p class="compliance-meta">@PeopleText(section.PeopleCount)</p>
+                        <ul class="compliance-rows">
+                            @foreach (ComplianceRow row in section.Rows)
+                            {
+                                <li>
+                                    <a class="compliance-row" href="@ComplianceDisplay.PersonUrl(section.Kind, row.UserId)">
+                                        <span class="compliance-row-text">
+                                            <span class="compliance-row-name">@row.DisplayName</span>
+                                            <span class="compliance-row-detail">@row.Detail</span>
+                                        </span>
+                                        <span class="compliance-row-date">@row.Date.ToString("d MMM yyyy")</span>
+                                    </a>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </section>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private const string AllLocationsValue = "all";
+
+    private record LocationOption(string Value, string Name);
+
+    [SupplyParameterFromQuery(Name = "section")]
+    public string? Section { get; set; }
+
+    [SupplyParameterFromQuery(Name = "days")]
+    public int? Days { get; set; }
+
+    [SupplyParameterFromQuery(Name = "location")]
+    public int? Location { get; set; }
+
+    private LocationScope? _scope;
+    private bool _isAdmin;
+    private int _days = ComplianceQuery.DefaultExpiryWindowDays;
+    private int? _locationId;
+    private ComplianceSectionKind? _focusedSection;
+    private List<LocationOption> _locationOptions = [];
+    private IReadOnlySet<CompanyFeature> _hiddenFeatures = new HashSet<CompanyFeature>();
+    private ComplianceSummary? _summary;
+    private string? _error;
+
+    // The section the widget link was for goes first, so on a phone it's what you land on.
+    private List<ComplianceSection> OrderedSections => _summary is null
+        ? []
+        : [.. _summary.Sections
+            .Where(x => !_hiddenFeatures.Contains(ComplianceDisplay.Feature(x.Kind)))
+            .OrderBy(x => x.Kind == _focusedSection ? 0 : 1)];
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (!scope.IsSuccess || scope.Data is null)
+        {
+            _error = scope.Error ?? "Your session couldn't be read. Please sign in again.";
+            return;
+        }
+
+        _scope = scope.Data;
+        _isAdmin = _scope.IsAdmin;
+        _focusedSection = ComplianceDisplay.FromQueryKey(Section);
+        _days = Math.Clamp(Days ?? ComplianceQuery.DefaultExpiryWindowDays, ComplianceQuery.MinExpiryWindowDays, ComplianceQuery.MaxExpiryWindowDays);
+
+        // Only an Admin chooses; a Manager's location comes from their session, whatever the URL says.
+        _locationId = _isAdmin ? Location : null;
+
+        _hiddenFeatures = await _companyFeatureService.GetHiddenFeaturesForCurrentUserAsync();
+
+        if (_isAdmin)
+        {
+            Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync();
+
+            _locationOptions =
+            [
+                new(AllLocationsValue, "All locations"),
+                .. (locations.Data ?? []).OrderBy(x => x.GetDisplayName()).Select(x => new LocationOption(x.Id.ToString(), x.GetDisplayName()))
+            ];
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (_scope is null)
+        {
+            return;
+        }
+
+        Result<ComplianceSummary> result = await _complianceService.GetSummaryAsync(_scope, new ComplianceQuery(_locationId, _days));
+
+        _error = result.IsSuccess ? null : result.Error;
+        _summary = result.IsSuccess ? result.Data : null;
+    }
+
+    private async Task OnLocationChangedAsync(string? value)
+    {
+        _locationId = int.TryParse(value, out int id) ? id : null;
+        await LoadAsync();
+    }
+
+    private async Task OnDaysChangedAsync(int value)
+    {
+        _days = Math.Clamp(value, ComplianceQuery.MinExpiryWindowDays, ComplianceQuery.MaxExpiryWindowDays);
+        await LoadAsync();
+    }
+
+    private static string PeopleText(int people) => people == 1 ? "1 person" : $"{people} people";
+}

@@ -1,6 +1,7 @@
 @using Lanyard.Infrastructure.Enum
+@using Lanyard.Infrastructure.DTO.Scheduling
 
-<button type="button" class="shift-chip theme-colour @StateClass @(Shift.UserId is null ? "shift-chip-open" : string.Empty) @(Compact ? "shift-chip-compact" : string.Empty)"
+<button type="button" class="shift-chip theme-colour @StateClass @(Shift.UserId is null ? "shift-chip-open" : string.Empty) @(Compact ? "shift-chip-compact" : string.Empty) @(HasTrainingGaps ? "shift-chip-training" : string.Empty)"
         style="@PositionColours.CssVariables(Shift.StaffPosition?.ColorIndex)"
         title="@Tooltip" aria-label="@Tooltip" disabled="@(!IsEditable)" @onclick="HandleClickAsync">
     <span class="shift-chip-time">@(Compact ? Shift.CompactTimeRange() : Shift.TimeRange())</span>
@@ -8,9 +9,19 @@
     {
         <span class="shift-chip-position">@(Shift.StaffPosition?.Name ?? "No position")</span>
     }
+    @if (HasTrainingGaps && ShowTrainingText && !Compact)
+    {
+        <span class="shift-chip-training-text">Needs @TrainingNames</span>
+    }
     @if (State == ShiftState.Changed)
     {
         <span class="shift-chip-dot" aria-hidden="true"></span>
+    }
+    @if (HasTrainingGaps)
+    {
+        <span class="shift-chip-training-icon" aria-hidden="true">
+            <FluentIcon Value="@(new Icons.Filled.Size16.HatGraduation())" Color="Color.Warning" />
+        </span>
     }
 </button>
 
@@ -23,6 +34,19 @@
 
     [Parameter]
     public EventCallback<Shift> OnClick { get; set; }
+
+    // Required training the person isn't current on by the shift's start (RotaRangeView.TrainingGapsFor).
+    [Parameter]
+    public IReadOnlyList<TrainingGap>? TrainingGaps { get; set; }
+
+    // Spells the missing training out on the chip itself, for touch screens where the tooltip
+    // never shows (the phone day list).
+    [Parameter]
+    public bool ShowTrainingText { get; set; }
+
+    private bool HasTrainingGaps => TrainingGaps is { Count: > 0 };
+
+    private string TrainingNames => string.Join(", ", TrainingGaps?.Select(x => x.CourseName) ?? []);
 
     private ShiftState State => Shift.GetState();
 
@@ -48,7 +72,9 @@
 
             string open = Shift.UserId is null ? " Open shift, nobody on it yet." : string.Empty;
 
-            return $"{Shift.TimeRange()} {position}{breakText}.{open} {State.StateLabel()}{notes}";
+            string training = HasTrainingGaps ? $" Missing training: {TrainingNames}." : string.Empty;
+
+            return $"{Shift.TimeRange()} {position}{breakText}.{open} {State.StateLabel()}{notes}{training}";
         }
     }
 

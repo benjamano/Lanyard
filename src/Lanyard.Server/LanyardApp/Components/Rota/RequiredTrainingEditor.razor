@@ -1,0 +1,284 @@
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Application.Services.Training
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@inject IStaffPositionService _staffPositionService
+@inject ICourseService _courseService
+
+<div class="training-editor">
+    @if (!string.IsNullOrWhiteSpace(Title))
+    {
+        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">@Title</FluentText>
+    }
+
+    <div class="training-editor-hint">
+        Staff can only pick up a @PositionName shift, or take one in a swap, once they've passed these courses. For a
+        course that has to be renewed, their pass must still be in date on the day of the shift. You can still put
+        anyone on the rota yourself - you'll just get a warning. Saving assigns a newly ticked course to anyone in
+        this position who hasn't done it yet, and emails them.
+    </div>
+
+    @if (isLoading)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else
+    {
+        @if (courses.Count == 0 && lockedRequirements.Count == 0)
+        {
+            <div class="training-editor-empty">
+                There are no training courses you can choose from yet. Create one under Manage &gt; Training &gt; Courses.
+            </div>
+        }
+        else
+        {
+            <div class="training-editor-list">
+                @foreach (Course course in courses)
+                {
+                    <div class="training-editor-row">
+                        <FluentCheckbox Label="@course.Name" Value="@selectedCourseIds.Contains(course.Id)"
+                                        ValueChanged="@(isChecked => ToggleCourseAsync(course.Id, isChecked))" />
+                        <div class="training-editor-tags">
+                            <span class="training-editor-tag">@WhereLabel(course)</span>
+                            @if (course.RecurrenceMonths is int months)
+                            {
+                                <span class="training-editor-tag">Renew every @months @(months == 1 ? "month" : "months")</span>
+                            }
+                            @if (!course.IsActive)
+                            {
+                                <span class="training-editor-tag is-warning">Archived, not enforced</span>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @foreach (StaffPositionRequiredCourse locked in lockedRequirements)
+                {
+                    <div class="training-editor-row is-locked">
+                        <div class="training-editor-locked-name">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.LockClosed())" Title="You can't change this one" />
+                            <span>@locked.Course?.Name</span>
+                        </div>
+                        <div class="training-editor-tags">
+                            <span class="training-editor-tag">@WhereLabel(locked.Course!)</span>
+                            <span class="training-editor-tag">@(locked.Course!.LocationId is null ? "Only an admin can change this" : "Only an admin or that location's manager can change this")</span>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @if (coverage is not null && selectedCourseIds.Count > 0)
+            {
+                <div class="training-editor-coverage @(coverage.UpToDate < coverage.Holders ? "is-short" : "")">
+                    <FluentIcon Value="@(coverage.UpToDate < coverage.Holders ? (Icon)new Icons.Regular.Size16.Warning() : new Icons.Regular.Size16.CheckmarkCircle())" />
+                    <span>@CoverageText</span>
+                </div>
+            }
+
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px" VerticalAlignment="VerticalAlignment.Center">
+                <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
+                              Disabled="@(isSaving || !HasChanges)" OnClick="@SaveAsync">
+                    @(isSaving ? "Saving..." : "Save Training")
+                </FluentButton>
+                @if (HasChanges)
+                {
+                    <span class="training-editor-hint">Unsaved changes</span>
+                }
+            </FluentStack>
+        }
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required int CompanyId { get; set; }
+
+    [Parameter, EditorRequired]
+    public required Guid PositionId { get; set; }
+
+    [Parameter, EditorRequired]
+    public required string PositionName { get; set; }
+
+    [Parameter]
+    public string? Title { get; set; }
+
+    // Raised after a save, so the positions list can refresh its "Needs ..." line.
+    [Parameter]
+    public EventCallback OnSaved { get; set; }
+
+    // Courses the viewer can tick: the ones they can see, plus any archived course still linked
+    // (so it can be unticked). Requirements they can't see stay as they are, shown locked.
+    private List<Course> courses = [];
+    private List<StaffPositionRequiredCourse> lockedRequirements = [];
+    private HashSet<Guid> selectedCourseIds = [];
+    private HashSet<Guid> savedCourseIds = [];
+    private TrainingCoverage? coverage;
+    private LocationScope? scope;
+    private bool isLoading = true;
+    private bool isSaving;
+
+    private bool HasChanges => !selectedCourseIds.SetEquals(savedCourseIds);
+
+    private string CoverageText
+    {
+        get
+        {
+            if (coverage is null)
+            {
+                return string.Empty;
+            }
+
+            string where = coverage.LocationName is null ? "" : $" at {coverage.LocationName}";
+
+            if (coverage.Holders == 0)
+            {
+                return $"Nobody{where} works as {PositionName} yet.";
+            }
+
+            if (coverage.UpToDate == coverage.Holders)
+            {
+                return $"All {coverage.Holders} {PositionName} staff{where} are up to date on this training.";
+            }
+
+            int notReady = coverage.Holders - coverage.UpToDate;
+            string others = notReady == 1 ? "The other person" : $"The other {notReady}";
+
+            return $"{coverage.UpToDate} of {coverage.Holders} {PositionName} staff{where} are up to date. "
+                + $"{others} won't be able to pick up {PositionName} shifts until they are.";
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            _toastService.ShowError($"Failed to resolve your location: {scopeResult.Error}");
+            isLoading = false;
+            return;
+        }
+
+        scope = scopeResult.Data;
+
+        Result<List<Course>> coursesResult = await _courseService.GetCoursesAsync(scope, allLocations: true);
+        Result<List<StaffPositionRequiredCourse>> requiredResult = await _staffPositionService.GetRequiredCoursesAsync(scope, PositionId);
+
+        if (!coursesResult.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to load training courses: {coursesResult.Error}");
+        }
+
+        if (!requiredResult.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to load the required training: {requiredResult.Error}");
+        }
+
+        List<Course> visible = (coursesResult.Data ?? []).Where(x => x.CompanyId == CompanyId).ToList();
+        List<StaffPositionRequiredCourse> required = requiredResult.Data ?? [];
+        HashSet<Guid> visibleIds = visible.Select(x => x.Id).ToHashSet();
+
+        // An archived course stays linked (and listed, so it can be removed) but isn't enforced.
+        List<Course> archived = required
+            .Where(x => x.Course is { IsActive: false } && CanSee(x.Course))
+            .Select(x => x.Course!)
+            .ToList();
+
+        courses = [.. visible, .. archived];
+        lockedRequirements = required.Where(x => x.Course is not null && !visibleIds.Contains(x.CourseId) && !archived.Contains(x.Course)).ToList();
+
+        savedCourseIds = required.Where(x => courses.Any(c => c.Id == x.CourseId)).Select(x => x.CourseId).ToHashSet();
+        selectedCourseIds = [.. savedCourseIds];
+
+        await LoadCoverageAsync();
+
+        isLoading = false;
+    }
+
+    private async Task LoadCoverageAsync()
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        List<Guid> enforced = selectedCourseIds
+            .Concat(lockedRequirements.Select(x => x.CourseId))
+            .Distinct()
+            .ToList();
+
+        Result<TrainingCoverage> result = await _staffPositionService.GetTrainingCoverageAsync(scope, PositionId, enforced);
+        coverage = result.IsSuccess ? result.Data : null;
+    }
+
+    private async Task ToggleCourseAsync(Guid courseId, bool isChecked)
+    {
+        if (isChecked)
+        {
+            selectedCourseIds.Add(courseId);
+        }
+        else
+        {
+            selectedCourseIds.Remove(courseId);
+        }
+
+        await LoadCoverageAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        isSaving = true;
+
+        try
+        {
+            Result<string> userResult = await _securityService.GetCurrentUserIdAsync();
+
+            if (!userResult.IsSuccess || string.IsNullOrEmpty(userResult.Data))
+            {
+                _toastService.ShowError($"Failed to identify you: {userResult.Error}");
+                return;
+            }
+
+            Result<RequiredTrainingAssignResult> result = await _staffPositionService.SetRequiredCoursesAsync(scope, PositionId, selectedCourseIds.ToList(), userResult.Data);
+
+            if (!result.IsSuccess)
+            {
+                _toastService.ShowError($"Failed to save the required training: {result.Error}");
+                return;
+            }
+
+            _toastService.ShowSuccess(result.Data?.Summary() is string assigned
+                ? $"Training for {PositionName} saved. {assigned}"
+                : $"Training for {PositionName} saved.");
+            await LoadAsync();
+            await OnSaved.InvokeAsync();
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private bool CanSee(Course course) =>
+        scope is not null && (scope.IsAdmin || course.LocationId == scope.LocationId || course.IsShared);
+
+    private static string WhereLabel(Course course) =>
+        course.LocationId is null ? "All locations"
+            : course.IsShared ? $"Shared from {course.Location?.Name ?? "another location"}"
+            : $"{course.Location?.Name ?? "One location"} only";
+}

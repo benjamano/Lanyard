@@ -111,6 +111,12 @@
                     <FluentMenuItem OnClick="() => Dashboard.Widgets.Add(new PendingTimeOffWidget())">
                         Time Off to Approve
                     </FluentMenuItem>
+                    <FluentMenuItem OnClick="() => Dashboard.Widgets.Add(new ComplianceSummaryWidget())">
+                        Compliance at a Glance
+                    </FluentMenuItem>
+                    <FluentMenuItem OnClick="() => Dashboard.Widgets.Add(new DemandStaffingWidget())">
+                        Demand and Staffing
+                    </FluentMenuItem>
                 </FluentMenuList>
             </FluentMenu>
 
@@ -119,10 +125,12 @@
                             OnClick="DeleteDashboardAsync"
                             Tooltip="Delete Dashboard">
             </FluentButton>
+
+            <HelpButton AreaKey="@HelpRegistry.Dashboards" Topic="editing" Compact="true" />
         </FluentStack>
     </FluentCard>
 
-    <DashboardGrid Widgets="Dashboard.Widgets" PreviewMode="IsPreviewing"/>
+    <DashboardGrid Widgets="Dashboard.Widgets" CompanyId="Dashboard.CompanyId" PreviewMode="IsPreviewing"/>
 }
 else
 {

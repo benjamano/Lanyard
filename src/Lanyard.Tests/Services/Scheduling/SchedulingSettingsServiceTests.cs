@@ -1,6 +1,7 @@
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -105,5 +106,118 @@ public class SchedulingSettingsServiceTests
             SchedulingTestHelpers.ManagerScopeFor(otherLocation), new CompanySchedulingSettings { CompanyId = company.Id });
 
         Assert.IsFalse(result.IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task GetSettingsAsync_DefaultsToCalendarMonthsAndNoBreakDeduction()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, _) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+
+        Result<CompanySchedulingSettings> result = await GetService(options).GetSettingsAsync(company.Id);
+
+        Assert.AreEqual(PayPeriodFrequency.Monthly, result.Data!.PayPeriod);
+        Assert.AreEqual(1, result.Data.PayPeriodStartDay);
+        Assert.IsNull(result.Data.PayPeriodAnchorDate);
+        Assert.AreEqual(BreakDeductionRule.None, result.Data.BreakDeduction);
+        Assert.AreEqual(20, result.Data.BreakDeductionMinutes);
+        Assert.AreEqual(6m, result.Data.BreakDeductionAfterHours);
+    }
+
+    [TestMethod]
+    public async Task SaveSettingsAsync_StoresThePayrollExportSettings()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, _) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        SchedulingSettingsService service = GetService(options);
+
+        Result<CompanySchedulingSettings> saved = await service.SaveSettingsAsync(SchedulingTestHelpers.AdminScope, new CompanySchedulingSettings
+        {
+            CompanyId = company.Id,
+            PayPeriod = PayPeriodFrequency.Fortnightly,
+            PayPeriodAnchorDate = new DateOnly(2026, 10, 5),
+            BreakDeduction = BreakDeductionRule.FixedOverThreshold,
+            BreakDeductionMinutes = 30,
+            BreakDeductionAfterHours = 7.5m
+        });
+
+        Assert.IsTrue(saved.IsSuccess, saved.Error);
+
+        CompanySchedulingSettings loaded = (await service.GetSettingsAsync(company.Id)).Data!;
+        Assert.AreEqual(PayPeriodFrequency.Fortnightly, loaded.PayPeriod);
+        Assert.AreEqual(new DateOnly(2026, 10, 5), loaded.PayPeriodAnchorDate);
+        Assert.AreEqual(BreakDeductionRule.FixedOverThreshold, loaded.BreakDeduction);
+        Assert.AreEqual(30, loaded.BreakDeductionMinutes);
+        Assert.AreEqual(7.5m, loaded.BreakDeductionAfterHours);
+    }
+
+    [TestMethod]
+    public async Task SaveSettingsAsync_MonthlyClearsAnyOldAnchorDate()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, _) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        SchedulingSettingsService service = GetService(options);
+
+        await service.SaveSettingsAsync(SchedulingTestHelpers.AdminScope,
+            new CompanySchedulingSettings { CompanyId = company.Id, PayPeriod = PayPeriodFrequency.Weekly, PayPeriodAnchorDate = new DateOnly(2026, 10, 5) });
+        await service.SaveSettingsAsync(SchedulingTestHelpers.AdminScope,
+            new CompanySchedulingSettings { CompanyId = company.Id, PayPeriod = PayPeriodFrequency.Monthly, PayPeriodStartDay = 26, PayPeriodAnchorDate = new DateOnly(2026, 10, 5) });
+
+        CompanySchedulingSettings loaded = (await service.GetSettingsAsync(company.Id)).Data!;
+        Assert.AreEqual(26, loaded.PayPeriodStartDay);
+        Assert.IsNull(loaded.PayPeriodAnchorDate);
+    }
+
+    [TestMethod]
+    [DataRow(0)]
+    [DataRow(29)]
+    public async Task SaveSettingsAsync_RejectsAMonthlyStartDayOutside1To28(int startDay)
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, _) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+
+        Result<CompanySchedulingSettings> result = await GetService(options).SaveSettingsAsync(SchedulingTestHelpers.AdminScope,
+            new CompanySchedulingSettings { CompanyId = company.Id, PayPeriod = PayPeriodFrequency.Monthly, PayPeriodStartDay = startDay });
+
+        Assert.IsFalse(result.IsSuccess);
+        StringAssert.Contains(result.Error, "between 1 and 28");
+    }
+
+    [TestMethod]
+    public async Task SaveSettingsAsync_RejectsAWeeklyPeriodWithNoAnchor()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, _) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+
+        Result<CompanySchedulingSettings> result = await GetService(options).SaveSettingsAsync(SchedulingTestHelpers.AdminScope,
+            new CompanySchedulingSettings { CompanyId = company.Id, PayPeriod = PayPeriodFrequency.FourWeekly });
+
+        Assert.IsFalse(result.IsSuccess);
+        StringAssert.Contains(result.Error, "first day of any one pay period");
+    }
+
+    [TestMethod]
+    public async Task SaveSettingsAsync_RejectsAFixedBreakOfZeroMinutes()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, _) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+
+        Result<CompanySchedulingSettings> result = await GetService(options).SaveSettingsAsync(SchedulingTestHelpers.AdminScope,
+            new CompanySchedulingSettings { CompanyId = company.Id, BreakDeduction = BreakDeductionRule.FixedOverThreshold, BreakDeductionMinutes = 0 });
+
+        Assert.IsFalse(result.IsSuccess);
+        StringAssert.Contains(result.Error, "between 1 and 120 minutes");
+    }
+
+    [TestMethod]
+    public async Task SaveSettingsAsync_IgnoresFixedBreakNumbersWhenTheRuleIsOff()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, _) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+
+        Result<CompanySchedulingSettings> result = await GetService(options).SaveSettingsAsync(SchedulingTestHelpers.AdminScope,
+            new CompanySchedulingSettings { CompanyId = company.Id, BreakDeduction = BreakDeductionRule.None, BreakDeductionMinutes = 0 });
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
     }
 }

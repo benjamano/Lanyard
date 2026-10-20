@@ -21,16 +21,21 @@ public static class CompanyFeatureCatalog
             "Onboarding emails and staff document types."),
         new(CompanyFeature.Announcements, "Announcements",
             "The Announcements page and widget."),
+        new(CompanyFeature.Insights, "Insights",
+            "Busy hours against staffing: games, players, clocked and rota hours by hour of the week."),
         new(CompanyFeature.Parties, "Parties",
             "Party bookings, deposits and the documents printed for each party.")
     ];
 
     // The module a dashboard widget belongs to, or null for widgets every company gets.
+    // ComplianceSummary is deliberately null: it spans Training and Onboarding, so it hides each of
+    // its sections itself rather than the whole widget disappearing for want of one module.
     public static CompanyFeature? ForWidget(WidgetType type) => type switch
     {
         WidgetType.MyTraining => CompanyFeature.Training,
         WidgetType.MyShifts or WidgetType.WhoIsOnToday or WidgetType.PendingTimeOff => CompanyFeature.StaffScheduling,
         WidgetType.Announcements => CompanyFeature.Announcements,
+        WidgetType.DemandStaffing => CompanyFeature.Insights,
         _ => null
     };
 

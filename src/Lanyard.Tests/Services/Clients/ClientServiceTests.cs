@@ -606,6 +606,126 @@ namespace Lanyard.Tests.Services.Clients
             Assert.AreEqual(1, result.Data?.Count(), "Expected one client projection setting.");
         }
 
+        private static async Task<(Guid ClientId, Guid ActiveStepId, Guid DeletedStepId)> SeedClientWithProgramAsync(DbContextOptions<ApplicationDbContext> options, bool programIsActive)
+        {
+            await using var ctx = new ApplicationDbContext(options);
+
+            Guid clientId = Guid.NewGuid();
+            Guid programId = Guid.NewGuid();
+            Guid activeStepId = Guid.NewGuid();
+            Guid deletedStepId = Guid.NewGuid();
+
+            ctx.Clients.Add(new Client { Id = clientId, Name = "Client 1" });
+            ctx.ProjectionPrograms.Add(new ProjectionProgram { Id = programId, Name = "Program", IsActive = programIsActive });
+            ctx.ProjectionProgramSteps.Add(new ProjectionProgramStep { Id = activeStepId, ProjectionProgramId = programId, SortOrder = 0, IsActive = true });
+            ctx.ProjectionProgramSteps.Add(new ProjectionProgramStep { Id = deletedStepId, ProjectionProgramId = programId, SortOrder = 1, IsActive = false });
+            ctx.ClientProjectionSettings.Add(new ClientProjectionSettings
+            {
+                Id = Guid.NewGuid(), ClientId = clientId, ProjectionProgramId = programId, DisplayIndex = 0, Width = 1920, Height = 1080, IsActive = true,
+            });
+            await ctx.SaveChangesAsync();
+
+            return (clientId, activeStepId, deletedStepId);
+        }
+
+        [TestMethod]
+        public async Task GetClientProjectionSettingsAsync_LeavesOutSoftDeletedSteps()
+        {
+            var options = GetInMemoryOptions();
+            var service = GetService(options);
+            var (clientId, activeStepId, _) = await SeedClientWithProgramAsync(options, programIsActive: true);
+
+            var result = await service.GetClientProjectionSettingsAsync(clientId);
+
+            Assert.IsTrue(result.Success, result.Error);
+            List<ProjectionProgramStep> steps = result.Data!.Single().ProjectionProgram!.ProjectionProgramSteps;
+            Assert.AreEqual(1, steps.Count, "A deleted step must not be sent to the kiosk.");
+            Assert.AreEqual(activeStepId, steps[0].Id);
+        }
+
+        [TestMethod]
+        public async Task ConvertIntoClientProjectionSettingsDTO_SkipsAssignmentsToDeletedPrograms()
+        {
+            var options = GetInMemoryOptions();
+            var service = GetService(options);
+            var (clientId, _, _) = await SeedClientWithProgramAsync(options, programIsActive: false);
+
+            var settings = await service.GetClientProjectionSettingsAsync(clientId);
+            var dtos = service.ConvertIntoClientProjectionSettingsDTO(settings.Data!);
+
+            Assert.IsTrue(dtos.Success, dtos.Error);
+            Assert.AreEqual(0, dtos.Data!.Count());
+        }
+
+        [TestMethod]
+        public async Task ConvertIntoClientProjectionSettingsDTO_SendsOnlyActiveSteps()
+        {
+            var options = GetInMemoryOptions();
+            var service = GetService(options);
+            var (clientId, _, _) = await SeedClientWithProgramAsync(options, programIsActive: true);
+
+            var settings = await service.GetClientProjectionSettingsAsync(clientId);
+            var dtos = service.ConvertIntoClientProjectionSettingsDTO(settings.Data!);
+
+            Assert.IsTrue(dtos.Success, dtos.Error);
+            Assert.AreEqual(1, dtos.Data!.Single().ProjectionProgram.ProjectionProgramSteps.Count());
+        }
+
+        [TestMethod]
+        public async Task UpdateOfflineFallbackSettingsAsync_SavesTheSettings()
+        {
+            var options = GetInMemoryOptions();
+            var service = GetService(options);
+            var (clientId, _, _) = await SeedClientWithProgramAsync(options, programIsActive: true);
+
+            var result = await service.UpdateOfflineFallbackSettingsAsync(clientId, enabled: false, offlineAfterSeconds: 120, cacheLimitMb: 4096);
+
+            Assert.IsTrue(result.Success, result.Error);
+            await using var ctx = new ApplicationDbContext(options);
+            Client saved = await ctx.Clients.SingleAsync(x => x.Id == clientId);
+            Assert.IsFalse(saved.OfflineFallbackEnabled);
+            Assert.AreEqual(120, saved.OfflineAfterSeconds);
+            Assert.AreEqual(4096, saved.ProjectionCacheLimitMb);
+        }
+
+        [TestMethod]
+        [DataRow(9, 2048)]
+        [DataRow(601, 2048)]
+        [DataRow(30, 255)]
+        public async Task UpdateOfflineFallbackSettingsAsync_RejectsOutOfRangeValues(int offlineAfterSeconds, int cacheLimitMb)
+        {
+            var options = GetInMemoryOptions();
+            var service = GetService(options);
+            var (clientId, _, _) = await SeedClientWithProgramAsync(options, programIsActive: true);
+
+            var result = await service.UpdateOfflineFallbackSettingsAsync(clientId, enabled: true, offlineAfterSeconds, cacheLimitMb);
+
+            Assert.IsFalse(result.Success);
+        }
+
+        [TestMethod]
+        public async Task UpdateClientAsync_DoesNotOverwriteOfflineSettingsWithAStaleCopy()
+        {
+            var options = GetInMemoryOptions();
+            var service = GetService(options);
+            var (clientId, _, _) = await SeedClientWithProgramAsync(options, programIsActive: true);
+
+            // Another settings tab loaded the client before the offline settings were changed.
+            Client stale = (await service.GetClientFromIdAsync(clientId)).Data!;
+
+            await service.UpdateOfflineFallbackSettingsAsync(clientId, enabled: false, offlineAfterSeconds: 90, cacheLimitMb: 512);
+
+            stale.Notes = "Saved from another tab";
+            await service.UpdateClientAsync(stale);
+
+            await using var ctx = new ApplicationDbContext(options);
+            Client saved = await ctx.Clients.SingleAsync(x => x.Id == clientId);
+            Assert.AreEqual("Saved from another tab", saved.Notes);
+            Assert.IsFalse(saved.OfflineFallbackEnabled);
+            Assert.AreEqual(90, saved.OfflineAfterSeconds);
+            Assert.AreEqual(512, saved.ProjectionCacheLimitMb);
+        }
+
         [TestMethod]
         public async Task SetClientAvailableScreensAsync_ShouldUpdateScreens()
         {
@@ -1419,6 +1539,207 @@ namespace Lanyard.Tests.Services.Clients
             var result = await service.DeleteProjectionProgramAsync(result1.Data.Id);
 
             Assert.IsTrue(result.Success);
+        }
+
+        [TestMethod]
+        public async Task GetClientsWithCapabilitiesAsync_ShouldProjectReportedClientVersion()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            ClientService service = GetService(options);
+            DateTime reportedAt = new(2026, 10, 12, 9, 0, 0, DateTimeKind.Utc);
+
+            await service.CreateClientAsync(new Client { Id = Guid.NewGuid(), Name = "Reported", ReportedClientVersion = "1.0.41", ClientVersionReportedAt = reportedAt });
+            await service.CreateClientAsync(new Client { Id = Guid.NewGuid(), Name = "Old build" });
+
+            Result<IEnumerable<ClientConnectedWithCapabilitiesDTO>> result = await service.GetClientsWithCapabilitiesAsync();
+
+            Assert.IsTrue(result.Success, result.Error);
+            ClientConnectedWithCapabilitiesDTO reported = result.Data!.Single(x => x.Name == "Reported");
+            ClientConnectedWithCapabilitiesDTO oldBuild = result.Data!.Single(x => x.Name == "Old build");
+
+            Assert.AreEqual("1.0.41", reported.ReportedClientVersion);
+            Assert.AreEqual(reportedAt, reported.ClientVersionReportedAt);
+            Assert.IsNull(oldBuild.ReportedClientVersion);
+            Assert.IsNull(oldBuild.ClientVersionReportedAt);
+        }
+
+        [TestMethod]
+        public async Task GetClientsAsync_ShouldProjectReportedClientVersion()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            ClientService service = GetService(options);
+
+            await service.CreateClientAsync(new Client { Id = Guid.NewGuid(), Name = "Reported", ReportedClientVersion = "1.0.41" });
+
+            Result<IEnumerable<ClientConnectedDTO>> result = await service.GetClientsAsync();
+
+            Assert.IsTrue(result.Success, result.Error);
+            Assert.AreEqual("1.0.41", result.Data!.Single().ReportedClientVersion);
+        }
+
+        [TestMethod]
+        public async Task UpdateClientAsync_DoesNotOverwriteUpdateRingOrPin_FromAStaleCopy()
+        {
+            // The settings tabs and the hub write back a whole Client loaded earlier; that must not
+            // undo an update setting an admin saved in between.
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            ClientService service = GetService(options);
+            Guid id = Guid.NewGuid();
+
+            await service.CreateClientAsync(new Client { Id = id, Name = "Kiosk" });
+            Client staleCopy = (await service.GetClientFromIdAsync(id)).Data!;
+
+            await using (ApplicationDbContext ctx = new(options))
+            {
+                Client stored = await ctx.Clients.SingleAsync(x => x.Id == id);
+                stored.UpdateRing = Lanyard.Shared.Enum.ClientUpdateRing.Pinned;
+                stored.PinnedClientVersion = "1.0.40";
+                await ctx.SaveChangesAsync();
+            }
+
+            staleCopy.Name = "Renamed";
+            Result<Client?> result = await service.UpdateClientAsync(staleCopy);
+
+            Assert.IsTrue(result.Success, result.Error);
+
+            await using ApplicationDbContext check = new(options);
+            Client after = await check.Clients.AsNoTracking().SingleAsync(x => x.Id == id);
+            Assert.AreEqual("Renamed", after.Name);
+            Assert.AreEqual(Lanyard.Shared.Enum.ClientUpdateRing.Pinned, after.UpdateRing);
+            Assert.AreEqual("1.0.40", after.PinnedClientVersion);
+        }
+
+        private static async Task<(int OwnLocationId, int OtherCompanyLocationId, Guid ClientId)> SeedClientWithLocationsAsync(DbContextOptions<ApplicationDbContext> options)
+        {
+            await using var ctx = new ApplicationDbContext(options);
+
+            var own = new Company { Name = "Play2Day" };
+            var other = new Company { Name = "Partyman" };
+            ctx.Companies.AddRange(own, other);
+            await ctx.SaveChangesAsync();
+
+            var ownLocation = new Location { CompanyId = own.Id, Name = "Ipswich" };
+            var otherLocation = new Location { CompanyId = other.Id, Name = "Colchester" };
+            ctx.Locations.AddRange(ownLocation, otherLocation);
+
+            var client = new Client { Id = Guid.NewGuid(), CompanyId = own.Id, Name = "Lobby kiosk" };
+            ctx.Clients.Add(client);
+            await ctx.SaveChangesAsync();
+
+            return (ownLocation.Id, otherLocation.Id, client.Id);
+        }
+
+        [TestMethod]
+        public async Task SetClientLocationAsync_PutsTheKioskInOneOfItsCompanysLocations()
+        {
+            var options = GetInMemoryOptions();
+            (int ownLocationId, _, Guid clientId) = await SeedClientWithLocationsAsync(options);
+
+            Result<bool> result = await GetService(options).SetClientLocationAsync(clientId, ownLocationId);
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            await using var ctx = new ApplicationDbContext(options);
+            Assert.AreEqual(ownLocationId, (await ctx.Clients.SingleAsync()).LocationId);
+        }
+
+        [TestMethod]
+        public async Task SetClientLocationAsync_RefusesAnotherCompanysLocation()
+        {
+            var options = GetInMemoryOptions();
+            (_, int otherCompanyLocationId, Guid clientId) = await SeedClientWithLocationsAsync(options);
+
+            Result<bool> result = await GetService(options).SetClientLocationAsync(clientId, otherCompanyLocationId);
+
+            Assert.IsFalse(result.IsSuccess);
+            await using var ctx = new ApplicationDbContext(options);
+            Assert.IsNull((await ctx.Clients.SingleAsync()).LocationId);
+        }
+
+        [TestMethod]
+        public async Task UpdateClientAsync_LeavesTheLocationAlone()
+        {
+            var options = GetInMemoryOptions();
+            (int ownLocationId, _, Guid clientId) = await SeedClientWithLocationsAsync(options);
+            ClientService service = GetService(options);
+
+            // A copy loaded before the location was set, as the hub holds on connect.
+            Client stale = (await service.GetClientFromIdAsync(clientId)).Data!;
+            await service.SetClientLocationAsync(clientId, ownLocationId);
+
+            stale.Name = "Renamed";
+            await service.UpdateClientAsync(stale);
+
+            await using var ctx = new ApplicationDbContext(options);
+            Client saved = await ctx.Clients.SingleAsync();
+            Assert.AreEqual("Renamed", saved.Name);
+            Assert.AreEqual(ownLocationId, saved.LocationId, "A stale copy must not wipe the location.");
+        }
+
+        [TestMethod]
+        public async Task RecordDisconnectAsync_StampsOnlyTheDisconnectTime_WhileTheConnectionIsCurrent()
+        {
+            var options = GetInMemoryOptions();
+            var lastUpdate = new DateTime(2026, 10, 16, 9, 0, 0, DateTimeKind.Utc);
+            var client = new Client { Id = Guid.NewGuid(), Name = "Kiosk", MostRecentConnectionId = "connection-1", LastUpdateDate = lastUpdate };
+
+            await using (var ctx = new ApplicationDbContext(options))
+            {
+                ctx.Clients.Add(client);
+                await ctx.SaveChangesAsync();
+            }
+
+            var disconnectedAt = new DateTime(2026, 10, 16, 9, 5, 0, DateTimeKind.Utc);
+            Result<bool> result = await GetService(options).RecordDisconnectAsync(client.Id, "connection-1", disconnectedAt);
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            Assert.IsTrue(result.Data);
+
+            await using (var ctx = new ApplicationDbContext(options))
+            {
+                Client saved = await ctx.Clients.SingleAsync(x => x.Id == client.Id);
+                Assert.AreEqual(disconnectedAt, saved.LastDisconnectDate);
+                Assert.AreEqual("connection-1", saved.MostRecentConnectionId);
+                Assert.AreEqual(lastUpdate, saved.LastUpdateDate);
+            }
+        }
+
+        [TestMethod]
+        public async Task RecordDisconnectAsync_LeavesAReconnectedClientAlone()
+        {
+            // The old socket's disconnect fires after the kiosk has reconnected. Before, the hub
+            // wrote back the whole row it had loaded, putting the dead connection ID back and
+            // clearing the reconnect's LastUpdateDate, so a live kiosk looked disconnected.
+            var options = GetInMemoryOptions();
+            var reconnectedAt = new DateTime(2026, 10, 16, 9, 0, 1, DateTimeKind.Utc);
+            var client = new Client { Id = Guid.NewGuid(), Name = "Kiosk", MostRecentConnectionId = "connection-2", LastUpdateDate = reconnectedAt };
+
+            await using (var ctx = new ApplicationDbContext(options))
+            {
+                ctx.Clients.Add(client);
+                await ctx.SaveChangesAsync();
+            }
+
+            Result<bool> result = await GetService(options).RecordDisconnectAsync(client.Id, "connection-1", reconnectedAt.AddSeconds(1));
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            Assert.IsFalse(result.Data);
+
+            await using (var ctx = new ApplicationDbContext(options))
+            {
+                Client saved = await ctx.Clients.SingleAsync(x => x.Id == client.Id);
+                Assert.AreEqual("connection-2", saved.MostRecentConnectionId);
+                Assert.AreEqual(reconnectedAt, saved.LastUpdateDate);
+                Assert.IsNull(saved.LastDisconnectDate);
+            }
+        }
+
+        [TestMethod]
+        public async Task RecordDisconnectAsync_IsFalseForAnUnknownClient()
+        {
+            Result<bool> result = await GetService(GetInMemoryOptions()).RecordDisconnectAsync(Guid.NewGuid(), "connection-1", DateTime.UtcNow);
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            Assert.IsFalse(result.Data);
         }
     }
 }

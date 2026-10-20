@@ -152,7 +152,11 @@ function overlayInit() {
         flex-direction: column; gap: 10px; background: #14151a; color: #fff; font-family: system-ui, 'Segoe UI', sans-serif;
         text-align: center; padding: 24px; transition: opacity .5s; }
       #__wt_title h1 { margin: 0; font-size: clamp(26px, 4.5vw, 48px); font-weight: 650; }
-      #__wt_title p { margin: 0; font-size: clamp(14px, 1.8vw, 20px); color: #b8bcc8; }`;
+      #__wt_title p { margin: 0; font-size: clamp(14px, 1.8vw, 20px); color: #b8bcc8; }
+      /* Undo the UA [popover] defaults (inset: 0, margin: auto, border, padding, Canvas background). */
+      #__wt_cursor:popover-open { right: auto; bottom: auto; padding: 0; border: 0; background: transparent; overflow: visible; }
+      #__wt_caption:popover-open { top: auto; right: auto; margin: 0; border: 0; overflow: visible; }
+      #__wt_box:popover-open { right: auto; bottom: auto; margin: 0; padding: 0; background: transparent; overflow: visible; }`;
     document.documentElement.appendChild(css);
     const cursor = document.createElement('div');
     cursor.id = '__wt_cursor';
@@ -162,6 +166,24 @@ function overlayInit() {
     const box = document.createElement('div');
     box.id = '__wt_box';
     document.documentElement.append(box, caption, cursor);
+    // A modal <dialog> (Fluent dialogs use showModal) sits in the browser's top layer, above
+    // any z-index, which hid the caption and highlight behind it. Manual popovers live in the
+    // top layer too, stacked in the order they were shown, so re-showing them after the page
+    // changes puts them back above a dialog that has just opened.
+    if ('showPopover' in HTMLElement.prototype) {
+      const overlays = [box, caption, cursor];
+      overlays.forEach((el) => el.setAttribute('popover', 'manual'));
+      const raise = () => overlays.forEach((el) => {
+        if (el.matches(':popover-open')) el.hidePopover();
+        el.showPopover();
+      });
+      raise();
+      let pending = 0;
+      new MutationObserver(() => {
+        clearTimeout(pending);
+        pending = setTimeout(raise, 120);
+      }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['open', 'hidden', 'class'] });
+    }
     const pos = JSON.parse(sessionStorage.getItem('__wt_pos') || 'null');
     if (pos) { cursor.style.left = pos[0] + 'px'; cursor.style.top = pos[1] + 'px'; }
     const text = sessionStorage.getItem('__wt_caption');
@@ -246,7 +268,9 @@ async function signIn(page, baseUrl) {
   // server; wait for whichever step shows up rather than a fixed sleep.
   await page.goto(`${baseUrl}/login`);
   const picker = page.locator('.company-picker-button').first();
-  const username = page.getByRole('textbox', { name: /Username/ });
+  // Not getByRole: the inner <input>'s label lives outside fluent-text-input's shadow root, so it
+  // has no accessible name and a role+name lookup never matches.
+  const username = page.locator('fluent-text-input').first();
   await picker.or(username).first().waitFor({ timeout: 60000 });
   // A click on the prerendered picker before the circuit is interactive is
   // silently dropped, so keep clicking until the credentials form appears.
@@ -257,8 +281,12 @@ async function signIn(page, baseUrl) {
     await username.waitFor({ timeout: 5000 }).catch(() => {});
   }
   await page.waitForTimeout(500);
-  await username.fill(LOGIN_USER);
-  await page.getByRole('textbox', { name: /Password/ }).fill(LOGIN_PASSWORD);
+  // Typing into the focused custom element reaches its form value; filling the inner <input>
+  // directly submits empty (see the verify skill).
+  await username.click();
+  await page.keyboard.type(LOGIN_USER);
+  await page.locator('fluent-text-input').nth(1).click();
+  await page.keyboard.type(LOGIN_PASSWORD);
   const location = page.locator('fluent-dropdown#locationId');
   if (await location.count()) {
     await location.click();

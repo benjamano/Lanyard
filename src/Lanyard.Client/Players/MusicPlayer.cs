@@ -7,6 +7,7 @@ public class MusicPlayer : IMusicPlayer, IDisposable
 {
     private readonly ILogger<MusicPlayer> _logger;
     private readonly ISongCacheService _cacheService;
+    private readonly MusicGain _gain;
 
     public event Action<PlaybackState>? PlaybackStateChanged;
     public event Action<Guid>? PlayingSongChanged;
@@ -21,13 +22,18 @@ public class MusicPlayer : IMusicPlayer, IDisposable
     private Dictionary<Guid, Guid> SongAndPlaylistQueue = [];
     private Guid QueueIndex = Guid.Empty;
 
-    public MusicPlayer(ILogger<MusicPlayer> logger, ISongCacheService cacheService)
+    public MusicPlayer(ILogger<MusicPlayer> logger, ISongCacheService cacheService, MusicGain gain)
     {
         _logger = logger;
         _cacheService = cacheService;
+        _gain = gain;
 
         _player = new WaveOutEvent();
         _player.PlaybackStopped += OnPlaybackStopped;
+
+        // Volume lives on the samples now (see MusicGain). Older versions set it on the device,
+        // and Windows may have kept that level for this app, so put the device back to full.
+        _player.Volume = 1f;
     }
 
     /// <summary>
@@ -84,6 +90,13 @@ public class MusicPlayer : IMusicPlayer, IDisposable
 
     public async Task<Result<bool>> LoadPlaylist(Dictionary<Guid, Guid> songList)
     {
+        // An empty playlist has nothing to load; keep whatever is queued now rather than
+        // swapping in an empty queue and looking up a song that isn't there.
+        if (songList.Count == 0)
+        {
+            return Result<bool>.Fail("Playlist has no songs");
+        }
+
         SongAndPlaylistQueue = songList;
         QueueIndex = songList.Keys.FirstOrDefault();
 
@@ -114,7 +127,7 @@ public class MusicPlayer : IMusicPlayer, IDisposable
             QueueIndex = songId;
 
             _reader = new MediaFoundationReader(audioSource);
-            _player!.Init(_reader);
+            _player!.Init(new GainSampleProvider(_reader.ToSampleProvider(), _gain));
 
             return Result<bool>.Ok(true);
         }
@@ -378,9 +391,7 @@ public class MusicPlayer : IMusicPlayer, IDisposable
 
         try
         {
-            float volumeFloat = Math.Clamp(volume / 100f, 0f, 1f);
-
-            _player.Volume = volumeFloat;
+            _gain.SetBaseVolume(volume);
 
             return Result<bool>.Ok(true);
         }
@@ -401,8 +412,8 @@ public class MusicPlayer : IMusicPlayer, IDisposable
 
         try
         {
-            int volumeInt = (int)Math.Round(_player.Volume * 100);
-            return Result<int>.Ok(volumeInt);
+            // The volume the server set, not the ducked level, so a clip never moves the slider.
+            return Result<int>.Ok(_gain.BaseVolume);
         }
         catch (Exception ex)
         {

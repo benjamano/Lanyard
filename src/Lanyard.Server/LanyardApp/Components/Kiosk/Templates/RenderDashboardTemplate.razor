@@ -5,7 +5,7 @@
 
 @if (_dashboard != null)
 {
-    <DashboardGrid Widgets="_dashboard.Widgets" PreviewMode="true" />
+    <DashboardGrid Widgets="_dashboard.Widgets" CompanyId="_dashboard.CompanyId" PreviewMode="true" />
 }
 
 @code {
@@ -51,9 +51,6 @@
 
     private string? GetStepParameterValue(string parameterName)
     {
-        return Step.ParameterValues
-            .Where(x => x.Parameter?.Name == parameterName)
-            .Select(x => x.Value)
-            .FirstOrDefault();
+        return ProjectionStepValues.Get(Step, parameterName);
     }
 }

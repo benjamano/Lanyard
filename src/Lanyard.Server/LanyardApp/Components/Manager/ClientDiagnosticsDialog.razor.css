@@ -1,0 +1,86 @@
+.diagnostics-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.log-tail {
+    width: 100%;
+    max-height: min(480px, 55dvh);
+    overflow-y: auto;
+    padding: 8px 12px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 6px;
+    background: var(--colorNeutralBackground3);
+    color: var(--colorNeutralForeground1);
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+/* Phone first: the time, level and source sit on one line with the message wrapped under it. */
+.log-line {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 8px;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--colorNeutralStroke3);
+}
+
+.log-line:last-child {
+    border-bottom: none;
+}
+
+.log-time,
+.log-category {
+    color: var(--colorNeutralForeground3);
+}
+
+.log-level {
+    font-weight: 600;
+}
+
+.log-message {
+    flex-basis: 100%;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.log-line-warning .log-level {
+    color: var(--colorPaletteDarkOrangeForeground1);
+}
+
+.log-line-error {
+    background: var(--colorPaletteRedBackground1);
+}
+
+.log-line-error .log-level {
+    color: var(--colorPaletteRedForeground1);
+}
+
+@media (min-width: 900px) {
+    .log-line {
+        flex-wrap: nowrap;
+    }
+
+    .log-time {
+        flex: 0 0 auto;
+    }
+
+    .log-level {
+        flex: 0 0 48px;
+    }
+
+    .log-category {
+        flex: 0 0 160px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .log-message {
+        flex: 1 1 auto;
+        flex-basis: auto;
+        min-width: 0;
+    }
+}

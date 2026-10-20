@@ -4,6 +4,7 @@
 
 @using Lanyard.App.Components.Clients
 @using Lanyard.App.Components.Music
+@using Lanyard.App.Components.Music.Schedule
 @using Lanyard.Application.Services
 @using Lanyard.Application.Services.Authentication
 @using Lanyard.Infrastructure.DTO
@@ -11,6 +12,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.JSInterop
 @using NAudio.Wave;
+@using Lanyard.App.Components.AudioClips
 
 @inject MusicPlayerService _player
 @inject IClientService _clientService
@@ -21,6 +23,10 @@
 @implements IAsyncDisposable
 
 <PageTitle>Music</PageTitle>
+
+<div class="d-flex justify-content-end mb-2">
+    <HelpButton AreaKey="@HelpRegistry.Music" Topic="player" />
+</div>
 
 <div class="music-page">
     <div class="music-content">
@@ -180,6 +186,8 @@
 
                 <div class="music-client-controls">
                     <ClientSelector OnClientSelected="SetSelectedClient" />
+                    <MusicScheduleStatusChip ClientId="selectedClientId" />
+                    <AudioClipNowPlayingChip ClientId="selectedClientId" />
                 </div>
             </FluentStack>
         </FluentCard>

@@ -54,7 +54,7 @@ public class AutomationRuleServiceTests
         AutomationEngineService engine = new(
             factory,
             [executor],
-            NullLogger<AutomationEngineService>.Instance);
+            new LaserGameStatusStore(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
 
         return (new AutomationRuleService(factory, engine), engine, executor);
     }
@@ -599,4 +599,371 @@ public class AutomationRuleServiceTests
         Assert.IsTrue(idleResult.IsSuccess, idleResult.Error);
         Assert.IsTrue(transitionResult.IsSuccess, transitionResult.Error);
     }
+
+    private static AutomationRuleCondition BuildCondition(AutomationConditionType type, string parametersJson)
+    {
+        return new AutomationRuleCondition
+        {
+            Id = Guid.NewGuid(),
+            ConditionType = type,
+            ParametersJson = parametersJson,
+            IsActive = true
+        };
+    }
+
+    private static AutomationRuleCondition EveningWindow()
+    {
+        return BuildCondition(
+            AutomationConditionType.TimeWindow,
+            AutomationConditionParameters.Serialize(new TimeWindowConditionParameters(new TimeOnly(18, 0), new TimeOnly(22, 0))));
+    }
+
+    private static async Task<Guid> SeedKioskAsync(DbContextOptions<ApplicationDbContext> options, int companyId)
+    {
+        await using ApplicationDbContext ctx = new(options);
+
+        Client client = new() { Id = Guid.NewGuid(), CompanyId = companyId, Name = $"Kiosk {companyId}", CreateDate = DateTime.UtcNow };
+        ctx.Clients.Add(client);
+        await ctx.SaveChangesAsync();
+
+        return client.Id;
+    }
+
+    [TestMethod]
+    public async Task CreateRule_SavesItsConditions()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule rule = BuildRule(Guid.NewGuid());
+        rule.Conditions = [EveningWindow()];
+
+        Result<AutomationRule> result = await service.CreateRuleAsync(rule);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        AutomationRule saved = (await service.GetRuleAsync(rule.Id)).Data!;
+        Assert.HasCount(1, saved.Conditions);
+        Assert.AreEqual(AutomationConditionType.TimeWindow, saved.Conditions[0].ConditionType);
+    }
+
+    [TestMethod]
+    public async Task CreateRule_RejectsATimeWindowThatStartsAndEndsTogether()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule rule = BuildRule(Guid.NewGuid());
+        rule.Conditions =
+        [
+            BuildCondition(
+                AutomationConditionType.TimeWindow,
+                AutomationConditionParameters.Serialize(new TimeWindowConditionParameters(new TimeOnly(9, 0), new TimeOnly(9, 0))))
+        ];
+
+        Result<AutomationRule> result = await service.CreateRuleAsync(rule);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual("A time window's start and end can't be the same time.", result.Error);
+    }
+
+    [TestMethod]
+    public async Task CreateRule_RejectsAKioskConditionForAKioskThatDoesNotExist()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule rule = BuildRule(Guid.NewGuid());
+        rule.Conditions =
+        [
+            BuildCondition(
+                AutomationConditionType.ClientGameStatus,
+                AutomationConditionParameters.Serialize(new ClientGameStatusConditionParameters(Guid.NewGuid(), true)))
+        ];
+
+        Result<AutomationRule> result = await service.CreateRuleAsync(rule);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual("A game status condition refers to a kiosk that doesn't exist.", result.Error);
+    }
+
+    [TestMethod]
+    public async Task CreateRule_RejectsAKioskConditionForAnotherCompanysKiosk()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid ownKioskId = await SeedKioskAsync(options, companyId: 1);
+        Guid otherKioskId = await SeedKioskAsync(options, companyId: 2);
+
+        // A signed-in user of company 1: the same tenant-filtered factory the app gives the service.
+        Mock<IDbContextFactory<ApplicationDbContext>> tenantFactory = new();
+        tenantFactory
+            .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new ApplicationDbContext(options, new FixedTenantProvider(1)));
+
+        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+        AutomationRuleService service = new(tenantFactory.Object, engine);
+
+        AutomationRule foreign = BuildRule(ownKioskId);
+        foreign.Conditions =
+        [
+            BuildCondition(
+                AutomationConditionType.ClientGameStatus,
+                AutomationConditionParameters.Serialize(new ClientGameStatusConditionParameters(otherKioskId, true)))
+        ];
+
+        AutomationRule own = BuildRule(ownKioskId);
+        own.Conditions =
+        [
+            BuildCondition(
+                AutomationConditionType.ClientGameStatus,
+                AutomationConditionParameters.Serialize(new ClientGameStatusConditionParameters(ownKioskId, true)))
+        ];
+
+        Result<AutomationRule> foreignResult = await service.CreateRuleAsync(foreign);
+        Result<AutomationRule> ownResult = await service.CreateRuleAsync(own);
+
+        Assert.IsFalse(foreignResult.IsSuccess, "Another company's kiosk must look like it doesn't exist.");
+        Assert.IsTrue(ownResult.IsSuccess, ownResult.Error);
+    }
+
+    [TestMethod]
+    public async Task UpdateRule_AddsAnActionAddedWhileEditing()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule rule = BuildRule(Guid.NewGuid());
+        await SeedRuleDirectlyAsync(options, rule);
+
+        // What the dialog sends: the existing action plus a new one with a client-side Guid.
+        AutomationRule edited = (await service.GetRuleAsync(rule.Id)).Data!;
+        edited.Actions.Add(new AutomationRuleAction
+        {
+            Id = Guid.NewGuid(),
+            ActionType = RecordingActionExecutor.TestActionType,
+            ParametersJson = "{\"Second\":true}",
+            SortOrder = 1,
+            IsActive = true
+        });
+
+        Result<AutomationRule> result = await service.UpdateRuleAsync(edited);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.HasCount(2, (await service.GetRuleAsync(rule.Id)).Data!.Actions);
+    }
+
+    [TestMethod]
+    public async Task UpdateRule_SoftDeletesRemovedActionsAndConditions()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule rule = BuildRule(Guid.NewGuid());
+        rule.Actions.Add(new AutomationRuleAction
+        {
+            Id = Guid.NewGuid(),
+            ActionType = RecordingActionExecutor.TestActionType,
+            ParametersJson = "{}",
+            SortOrder = 1,
+            IsActive = true
+        });
+        rule.Conditions = [EveningWindow()];
+        await SeedRuleDirectlyAsync(options, rule);
+
+        AutomationRule edited = (await service.GetRuleAsync(rule.Id)).Data!;
+        Guid keptActionId = edited.Actions.OrderBy(a => a.SortOrder).First().Id;
+        edited.Actions = [edited.Actions.Single(a => a.Id == keptActionId)];
+        edited.Conditions = [];
+
+        Result<AutomationRule> result = await service.UpdateRuleAsync(edited);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        List<AutomationRuleAction> actions = await ctx.AutomationRuleActions.ToListAsync();
+        List<AutomationRuleCondition> conditions = await ctx.AutomationRuleConditions.ToListAsync();
+
+        Assert.HasCount(2, actions, "Removed rows are soft-deleted, not hard-deleted.");
+        Assert.IsTrue(actions.Single(a => a.Id == keptActionId).IsActive);
+        Assert.IsFalse(actions.Single(a => a.Id != keptActionId).IsActive);
+        Assert.IsFalse(conditions.Single().IsActive);
+    }
+
+    [TestMethod]
+    public async Task UpdateRule_SavesAnEditedCondition()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule rule = BuildRule(Guid.NewGuid());
+        rule.Conditions = [EveningWindow()];
+        await SeedRuleDirectlyAsync(options, rule);
+
+        AutomationRule edited = (await service.GetRuleAsync(rule.Id)).Data!;
+        string lateWindow = AutomationConditionParameters.Serialize(new TimeWindowConditionParameters(new TimeOnly(22, 0), new TimeOnly(2, 0)));
+        edited.Conditions[0].ParametersJson = lateWindow;
+
+        Result<AutomationRule> result = await service.UpdateRuleAsync(edited);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        AutomationRuleCondition saved = (await service.GetRuleAsync(rule.Id)).Data!.Conditions.Single();
+        Assert.AreEqual(rule.Conditions[0].Id, saved.Id, "An edited condition keeps its row rather than being replaced.");
+        Assert.AreEqual(lateWindow, saved.ParametersJson);
+    }
+
+    [TestMethod]
+    public async Task UpdateRule_KeepsADisabledRuleDisabled()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule rule = BuildRule(Guid.NewGuid());
+        await SeedRuleDirectlyAsync(options, rule);
+        await service.SetRuleEnabledAsync(rule.Id, false);
+
+        // The dialog builds a fresh AutomationRule, whose IsEnabled defaults to true.
+        AutomationRule edited = (await service.GetRuleAsync(rule.Id)).Data!;
+        edited.IsEnabled = true;
+        edited.Name = "Renamed";
+
+        Result<AutomationRule> result = await service.UpdateRuleAsync(edited);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.IsFalse((await service.GetRuleAsync(rule.Id)).Data!.IsEnabled, "Editing a rule must not switch it back on.");
+    }
+
+    [TestMethod]
+    public async Task UpdateRule_FailsForARuleThatDoesNotExist()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        Result<AutomationRule> result = await service.UpdateRuleAsync(BuildRule(Guid.NewGuid()));
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual("Rule not found.", result.Error);
+    }
+
+    private static AutomationRuleCondition WhileOpen(int locationId)
+    {
+        return BuildCondition(
+            AutomationConditionType.DuringOpeningHours,
+            AutomationConditionParameters.Serialize(new OpeningHoursConditionParameters(locationId, true)));
+    }
+
+    private static async Task<int> SeedLocationAsync(DbContextOptions<ApplicationDbContext> options, int companyId, bool isActive = true)
+    {
+        await using ApplicationDbContext ctx = new(options);
+
+        Location location = new() { CompanyId = companyId, Name = $"Location {companyId}", IsActive = isActive, CreateDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow };
+        ctx.Locations.Add(location);
+        await ctx.SaveChangesAsync();
+
+        return location.Id;
+    }
+
+    [TestMethod]
+    public async Task CreateRule_RejectsAnOpeningHoursConditionForALocationThatDoesNotExist()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        int deactivatedId = await SeedLocationAsync(options, companyId: 1, isActive: false);
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule missing = BuildRule(Guid.NewGuid());
+        missing.Conditions = [WhileOpen(999)];
+        AutomationRule deactivated = BuildRule(Guid.NewGuid());
+        deactivated.Conditions = [WhileOpen(deactivatedId)];
+
+        Result<AutomationRule> missingResult = await service.CreateRuleAsync(missing);
+        Result<AutomationRule> deactivatedResult = await service.CreateRuleAsync(deactivated);
+
+        Assert.AreEqual("An opening hours condition refers to a location that doesn't exist.", missingResult.Error);
+        Assert.IsFalse(deactivatedResult.IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task CreateRule_RejectsAnOpeningHoursConditionForAnotherCompanysLocation()
+    {
+        // Locations aren't tenant-filtered, so this is an explicit check rather than the filter.
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        int ownLocationId = await SeedLocationAsync(options, companyId: 1);
+        int otherLocationId = await SeedLocationAsync(options, companyId: 2);
+
+        Mock<IDbContextFactory<ApplicationDbContext>> tenantFactory = new();
+        tenantFactory
+            .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new ApplicationDbContext(options, new FixedTenantProvider(1)));
+
+        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+        AutomationRuleService service = new(tenantFactory.Object, engine);
+
+        AutomationRule foreign = BuildRule(Guid.NewGuid());
+        foreign.Conditions = [WhileOpen(otherLocationId)];
+        AutomationRule own = BuildRule(Guid.NewGuid());
+        own.Conditions = [WhileOpen(ownLocationId)];
+
+        Result<AutomationRule> foreignResult = await service.CreateRuleAsync(foreign);
+        Result<AutomationRule> ownResult = await service.CreateRuleAsync(own);
+
+        Assert.IsFalse(foreignResult.IsSuccess);
+        Assert.IsTrue(ownResult.IsSuccess, ownResult.Error);
+    }
+
+    [TestMethod]
+    public async Task CreateRule_ValidatesTheGameDataTriggers()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule noSeconds = BuildRule(Guid.NewGuid());
+        noSeconds.TriggerType = AutomationTriggerType.TimeRemainingBelow;
+
+        AutomationRule noScope = BuildRule(Guid.NewGuid());
+        noScope.TriggerType = AutomationTriggerType.ScoreThreshold;
+        noScope.TriggerThreshold = 1000;
+
+        AutomationRule good = BuildRule(Guid.NewGuid());
+        good.TriggerType = AutomationTriggerType.ScoreThreshold;
+        good.TriggerThreshold = 1000;
+        good.TriggerScoreScope = AutomationScoreScope.Team;
+        good.TriggerTeam = Team.Red;
+
+        Assert.AreEqual("A time remaining rule needs a number of seconds greater than zero.", (await service.CreateRuleAsync(noSeconds)).Error);
+        Assert.AreEqual("A score rule needs to say whose score counts.", (await service.CreateRuleAsync(noScope)).Error);
+
+        Result<AutomationRule> goodResult = await service.CreateRuleAsync(good);
+        Assert.IsTrue(goodResult.IsSuccess, goodResult.Error);
+    }
+
+    [TestMethod]
+    public async Task UpdateRule_SavesTheGameDataTriggerFields()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule rule = BuildRule(Guid.NewGuid());
+        await SeedRuleDirectlyAsync(options, rule);
+
+        AutomationRule edited = (await service.GetRuleAsync(rule.Id)).Data!;
+        edited.TriggerType = AutomationTriggerType.TimeRemainingBelow;
+        edited.TriggerThreshold = 45;
+
+        Result<AutomationRule> result = await service.UpdateRuleAsync(edited);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        AutomationRule saved = (await service.GetRuleAsync(rule.Id)).Data!;
+        Assert.AreEqual(AutomationTriggerType.TimeRemainingBelow, saved.TriggerType);
+        Assert.AreEqual(45, saved.TriggerThreshold);
+    }
+
+    [TestMethod]
+    public void TriggerType_ExistingValuesNeverMove()
+    {
+        // Stored as ints: every rule saved before these triggers must still mean the same thing.
+        Assert.AreEqual(0, (int)AutomationTriggerType.GameStatusTransition);
+        Assert.AreEqual(1, (int)AutomationTriggerType.ClientIdle);
+        Assert.AreEqual(2, (int)AutomationTriggerType.Scheduled);
+    }
 }
+

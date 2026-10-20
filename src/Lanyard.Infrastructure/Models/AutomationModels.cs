@@ -22,15 +22,24 @@ public class AutomationRule : ICompanyOwned
     // ClientIdle rule without one rather than letting a rule that can never fire be saved.
     public int? IdleThresholdMinutes { get; set; }
 
-    // Required when TriggerType is Scheduled, null otherwise. Server-local wall-clock time -
-    // matches HallOfFamePeriodExtensions/Client.AutoRestartTimeOfDay, since there is no venue
-    // timezone concept in this app and local is the basis staff actually experience.
+    // Required when TriggerType is Scheduled, null otherwise. Venue wall-clock time (UK, see
+    // RotaTime) - the basis staff actually experience, whatever zone the server runs in.
     public TimeOnly? ScheduledTimeOfDay { get; set; }
 
     // Meaningful only when TriggerType is Scheduled. CSV of System.DayOfWeek integer values
     // (e.g. "1,2,3,4,5"); null or empty means every day. See AutomationScheduleDays for the
     // shared parse/serialize/match logic.
     public string? ScheduledDaysOfWeek { get; set; }
+
+    // Seconds for TimeRemainingBelow, points for ScoreThreshold; null for every other trigger type.
+    public int? TriggerThreshold { get; set; }
+
+    // ScoreThreshold only: whose score counts. Null otherwise.
+    public AutomationScoreScope? TriggerScoreScope { get; set; }
+
+    // ScoreThreshold: limit to one team's players (AnyPlayer) or pick the team (Team). GameEnded:
+    // the team that has to win. Null means any team.
+    public Team? TriggerTeam { get; set; }
 
     public bool IsActive { get; set; }
     public bool IsEnabled { get; set; } = true;
@@ -39,7 +48,29 @@ public class AutomationRule : ICompanyOwned
     public DateTime? LastUpdateDate { get; set; }
 
     public virtual List<AutomationRuleAction> Actions { get; set; } = [];
+
+    // Extra "only if" checks, all of which must pass when the trigger fires (AND). A rule with no
+    // active conditions behaves exactly as rules did before conditions existed.
+    public virtual List<AutomationRuleCondition> Conditions { get; set; } = [];
+
     public virtual List<AutomationRuleExecution> Executions { get; set; } = [];
+}
+
+public class AutomationRuleCondition
+{
+    public Guid Id { get; set; }
+
+    public Guid AutomationRuleId { get; set; }
+    public AutomationRule? AutomationRule { get; set; }
+
+    public AutomationConditionType ConditionType { get; set; }
+
+    // Shape depends on ConditionType - see AutomationConditionParameters for the typed records.
+    public string ParametersJson { get; set; } = "{}";
+
+    public int SortOrder { get; set; }
+
+    public bool IsActive { get; set; }
 }
 
 public class AutomationRuleAction
@@ -71,6 +102,10 @@ public class AutomationRuleExecution
     public Guid TriggerClientId { get; set; }
 
     public bool OverallSuccess { get; set; }
+
+    // Set when the trigger fired but a condition wasn't met, so no actions ran. Such a row has
+    // OverallSuccess false and no action rows, and must not be read as a failure or as "fired".
+    public string? SkipReason { get; set; }
 
     public virtual List<AutomationRuleActionExecution> ActionExecutions { get; set; } = [];
 }

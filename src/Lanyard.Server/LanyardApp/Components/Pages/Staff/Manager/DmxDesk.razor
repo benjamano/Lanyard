@@ -39,6 +39,7 @@
                                     <FluentButton IconStart="@(isEditModeEnabled ? new Icons.Filled.Size20.Edit() : new Icons.Regular.Size20.Edit())"
                                             Appearance="ButtonAppearance.Primary"
                                             OnClick="ToggleEditMode"
+                                            Title="Toggle Edit Mode"
                                             Tooltip="Toggle Edit Mode"/>
                                 </FluentGridItem>
                         </FluentGrid>
@@ -57,16 +58,44 @@
                                     <FluentButton IconStart="@(showFixturePreview ? new Icons.Filled.Size20.Lightbulb() : new Icons.Regular.Size20.SlideGrid())"
                                             Appearance="ButtonAppearance.Outline"
                                             OnClick="ToggleFixturePreview"
+                                            Title="Toggle Fixture Preview"
                                             Tooltip="Toggle Fixture Preview"/>
                                 </FluentGridItem>
                         </FluentGrid>
                     </FluentStack>
 
+                    @if (!showFixturePreview)
+                    {
+                        <FluentStack Width="auto">
+                            <FluentGrid>
+                                <FluentGridItem HiddenWhen="@GridItemHidden.SmAndDown">
+                                    <FluentButton IconStart="@(groupByFixture ? new Icons.Filled.Size20.GroupList() : new Icons.Regular.Size20.GroupList())"
+                                                  Appearance="ButtonAppearance.Outline"
+                                                  Disabled="@(selectedClientId == null)"
+                                                  OnClick="ToggleGroupByFixture">
+                                        @(groupByFixture ? "All Channels" : "Group by Fixture")
+                                    </FluentButton>
+                                </FluentGridItem>
+                                <FluentGridItem HiddenWhen="@GridItemHidden.MdAndUp">
+                                    <FluentButton IconStart="@(groupByFixture ? new Icons.Filled.Size20.GroupList() : new Icons.Regular.Size20.GroupList())"
+                                                  Appearance="ButtonAppearance.Outline"
+                                                  Disabled="@(selectedClientId == null)"
+                                                  OnClick="ToggleGroupByFixture"
+                                                  Title="@(groupByFixture ? "Show all channels" : "Group sliders by fixture")"
+                                                  Tooltip="@(groupByFixture ? "Show all channels" : "Group sliders by fixture")" />
+                                </FluentGridItem>
+                            </FluentGrid>
+                        </FluentStack>
+                    }
+
                     <FluentButton IconStart="new Icons.Regular.Size20.Settings()"
                                     Appearance="ButtonAppearance.Outline"
                                     Disabled="@(selectedClientId == null)"
                                     OnClick="OpenFixtureManager"
+                                    Title="Manage Fixtures"
                                     Tooltip="Manage Fixtures" />
+
+                    <HelpButton AreaKey="@HelpRegistry.Dmx" Compact="true" />
 
                     @if (isEditModeEnabled)
                     {
@@ -83,6 +112,7 @@
                                         <FluentButton IconStart="@(isBlindModeEnabled ? new Icons.Filled.Size20.EyeOff() : new Icons.Regular.Size20.Eye())"
                                             Appearance="ButtonAppearance.Primary"
                                             OnClick="ToggleBlindMode"
+                                            Title="Toggle Blind Mode"
                                             Tooltip="Toggle Blind Mode"/>
                                     </FluentGridItem>
                             </FluentGrid>
@@ -99,6 +129,7 @@
                         IsBlindModeEnabled="@isBlindModeEnabled"
                         EditingStep="@editingStep"
                         ShowFixturePreview="@showFixturePreview"
+                        GroupByFixture="@groupByFixture"
                         PreviewingSceneId="@previewingSceneId"
                         PreviewingSceneSteps="@previewingSceneSteps"
                         PreviewSceneLoop="@(selectedScene?.Loop ?? true)" />
@@ -138,6 +169,7 @@
     private bool isBlindModeEnabled = true;
 
     private bool showFixturePreview = false;
+    private bool groupByFixture = false;
 
     private bool isASceneOpen = false;
 
@@ -223,6 +255,11 @@
     private void ToggleFixturePreview()
     {
         showFixturePreview = !showFixturePreview;
+    }
+
+    private void ToggleGroupByFixture()
+    {
+        groupByFixture = !groupByFixture;
     }
 
     private async Task OpenFixtureManager()

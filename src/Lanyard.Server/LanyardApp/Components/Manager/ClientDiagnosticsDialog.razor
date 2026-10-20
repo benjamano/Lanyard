@@ -1,0 +1,235 @@
+@using System.Globalization
+@using System.Text
+@using Lanyard.Shared.DTO
+
+@inject IClientDiagnosticsService _clientDiagnosticsService
+@inject IJSRuntime _jsRuntime
+
+<FluentDialogBody>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="18px" Class="w-100">
+            <FluentText>
+                Fetch the last @ClientDiagnosticsService.LogTailLines lines that <strong>@ClientName</strong> has logged.
+                Results are kept for 10 minutes and are only visible to Admins.
+            </FluentText>
+
+            <FluentStack HorizontalGap="8px" VerticalAlignment="VerticalAlignment.Center" Wrap="true">
+                <FluentButton Appearance="ButtonAppearance.Primary" Loading="@_fetching"
+                              IconStart="@(new Icons.Regular.Size20.DocumentSearch())"
+                              OnClick="FetchLogTailAsync">
+                    @(_capture == null ? "Fetch log" : "Fetch again")
+                </FluentButton>
+                <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@(_capture == null || _capture.LogTail.Lines.Count == 0)"
+                              IconStart="@(new Icons.Regular.Size20.Copy())"
+                              OnClick="CopyLogTailAsync">
+                    Copy to clipboard
+                </FluentButton>
+            </FluentStack>
+
+            @if (_error != null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">
+                    @_error
+                </FluentMessageBar>
+            }
+
+            @if (_capture != null)
+            {
+                <div class="diagnostics-meta">
+                    <FluentText Size="TextSize.Size200">
+                        Captured @FormatTime(_capture.ReceivedAtUtc, "d MMM HH:mm:ss") by @_capture.RequestedBy
+                        · @_capture.LogTail.Lines.Count lines
+                        @if (!string.IsNullOrEmpty(_capture.LogTail.ClientVersion))
+                        {
+                            <span> · Lanyard Client @_capture.LogTail.ClientVersion</span>
+                        }
+                    </FluentText>
+                    <FluentText Size="TextSize.Size200">
+                        As reported by the kiosk. Secrets and URL tokens are replaced with [REDACTED].
+                    </FluentText>
+                </div>
+
+                @if (_capture.LogTail.Truncated)
+                {
+                    <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                        Some older lines were left out to keep the reply small enough to send.
+                    </FluentMessageBar>
+                }
+
+                @if (_capture.LogTail.Lines.Count == 0)
+                {
+                    <FluentText>The kiosk hasn't logged anything since it started.</FluentText>
+                }
+                else
+                {
+                    <div class="log-tail" role="log" aria-label="Kiosk log" @ref="_logTailElement">
+                        @foreach (ClientLogLineDTO line in _capture.LogTail.Lines)
+                        {
+                            <div class="log-line @LevelClass(line.Level)">
+                                <span class="log-time">@FormatTime(line.TimestampUtc, "HH:mm:ss")</span>
+                                <span class="log-level">@ShortLevel(line.Level)</span>
+                                <span class="log-category" title="@line.Category">@ShortCategory(line.Category)</span>
+                                <span class="log-message">@line.Message</span>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentStack HorizontalGap="8px" HorizontalAlignment="HorizontalAlignment.End">
+            <FluentButton OnClick="@CloseAsync">Close</FluentButton>
+        </FluentStack>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public Guid ClientId { get; set; }
+
+    [Parameter]
+    public string ClientName { get; set; } = "this kiosk";
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private static readonly CultureInfo UkCulture = new("en-GB");
+
+    private ClientLogTailCapture? _capture;
+    private string? _error;
+    private bool _fetching;
+
+    private ElementReference _logTailElement;
+
+    // The newest lines are what matter, so the log opens scrolled to the bottom.
+    private bool _scrollToNewest;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Reopening within the retention window shows the last capture instead of a blank dialog.
+        Result<ClientLogTailCapture?> latest = await _clientDiagnosticsService.GetLatestLogTailAsync(ClientId);
+
+        if (latest.IsSuccess)
+        {
+            _capture = latest.Data;
+            _scrollToNewest = _capture != null;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_scrollToNewest || _capture == null || _capture.LogTail.Lines.Count == 0)
+        {
+            return;
+        }
+
+        _scrollToNewest = false;
+
+        try
+        {
+            await _jsRuntime.InvokeVoidAsync("lanyardChat.scrollToBottom", _logTailElement);
+        }
+        catch (JSException)
+        {
+            // Purely cosmetic: the log is still readable from the top.
+        }
+    }
+
+    private async Task FetchLogTailAsync()
+    {
+        _fetching = true;
+        _error = null;
+
+        try
+        {
+            string requestedBy = await _securityService.GetCurrentUserName() ?? "An Admin";
+
+            Result<ClientLogTailCapture> result = await _clientDiagnosticsService.RequestLogTailAsync(ClientId, requestedBy);
+
+            if (result.IsSuccess)
+            {
+                _capture = result.Data;
+                _scrollToNewest = true;
+            }
+            else
+            {
+                _error = result.Error;
+            }
+        }
+        finally
+        {
+            _fetching = false;
+        }
+    }
+
+    private async Task CopyLogTailAsync()
+    {
+        if (_capture == null)
+        {
+            return;
+        }
+
+        StringBuilder text = new();
+
+        foreach (ClientLogLineDTO line in _capture.LogTail.Lines)
+        {
+            text.Append(FormatTime(line.TimestampUtc, "yyyy-MM-dd HH:mm:ss.fff"))
+                .Append(" [").Append(line.Level).Append("] ")
+                .Append(line.Category).Append(": ")
+                .AppendLine(line.Message);
+        }
+
+        bool copied = await _jsRuntime.TryCopyToClipboardAsync(text.ToString());
+
+        if (copied)
+        {
+            _toastService.ShowSuccess($"Copied {_capture.LogTail.Lines.Count} log lines.");
+        }
+        else
+        {
+            _toastService.ShowError("Couldn't copy to the clipboard. Your browser may have blocked it.");
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        await Dialog.CloseAsync();
+    }
+
+    // Kiosks and the venue are in the UK, but the server runs in UTC, so ToLocalTime() is wrong.
+    private static string FormatTime(DateTime utc, string format)
+    {
+        return RotaTime.ToVenueLocal(utc).ToString(format, UkCulture);
+    }
+
+    private static string LevelClass(string level)
+    {
+        return level switch
+        {
+            "Warning" => "log-line-warning",
+            "Error" or "Critical" => "log-line-error",
+            _ => string.Empty
+        };
+    }
+
+    private static string ShortLevel(string level)
+    {
+        return level switch
+        {
+            "Information" => "INFO",
+            "Warning" => "WARN",
+            "Error" => "ERROR",
+            "Critical" => "CRIT",
+            _ => level.ToUpperInvariant()
+        };
+    }
+
+    // "Lanyard.Client.Players.MusicPlayer" is unreadable on a phone; the full name is in the tooltip.
+    private static string ShortCategory(string category)
+    {
+        int lastDot = category.LastIndexOf('.');
+
+        return lastDot >= 0 && lastDot < category.Length - 1 ? category[(lastDot + 1)..] : category;
+    }
+}

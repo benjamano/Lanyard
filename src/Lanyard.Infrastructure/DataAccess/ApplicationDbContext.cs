@@ -1,4 +1,5 @@
 ﻿using Lanyard.Infrastructure.Models;
+using Lanyard.Shared.Contracts;
 using Lanyard.Infrastructure.Models.Dmx;
 using Lanyard.Infrastructure.Enum;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
@@ -22,6 +23,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public const string SeedCanManageDmxSystemsRoleId = "dev-role-can-manage-dmx-systems";
         public const string SeedCanManageFilesRoleId = "dev-role-can-manage-files";
         public const string SeedCanPostAnnouncementsRoleId = "dev-role-can-post-announcements";
+        public const string SeedCanPlayAudioClipsRoleId = "dev-role-can-play-audio-clips";
         public const string SeedPlatformAdminRoleId = "dev-role-platform-admin";
         public const string SystemDeletedUserPlaceholderId = "system-deleted-user-placeholder";
         public const int SeedPlay2DayCompanyId = 1;
@@ -59,7 +61,13 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<Playlist> Playlists { get; set; }
         public DbSet<PlaylistSongMember> PlaylistSongMembers { get; set; }
         public DbSet<Client> Clients { get; set; }
+        public DbSet<ClientRelease> ClientReleases { get; set; }
         public DbSet<ClientProjectionSettings> ClientProjectionSettings { get; set; }
+        public DbSet<ClientHealthSnapshot> ClientHealthSnapshots { get; set; }
+        public DbSet<ClientCredential> ClientCredentials { get; set; }
+        public DbSet<ClientEnrolmentRequest> ClientEnrolmentRequests { get; set; }
+        public DbSet<ClientSelfTestRun> ClientSelfTestRuns { get; set; }
+        public DbSet<ClientSelfTestCheck> ClientSelfTestChecks { get; set; }
         public DbSet<ProjectionProgram> ProjectionPrograms { get; set; }
         public DbSet<ProjectionProgramStep> ProjectionProgramSteps { get; set; }
         public DbSet<ClientAvailableScreen> ClientAvailableScreens { get; set; }
@@ -71,6 +79,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<Folder> Folders { get; set; }
         public DbSet<AutomationRule> AutomationRules { get; set; }
         public DbSet<AutomationRuleAction> AutomationRuleActions { get; set; }
+        public DbSet<AutomationRuleCondition> AutomationRuleConditions { get; set; }
         public DbSet<AutomationRuleExecution> AutomationRuleExecutions { get; set; }
         public DbSet<AutomationRuleActionExecution> AutomationRuleActionExecutions { get; set; }
         public DbSet<AppSetting> AppSettings { get; set; }
@@ -87,6 +96,10 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<DmxSceneStep> DmxSceneSteps { get; set; }
         public DbSet<DmxSceneStepChannelValue> DmxSceneStepChannelValues { get; set; }
         public DbSet<DmxFixture> DmxFixtures { get; set; }
+        public DbSet<DmxFixtureDefinition> DmxFixtureDefinitions { get; set; }
+        public DbSet<DmxFixtureMode> DmxFixtureModes { get; set; }
+        public DbSet<DmxFixtureModeChannel> DmxFixtureModeChannels { get; set; }
+        public DbSet<DmxFixtureModeChannelColorRange> DmxFixtureModeChannelColorRanges { get; set; }
         public DbSet<Course> Courses { get; set; }
         public DbSet<CourseSection> CourseSections { get; set; }
         public DbSet<CourseQuestion> CourseQuestions { get; set; }
@@ -106,11 +119,14 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<CompanyOnboardingStandingAttachment> CompanyOnboardingStandingAttachments { get; set; }
         public DbSet<StaffPosition> StaffPositions { get; set; }
         public DbSet<UserPosition> UserPositions { get; set; }
+        public DbSet<StaffPositionRequiredCourse> StaffPositionRequiredCourses { get; set; }
         public DbSet<ContractRequirement> ContractRequirements { get; set; }
         public DbSet<UserClockInPin> UserClockInPins { get; set; }
+        public DbSet<StaffAvailability> StaffAvailabilities { get; set; }
         public DbSet<CompanySchedulingSettings> CompanySchedulingSettings { get; set; }
         public DbSet<Shift> Shifts { get; set; }
         public DbSet<ClockInTerminal> ClockInTerminals { get; set; }
+        public DbSet<CalendarFeedToken> CalendarFeedTokens { get; set; }
         public DbSet<TimeEntry> TimeEntries { get; set; }
         public DbSet<TimeOffType> TimeOffTypes { get; set; }
         public DbSet<TimeOffAllowance> TimeOffAllowances { get; set; }
@@ -120,6 +136,12 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<AppInstallation> AppInstallations { get; set; }
         public DbSet<ShiftClaim> ShiftClaims { get; set; }
         public DbSet<LocationSchedulingSettings> LocationSchedulingSettings { get; set; }
+        public DbSet<MusicSchedule> MusicSchedules { get; set; }
+        public DbSet<MusicDaypart> MusicDayparts { get; set; }
+        public DbSet<LocationOpeningHours> LocationOpeningHours { get; set; }
+        public DbSet<AudioClip> AudioClips { get; set; }
+        public DbSet<AudioClipPlay> AudioClipPlays { get; set; }
+        public DbSet<AudioClipSchedule> AudioClipSchedules { get; set; }
         public DbSet<PartyBooking> PartyBookings { get; set; }
         public DbSet<PartyLocationSettings> PartyLocationSettings { get; set; }
         public DbSet<PartyMenuItem> PartyMenuItems { get; set; }
@@ -130,6 +152,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ChatBlock> ChatBlocks { get; set; }
         public DbSet<ChatReport> ChatReports { get; set; }
         public DbSet<ChatSuspension> ChatSuspensions { get; set; }
+        public DbSet<UserFeedback> UserFeedback { get; set; }
 
         // Connection string used only when the context is created without configured options -
         // i.e. by design-time tooling (dotnet ef migrations/database update). It reads
@@ -176,6 +199,56 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<IdentityUserToken<string>>().Property(x => x.LoginProvider).Metadata.SetMaxLength(null);
             modelBuilder.Entity<IdentityUserToken<string>>().Property(x => x.Name).Metadata.SetMaxLength(null);
 
+            // One row per kiosk, keyed by the kiosk itself: the latest heartbeat overwrites it.
+            modelBuilder.Entity<ClientHealthSnapshot>(entity =>
+            {
+                entity.HasKey(x => x.ClientId);
+                entity.HasOne(x => x.Client)
+                    .WithOne()
+                    .HasForeignKey<ClientHealthSnapshot>(x => x.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.Property(x => x.ClientVersion).HasMaxLength(ClientVersionFormat.MaxLength);
+            });
+
+            modelBuilder.Entity<ClientCredential>(entity =>
+            {
+                entity.HasOne(x => x.Client)
+                    .WithMany(x => x.Credentials)
+                    .HasForeignKey(x => x.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(x => new { x.ClientId, x.IsActive });
+            });
+
+            modelBuilder.Entity<ClientEnrolmentRequest>(entity =>
+            {
+                entity.HasIndex(x => new { x.PairingCodeHash, x.Status });
+                entity.HasIndex(x => x.ClientId);
+            });
+
+            modelBuilder.Entity<ClientSelfTestRun>(entity =>
+            {
+                // A kiosk's self-test history goes with the kiosk.
+                entity.HasOne(x => x.Client)
+                    .WithMany()
+                    .HasForeignKey(x => x.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                // Cleared by GDPR erasure (GdprService), like AudioClipPlay.TriggeredByUserId.
+                entity.HasOne(x => x.RequestedByUser)
+                    .WithMany()
+                    .HasForeignKey(x => x.RequestedByUserId);
+
+                entity.HasIndex(x => new { x.ClientId, x.RequestedAtUtc });
+
+                // The retention sweep deletes by age across every kiosk.
+                entity.HasIndex(x => x.RequestedAtUtc);
+
+                entity.HasMany(x => x.Checks)
+                    .WithOne(x => x.Run)
+                    .HasForeignKey(x => x.RunId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
             modelBuilder.Entity<DashboardWidget>()
                 .HasDiscriminator(x => x.Type)
                 .HasValue<DashboardWidget>(WidgetType.Unknown)
@@ -195,7 +268,9 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasValue<ProjectionStatusWidget>(WidgetType.ProjectionStatus)
                 .HasValue<MyShiftsWidget>(WidgetType.MyShifts)
                 .HasValue<WhoIsOnTodayWidget>(WidgetType.WhoIsOnToday)
-                .HasValue<PendingTimeOffWidget>(WidgetType.PendingTimeOff);
+                .HasValue<PendingTimeOffWidget>(WidgetType.PendingTimeOff)
+                .HasValue<ComplianceSummaryWidget>(WidgetType.ComplianceSummary)
+                .HasValue<DemandStaffingWidget>(WidgetType.DemandStaffing);
 
             // Sibling widget types share a ClientId property in the TPH table; pin the
             // column names so EF's automatic uniquification cannot rename existing columns.
@@ -247,6 +322,28 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<WhoIsOnTodayWidget>()
                 .Property(x => x.LocationId)
                 .HasColumnName("WhoIsOnTodayWidget_LocationId");
+
+            // Shares MaxItems and LocationId with the widgets above, so pinned the same way.
+            modelBuilder.Entity<ComplianceSummaryWidget>()
+                .Property(x => x.MaxItems)
+                .HasColumnName("ComplianceSummaryWidget_MaxItems");
+
+            modelBuilder.Entity<ComplianceSummaryWidget>()
+                .Property(x => x.LocationId)
+                .HasColumnName("ComplianceSummaryWidget_LocationId");
+
+            modelBuilder.Entity<ComplianceSummaryWidget>()
+                .Property(x => x.ExpiryWindowDays)
+                .HasColumnName("ComplianceSummaryWidget_ExpiryWindowDays");
+
+            // LocationId is shared with the widgets above, so pinned the same way.
+            modelBuilder.Entity<DemandStaffingWidget>()
+                .Property(x => x.LocationId)
+                .HasColumnName("DemandStaffingWidget_LocationId");
+
+            modelBuilder.Entity<DemandStaffingWidget>()
+                .Property(x => x.RangeDays)
+                .HasColumnName("DemandStaffingWidget_RangeDays");
 
             // A song may be backed by an uploaded file. When that file row is hard-deleted,
             // null the link rather than cascade-deleting the song (it is soft-deleted instead).
@@ -331,6 +428,41 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasForeignKey(x => x.FileMetadataId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            // Restrict: clips are only ever soft-deleted, and a file still behind one mustn't vanish.
+            modelBuilder.Entity<AudioClip>()
+                .HasOne(x => x.FileMetadata)
+                .WithMany()
+                .HasForeignKey(x => x.FileMetadataId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<AudioClipPlay>(entity =>
+            {
+                entity.HasOne(x => x.AudioClip)
+                    .WithMany()
+                    .HasForeignKey(x => x.AudioClipId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                // A kiosk's play history goes with the kiosk.
+                entity.HasOne(x => x.Client)
+                    .WithMany()
+                    .HasForeignKey(x => x.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(x => new { x.ClientId, x.RequestedAtUtc });
+
+                // Schedules are only soft-deleted, so the link never needs to cascade.
+                entity.HasOne(x => x.AudioClipSchedule)
+                    .WithMany()
+                    .HasForeignKey(x => x.AudioClipScheduleId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<AudioClipSchedule>()
+                .HasOne(x => x.AudioClip)
+                .WithMany()
+                .HasForeignKey(x => x.AudioClipId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             modelBuilder.Entity<CompanyOnboardingStandingAttachment>()
                 .HasOne(x => x.FileMetadata)
                 .WithMany()
@@ -357,6 +489,23 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<UserPosition>()
                 .HasIndex(x => new { x.UserId, x.StaffPositionId })
                 .IsUnique();
+
+            modelBuilder.Entity<StaffPositionRequiredCourse>()
+                .HasIndex(x => new { x.StaffPositionId, x.CourseId })
+                .IsUnique();
+
+            modelBuilder.Entity<StaffPositionRequiredCourse>()
+                .HasOne(x => x.StaffPosition)
+                .WithMany(x => x.RequiredCourses)
+                .HasForeignKey(x => x.StaffPositionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Courses are only ever deactivated, so a requirement never needs to follow a deleted one.
+            modelBuilder.Entity<StaffPositionRequiredCourse>()
+                .HasOne(x => x.Course)
+                .WithMany()
+                .HasForeignKey(x => x.CourseId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             // "Exactly one primary position per user" is what the tier resolution relies on;
             // enforce it in the database rather than trusting every writer to keep it.
@@ -387,6 +536,16 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<UserClockInPin>()
                 .HasIndex(x => x.UserId)
                 .IsUnique();
+
+            // The person's own record (like their leave requests), so it goes with the account.
+            modelBuilder.Entity<StaffAvailability>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<StaffAvailability>()
+                .HasIndex(x => new { x.UserId, x.DayOfWeek });
 
             modelBuilder.Entity<CompanySchedulingSettings>()
                 .HasIndex(x => x.CompanyId)
@@ -478,6 +637,22 @@ namespace Lanyard.Infrastructure.DataAccess
 
             modelBuilder.Entity<ClockInTerminal>()
                 .HasIndex(x => x.LocationId);
+
+            // A calendar feed is found by the hash of the token in its URL on every poll.
+            modelBuilder.Entity<CalendarFeedToken>()
+                .HasIndex(x => x.TokenHash)
+                .IsUnique();
+
+            modelBuilder.Entity<CalendarFeedToken>()
+                .HasIndex(x => new { x.UserId, x.CompanyId })
+                .IsUnique()
+                .HasFilter("\"IsActive\"");
+
+            modelBuilder.Entity<CalendarFeedToken>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<ClockInTerminal>()
                 .HasOne(x => x.Location)
@@ -663,6 +838,36 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasIndex(x => x.LocationId)
                 .IsUnique();
 
+            // ---- Music schedule ----
+            // Locations are only ever deactivated, never deleted, so these never actually cascade
+            // or null out in practice; SetNull just keeps a kiosk from blocking a location's removal.
+            modelBuilder.Entity<Client>()
+                .HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<MusicSchedule>()
+                .HasIndex(x => x.LocationId)
+                .IsUnique();
+
+            modelBuilder.Entity<MusicSchedule>()
+                .HasMany(x => x.Dayparts)
+                .WithOne(x => x.MusicSchedule)
+                .HasForeignKey(x => x.MusicScheduleId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Playlists are soft-deleted, so a daypart can outlive its playlist's DeleteDate; the
+            // engine and the editor treat that as "playlist missing".
+            modelBuilder.Entity<MusicDaypart>()
+                .HasOne(x => x.Playlist)
+                .WithMany()
+                .HasForeignKey(x => x.PlaylistId)
+                .OnDelete(DeleteBehavior.Restrict);
+            // Read for one location at a time; several windows per day, so not unique.
+            modelBuilder.Entity<LocationOpeningHours>()
+                .HasIndex(x => new { x.LocationId, x.DayOfWeek });
+
             // ---- Chat ----
             // One direct conversation per pair of people.
             modelBuilder.Entity<ChatConversation>()
@@ -784,6 +989,18 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<ChatSuspension>()
                 .HasIndex(x => new { x.UserId, x.CompanyId });
 
+            modelBuilder.Entity<UserFeedback>()
+                .HasIndex(x => x.CreatedUtc);
+
+            modelBuilder.Entity<UserFeedback>()
+                .HasIndex(x => new { x.UserId, x.CreatedUtc });
+
+            modelBuilder.Entity<UserFeedback>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             modelBuilder.Entity<ChatSuspension>()
                 .HasOne(x => x.User)
                 .WithMany()
@@ -812,7 +1029,92 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<Song>()
                 .HasIndex(x => x.BpmAnalysisStatus);
 
+            ConfigureDmxFixtureDefinitions(modelBuilder);
+
             ConfigureCompanyTenancy(modelBuilder);
+        }
+
+        // Fixture definition -> mode -> channel -> colour range. Built-ins are seeded here with
+        // fixed ids (BuiltInDmxFixtureDefinitions) because the migration points every fixture that
+        // predates definitions at one of them.
+        private static void ConfigureDmxFixtureDefinitions(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<DmxFixtureDefinition>(entity =>
+            {
+                entity.Property(x => x.Manufacturer).HasMaxLength(100);
+                entity.Property(x => x.Model).HasMaxLength(100);
+                entity.Property(x => x.OflKey).HasMaxLength(200);
+                entity.Property(x => x.OflRevision).HasMaxLength(50);
+
+                entity.HasOne<Company>()
+                    .WithMany()
+                    .HasForeignKey(x => x.CompanyId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne<UserProfile>()
+                    .WithMany()
+                    .HasForeignKey(x => x.CreateByUserId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                // An OFL import is reused per company, keyed by fixture and revision.
+                entity.HasIndex(x => new { x.CompanyId, x.OflKey, x.OflRevision });
+
+                entity.HasData(BuiltInDmxFixtureDefinitions.Definitions);
+            });
+
+            modelBuilder.Entity<DmxFixtureMode>(entity =>
+            {
+                entity.Property(x => x.Name).HasMaxLength(100);
+                entity.Property(x => x.ShortName).HasMaxLength(50);
+
+                entity.HasOne(x => x.Definition)
+                    .WithMany(x => x.Modes)
+                    .HasForeignKey(x => x.DefinitionId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasData(BuiltInDmxFixtureDefinitions.Modes);
+            });
+
+            modelBuilder.Entity<DmxFixtureModeChannel>(entity =>
+            {
+                entity.Property(x => x.Label).HasMaxLength(100);
+
+                entity.HasOne(x => x.Mode)
+                    .WithMany(x => x.Channels)
+                    .HasForeignKey(x => x.ModeId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(x => new { x.ModeId, x.Offset }).IsUnique();
+
+                entity.HasData(BuiltInDmxFixtureDefinitions.Channels.Select(c => new
+                {
+                    c.Id,
+                    c.ModeId,
+                    c.Offset,
+                    c.Label,
+                    c.Role,
+                    c.CoarseOffset,
+                    c.FineLevel,
+                    c.DefaultValue
+                }));
+            });
+
+            modelBuilder.Entity<DmxFixtureModeChannelColorRange>(entity =>
+            {
+                entity.Property(x => x.ColorHex).HasMaxLength(7);
+
+                entity.HasOne(x => x.ModeChannel)
+                    .WithMany(x => x.ColorRanges)
+                    .HasForeignKey(x => x.ModeChannelId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // Restrict: a mode that still has fixtures patched in it can't disappear underneath them.
+            modelBuilder.Entity<DmxFixture>()
+                .HasOne(x => x.FixtureMode)
+                .WithMany()
+                .HasForeignKey(x => x.FixtureModeId)
+                .OnDelete(DeleteBehavior.Restrict);
         }
 
         // Every ICompanyOwned root gets a FK to Company and a filter so a signed-in user only ever
@@ -846,6 +1148,9 @@ namespace Lanyard.Infrastructure.DataAccess
             }
 
             modelBuilder.Entity<ClientProjectionSettings>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ClientHealthSnapshot>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ClientCredential>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ClientSelfTestCheck>().HasQueryFilter(x => TenantFilterDisabled || x.Run!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableScreen>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableVideoDevice>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableNetworkInterface>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
@@ -857,10 +1162,18 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<ProjectionProgramParameterValue>().HasQueryFilter(x => TenantFilterDisabled || x.ProjectionProgramStep!.ProjectionProgram!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<DashboardWidget>().HasQueryFilter(x => TenantFilterDisabled || x.Dashboard!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<AutomationRuleAction>().HasQueryFilter(x => TenantFilterDisabled || x.AutomationRule!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<AutomationRuleCondition>().HasQueryFilter(x => TenantFilterDisabled || x.AutomationRule!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<AutomationRuleExecution>().HasQueryFilter(x => TenantFilterDisabled || x.AutomationRule!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<AutomationRuleActionExecution>().HasQueryFilter(x => TenantFilterDisabled || x.AutomationRuleExecution!.AutomationRule!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<DmxSceneStep>().HasQueryFilter(x => TenantFilterDisabled || x.Scene!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<DmxSceneStepChannelValue>().HasQueryFilter(x => TenantFilterDisabled || x.SceneStep!.Scene!.CompanyId == TenantCompanyId);
+
+            // Shared-or-owned: built-in definitions (CompanyId null) are visible to everyone, a
+            // company's own imports and custom fixtures only to that company.
+            modelBuilder.Entity<DmxFixtureDefinition>().HasQueryFilter(x => TenantFilterDisabled || x.CompanyId == null || x.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<DmxFixtureMode>().HasQueryFilter(x => TenantFilterDisabled || x.Definition!.CompanyId == null || x.Definition!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<DmxFixtureModeChannel>().HasQueryFilter(x => TenantFilterDisabled || x.Mode!.Definition!.CompanyId == null || x.Mode!.Definition!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<DmxFixtureModeChannelColorRange>().HasQueryFilter(x => TenantFilterDisabled || x.ModeChannel!.Mode!.Definition!.CompanyId == null || x.ModeChannel!.Mode!.Definition!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<GameResultPlayerScore>().HasQueryFilter(x => TenantFilterDisabled || x.GameResult!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<CourseSection>().HasQueryFilter(x => TenantFilterDisabled || x.Course!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<CourseQuestion>().HasQueryFilter(x => TenantFilterDisabled || x.Course!.CompanyId == TenantCompanyId);
@@ -881,9 +1194,13 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<PartyLocationSettings>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<PartyMenuItem>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<LocationSchedulingSettings>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
+            modelBuilder.Entity<MusicSchedule>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
+            modelBuilder.Entity<MusicDaypart>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.MusicSchedule!.LocationId && l.CompanyId == TenantCompanyId));
+            modelBuilder.Entity<LocationOpeningHours>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<ChatReport>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<ShiftClaim>().HasQueryFilter(x => TenantFilterDisabled || Shifts.Any(sh => sh.Id == x.ShiftId && Locations.Any(l => l.Id == sh.LocationId && l.CompanyId == TenantCompanyId)));
             modelBuilder.Entity<UserPosition>().HasQueryFilter(x => TenantFilterDisabled || x.StaffPosition!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<StaffPositionRequiredCourse>().HasQueryFilter(x => TenantFilterDisabled || x.StaffPosition!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ChatMember>().HasQueryFilter(x => TenantFilterDisabled || x.Conversation!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ChatMessage>().HasQueryFilter(x => TenantFilterDisabled || x.Conversation!.CompanyId == TenantCompanyId);
         }
@@ -948,6 +1265,66 @@ namespace Lanyard.Infrastructure.DataAccess
                             throw new CrossTenantWriteException($"Cannot change {entry.Metadata.ClrType.Name} belonging to another company.");
                         }
                         break;
+                }
+            }
+
+            // Shared rows (CompanyId null) are reference data only system code may write; a tenant
+            // insert is always stamped into the tenant's own company.
+            foreach (Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<ISharedOrCompanyOwned> entry in ChangeTracker.Entries<ISharedOrCompanyOwned>())
+            {
+                switch (entry.State)
+                {
+                    case EntityState.Added:
+                        if (isSystem)
+                        {
+                            break;
+                        }
+
+                        if (tenantCompanyId is null)
+                        {
+                            throw new CrossTenantWriteException($"Cannot create {entry.Metadata.ClrType.Name}: the current user isn't linked to a company.");
+                        }
+
+                        if (entry.Entity.CompanyId is null)
+                        {
+                            entry.Entity.CompanyId = tenantCompanyId;
+                        }
+                        else if (entry.Entity.CompanyId != tenantCompanyId)
+                        {
+                            throw new CrossTenantWriteException($"Cannot create {entry.Metadata.ClrType.Name} in another company.");
+                        }
+                        break;
+
+                    case EntityState.Modified:
+                    case EntityState.Deleted:
+                        if (isSystem)
+                        {
+                            break;
+                        }
+
+                        int? originalCompanyId = entry.Property(x => x.CompanyId).OriginalValue;
+
+                        if (originalCompanyId is null || originalCompanyId != tenantCompanyId || entry.Entity.CompanyId != tenantCompanyId)
+                        {
+                            throw new CrossTenantWriteException($"Cannot change {entry.Metadata.ClrType.Name}: it is shared, or belongs to another company.");
+                        }
+                        break;
+                }
+            }
+
+            // Built-in fixture modes and their channels have no CompanyId of their own; their ids are
+            // fixed, so a tenant change to (or under) one can be refused without loading the parent.
+            if (!isSystem)
+            {
+                bool touchesBuiltIn =
+                    ChangeTracker.Entries<DmxFixtureMode>().Any(e => e.State != EntityState.Unchanged && e.State != EntityState.Detached
+                        && BuiltInDmxFixtureDefinitions.Modes.Any(m => m.Id == e.Entity.Id || m.DefinitionId == e.Entity.DefinitionId))
+                    || ChangeTracker.Entries<DmxFixtureModeChannel>().Any(e => e.State != EntityState.Unchanged && e.State != EntityState.Detached
+                        && BuiltInDmxFixtureDefinitions.Modes.Any(m => m.Id == e.Entity.ModeId));
+
+                if (touchesBuiltIn)
+                {
+                    throw new CrossTenantWriteException("Built-in fixture definitions can't be changed.");
                 }
             }
         }

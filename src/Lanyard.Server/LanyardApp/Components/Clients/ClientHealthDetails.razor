@@ -1,0 +1,129 @@
+@using Lanyard.Application.Services.Clients
+@using Humanizer
+
+@inject IKioskHealthService _kioskHealthService
+@inject IKioskSelfTestService _kioskSelfTestService
+
+@if (_loading)
+{
+    <FluentText>Loading...</FluentText>
+}
+else if (_error != null)
+{
+    <FluentText>@_error</FluentText>
+}
+else
+{
+    <div class="client-health">
+        <div class="client-health-status">
+            <KioskHealthBadge Health="@_health" />
+            @if (_snapshot != null)
+            {
+                <span class="client-health-muted">Last report @KioskHealthDisplay.Ago(_health?.SinceLastHeartbeat ?? TimeSpan.Zero)</span>
+            }
+        </div>
+
+        @if (_selfTestLine != null)
+        {
+            <p class="client-health-muted client-health-self-test">@_selfTestLine Run one with the Self-test button on the Clients page.</p>
+        }
+
+        @if (KioskHealthDisplay.Details(_health, includeLastHeartbeat: false).Any())
+        {
+            <ul class="client-health-reasons">
+                @foreach (string detail in KioskHealthDisplay.Details(_health, includeLastHeartbeat: false))
+                {
+                    <li>@detail</li>
+                }
+            </ul>
+        }
+
+        @if (_snapshot != null)
+        {
+            <dl class="client-health-metrics">
+                <dt>Client version</dt>
+                <dd>@(_snapshot.ClientVersion ?? "unknown")</dd>
+
+                <dt>Client running for</dt>
+                <dd>@Uptime(DateTime.UtcNow - _snapshot.ProcessStartedUtc)</dd>
+
+                <dt>PC on for</dt>
+                <dd>@Uptime(TimeSpan.FromSeconds(_snapshot.MachineUptimeSeconds))</dd>
+
+                <dt>CPU</dt>
+                <dd>@Percent(_snapshot.CpuPercent)</dd>
+
+                <dt>Memory</dt>
+                <dd>@Percent(_snapshot.MemoryPercent)</dd>
+
+                <dt>Disk free</dt>
+                <dd>@KioskHealthDisplay.Bytes(_snapshot.SystemDriveFreeBytes) of @KioskHealthDisplay.Bytes(_snapshot.SystemDriveTotalBytes)</dd>
+
+                <dt>DMX</dt>
+                <dd>@(!_snapshot.DmxConfigured ? "Not used" : _snapshot.DmxOpen ? "Device open" : "Device not open")</dd>
+
+                <dt>Preferred audio device</dt>
+                <dd>@(_snapshot.PreferredAudioDevicePresent switch { null => "None set", true => "Connected", false => "Missing" })</dd>
+
+                <dt>Zone scoreboard capture</dt>
+                <dd>@(!_snapshot.PacketCaptureConfigured ? "Not used" : _snapshot.PacketCaptureRunning ? "Running" : "Stopped")</dd>
+
+                <dt>Projection windows open</dt>
+                <dd>@_snapshot.ProjectionRunningCount</dd>
+
+                <dt>Offline fallback</dt>
+                <dd>@KioskHealthDisplay.OfflineFallback(_snapshot)</dd>
+
+                @if (_snapshot.OfflineCacheSyncedUtc is DateTime synced)
+                {
+                    <dt>Offline copy updated</dt>
+                    <dd>@KioskHealthDisplay.Ago(DateTime.UtcNow - synced)</dd>
+                }
+
+                <dt>Last played offline</dt>
+                <dd>@(KioskHealthDisplay.LastOutage(_snapshot, DateTime.UtcNow) ?? "Never")</dd>
+            </dl>
+        }
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Guid ClientId { get; set; }
+
+    private KioskHealthView? _health;
+    private ClientHealthSnapshot? _snapshot;
+    private bool _loading = true;
+    private string? _error;
+    private string? _selfTestLine;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+
+        Result<Dictionary<Guid, KioskHealthView>> result = await _kioskHealthService.GetHealthAsync();
+
+        if (result.IsSuccess && result.Data != null)
+        {
+            _health = result.Data.GetValueOrDefault(ClientId);
+            _snapshot = _health?.Snapshot;
+            _error = null;
+
+            // Only shown when it loads: a failure here shouldn't hide the health above it.
+            Result<List<KioskSelfTestRunView>> selfTests = await _kioskSelfTestService.GetHistoryAsync(ClientId, take: 1);
+            _selfTestLine = selfTests.IsSuccess ? KioskSelfTestDisplay.HealthLine(selfTests.Data?.FirstOrDefault(), DateTime.UtcNow) : null;
+        }
+        else
+        {
+            _error = $"Couldn't load this kiosk's health, {result.Error}";
+        }
+
+        _loading = false;
+    }
+
+    private static string Percent(double? value) => value is double v ? $"{v:0}%" : "unknown";
+
+    private static string Uptime(TimeSpan span) => span < TimeSpan.Zero
+        ? "unknown"
+        : span.Humanize(precision: 2, minUnit: Humanizer.Localisation.TimeUnit.Minute);
+}

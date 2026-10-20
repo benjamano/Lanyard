@@ -1,6 +1,7 @@
 using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -62,6 +63,12 @@ public class SchedulingSettingsService(IDbContextFactory<ApplicationDbContext> f
             existing.ShiftReminderLeadHours = settings.ShiftReminderLeadHours;
             existing.SendShiftReminders = settings.SendShiftReminders;
             existing.ClockInWindowMinutes = settings.ClockInWindowMinutes;
+            existing.PayPeriod = settings.PayPeriod;
+            existing.PayPeriodStartDay = settings.PayPeriodStartDay;
+            existing.PayPeriodAnchorDate = settings.PayPeriod == PayPeriodFrequency.Monthly ? null : settings.PayPeriodAnchorDate;
+            existing.BreakDeduction = settings.BreakDeduction;
+            existing.BreakDeductionMinutes = settings.BreakDeductionMinutes;
+            existing.BreakDeductionAfterHours = settings.BreakDeductionAfterHours;
             existing.UpdateDate = DateTime.UtcNow;
 
             await ctx.SaveChangesAsync();
@@ -104,6 +111,40 @@ public class SchedulingSettingsService(IDbContextFactory<ApplicationDbContext> f
         if (settings.ClockInWindowMinutes is < 0 or > 240)
         {
             return "The clock-in window must be between 0 and 240 minutes.";
+        }
+
+        if (!System.Enum.IsDefined(settings.PayPeriod))
+        {
+            return "Choose how often you run payroll.";
+        }
+
+        // Capped at 28 so every month, February included, has the day a period starts on.
+        if (settings.PayPeriod == PayPeriodFrequency.Monthly && settings.PayPeriodStartDay is < 1 or > 28)
+        {
+            return "A monthly pay period must start on a day between 1 and 28.";
+        }
+
+        if (settings.PayPeriod != PayPeriodFrequency.Monthly && settings.PayPeriodAnchorDate is null)
+        {
+            return "Choose the first day of any one pay period, so Lanyard can count the periods from it.";
+        }
+
+        if (!System.Enum.IsDefined(settings.BreakDeduction))
+        {
+            return "Choose how breaks are handled in the payroll export.";
+        }
+
+        if (settings.BreakDeduction == BreakDeductionRule.FixedOverThreshold)
+        {
+            if (settings.BreakDeductionMinutes is < 1 or > 120)
+            {
+                return "The break to deduct must be between 1 and 120 minutes.";
+            }
+
+            if (settings.BreakDeductionAfterHours is <= 0 or > 24)
+            {
+                return "The hours before a break is deducted must be greater than 0 and at most 24.";
+            }
         }
 
         return null;

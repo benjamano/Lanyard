@@ -116,8 +116,14 @@
                                         @context.GetDisplayName()
                                     </TemplateColumn>
                                     <TemplateColumn Title="Actions">
-                                        <FluentButton IconEnd="@(new Icons.Regular.Size20.Delete())"
-                                                      OnClick="@(() => DeactivateLocation(context.Id))" />
+                                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
+                                            <FluentButton IconEnd="@(new Icons.Regular.Size20.Clock())"
+                                                          Title="Opening hours"
+                                                          OnClick="@(() => OpenOpeningHoursAsync(context))" />
+                                            <FluentButton IconEnd="@(new Icons.Regular.Size20.Delete())"
+                                                          Title="Deactivate location"
+                                                          OnClick="@(() => DeactivateLocation(context.Id))" />
+                                        </FluentStack>
                                     </TemplateColumn>
                                 </FluentDataGrid>
                             }
@@ -320,6 +326,16 @@
         newLocationName = string.Empty;
         await LoadLocationsAsync();
         await OnLocationsChanged.InvokeAsync();
+    }
+
+    private async Task OpenOpeningHoursAsync(Location location)
+    {
+        await _dialogService.ShowDialogAsync<LocationOpeningHoursDialog>(options =>
+        {
+            options.Width = "560px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(LocationOpeningHoursDialog.Content), location);
+        });
     }
 
     private async Task DeactivateLocation(int locationId)

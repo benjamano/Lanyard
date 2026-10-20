@@ -44,6 +44,7 @@
             <FluentCheckbox Label="Show staff without a position" Value="@includeAllMembers" ValueChanged="@OnIncludeAllChanged" />
 
             <div class="rota-actions">
+                <HelpButton AreaKey="@HelpRegistry.Rota" Topic="building" />
                 <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Copy())"
                               Disabled="@(view is null || isBusy)" OnClick="@CopyAsync">
                     @(monthView ? "Copy from 4 weeks earlier" : "Copy last week")
@@ -123,6 +124,10 @@
         <span><span class="legend-chip legend-time-off"></span> Time off</span>
         <span><span class="legend-chip legend-time-off legend-time-off-asked"></span> Time off asked for</span>
         <span><FluentIcon Value="@(new Icons.Filled.Size16.Warning())" Color="Color.Warning" /> Contract not met that week</span>
+        @if (view?.TrainingGapsByShift.Count > 0)
+        {
+            <span><FluentIcon Value="@(new Icons.Filled.Size16.HatGraduation())" Color="Color.Warning" /> Missing the position's required training</span>
+        }
     </div>
 </div>
 
@@ -466,6 +471,13 @@
         }
 
         _toastService.ShowSuccess($"Published {result.Data.ShiftCount} {(result.Data.ShiftCount == 1 ? "change" : "changes")} {WhoIsAffected(result.Data.PeopleAffected, result.Data.OpenedShifts.Count)}.");
+
+        if (result.Data.ShiftsMissingTraining is int untrained and > 0)
+        {
+            _toastService.ShowWarning(untrained == 1
+                ? "One of the published shifts is for someone missing the position's required training."
+                : $"{untrained} of the published shifts are for staff missing the position's required training.");
+        }
 
         await LoadAsync();
     }

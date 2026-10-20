@@ -1,0 +1,23 @@
+/* The URL is one long unbroken string; let it wrap anywhere so it never drags a phone-width
+   dialog into horizontal scroll, and make it easy to select by hand if copying is blocked. */
+.calendar-feed-url {
+    font-family: var(--fontFamilyMonospace, ui-monospace, monospace);
+    font-size: 0.85rem;
+    overflow-wrap: anywhere;
+    user-select: all;
+    padding: 10px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--colorNeutralStroke1);
+    background: var(--colorNeutralBackground2);
+    color: var(--colorNeutralForeground1);
+}
+
+.calendar-feed-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.calendar-feed-panel ::deep .calendar-feed-hint {
+    color: var(--colorNeutralForeground3);
+}

@@ -369,6 +369,15 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 case PendingTimeOffWidget existingPending when widget is PendingTimeOffWidget incomingPending:
                     existingPending.MaxItems = incomingPending.MaxItems;
                     break;
+                case ComplianceSummaryWidget existingCompliance when widget is ComplianceSummaryWidget incomingCompliance:
+                    existingCompliance.MaxItems = incomingCompliance.MaxItems;
+                    existingCompliance.ExpiryWindowDays = incomingCompliance.ExpiryWindowDays;
+                    existingCompliance.LocationId = incomingCompliance.LocationId;
+                    break;
+                case DemandStaffingWidget existingDemand when widget is DemandStaffingWidget incomingDemand:
+                    existingDemand.RangeDays = incomingDemand.RangeDays;
+                    existingDemand.LocationId = incomingDemand.LocationId;
+                    break;
             }
 
             Dashboard? parentDashboard = await ctx.Dashboards
@@ -750,6 +759,17 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             {
                 MaxItems = pendingWidget.MaxItems
             },
+            ComplianceSummaryWidget complianceWidget => new ComplianceSummaryWidget
+            {
+                MaxItems = complianceWidget.MaxItems,
+                ExpiryWindowDays = complianceWidget.ExpiryWindowDays,
+                LocationId = complianceWidget.LocationId
+            },
+            DemandStaffingWidget demandWidget => new DemandStaffingWidget
+            {
+                RangeDays = demandWidget.RangeDays,
+                LocationId = demandWidget.LocationId
+            },
             _ => throw new InvalidOperationException("Unsupported widget type.")
         };
 
@@ -870,6 +890,19 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         if (target is PendingTimeOffWidget targetPending && source is PendingTimeOffWidget sourcePending)
         {
             targetPending.MaxItems = sourcePending.MaxItems;
+        }
+
+        if (target is ComplianceSummaryWidget targetCompliance && source is ComplianceSummaryWidget sourceCompliance)
+        {
+            targetCompliance.MaxItems = sourceCompliance.MaxItems;
+            targetCompliance.ExpiryWindowDays = sourceCompliance.ExpiryWindowDays;
+            targetCompliance.LocationId = sourceCompliance.LocationId;
+        }
+
+        if (target is DemandStaffingWidget targetDemand && source is DemandStaffingWidget sourceDemand)
+        {
+            targetDemand.RangeDays = sourceDemand.RangeDays;
+            targetDemand.LocationId = sourceDemand.LocationId;
         }
 
         if (target is ProjectionStatusWidget targetProjectionStatus && source is ProjectionStatusWidget sourceProjectionStatus)

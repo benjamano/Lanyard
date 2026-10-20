@@ -1,0 +1,45 @@
+.bound-text-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    /* The step card's grid sizes to its content, so a percentage width collapses to the text box's
+       own width in "Fixed text" mode. A set width keeps both modes the same size as the card. */
+    width: 288px;
+    max-width: 100%;
+    text-align: left;
+}
+
+::deep fluent-dropdown,
+::deep fluent-text-input {
+    width: 100%;
+}
+
+::deep .bound-text-description {
+    color: var(--colorNeutralForeground3);
+}
+
+.bound-text-preview {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--borderRadiusMedium);
+    border: 1px solid var(--colorNeutralStroke2);
+    background: var(--colorNeutralBackground2);
+}
+
+::deep .bound-text-preview-icon {
+    flex-shrink: 0;
+    margin-top: 2px;
+    color: var(--colorBrandForeground1);
+}
+
+.bound-text-preview-label {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}
+
+.bound-text-preview-value {
+    font-weight: var(--fontWeightSemibold);
+    overflow-wrap: anywhere;
+}

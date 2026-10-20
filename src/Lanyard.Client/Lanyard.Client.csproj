@@ -5,7 +5,7 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>1.0.40</Version>
+    <Version>1.0.43</Version>
     <ApplicationIcon>favicon.ico</ApplicationIcon>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
@@ -29,6 +29,7 @@
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="PacketDotNet" Version="1.4.8" />
     <PackageReference Include="SharpPcap" Version="6.3.1" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.1" />
     <PackageReference Include="TaskScheduler" Version="2.12.2" />
     <PackageReference Include="Velopack" Version="0.0.1298" />
   </ItemGroup>
@@ -37,6 +38,11 @@
     <ProjectReference Include="..\Lanyard.Shared\Lanyard.Shared.csproj" />
     <ProjectReference Include="..\Lanyard.Infrastructure\Lanyard.Infrastructure.csproj" />
     <ProjectReference Include="..\Lanyard.Client.Watchdog\LanyardClient.Watchdog.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The offline player page: loaded from disk into the projection windows when the server is unreachable. -->
+    <Content Include="ProjectionPrograms\Offline\Player\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -25,10 +25,35 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
     // gets a duplicate += subscription (CaptureDeviceList.Instance returns the same cached
     // device object) and the capture is reopened, so after N reconnects every real packet
     // is processed and republished N times.
-    private ILiveDevice? _activeDevice;
+    private volatile ILiveDevice? _activeDevice;
+    private volatile bool _isConfigured;
+
+    public bool IsConfigured => _isConfigured;
+    public bool IsCapturing => _activeDevice != null;
+
+    // Ticks rather than DateTime? so the capture thread can write them without a lock.
+    private long _captureStartedTicks;
+    private long _lastPacketTicks;
+    private long _lastGamePacketTicks;
+
+    public string? PreferredMacAddress { get; private set; }
+    public string? ActiveDeviceName => _activeDevice?.Name;
+    public DateTime? CaptureStartedUtc => FromTicks(ref _captureStartedTicks);
+    public DateTime? LastPacketUtc => FromTicks(ref _lastPacketTicks);
+    public DateTime? LastGamePacketUtc => FromTicks(ref _lastGamePacketTicks);
+
+    private static DateTime? FromTicks(ref long ticks)
+    {
+        long value = Interlocked.Read(ref ticks);
+
+        return value == 0 ? null : new DateTime(value, DateTimeKind.Utc);
+    }
 
     public async Task StartSniffingAsync(ZoneScoreboardSettingsDTO settings)
     {
+        _isConfigured = true;
+        PreferredMacAddress = settings.PreferredDeviceMacAddress;
+
         CaptureDeviceList devices = CaptureDeviceList.Instance;
 
         if (devices.Any() == false)
@@ -91,11 +116,14 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
 
         device.StartCapture();
 
+        Interlocked.Exchange(ref _captureStartedTicks, DateTime.UtcNow.Ticks);
         _activeDevice = device;
     }
 
     private void OnPacketArrival(object sender, PacketCapture e)
     {
+        Interlocked.Exchange(ref _lastPacketTicks, DateTime.UtcNow.Ticks);
+
         try
         {
             Packet packet = Packet.ParsePacket(e.GetPacket().LinkLayerType, e.GetPacket().Data);
@@ -108,6 +136,8 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
 
             if (SourceIPs.Contains(ipPacket.SourceAddress.ToString()) && ipPacket.DestinationAddress.ToString() == DestinationIP)
             {
+                Interlocked.Exchange(ref _lastGamePacketTicks, DateTime.UtcNow.Ticks);
+
                 _logger.LogInformation("Recieved a packet that aligns with the filters!, Source: {source}, Destination {dest}", ipPacket.SourceAddress.ToString(), ipPacket.DestinationAddress.ToString());
 
                 UdpPacket udpPacket = packet.Extract<UdpPacket>();

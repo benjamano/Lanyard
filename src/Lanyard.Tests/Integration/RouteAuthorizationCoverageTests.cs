@@ -47,6 +47,7 @@ public class RouteAuthorizationCoverageTests
             ("/manage/onboarding", CompanyFeature.Onboarding),
             ("/manage/staff-documents", CompanyFeature.Onboarding),
             ("/manage/announcements", CompanyFeature.Announcements),
+            ("/manage/insights", CompanyFeature.Insights),
             ("/manage/parties", CompanyFeature.Parties)
         ];
 

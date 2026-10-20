@@ -19,5 +19,7 @@ public enum WidgetType
     ProjectionStatus = 14,
     MyShifts = 15,
     WhoIsOnToday = 16,
-    PendingTimeOff = 17
+    PendingTimeOff = 17,
+    ComplianceSummary = 18,
+    DemandStaffing = 19
 }

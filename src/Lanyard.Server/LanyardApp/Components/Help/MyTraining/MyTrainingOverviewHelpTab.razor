@@ -1,0 +1,48 @@
+<HelpTab>
+    <FluentText>
+        Your manager assigns you training courses. Everything assigned to you is listed on
+        <a href="/training">My Training</a>, and anything still to do also shows on your home page.
+    </FluentText>
+
+    <HelpSection Title="Your training list">
+        <ul>
+            <li><strong>Course</strong>: select the name to open the course.</li>
+            <li><strong>Due Date</strong>: the date your manager wants it done by. A dash means there's no deadline.</li>
+            <li><strong>Status</strong>: how far you've got (see below).</li>
+        </ul>
+        <FluentText>
+            If you've been given the same course more than once, for example a yearly refresher, it
+            appears as one row. Expand the row to see your earlier assignments and quiz attempts.
+        </FluentText>
+    </HelpSection>
+
+    <HelpSection Title="What the statuses mean">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8px">
+            <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12px">
+                <FluentBadge Content="Not Started" Color="BadgeColor.Subtle" Appearance="BadgeAppearance.Filled" />
+                <FluentText>You haven't opened the course yet.</FluentText>
+            </FluentStack>
+            <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12px">
+                <FluentBadge Content="In Progress" Color="BadgeColor.Informative" Appearance="BadgeAppearance.Filled" />
+                <FluentText>You've started but haven't passed the quiz yet.</FluentText>
+            </FluentStack>
+            <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12px">
+                <FluentBadge Content="Completed" Color="BadgeColor.Success" Appearance="BadgeAppearance.Filled" />
+                <FluentText>You've passed. Nothing more to do.</FluentText>
+            </FluentStack>
+            <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12px">
+                <FluentBadge Content="Overdue" Color="BadgeColor.Danger" Appearance="BadgeAppearance.Filled" />
+                <FluentText>The due date has passed and the course isn't completed. Finish it as soon as you can.</FluentText>
+            </FluentStack>
+        </FluentStack>
+    </HelpSection>
+
+    <FluentText>
+        You get an email when a course is assigned to you, and a reminder when it's due within a week.
+    </FluentText>
+
+    <HelpNote>
+        Can't see a course you were expecting? Ask your manager. Training is assigned per
+        person, so it only appears here once it has been assigned to you.
+    </HelpNote>
+</HelpTab>

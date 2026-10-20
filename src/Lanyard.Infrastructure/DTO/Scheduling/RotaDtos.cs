@@ -23,6 +23,13 @@ public record RotaStaffRow(
     public List<TimeOffRequest> TimeOff { get; init; } = [];
 
     public TimeOffRequest? TimeOffOn(DateOnly day) => TimeOff.FirstOrDefault(x => x.Covers(day));
+
+    // Their weekly availability (StaffAvailability), shown beside the shifts.
+    public List<StaffAvailability> Availability { get; init; } = [];
+
+    // The times they've said they can't work that start on this day.
+    public List<StaffAvailability> UnavailableOn(DateOnly day) =>
+        Availability.Where(x => x.Kind == AvailabilityKind.Unavailable && StaffAvailabilityRules.AppliesOn(x, day)).OrderBy(x => x.StartTime).ToList();
 }
 
 public record RotaRangeView(
@@ -41,6 +48,13 @@ public record RotaRangeView(
 
     // Of UnpublishedChangeCount, how many are open shifts (they affect no one person).
     public int UnpublishedOpenShiftCount { get; init; }
+
+    // Required training the person on each upcoming shift isn't current on by its start, keyed by
+    // shift id. Only shifts with a gap are present.
+    public Dictionary<Guid, List<TrainingGap>> TrainingGapsByShift { get; init; } = [];
+
+    public IReadOnlyList<TrainingGap> TrainingGapsFor(Shift shift) =>
+        TrainingGapsByShift.TryGetValue(shift.Id, out List<TrainingGap>? gaps) ? gaps : [];
 }
 
 public record ShiftSaveResult(Shift Shift, List<string> Warnings);
@@ -51,6 +65,10 @@ public record PublishResult(List<PublishedChange> Changes)
 {
     // Open shifts published (new or changed) by this publish, announced to everyone who could work them.
     public List<Shift> OpenedShifts { get; init; } = [];
+
+    // Of the upcoming shifts just published (new or changed), how many are for someone missing
+    // the position's required training. Publishing goes ahead; the manager is warned.
+    public int ShiftsMissingTraining { get; init; }
 
     public int PeopleAffected => Changes.Count;
     public int ShiftCount => Changes.Sum(x => x.New.Count + x.Changed.Count + x.Removed.Count) + OpenedShifts.Count;

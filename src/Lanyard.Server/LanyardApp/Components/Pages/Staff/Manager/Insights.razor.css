@@ -1,0 +1,195 @@
+.insights-page {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 8px;
+    min-width: 0;
+}
+
+.insights-intro {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.insights-title {
+    margin: 0;
+    font-size: var(--fontSizeBase600);
+    line-height: var(--lineHeightBase600);
+    font-weight: var(--fontWeightSemibold);
+}
+
+.insights-subtitle,
+.insights-card-hint {
+    margin: 0;
+    color: var(--colorNeutralForeground3);
+}
+
+.insights-toolbar {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.insights-dates,
+.insights-presets {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.insights-notices {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.insights-notices:empty {
+    display: none;
+}
+
+/* Two tiles a row on a phone, three on a tablet, all six on a desktop. */
+.insights-kpis {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+@media (min-width: 640px) {
+    .insights-kpis {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 1200px) {
+    .insights-kpis {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+}
+
+.insights-kpi {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 14px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+    min-width: 0;
+}
+
+.insights-kpi-label {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}
+
+.insights-kpi-value {
+    font-size: var(--fontSizeBase600);
+    line-height: var(--lineHeightBase600);
+    font-weight: var(--fontWeightSemibold);
+    font-variant-numeric: tabular-nums;
+}
+
+.insights-kpi-note {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}
+
+.insights-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+    padding: 14px 16px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+}
+
+.insights-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.insights-card-title {
+    margin: 0;
+    font-size: var(--fontSizeBase400);
+    font-weight: var(--fontWeightSemibold);
+}
+
+.insights-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+}
+
+@media (min-width: 1024px) {
+    .insights-columns {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
+    }
+}
+
+.insights-flag-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.insights-flag {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border-left: 4px solid var(--colorNeutralStroke1);
+    background: var(--colorNeutralBackground2);
+}
+
+.insights-flag.is-understaffed {
+    border-left-color: var(--colorStatusDangerBorder2, var(--colorPaletteRedBorder2));
+}
+
+.insights-flag.is-overstaffed {
+    border-left-color: var(--colorStatusWarningBorder2, var(--colorPaletteDarkOrangeBorder2));
+}
+
+.insights-flag-title {
+    font-weight: var(--fontWeightSemibold);
+}
+
+.insights-flag-detail {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground2);
+}
+
+.insights-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+}
+
+.insights-table th,
+.insights-table td {
+    padding: 6px 8px;
+    text-align: left;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.insights-table thead th {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+    font-weight: var(--fontWeightRegular);
+}
+
+.insights-table .is-number {
+    text-align: right;
+}

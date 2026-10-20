@@ -3,28 +3,100 @@
 
 @using Microsoft.AspNetCore.Authorization
 @using Lanyard.App.Components.Manager
+@using Lanyard.Application.Services.ClientReleases
+@using Lanyard.App.Components.Clients
+@using Lanyard.Application.Services.Clients
+@using Lanyard.Shared.Contracts
 @using Lanyard.Shared.Enum
+@using Lanyard.Infrastructure.Enum
+@using System.Globalization
 
 @implements IDisposable
 
 @inject IClientService _clientService
+@inject IClientUpdatePolicyService _updatePolicyService
+@inject IKioskHealthService _kioskHealthService
 @inject INotificationService _toastService
 
 <PageTitle>Clients</PageTitle>
 
 <FluentCard Height="auto">
-    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">
-        Clients
-    </FluentText>
+    <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center" Wrap="true">
+        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">
+            Clients
+        </FluentText>
+        <HelpButton AreaKey="@HelpRegistry.Kiosks" />
+    </FluentStack>
+    <div class="clients-header">
+        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">
+            Clients
+        </FluentText>
+        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Add())"
+                      OnClick="OpenPairKioskDialogAsync">Add kiosk</FluentButton>
+    </div>
+    @if (_versionCounts.Count > 0)
+    {
+        <div class="clients-version-summary">
+            <span class="clients-muted">Kiosk versions</span>
+            <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="8px" VerticalGap="8px">
+                @foreach (ClientVersionCount versionCount in _versionCounts)
+                {
+                    <FluentBadge Appearance="BadgeAppearance.Tint"
+                                 Color="@(versionCount.Version is null ? BadgeColor.Subtle : BadgeColor.Informative)"
+                                 Title="@($"{versionCount.Count} {(versionCount.Count == 1 ? "PC" : "PCs")} on {VersionLabel(versionCount.Version)}")">
+                        @VersionLabel(versionCount.Version) · @versionCount.Count
+                    </FluentBadge>
+                }
+            </FluentStack>
+        </div>
+    }
+    @if (_legacySecretCount > 0 || _credentialCount > 0)
+    {
+        <div class="clients-version-summary">
+            <span class="clients-muted">Kiosk sign-in</span>
+            <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="8px" VerticalGap="8px">
+                <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Success"
+                             Title="Kiosks that signed in with their own credential last time they connected">
+                    Own credential · @_credentialCount
+                </FluentBadge>
+                @if (_legacySecretCount > 0)
+                {
+                    <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Warning"
+                                 Title="@SharedSecretTooltip">
+                        Shared secret · @_legacySecretCount
+                    </FluentBadge>
+                }
+            </FluentStack>
+        </div>
+    }
     <div class="clients-grid-wrapper">
-        <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="2fr 2fr 1fr 1fr 1fr 1fr 1fr 1fr" Style="width: 100%;" Class="clients-grid">
+        <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="minmax(0, 0.6fr) minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(125px, 1.1fr) minmax(0, 1.1fr) 224px" Class="clients-grid">
             <ChildContent>
                 <PropertyColumn Property="x => x.Id" Title="Client ID" Class="clients-col-id"/>
-                <PropertyColumn Sortable="true" Property="x => x.Name" Title="Name" />
+                <TemplateColumn Title="Name" Sortable="true" SortBy="@_sortByName">
+                    <div class="clients-name-cell">
+                        <span class="clients-name-text">@context.Name</span>
+                        @if (context.LastAuthMethod == ClientAuthMethod.LegacySecret)
+                        {
+                            <span class="clients-signin-warning" title="@SharedSecretTooltip" role="img" aria-label="Signs in with the shared secret">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Color="Color.Warning" />
+                            </span>
+                        }
+                    </div>
+                </TemplateColumn>
                 <PropertyColumn Property="x => x.MostRecentIpAddress" Title="IP Address" Class="clients-col-ip"/>
+                <TemplateColumn Title="Version" Class="clients-col-version">
+                    <div class="clients-version-cell">
+                        <span class="@(context.ReportedClientVersion is null ? "clients-muted" : null)"
+                              title="@VersionTooltip(context)">
+                            @VersionLabel(context.ReportedClientVersion)
+                        </span>
+                        <ClientUpdateRingBadges Target="@TargetFor(context.Id)" />
+                    </div>
+                </TemplateColumn>
                 <PropertyColumn IsDefaultSortColumn="true" InitialSortDirection="DataGridSortDirection.Descending" Sortable="true"
-                                Property="x => x.LastLogin" Title="Last Login" />
-                <TemplateColumn Title="Capabilities">
+                                Property="x => x.LastLogin" Title="Last Login" Class="clients-col-lastlogin" />
+                <TemplateColumn Title="Capabilities" Class="clients-col-capabilities">
                     @if (context.ProjectionEnabled)
                     {
                         <FluentBadge Appearance="BadgeAppearance.Filled" Class="me-1">Projection</FluentBadge>
@@ -35,8 +107,10 @@
                         <FluentBadge Appearance="BadgeAppearance.Filled" Class="me-1">DMX</FluentBadge>
                     }
                 </TemplateColumn>
-                <PropertyColumn Sortable="true" Property="@(x => x.IsCurrentlyConnected ? "Yes" : "No")" Title="Currently Connected" />
-                <TemplateColumn Title="Current Session Length" Class="clients-col-session">
+                <TemplateColumn Title="Health" Class="clients-col-health">
+                    <KioskHealthBadge Health="@_health.GetValueOrDefault(context.Id)" IsConnected="@context.IsCurrentlyConnected" />
+                </TemplateColumn>
+                <TemplateColumn Title="Session Length" Class="clients-col-session">
                     @if (context.IsCurrentlyConnected && context.LastLogin is DateTime lastLogin)
                     {
                         <span>
@@ -58,6 +132,21 @@
                                       IconStart="@(new Icons.Regular.Size20.ArrowClockwise())"
                                       Disabled="@(!context.IsCurrentlyConnected)"
                                       OnClick="() => OpenRestartClientDialogAsync(context)" />
+                        <FluentButton Appearance="ButtonAppearance.Transparent"
+                                      Title="@(context.IsCurrentlyConnected ? "Diagnostics" : "Diagnostics (client is offline)")"
+                                      IconStart="@(new Icons.Regular.Size20.DocumentSearch())"
+                                      Disabled="@(!context.IsCurrentlyConnected)"
+                                      OnClick="() => OpenDiagnosticsDialogAsync(context)" />
+                        <FluentButton Appearance="ButtonAppearance.Transparent"
+                                      Title="@(context.IsCurrentlyConnected ? "Screens" : "Screens (client is offline)")"
+                                      IconStart="@(new Icons.Regular.Size20.Desktop())"
+                                      Disabled="@(!context.IsCurrentlyConnected)"
+                                      OnClick="() => OpenScreensDialogAsync(context)" />
+                        <FluentButton Appearance="ButtonAppearance.Transparent"
+                                      Title="@(context.IsCurrentlyConnected ? "Self-test" : "Self-test (client is offline)")"
+                                      IconStart="@(new Icons.Regular.Size20.Stethoscope())"
+                                      Disabled="@(!context.IsCurrentlyConnected)"
+                                      OnClick="() => OpenSelfTestDialogAsync(context)" />
                     </FluentStack>
                 </TemplateColumn>
             </ChildContent>
@@ -65,6 +154,72 @@
                 Loading...
             </LoadingContent>
         </FluentDataGrid>
+    </div>
+
+    @* Phone width: a fixed-column grid truncates the name and can't fit the version, so each
+       client becomes a row with its details wrapping underneath instead. *@
+    <div class="clients-phone-list">
+        @foreach (ClientConnectedWithCapabilitiesDTO client in _sortedClients)
+        {
+            <div class="clients-phone-item">
+                <div class="clients-phone-info">
+                    <div class="clients-phone-name">@client.Name</div>
+                    <div class="clients-phone-meta">
+                        <span class="@(client.ReportedClientVersion is null ? "clients-muted" : null)">@VersionLabel(client.ReportedClientVersion)</span>
+                        <ClientUpdateRingBadges Target="@TargetFor(client.Id)" />
+                        @if (client.LastAuthMethod == ClientAuthMethod.LegacySecret)
+                        {
+                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Warning" Title="@SharedSecretTooltip">Shared secret</FluentBadge>
+                        }
+                        <span>·</span>
+                        <KioskHealthBadge Health="@_health.GetValueOrDefault(client.Id)" IsConnected="@client.IsCurrentlyConnected" />
+                        @if (client.LastLogin is DateTime lastLogin)
+                        {
+                            <span>·</span>
+                            <span>Last login @FormatUkDateTime(lastLogin)</span>
+                        }
+                    </div>
+                    @if (client.ProjectionEnabled || client.DmxEnabled)
+                    {
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6" Class="mt-1">
+                            @if (client.ProjectionEnabled)
+                            {
+                                <FluentBadge Appearance="BadgeAppearance.Filled">Projection</FluentBadge>
+                            }
+                            @if (client.DmxEnabled)
+                            {
+                                <FluentBadge Appearance="BadgeAppearance.Filled">DMX</FluentBadge>
+                            }
+                        </FluentStack>
+                    }
+                </div>
+                <div class="clients-phone-actions">
+                    <FluentButton Appearance="ButtonAppearance.Transparent" Title="Settings"
+                                  IconStart="@(new Icons.Regular.Size20.Settings())"
+                                  OnClick="() => OpenClientSettingsDialog(client.Id)" />
+                    <FluentButton Appearance="ButtonAppearance.Transparent"
+                                  Title="@(client.IsCurrentlyConnected ? "Restart" : "Restart (client is offline)")"
+                                  IconStart="@(new Icons.Regular.Size20.ArrowClockwise())"
+                                  Disabled="@(!client.IsCurrentlyConnected)"
+                                  OnClick="() => OpenRestartClientDialogAsync(client)" />
+                    <FluentButton Appearance="ButtonAppearance.Transparent"
+                                  Title="@(client.IsCurrentlyConnected ? "Diagnostics" : "Diagnostics (client is offline)")"
+                                  IconStart="@(new Icons.Regular.Size20.DocumentSearch())"
+                                  Disabled="@(!client.IsCurrentlyConnected)"
+                                  OnClick="() => OpenDiagnosticsDialogAsync(client)" />
+                    <FluentButton Appearance="ButtonAppearance.Transparent"
+                                  Title="@(client.IsCurrentlyConnected ? "Screens" : "Screens (client is offline)")"
+                                  IconStart="@(new Icons.Regular.Size20.Desktop())"
+                                  Disabled="@(!client.IsCurrentlyConnected)"
+                                  OnClick="() => OpenScreensDialogAsync(client)" />
+                    <FluentButton Appearance="ButtonAppearance.Transparent"
+                                  Title="@(client.IsCurrentlyConnected ? "Self-test" : "Self-test (client is offline)")"
+                                  IconStart="@(new Icons.Regular.Size20.Stethoscope())"
+                                  Disabled="@(!client.IsCurrentlyConnected)"
+                                  OnClick="() => OpenSelfTestDialogAsync(client)" />
+                </div>
+            </div>
+        }
     </div>
 </FluentCard>
 
@@ -74,6 +229,27 @@
     // Sorted once per load, not per render: the 1 s "last seen" tick re-renders the page, and
     // a fresh OrderBy().AsQueryable() in the markup made the grid refetch its rows every second.
     private IQueryable<ClientConnectedWithCapabilitiesDTO> _sortedClients = Enumerable.Empty<ClientConnectedWithCapabilitiesDTO>().AsQueryable();
+
+    private Dictionary<Guid, KioskHealthView> _health = new();
+
+    private sealed record ClientVersionCount(string? Version, int Count);
+
+    private List<ClientVersionCount> _versionCounts = [];
+
+    // How the kiosks signed in on their latest connection. Kiosks that haven't connected since
+    // per-kiosk credentials shipped aren't counted either way.
+    private int _credentialCount;
+    private int _legacySecretCount;
+
+    private static readonly GridSort<ClientConnectedWithCapabilitiesDTO> _sortByName = GridSort<ClientConnectedWithCapabilitiesDTO>.ByAscending(x => x.Name);
+
+    // The shared secret isn't accepted any more, so these kiosks last connected before it was
+    // switched off and can't connect again until they're paired.
+    private const string SharedSecretTooltip = "Last signed in with the old shared kiosk secret, which no longer works. Pair it again with Add kiosk.";
+
+    // Update ring and target per client. Empty (no badges) if releases couldn't be loaded, which
+    // must not stop the rest of the page working.
+    private IReadOnlyDictionary<Guid, ClientUpdateTargetDTO> _targets = new Dictionary<Guid, ClientUpdateTargetDTO>();
 
     private PeriodicTimer? timer;
     private CancellationTokenSource? timerCancellation;
@@ -135,16 +311,71 @@
     {
         Result<IEnumerable<ClientConnectedWithCapabilitiesDTO>> result = await _clientService.GetClientsWithCapabilitiesAsync();
 
+        Result<Dictionary<Guid, KioskHealthView>> healthResult = await _kioskHealthService.GetHealthAsync();
+
+        if (healthResult.IsSuccess && healthResult.Data != null)
+        {
+            _health = healthResult.Data;
+        }
+
         if (result.IsSuccess)
         {
             clients = result.Data!;
             _sortedClients = clients.OrderBy(x => x.Name).ToList().AsQueryable();
+            _versionCounts = BuildVersionCounts(clients);
+            _credentialCount = clients.Count(x => x.LastAuthMethod == ClientAuthMethod.Credential);
+            _legacySecretCount = clients.Count(x => x.LastAuthMethod == ClientAuthMethod.LegacySecret);
+
+            Result<IReadOnlyDictionary<Guid, ClientUpdateTargetDTO>> targets = await _updatePolicyService.GetTargetsAsync();
+
+            if (targets.IsSuccess)
+            {
+                _targets = targets.Data!;
+            }
         }
         else if (showErrors)
         {
             _toastService.ShowError($"Failed to load connected clients, {result.Error}");
         }
     }
+
+    // Newest version first; clients that have never reported one ("Unknown") always go last.
+    private static List<ClientVersionCount> BuildVersionCounts(IEnumerable<ClientConnectedWithCapabilitiesDTO> source)
+    {
+        List<ClientVersionCount> counts = source
+            .GroupBy(x => x.ReportedClientVersion)
+            .Select(g => new ClientVersionCount(g.Key, g.Count()))
+            .ToList();
+
+        counts.Sort((left, right) =>
+        {
+            if (left.Version is null || right.Version is null)
+            {
+                return (left.Version is null ? 1 : 0) - (right.Version is null ? 1 : 0);
+            }
+
+            return ClientVersionFormat.Compare(right.Version, left.Version);
+        });
+
+        return counts;
+    }
+
+    private ClientUpdateTargetDTO? TargetFor(Guid clientId) => _targets.TryGetValue(clientId, out ClientUpdateTargetDTO? target) ? target : null;
+
+    private static string VersionLabel(string? version) => version is null ? "Unknown" : $"v{version}";
+
+    private static string VersionTooltip(ClientConnectedWithCapabilitiesDTO client)
+    {
+        if (client.ReportedClientVersion is null || client.ClientVersionReportedAt is not DateTime reportedAt)
+        {
+            return "This PC hasn't reported a version. Kiosk software older than 1.0.41 doesn't send one.";
+        }
+
+        return $"Reported {FormatUkDateTime(reportedAt)}";
+    }
+
+    private static string FormatUkDateTime(DateTime utc) =>
+        utc.ToLocalTime().ToString("dd/MM/yyyy HH:mm", CultureInfo.GetCultureInfo("en-GB"));
 
     private async Task OpenRestartClientDialogAsync(ClientConnectedWithCapabilitiesDTO client)
     {
@@ -177,12 +408,65 @@
         await GetClientsAsync();
     }
 
+    private async Task OpenDiagnosticsDialogAsync(ClientConnectedWithCapabilitiesDTO client)
+    {
+        await _dialogService.ShowDialogAsync<ClientDiagnosticsDialog>(options =>
+        {
+            options.Header.Title = $"Diagnostics: {client.Name}";
+            options.Width = "min(1100px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ClientDiagnosticsDialog.ClientId), client.Id);
+            options.Parameters.Add(nameof(ClientDiagnosticsDialog.ClientName), client.Name);
+        });
+    }
+
+    private async Task OpenScreensDialogAsync(ClientConnectedWithCapabilitiesDTO client)
+    {
+        await _dialogService.ShowDialogAsync<ClientScreensDialog>(options =>
+        {
+            options.Header.Title = $"Screens: {client.Name}";
+            options.Width = "min(1100px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ClientScreensDialog.ClientId), client.Id);
+            options.Parameters.Add(nameof(ClientScreensDialog.ClientName), client.Name);
+        });
+    }
+
+    private async Task OpenPairKioskDialogAsync()
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<PairKioskDialog>(options =>
+        {
+            options.Header.Title = "Add kiosk";
+            options.Width = "min(520px, 95vw)";
+            options.Modal = true;
+        });
+
+        if (!result.Cancelled)
+        {
+            await GetClientsAsync();
+        }
+    }
+    
+    private async Task OpenSelfTestDialogAsync(ClientConnectedWithCapabilitiesDTO client)
+    {
+        await _dialogService.ShowDialogAsync<ClientSelfTestDialog>(options =>
+        {
+            options.Header.Title = $"Self-test: {client.Name}";
+            options.Width = "min(900px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ClientSelfTestDialog.ClientId), client.Id);
+            options.Parameters.Add(nameof(ClientSelfTestDialog.ClientName), client.Name);
+        });
+    }
+
     private async Task OpenClientSettingsDialog(Guid clientId)
     {
         await _dialogService.ShowDialogAsync<ClientSettingsDialog>(options =>
         {
             options.Header.Title = "Client Settings";
-            options.Width = "min(900px, 95vw)";
+            // Wide enough for every tab heading on one line: when they overflow, the tab strip
+            // scrolls and drags the open tab's content sideways with it.
+            options.Width = "min(1000px, 95vw)";
             options.Modal = true;
             options.Parameters.Add(nameof(ClientSettingsDialog.ClientId), clientId);
         });

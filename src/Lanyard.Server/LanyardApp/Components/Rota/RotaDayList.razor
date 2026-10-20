@@ -85,9 +85,10 @@
                         {
                             <TimeOffChip Request="@timeOff" />
                         }
+                        <UnavailableNote Windows="@row.UnavailableOn(selectedDate)" />
                         @foreach (Shift shift in row.Shifts.Where(s => s.LocalDate() == selectedDate))
                         {
-                            <ShiftChip Shift="@shift" OnClick="@OnEdit" />
+                            <ShiftChip Shift="@shift" OnClick="@OnEdit" TrainingGaps="@View.TrainingGapsFor(shift)" ShowTrainingText="true" />
                         }
                     </div>
                 </div>
@@ -117,7 +118,7 @@
     private List<Shift> OpenOnDay => View.OpenShifts.Where(s => s.LocalDate() == selectedDate).ToList();
 
     private List<RotaStaffRow> RowsOnDay =>
-        View.Rows.Where(r => r.Shifts.Any(s => s.LocalDate() == selectedDate) || r.TimeOffOn(selectedDate) is not null).ToList();
+        View.Rows.Where(r => r.Shifts.Any(s => s.LocalDate() == selectedDate) || r.TimeOffOn(selectedDate) is not null || r.UnavailableOn(selectedDate).Count > 0).ToList();
 
     private List<(RotaStaffRow Row, ContractWarning Warning)> WeekWarnings
     {
