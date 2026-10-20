@@ -68,6 +68,17 @@ public static class HelpRegistry
     public const string Compliance = "compliance";
     public const string Onboarding = "onboarding";
     public const string Account = "account";
+    public const string Chat = "chat";
+    public const string ChatModeration = "chat-moderation";
+    public const string Announcements = "announcements";
+    public const string Files = "files";
+    public const string Dashboards = "dashboards";
+    public const string Music = "music";
+    public const string Projection = "projection";
+    public const string Automation = "automation";
+    public const string Dmx = "dmx";
+    public const string Kiosks = "kiosks";
+    public const string Insights = "insights";
 
     public static IReadOnlyList<HelpArea> Areas { get; } =
     [
@@ -127,6 +138,145 @@ public static class HelpRegistry
                 new("sign-in", "Signing In Securely")
             ],
             ["/account"]),
+
+        new(Chat,
+            "Chat",
+            "Messaging colleagues, groups and channels, replying and editing, and reporting or blocking someone.",
+            HelpAudience.Everyone,
+            () => new Icons.Regular.Size20.Chat(),
+            [
+                new("conversations", "Conversations"),
+                new("messages", "Messages"),
+                new("safety", "Reporting & Blocking")
+            ],
+            ["/chat"],
+            Feature: CompanyFeature.Chat),
+
+        new(Dashboards,
+            "Dashboards",
+            "Choosing your home screen, building dashboards, and what each widget shows.",
+            HelpAudience.Everyone,
+            () => new Icons.Regular.Size20.DataArea(),
+            [
+                new("overview", "Overview"),
+                new("editing", "Editing a Dashboard"),
+                new("widgets", "Widgets")
+            ],
+            ["/manage/dashboards"]),
+
+        new(ChatModeration,
+            "Chat Channels & Reports",
+            "Looking after location channels, pinned posts, and dealing with reported messages.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.ChatWarning(),
+            [
+                new("channels", "Channels"),
+                new("reports", "Reports")
+            ],
+            ["/manage/chat"],
+            Roles: "Admin,Manager",
+            Feature: CompanyFeature.Chat),
+
+        new(Announcements,
+            "Announcements",
+            "Posting notices to staff at a location, pinning, expiry and emailing them out.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.Megaphone(),
+            [
+                new("overview", "Announcements")
+            ],
+            ["/manage/announcements"],
+            Roles: "Admin,CanPostAnnouncements",
+            Feature: CompanyFeature.Announcements),
+
+        new(Files,
+            "File Manager",
+            "Folders, uploading, and moving, renaming and deleting your company's files.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.Folder(),
+            [
+                new("overview", "File Manager")
+            ],
+            ["/files"],
+            Roles: "Admin,CanManageFiles"),
+
+        new(Music,
+            "Music & Audio Clips",
+            "Playing music on a kiosk, the music schedule for each time of day, and audio clips over the music.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.MusicNote2(),
+            [
+                new("player", "Music"),
+                new("schedule", "Music Schedule"),
+                new("clips", "Audio Clips")
+            ],
+            ["/music", "/manage/music-schedule", "/manage/audio-clips"],
+            Roles: "Admin,Manager,CanControlMusic,CanPlayAudioClips"),
+
+        new(Projection,
+            "Projection",
+            "Building projection programs, controlling what's on screen, and step templates.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.ProjectionScreenText(),
+            [
+                new("programs", "Programs"),
+                new("control", "Projection Control"),
+                new("templates", "Templates")
+            ],
+            ["/manage/projectionprograms", "/manage/projectioncontrol", "/manage/projectiontemplates"],
+            Roles: "Admin,Manager"),
+
+        new(Automation,
+            "Automation",
+            "Rules that run music, projection, lighting and audio clips by themselves, and the execution log.",
+            HelpAudience.Admins,
+            () => new Icons.Regular.Size20.SettingsCogMultiple(),
+            [
+                new("rules", "Rules & Triggers"),
+                new("conditions", "Conditions & Actions"),
+                new("log", "Execution Log")
+            ],
+            ["/automation"],
+            Roles: "Admin"),
+
+        new(Dmx,
+            "DMX Lighting",
+            "The DMX desk, setting up fixtures, and building and running lighting scenes.",
+            HelpAudience.Admins,
+            () => new Icons.Regular.Size20.Lightbulb(),
+            [
+                new("desk", "The Desk"),
+                new("fixtures", "Fixtures"),
+                new("scenes", "Scenes")
+            ],
+            ["/dmx"],
+            Roles: "Admin,CanManageDmxSystems"),
+
+        new(Kiosks,
+            "Kiosks",
+            "Kiosk health and alerts, restarting, diagnostics, each kiosk's settings, and software updates.",
+            HelpAudience.Admins,
+            () => new Icons.Regular.Size20.Laptop(),
+            [
+                new("overview", "Kiosks & Health"),
+                new("settings", "Kiosk Settings"),
+                new("updates", "Updates & Releases")
+            ],
+            ["/manage/clients", "/manage/client-releases"],
+            Roles: "Admin"),
+
+        new(Insights,
+            "Insights",
+            "Comparing games played with staff hours, and the hours where staffing didn't match demand.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.DataArea(),
+            [
+                new("overview", "Figures"),
+                new("week", "Typical Week & Flags")
+            ],
+            ["/manage/insights"],
+            Roles: "Admin,Manager",
+            Feature: CompanyFeature.Insights),
 
         new(Users,
             "Users & Roles",

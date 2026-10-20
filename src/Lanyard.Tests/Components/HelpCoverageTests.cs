@@ -31,25 +31,7 @@ public class HelpCoverageTests
         ["/not-found"] = "Error page",
         ["/whats-new"] = "Release notes",
         ["/kiosk"] = "Rendered on kiosk screens, not by people",
-        ["/video-publisher"] = "Rendered on kiosk screens, not by people",
-
-        // Not written yet - each stacked help PR removes its own lines. Don't add to these.
-        ["/chat"] = "Pending help PR 4/6 (Comms)",
-        ["/manage/chat"] = "Pending help PR 4/6 (Comms)",
-        ["/manage/announcements"] = "Pending help PR 4/6 (Comms)",
-        ["/files"] = "Pending help PR 4/6 (Comms)",
-        ["/manage/dashboards"] = "Pending help PR 4/6 (Comms)",
-        ["/music"] = "Pending help PR 5/6 (Venue tech)",
-        ["/manage/music-schedule"] = "Pending help PR 5/6 (Venue tech)",
-        ["/manage/audio-clips"] = "Pending help PR 5/6 (Venue tech)",
-        ["/manage/projectionprograms"] = "Pending help PR 5/6 (Venue tech)",
-        ["/manage/projectioncontrol"] = "Pending help PR 5/6 (Venue tech)",
-        ["/manage/projectiontemplates"] = "Pending help PR 5/6 (Venue tech)",
-        ["/automation"] = "Pending help PR 5/6 (Venue tech)",
-        ["/dmx"] = "Pending help PR 5/6 (Venue tech)",
-        ["/manage/clients"] = "Pending help PR 6/6 (Kiosks & insights)",
-        ["/manage/client-releases"] = "Pending help PR 6/6 (Kiosks & insights)",
-        ["/manage/insights"] = "Pending help PR 6/6 (Kiosks & insights)"
+        ["/video-publisher"] = "Rendered on kiosk screens, not by people"
     };
 
     private static List<(Type Page, string Route)> AllRoutes() =>

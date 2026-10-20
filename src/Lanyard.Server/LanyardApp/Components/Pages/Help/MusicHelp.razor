@@ -1,0 +1,17 @@
+@page "/help/music"
+@attribute [Authorize(Roles = "Admin,Manager,CanControlMusic,CanPlayAudioClips")]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.Music
+
+<HelpPage AreaKey="@HelpRegistry.Music">
+    <FluentTab Id="help-player" Header="Music" IconStart="@(new Icons.Regular.Size16.MusicNote2())">
+        <MusicPlayerHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-schedule" Header="Music Schedule" IconStart="@(new Icons.Regular.Size16.CalendarClock())" DeferredLoading="true">
+        <MusicScheduleHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-clips" Header="Audio Clips" IconStart="@(new Icons.Regular.Size16.Speaker2())" DeferredLoading="true">
+        <AudioClipsHelpTab />
+    </FluentTab>
+</HelpPage>

@@ -1,0 +1,36 @@
+<HelpTab>
+    <FluentText>
+        Automation runs things at the venue for you. For example, play the winner's lighting scene when a game
+        ends, start a projection program when a game starts, or turn the music down before opening. It's
+        Admin-only, on <a href="/automation">Automation</a>.
+    </FluentText>
+
+    <HelpSection Title="The engine switch">
+        <FluentText>
+            <strong>Engine: Enabled</strong> at the top turns all automation on or off at once. Each rule also has
+            its own <strong>Enabled</strong> switch in the list.
+        </FluentText>
+    </HelpSection>
+
+    <HelpSection Title="Making a rule">
+        <ol>
+            <li>Select <strong>New Rule</strong> and give it a <strong>Rule Name</strong>.</li>
+            <li>Choose the <strong>Trigger Client</strong>: the kiosk whose game it watches.</li>
+            <li>Choose the <strong>Trigger Type</strong> (see below).</li>
+            <li>Optionally add conditions under <strong>Only if</strong>.</li>
+            <li>Add one or more actions. At least one is required.</li>
+        </ol>
+    </HelpSection>
+
+    <HelpSection Title="Trigger types">
+        <ul>
+            <li><strong>Game Status Change</strong>: when the kiosk's game goes <strong>In Game</strong> or <strong>Not Started</strong>.</li>
+            <li><strong>Client Idle</strong>: when the kiosk has stayed at the same game status for <strong>Idle for (minutes)</strong>.</li>
+            <li><strong>Scheduled</strong>: at a time of day (UK time) on the days you tick, or every day if you tick none.</li>
+            <li><strong>Time remaining drops below</strong>: once per game, when the countdown passes that many seconds.</li>
+            <li><strong>Score reaches</strong>: once per game, when any one player's score or a team's total reaches a value.</li>
+            <li><strong>Game ends with a winner</strong>: when a team game ends with one team ahead. A draw or a game
+                without teams doesn't count. Make one rule per team to give each its own scene.</li>
+        </ul>
+    </HelpSection>
+</HelpTab>
