@@ -35,23 +35,21 @@
        ends with blazor.web.js and blazorStart.js at the bottom of <body>, so every window.* helper
        below exists before Blazor starts and any component can call into it. A new global script
        must be `defer` and sit above blazorStart.js; a script only one component uses is better as
-       a module that component imports (see ContactForm.razor). *@
+       a module that component imports (see ContactForm.razor) - like the course editor's, the DMX
+       desk's and the kiosk's video scripts. *@
     <script src="@Assets["app.js"]" defer></script>
-    <script src="@Assets["video-stream.js"]" defer></script>
     <script src="@Assets["js/autoLogout.js"]" defer></script>
-    <script src="@Assets["js/dmxKeybinds.js"]" defer></script>
     <script src="@Assets["js/viewportWatcher.js"]" defer></script>
     <script src="@Assets["js/navDrawerScroll.js"]" defer></script>
     <script src="@Assets["js/lanyardPush.js"]" defer></script>
     <script src="@Assets["js/lanyardInstall.js"]" defer></script>
     <script src="@Assets["js/lanyardPasskeys.js"]" defer></script>
-    <script src="@Assets["js/trainingScrollGate.js"]" defer></script>
-    <script src="@Assets["js/courseWalkthrough.js"]" defer></script>
-    <script src="@Assets["js/courseImageEditor.js"]" defer></script>
-    <script src="@Assets["js/kioskWidgetEditor.js"]" defer></script>
     <script src="@Assets["js/fileDownload.js"]" defer></script>
     <link rel="stylesheet" href="@Assets["Lanyard.App.styles.css"]" />
-    <link href="@Assets["lib/quill/2.0.3/quill.snow.css"]" rel="stylesheet" />
+    @* Quill's content styles (lists, alignment, indents) for saved rich text shown read-only in .ql-editor
+       (dashboard text widgets, course sections, chat). The editor itself and its toolbar theme load on
+       demand - see Components/Editor/QuillGate.razor. *@
+    <link href="@Assets["lib/quill/2.0.3/quill.core.css"]" rel="stylesheet" />
     <HeadOutlet @rendermode="PageRenderMode" />
 
     <style>
@@ -246,11 +244,6 @@
     @* After every script the app calls into, so all of them have run before Blazor.start(). *@
     <script src="@Assets["_framework/blazor.web.js"]" autostart="false" defer></script>
     <script src="@Assets["js/blazorStart.js"]" defer></script>
-    @* The rich-text editor (Quill, ~210 KB) is the one exception: only a few pages use it, and holding
-       Blazor back on every page until it has downloaded costs more than it saves. *@
-    <script src="@Assets["lib/quill/2.0.3/quill.js"]" defer></script>
-    <script src="_content/Blazored.TextEditor/quill-blot-formatter.min.js" defer></script>
-    <script src="_content/Blazored.TextEditor/Blazored-BlazorQuill.js" defer></script>
 
     @if (NavigationManager.Uri.Contains("localhost", StringComparison.OrdinalIgnoreCase))
     {

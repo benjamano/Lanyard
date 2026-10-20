@@ -3,7 +3,7 @@
 // .NET pushes the set of bound keys via setKeys so unbound keys never round-trip
 // and preventDefault can be decided synchronously.
 
-window.dmxKeybinds = (() => {
+export const dmxKeybinds = (() => {
     let dotNetRef = null;
     let boundKeys = new Set();
 

@@ -19,7 +19,7 @@
 // active, so a clamp event fired for the departing step can never unlock the
 // arriving one.
 
-window.trainingScrollGate = (() => {
+export const trainingScrollGate = (() => {
     const BOTTOM_THRESHOLD_PX = 24;
 
     let hostEl = null;

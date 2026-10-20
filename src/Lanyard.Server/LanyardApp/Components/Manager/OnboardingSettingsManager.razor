@@ -43,22 +43,24 @@
                                   Placeholder="Welcome to Lanyard" />
 
                 <FluentText>Email body</FluentText>
-                <div class="onboarding-editor-host" @ref="_editorHostRef">
-                    <BlazoredTextEditor @ref="_editor" Placeholder="Write a welcome message...">
-                        <ToolbarContent>
-                            <span class="ql-formats">
-                                <button class="ql-bold"></button>
-                                <button class="ql-italic"></button>
-                                <button class="ql-underline"></button>
-                            </span>
-                            <span class="ql-formats">
-                                <button class="ql-list" value="ordered"></button>
-                                <button class="ql-list" value="bullet"></button>
-                            </span>
-                        </ToolbarContent>
-                        <EditorContent></EditorContent>
-                    </BlazoredTextEditor>
-                </div>
+                <QuillGate OnReady="StateHasChanged">
+                    <div class="onboarding-editor-host" @ref="_editorHostRef">
+                        <BlazoredTextEditor @ref="_editor" Placeholder="Write a welcome message...">
+                            <ToolbarContent>
+                                <span class="ql-formats">
+                                    <button class="ql-bold"></button>
+                                    <button class="ql-italic"></button>
+                                    <button class="ql-underline"></button>
+                                </span>
+                                <span class="ql-formats">
+                                    <button class="ql-list" value="ordered"></button>
+                                    <button class="ql-list" value="bullet"></button>
+                                </span>
+                            </ToolbarContent>
+                            <EditorContent></EditorContent>
+                        </BlazoredTextEditor>
+                    </div>
+                </QuillGate>
 
                 <FluentSwitch @bind-Value="settings.AutoAttachStandingDocuments" Label="Attach standing documents to the welcome email" />
 
