@@ -55,6 +55,10 @@
                       Disabled="@(_summary is null || _isExporting)" OnClick="@ExportAsync" Class="insights-export">
             Export CSV
         </FluentButton>
+    
+        <div class="ms-auto">
+            <HelpButton AreaKey="@HelpRegistry.Insights" />
+        </div>
     </div>
 
     @if (_error is not null)

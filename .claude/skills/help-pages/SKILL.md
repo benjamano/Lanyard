@@ -60,4 +60,4 @@ description: How LanyardApp's in-app help works. Covers the /help hub, HelpRegis
 
 ## Exemptions
 
-The `Exempt` dictionary in `HelpCoverageTests` is only for pages with nothing to explain, each with a reason: sign-in flow, legal and error pages, kiosk-rendered screens. While the help rollout was stacked across PRs, it also held "Pending help PR n/6" lines, and each PR removed its own. Don't add pending lines for new work. Write the help instead.
+The `Exempt` dictionary in `HelpCoverageTests` is only for pages with nothing to explain, each with a reason: sign-in flow, legal and error pages, kiosk-rendered screens. Don't add an exemption to get a new page past the test. Write its help, or extend an existing area's `Covers` and update that area's tabs.
