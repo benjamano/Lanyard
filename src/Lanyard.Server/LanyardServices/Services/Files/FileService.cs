@@ -193,7 +193,8 @@ public class FileService : IFileService
                 UploadedAt = DateTime.UtcNow,
                 UploadedBy = uploadedBy,
                 FolderId = folderId,
-                IsActive = true
+                IsActive = true,
+                IsRestricted = options.IsRestricted
             };
 
             db.FileMetadata.Add(metadata);
@@ -249,7 +250,7 @@ public class FileService : IFileService
 
             FileMetadata? file = await db.FileMetadata.FindAsync(new object[] { fileId }, cancellationToken);
 
-            if (file == null)
+            if (file == null || file.IsRestricted)
                 return Result<FileMetadata>.Fail("File not found.");
 
             file.FileName = newName;
@@ -264,7 +265,13 @@ public class FileService : IFileService
         }
     }
 
-    public async Task<Result<bool>> DeleteFileAsync(Guid fileId, CancellationToken cancellationToken)
+    public Task<Result<bool>> DeleteFileAsync(Guid fileId, CancellationToken cancellationToken) =>
+        DeleteFileCoreAsync(fileId, restricted: false, cancellationToken);
+
+    public Task<Result<bool>> DeleteRestrictedFileAsync(Guid fileId, CancellationToken cancellationToken) =>
+        DeleteFileCoreAsync(fileId, restricted: true, cancellationToken);
+
+    private async Task<Result<bool>> DeleteFileCoreAsync(Guid fileId, bool restricted, CancellationToken cancellationToken)
     {
         try
         {
@@ -272,7 +279,7 @@ public class FileService : IFileService
 
             FileMetadata? file = await db.FileMetadata.FindAsync(new object[] { fileId }, cancellationToken);
 
-            if (file == null)
+            if (file == null || file.IsRestricted != restricted)
                 return Result<bool>.Fail("File not found.");
 
             // Checked before touching storage, not just relying on the FK's Restrict behavior at
@@ -364,7 +371,7 @@ public class FileService : IFileService
             FileMetadata? file = await db.FileMetadata
                 .AsNoTracking()
                 .TagWithCallSite()
-                .FirstOrDefaultAsync(f => f.Id == fileId, cancellationToken);
+                .FirstOrDefaultAsync(f => f.Id == fileId && !f.IsRestricted, cancellationToken);
 
             if (file == null)
                 return Result<FileMetadata>.Fail("File not found.");
@@ -388,7 +395,7 @@ public class FileService : IFileService
             List<FileMetadata> files = await db.FileMetadata
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(f => f.FolderId == folderId)
+                .Where(f => f.FolderId == folderId && !f.IsRestricted)
                 .ToListAsync(cancellationToken);
 
             return Result<IReadOnlyList<FileMetadata>>.Ok(files);
@@ -593,7 +600,7 @@ public class FileService : IFileService
             FileMetadata? file = await db.FileMetadata
                 .AsNoTracking()
                 .TagWithCallSite()
-                .FirstOrDefaultAsync(f => f.Id == fileId, cancellationToken);
+                .FirstOrDefaultAsync(f => f.Id == fileId && !f.IsRestricted, cancellationToken);
 
             if (_isDevelopment)
             {
@@ -626,7 +633,13 @@ public class FileService : IFileService
         }
     }
 
-    public async Task<Result<FileContent>> OpenFileContentAsync(Guid fileId, FileByteRange? range, CancellationToken cancellationToken)
+    public Task<Result<FileContent>> OpenFileContentAsync(Guid fileId, FileByteRange? range, CancellationToken cancellationToken) =>
+        OpenFileContentCoreAsync(fileId, range, restricted: false, cancellationToken);
+
+    public Task<Result<FileContent>> OpenRestrictedFileContentAsync(Guid fileId, FileByteRange? range, CancellationToken cancellationToken) =>
+        OpenFileContentCoreAsync(fileId, range, restricted: true, cancellationToken);
+
+    private async Task<Result<FileContent>> OpenFileContentCoreAsync(Guid fileId, FileByteRange? range, bool restricted, CancellationToken cancellationToken)
     {
         try
         {
@@ -635,7 +648,7 @@ public class FileService : IFileService
             FileMetadata? file = await db.FileMetadata
                 .AsNoTracking()
                 .TagWithCallSite()
-                .FirstOrDefaultAsync(f => f.Id == fileId, cancellationToken);
+                .FirstOrDefaultAsync(f => f.Id == fileId && f.IsRestricted == restricted, cancellationToken);
 
             if (file == null)
                 return Result<FileContent>.Fail("File not found.");
@@ -724,7 +737,7 @@ public class FileService : IFileService
 
             FileMetadata? file = await db.FileMetadata.FindAsync(new object[] { fileId }, cancellationToken);
 
-            if (file == null)
+            if (file == null || file.IsRestricted)
                 return Result<FileMetadata>.Fail("File not found.");
 
             if (destinationFolderId.HasValue)

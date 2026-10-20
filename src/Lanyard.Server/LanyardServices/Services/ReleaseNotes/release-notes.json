@@ -782,12 +782,13 @@
   {
     "version": "1.4.18",
     "releaseDate": "2026-10-19",
-    "summary": "The old shared kiosk password is switched off: every kiosk now signs in with its own credential. Send feedback about Lanyard from the top bar, and rate it out of 5 stars.",
+    "summary": "The old shared kiosk password is switched off: every kiosk now signs in with its own credential. Send feedback about Lanyard from the top bar, and rate it out of 5 stars. Staff documents are now private to Admins and the person's Managers.",
     "details": [
       "Kiosks can no longer connect with the password that used to be shared by every kiosk. Each one uses its own credential, which an Admin can rotate or revoke.",
       "A kiosk that still showed \"Shared secret\" on Manage > Clients can't connect any more. Pair it again with Add kiosk: it keeps its settings.",
       "Tell us what you think: a new feedback button in the top bar lets you give Lanyard a thumbs up or down, with an optional comment, from any page. It goes straight to the Lanyard team.",
-      "Every month or so Lanyard asks you to rate it out of 5 stars and say why. Press Not now to be asked again in a week, or Don't ask again to stop it for good."
+      "Every month or so Lanyard asks you to rate it out of 5 stars and say why. Press Not now to be asked again in a week, or Don't ask again to stop it for good.",
+      "Staff documents such as right-to-work checks, ID and certificates no longer appear in File Manager, and kiosks and other staff can't download them. Only Admins and the person's Managers can see, upload or delete them, from the Documents tab on the person's page. Documents uploaded before this change are hidden the same way."
     ]
   }
 ]
