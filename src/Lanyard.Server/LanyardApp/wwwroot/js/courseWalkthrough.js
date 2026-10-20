@@ -15,7 +15,7 @@
 // are only written when a rect actually changes, so an idle frame costs one
 // getBoundingClientRect per element.
 
-window.courseWalkthrough = (() => {
+export const courseWalkthrough = (() => {
     const PADDING_PX = 6;
     const GAP_PX = 12;
     const EDGE_PX = 12;

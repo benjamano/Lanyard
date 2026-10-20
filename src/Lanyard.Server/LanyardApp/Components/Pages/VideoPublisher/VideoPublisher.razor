@@ -45,6 +45,9 @@
     public string? Token { get; set; }
 
     private DotNetObjectReference<VideoPublisher>? _selfRef;
+    // video-stream.js, imported before this page registers as a publisher - so set whenever a
+    // session can reach any of the methods below.
+    private IJSObjectReference? _videoModule;
     private bool _registered;
     private bool _rejected;
     private int _activeSessionCount;
@@ -61,7 +64,8 @@
         // JS side is initialised, so sessions can be forwarded the moment registration lands.
         _selfRef = DotNetObjectReference.Create(this);
 
-        await JS.InvokeVoidAsync("videoPublisher.init", _selfRef);
+        _videoModule = await JS.InvokeAsync<IJSObjectReference>("import", "./video-stream.js");
+        await _videoModule.InvokeVoidAsync("videoPublisher.init", _selfRef);
 
         if (!_signalingService.RegisterPublisher(this, Token))
         {
@@ -82,7 +86,7 @@
         {
             _logger.LogInformation("Publisher {ClientId} starting video session {SessionId} for device '{DeviceName}'", ClientId, sessionId, deviceName);
 
-            await JS.InvokeVoidAsync("videoPublisher.startSession", sessionId, deviceName, enableAudio, idealWidth, idealHeight, _videoStreamingOptions.Value.ToIceServersJson());
+            await _videoModule!.InvokeVoidAsync("videoPublisher.startSession", sessionId, deviceName, enableAudio, idealWidth, idealHeight, _videoStreamingOptions.Value.ToIceServersJson());
 
             RefreshSessionCount();
             StateHasChanged();
@@ -99,7 +103,7 @@
     {
         await InvokeAsync(async () =>
         {
-            await JS.InvokeVoidAsync("videoPublisher.receiveAnswer", sessionId, sdpAnswer);
+            await _videoModule!.InvokeVoidAsync("videoPublisher.receiveAnswer", sessionId, sdpAnswer);
         });
     }
 
@@ -107,7 +111,7 @@
     {
         await InvokeAsync(async () =>
         {
-            await JS.InvokeVoidAsync("videoPublisher.addIceCandidate", sessionId, candidateJson);
+            await _videoModule!.InvokeVoidAsync("videoPublisher.addIceCandidate", sessionId, candidateJson);
         });
     }
 
@@ -115,7 +119,7 @@
     {
         await InvokeAsync(async () =>
         {
-            await JS.InvokeVoidAsync("videoPublisher.endSession", sessionId);
+            await _videoModule!.InvokeVoidAsync("videoPublisher.endSession", sessionId);
 
             RefreshSessionCount();
             StateHasChanged();
@@ -162,7 +166,11 @@
 
         try
         {
-            await JS.InvokeVoidAsync("videoPublisher.disposeAll");
+            if (_videoModule is not null)
+            {
+                await _videoModule.InvokeVoidAsync("videoPublisher.disposeAll");
+                await _videoModule.DisposeAsync();
+            }
         }
         catch (JSDisconnectedException)
         {
