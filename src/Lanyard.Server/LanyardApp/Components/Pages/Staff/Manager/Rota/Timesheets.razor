@@ -30,6 +30,7 @@
         </div>
 
         <div class="timesheets-actions">
+            <HelpButton AreaKey="@HelpRegistry.Rota" Topic="timesheets" />
             <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowDownload())"
                           Disabled="@(view is null)" OnClick="@OpenExportAsync">
                 Export

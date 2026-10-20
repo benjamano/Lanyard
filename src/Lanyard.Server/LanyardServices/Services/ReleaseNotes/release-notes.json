@@ -749,6 +749,8 @@
       "New Help area: choose Help in the menu to see guides for every part of Lanyard you can use. Search them, or jump straight to a topic.",
       "Help buttons on each area's pages open the guide for what you're looking at.",
       "New My Training guide for staff: taking a course, the quiz and retries, and downloading certificates.",
+      "New My Shifts guide for staff: swapping and dropping shifts, picking up open shifts, time off, availability and clocking in with a PIN or your phone.",
+      "New Rota guide for managers: building and publishing the rota, staff suggestions, shift requests, time off, timesheets, payroll export and setting up positions, contracts and clock-in terminals.",
       "New staff now get a short guided tour the first time they open a training course. It highlights the list of sections, where the content goes, and the Next and Previous buttons, and explains the quiz and its pass mark.",
       "The tour only starts by itself until someone has finished or skipped it once, on any device. Press How this works at the top of a course to see it again. Managers can also run it from a course preview to see what their staff see.",
       "Added a kiosk self-test. On Manage > Clients, the new Self-test button checks a kiosk's speakers, DMX lighting interface, laser tag network card and projection display, and shows a pass/fail checklist with what to do about anything that failed. It's for setting up a new venue PC or working out why one is misbehaving.",

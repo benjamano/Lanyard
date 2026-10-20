@@ -32,11 +32,8 @@ public class HelpCoverageTests
         ["/whats-new"] = "Release notes",
         ["/kiosk"] = "Rendered on kiosk screens, not by people",
         ["/video-publisher"] = "Rendered on kiosk screens, not by people",
-        ["/rota/scan"] = "Opened by scanning a terminal QR code; covered under staff rota help",
 
         // Not written yet - each stacked help PR removes its own lines. Don't add to these.
-        ["/rota"] = "Pending help PR 2/6 (Rota)",
-        ["/manage/rota"] = "Pending help PR 2/6 (Rota)",
         ["/manage/users"] = "Pending help PR 3/6 (People)",
         ["/manage/roles"] = "Pending help PR 3/6 (People)",
         ["/manage/companies-locations"] = "Pending help PR 3/6 (People)",

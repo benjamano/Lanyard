@@ -44,6 +44,7 @@
             <FluentCheckbox Label="Show staff without a position" Value="@includeAllMembers" ValueChanged="@OnIncludeAllChanged" />
 
             <div class="rota-actions">
+                <HelpButton AreaKey="@HelpRegistry.Rota" Topic="building" />
                 <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Copy())"
                               Disabled="@(view is null || isBusy)" OnClick="@CopyAsync">
                     @(monthView ? "Copy from 4 weeks earlier" : "Copy last week")
