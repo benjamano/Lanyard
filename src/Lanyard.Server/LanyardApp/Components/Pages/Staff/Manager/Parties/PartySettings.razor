@@ -13,12 +13,16 @@
     <div class="party-settings-header">
         <h1>Party settings</h1>
 
-        @if (locationOptions.Count > 1)
-        {
-            <FluentSelect TOption="LocationOption" TValue="string" Items="@locationOptions" OptionText="@(x => x.Name)"
-                          OptionValue="@(x => x.Id.ToString())" Value="@locationId?.ToString()" ValueChanged="@OnLocationChanged"
-                          Label="Location" Width="260px" />
-        }
+        <div class="party-settings-tools">
+            @if (locationOptions.Count > 1)
+            {
+                <FluentSelect TOption="LocationOption" TValue="string" Items="@locationOptions" OptionText="@(x => x.Name)"
+                              OptionValue="@(x => x.Id.ToString())" Value="@locationId?.ToString()" ValueChanged="@OnLocationChanged"
+                              Label="Location" Width="260px" />
+            }
+
+            <HelpButton AreaKey="@HelpRegistry.Parties" Topic="settings" />
+        </div>
     </div>
 
     @if (loadError is not null)

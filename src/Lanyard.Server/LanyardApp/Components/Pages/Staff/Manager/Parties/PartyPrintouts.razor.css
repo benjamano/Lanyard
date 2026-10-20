@@ -17,3 +17,11 @@
     max-width: 820px;
     color: var(--colorNeutralForeground3);
 }
+
+.printouts-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}

@@ -69,3 +69,15 @@
     background: var(--colorNeutralBackground3);
     font-size: 0.9rem;
 }
+
+.party-settings-tools {
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.party-settings-tools ::deep fluent-field {
+    margin-top: 0;
+    margin-bottom: 0;
+}

@@ -13,9 +13,12 @@
 
 <div class="party-editor">
     <div class="party-editor-header">
-        <FluentAnchorButton Href="@BackHref" Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.ArrowLeft())">
-            Parties
-        </FluentAnchorButton>
+        <div class="party-editor-nav">
+            <FluentAnchorButton Href="@BackHref" Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.ArrowLeft())">
+                Parties
+            </FluentAnchorButton>
+            <HelpButton AreaKey="@HelpRegistry.Parties" Topic="@(existing is null ? "bookings" : "payments")" />
+        </div>
 
         <div class="party-editor-title">
             <h1>@Title</h1>
