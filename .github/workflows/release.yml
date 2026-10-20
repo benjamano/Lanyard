@@ -70,6 +70,14 @@ jobs:
       - name: Package with Velopack
         run: vpk pack --packId LanyardClient --packVersion ${{ steps.version.outputs.VERSION }} --packDir ./publish --mainExe Lanyard.Client.exe --icon src/Lanyard.Client/favicon.ico --releaseNotes release-notes.md
 
+      # Kiosks from 1.0.44 only install a package signed by this key (Lanyard.Shared.Updates.ReleaseSigning).
+      # Fails without the secret, so an unsigned release can't go out.
+      - name: Sign the package
+        shell: pwsh
+        env:
+          CLIENT_RELEASE_SIGNING_KEY: ${{ secrets.CLIENT_RELEASE_SIGNING_KEY }}
+        run: .github/scripts/sign-client-release.ps1 -FeedPath Releases/releases.win.json -Version ${{ steps.version.outputs.VERSION }} -OutDir Releases
+
       - name: Create and push tag
         run: |
           git config user.name "github-actions"
@@ -104,3 +112,10 @@ jobs:
           }
 
           vpk @uploadArgs
+
+      # vpk only uploads Velopack's own files; the signature goes up next to the package.
+      - name: Upload the package signature
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "LanyardClient-${{ steps.version.outputs.VERSION }}" (Get-ChildItem Releases/*.nupkg.sig).FullName --clobber

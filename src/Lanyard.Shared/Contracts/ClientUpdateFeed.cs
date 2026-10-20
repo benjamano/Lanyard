@@ -16,6 +16,11 @@ public class ClientUpdateFeedResponse
     // FileName as the local package path, so it has to stay a bare file name rather than a URL.
     public Dictionary<string, string> DownloadUrls { get; set; } = [];
 
+    // The release workflow's signature over the target package's manifest (ReleaseSigning), taken
+    // from the release's "<package>.sig" file. Null when the release has none; from 1.0.44 a kiosk
+    // refuses to update to a package without a valid one.
+    public string? PackageSignature { get; set; }
+
     public const string EmptyFeedJson = "{\"Assets\":[]}";
 }
 

@@ -1,5 +1,6 @@
 using Lanyard.Client.Security;
 using Lanyard.Shared.Contracts;
+using Lanyard.Shared.Updates;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -61,7 +62,22 @@ internal sealed class LanyardServerUpdateSource(Uri serverBaseUrl, Guid clientId
             _downloadUrls[downloadUrl.Key] = downloadUrl.Value;
         }
 
-        return VelopackAssetFeed.FromJson(envelope.Data.FeedJson);
+        VelopackAssetFeed feed = VelopackAssetFeed.FromJson(envelope.Data.FeedJson);
+
+        // Nothing is installed unless Lanyard's release workflow signed it (Security Issue 9.9):
+        // the hashes Velopack checks the download against come from this same server response, so
+        // without the signature a tampered server or connection could hand over any package.
+        foreach (VelopackAsset asset in feed.Assets)
+        {
+            string manifest = ReleaseSigning.Manifest(asset.Version.ToString(), asset.FileName, asset.Size, asset.SHA1, asset.SHA256);
+
+            if (!ReleaseSigning.Verify(manifest, envelope.Data.PackageSignature))
+            {
+                throw new InvalidOperationException($"Update {asset.Version} isn't signed by Lanyard's release workflow; not installing it.");
+            }
+        }
+
+        return feed;
     }
 
     public async Task DownloadReleaseEntry(IVelopackLogger logger, VelopackAsset releaseEntry, string localFile, Action<int> progress, CancellationToken cancelToken)
@@ -71,7 +87,12 @@ internal sealed class LanyardServerUpdateSource(Uri serverBaseUrl, Guid clientId
             throw new InvalidOperationException($"The server didn't say where to download {releaseEntry.FileName} from.");
         }
 
-        Console.WriteLine($"Downloading {releaseEntry.FileName} from {url}");
+        if (!ReleaseSigning.IsAllowedDownloadUrl(url))
+        {
+            throw new InvalidOperationException($"{releaseEntry.FileName} would be downloaded from somewhere other than GitHub over https; not downloading it.");
+        }
+
+        Console.WriteLine($"Downloading {releaseEntry.FileName}");
 
         HttpClientFileDownloader downloader = new();
         await downloader.DownloadFile(url, localFile, progress, headers: null, timeout: PackageDownloadTimeoutMinutes, cancelToken).ConfigureAwait(false);

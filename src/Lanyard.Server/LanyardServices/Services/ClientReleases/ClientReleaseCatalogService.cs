@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using System.Text.Json.Nodes;
+using Lanyard.Shared.Updates;
 
 namespace Lanyard.Application.Services.ClientReleases;
 
@@ -89,8 +90,21 @@ public sealed class ClientReleaseCatalogService(
 
             Result<ClientUpdateFeedResponse> built = BuildSingleVersionFeed(feedJson, version, release.AssetDownloadUrls);
 
-            if (built.IsSuccess)
+            if (built.IsSuccess && built.Data is not null)
             {
+                // Signed by the release workflow (see ReleaseSigning). Passed through as-is: the
+                // kiosk checks it, so a server that has been tampered with can't vouch for a package.
+                string packageFileName = built.Data.DownloadUrls.Keys.Single();
+
+                if (release.AssetDownloadUrls.TryGetValue(ReleaseSigning.SignatureFileName(packageFileName), out string? signatureUrl))
+                {
+                    built.Data.PackageSignature = (await _gitHub.DownloadStringAsync(signatureUrl, cancellationToken)).Trim();
+                }
+                else
+                {
+                    _logger.LogWarning("Kiosk release {Version} has no signature file; kiosks on 1.0.44 or later won't install it", version);
+                }
+
                 _cache.Set(cacheKey, built.Data, TimeSpan.FromHours(1));
             }
             else

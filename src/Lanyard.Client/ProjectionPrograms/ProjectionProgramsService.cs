@@ -1,3 +1,4 @@
+using Lanyard.Shared.Kiosk;
 using Lanyard.Client.ProjectionPrograms.Offline;
 using Lanyard.Client.SignalR;
 using Lanyard.Shared.DTO;
@@ -415,17 +416,23 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
             additionalBrowserArguments += $"--unsafely-treat-insecure-origin-as-secure=\"{origin}\" ";
         }
 
+        // Only on explicit opt-in, the same switch the hub connection uses (Security Issue 9.10):
+        // for a dev server on the .NET dev cert, which is untrusted on other machines. A real
+        // server has a valid certificate, and accepting any certificate would let anyone on the
+        // venue network stand in for it.
+        if (KioskUrls.AllowInsecureSsl())
+        {
+            additionalBrowserArguments += "--ignore-certificate-errors ";
+        }
+
         additionalBrowserArguments +=
-            // The server uses the .NET dev cert over HTTPS, which is only valid for localhost and
-            // untrusted on other machines; accept it so the kiosk loads without a cert interstitial.
-            // The origin stays HTTPS (a valid secure context for camera + WebRTC).
-            "--ignore-certificate-errors " +
             // Real LAN host ICE candidates (not mDNS .local names) so cross-client WebRTC
             // streams connect, and no gesture requirement for audible playback.
             "--disable-features=WebRtcHideLocalIpsWithMdns " +
             "--autoplay-policy=no-user-gesture-required";
 
-        _logger.LogInformation("Opening page with URL: {url}", url);
+        // Without the query string: it holds the kiosk's viewer token.
+        _logger.LogInformation("Opening page with URL: {url}", KioskUrls.WithoutQuery(url));
 
         TaskCompletionSource closedTcs = new();
 

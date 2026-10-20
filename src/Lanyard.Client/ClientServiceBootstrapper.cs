@@ -49,6 +49,7 @@ public static class ClientServiceBootstrapper
                 otel.IncludeScopes = true;
                 otel.SetResourceBuilder(ResourceBuilder.CreateDefault()
                     .AddService(serviceName: "Lanyard.Client", serviceInstanceId: Environment.MachineName));
+                otel.AddProcessor(new RedactingLogProcessor(knownSecrets));
                 otel.AddOtlpExporter();
             });
 

@@ -1,3 +1,4 @@
+using Lanyard.Shared.Kiosk;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.IO;
@@ -50,9 +51,9 @@ public class VideoPublisherWindowService(ILogger<VideoPublisherWindowService> lo
                 $"--window-size=480,360 " +
                 $"--no-first-run --disable-session-crashed-bubble " +
                 mediaCaptureArgs +
-                // Accept the server's HTTPS dev cert (localhost-only, untrusted elsewhere) so the
-                // publisher loads without an interstitial; the origin stays a secure context.
-                $"--ignore-certificate-errors " +
+                // The server's HTTPS dev cert (localhost-only, untrusted elsewhere) is only accepted on
+                // explicit opt-in, as for the hub connection (Security Issue 9.10).
+                (KioskUrls.AllowInsecureSsl() ? "--ignore-certificate-errors " : string.Empty) +
                 // Real LAN host ICE candidates instead of mDNS .local hostnames, and no
                 // throttling of the hidden window's timers/rendering while it streams.
                 $"--disable-features=WebRtcHideLocalIpsWithMdns " +
@@ -61,7 +62,8 @@ public class VideoPublisherWindowService(ILogger<VideoPublisherWindowService> lo
                 $"--disable-backgrounding-occluded-windows " +
                 $"--disable-renderer-backgrounding";
 
-            _logger.LogInformation("Starting video publisher window with URL: {Url}", url);
+            // Without the query string: it holds the publisher token.
+            _logger.LogInformation("Starting video publisher window with URL: {Url}", KioskUrls.WithoutQuery(url));
 
             _publisherProcess = Process.Start(new ProcessStartInfo
             {
