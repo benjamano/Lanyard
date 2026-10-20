@@ -64,6 +64,10 @@ public static class HelpRegistry
     public const string MyTraining = "my-training";
     public const string Rota = "rota";
     public const string MyShifts = "my-shifts";
+    public const string Users = "users";
+    public const string Compliance = "compliance";
+    public const string Onboarding = "onboarding";
+    public const string Account = "account";
 
     public static IReadOnlyList<HelpArea> Areas { get; } =
     [
@@ -111,6 +115,57 @@ public static class HelpRegistry
             ["/manage/rota"],
             Roles: "Admin,Manager",
             Feature: CompanyFeature.StaffScheduling),
+
+        new(Account,
+            "Your Account",
+            "Your details, notifications, password, Face ID or fingerprint sign-in and two-factor authentication.",
+            HelpAudience.Everyone,
+            () => new Icons.Regular.Size20.Person(),
+            [
+                new("details", "Your Details"),
+                new("notifications", "Notifications"),
+                new("sign-in", "Signing In Securely")
+            ],
+            ["/account"]),
+
+        new(Users,
+            "Users & Roles",
+            "Adding staff, their profiles, roles and permissions, locations, company features and sign-in security.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.PeopleTeam(),
+            [
+                new("overview", "Users"),
+                new("profile", "A Person's Profile"),
+                new("roles", "Roles & Permissions"),
+                new("locations", "Companies & Locations"),
+                new("security", "Sign-in & Security")
+            ],
+            ["/manage/users", "/manage/roles", "/manage/companies-locations"],
+            Roles: "Admin,Manager"),
+
+        new(Compliance,
+            "Compliance",
+            "Overdue training and expired or expiring staff documents, and how to clear them.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.ShieldCheckmark(),
+            [
+                new("overview", "Overview")
+            ],
+            ["/manage/compliance"],
+            Roles: "Admin,Manager"),
+
+        new(Onboarding,
+            "Onboarding & Staff Documents",
+            "The welcome email for new starters, and keeping staff documents such as certificates up to date.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.DocumentBulletList(),
+            [
+                new("welcome", "Welcome Email"),
+                new("documents", "Staff Documents")
+            ],
+            ["/manage/onboarding", "/manage/staff-documents"],
+            Roles: "Admin,Manager",
+            Feature: CompanyFeature.Onboarding),
 
         new(ManageTraining,
             "Training",

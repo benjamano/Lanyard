@@ -32,6 +32,10 @@
         <FluentNumberInput TValue="int" Value="@_days" ValueChanged="@OnDaysChangedAsync"
                            Min="ComplianceQuery.MinExpiryWindowDays" Max="ComplianceQuery.MaxExpiryWindowDays"
                            Label="Documents expiring within (days)" />
+
+        <div class="compliance-help">
+            <HelpButton AreaKey="@HelpRegistry.Compliance" />
+        </div>
     </div>
 
     @if (_error is not null)
