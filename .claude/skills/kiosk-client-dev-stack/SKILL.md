@@ -14,7 +14,7 @@ A full solution build can be blocked by file locks while the app is running unde
 ## Launching the server
 
 Run `Lanyard.App.exe` with:
-- **Working directory** set to the `LanyardApp` project folder, so `appsettings.local.json` (which holds `Clients:SharedSecret`) loads.
+- **Working directory** set to the `LanyardApp` project folder, so `appsettings.local.json` (any local overrides) loads.
 - `ASPNETCORE_URLS` including **https on 7175** — the kiosk client's config points at `https://localhost:7175`, so an http-only launch leaves the client unable to connect at all.
 - `ASPNETCORE_ENVIRONMENT=Development` — without it, `appsettings.Development.json` (which holds the local docker-compose Postgres `ConnectionStrings:DefaultConnection`) never loads, and the app throws `InvalidOperationException: Connection string 'DefaultConnection' is not configured` on startup, since `appsettings.json` deliberately ships an empty connection string.
 
@@ -23,9 +23,8 @@ Run `Lanyard.App.exe` with:
 The real, runnable binary is `build\Lanyard.Client.exe` at the **repo root** (the csproj sets `OutputPath=..\..\build\`). Don't launch from `src\Lanyard.Client\bin\Debug\net10.0-windows\` — that can hold stale leftovers that predate the current server handshake and will 401 against a fresh server. (If the client fails to launch entirely with a runtime-not-found-looking error, see the `client-build-troubleshooting` skill — that's usually a stray-DLL issue in `build\`, not this handshake issue.)
 
 Required client env vars:
-- `LANYARD_SERVER_URL`
-- `LANYARD_CLIENT_SHARED_SECRET` — both of these are sourced from `%APPDATA%\LanyardClient\config.json` in a real install.
-- `LANYARD_CLIENT_ID` — the specific client's row id in the `Clients` table.
+- `LANYARD_SERVER_URL` — sourced from `%APPDATA%\LanyardClient\config.json` in a real install.
+- The client id comes from `%UserProfile%\lanyardClient\client-id.txt`, and the kiosk's own credential from `credential.bin` next to it (DPAPI). A kiosk with no credential shows a pairing code full screen: pair it from Manage > Clients > Add kiosk. The old `LANYARD_CLIENT_SHARED_SECRET` is no longer accepted by the server.
 - For test runs, also set `LANYARD_CLIENT_SKIP_ADDING_STARTUP_TASK=true` and `LANYARD_CLIENT_SKIP_ADDING_WATCHDOG_STARTUP_TASK=true` to avoid registering Windows scheduled tasks as a side effect of testing.
 
 ## Troubleshooting the handshake

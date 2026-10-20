@@ -2,6 +2,7 @@
 @using Humanizer
 
 @inject IKioskHealthService _kioskHealthService
+@inject IKioskSelfTestService _kioskSelfTestService
 
 @if (_loading)
 {
@@ -21,6 +22,11 @@ else
                 <span class="client-health-muted">Last report @KioskHealthDisplay.Ago(_health?.SinceLastHeartbeat ?? TimeSpan.Zero)</span>
             }
         </div>
+
+        @if (_selfTestLine != null)
+        {
+            <p class="client-health-muted client-health-self-test">@_selfTestLine Run one with the Self-test button on the Clients page.</p>
+        }
 
         @if (KioskHealthDisplay.Details(_health, includeLastHeartbeat: false).Any())
         {
@@ -89,6 +95,7 @@ else
     private ClientHealthSnapshot? _snapshot;
     private bool _loading = true;
     private string? _error;
+    private string? _selfTestLine;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -101,6 +108,10 @@ else
             _health = result.Data.GetValueOrDefault(ClientId);
             _snapshot = _health?.Snapshot;
             _error = null;
+
+            // Only shown when it loads: a failure here shouldn't hide the health above it.
+            Result<List<KioskSelfTestRunView>> selfTests = await _kioskSelfTestService.GetHistoryAsync(ClientId, take: 1);
+            _selfTestLine = selfTests.IsSuccess ? KioskSelfTestDisplay.HealthLine(selfTests.Data?.FirstOrDefault(), DateTime.UtcNow) : null;
         }
         else
         {

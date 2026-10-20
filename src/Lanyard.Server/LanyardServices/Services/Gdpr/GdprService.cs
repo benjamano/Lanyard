@@ -438,6 +438,13 @@ public class GdprService : IGdprService
 
             ctx.TimeOffRequests.RemoveRange(timeOffRequests);
 
+            // Product feedback they sent: their own words, so it goes with them.
+            List<UserFeedback> feedback = await ctx.UserFeedback
+                .Where(x => x.UserId == userId)
+                .ToListAsync();
+
+            ctx.UserFeedback.RemoveRange(feedback);
+
             List<TimeOffAllowance> personalAllowances = await ctx.TimeOffAllowances
                 .Where(x => x.UserId == userId)
                 .ToListAsync();
