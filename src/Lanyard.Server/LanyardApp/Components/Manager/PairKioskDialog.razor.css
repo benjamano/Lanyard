@@ -1,0 +1,24 @@
+.pair-kiosk-facts {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    column-gap: 16px;
+    row-gap: 6px;
+    margin: 0;
+}
+
+.pair-kiosk-facts dt {
+    color: var(--colorNeutralForeground3);
+    font-weight: normal;
+}
+
+.pair-kiosk-facts dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+::deep .pair-kiosk-code input {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+}

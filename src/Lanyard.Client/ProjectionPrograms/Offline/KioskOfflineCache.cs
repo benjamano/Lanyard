@@ -1,3 +1,4 @@
+using Lanyard.Client.Security;
 using Lanyard.Shared.Contracts;
 using Lanyard.Shared.DTO;
 using Lanyard.Shared.Kiosk;
@@ -326,12 +327,7 @@ public class KioskOfflineCache(ILogger<KioskOfflineCache> logger) : IKioskOfflin
     {
         HttpRequestMessage request = new(HttpMethod.Get, path);
 
-        string? secret = Environment.GetEnvironmentVariable("LANYARD_CLIENT_SHARED_SECRET");
-
-        if (!string.IsNullOrWhiteSpace(secret))
-        {
-            request.Headers.Add(ClientConnectionQuery.SecretHeader, secret);
-        }
+        KioskCredentials.ApplyTo(request);
 
         return request;
     }

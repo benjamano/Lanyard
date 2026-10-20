@@ -1,0 +1,117 @@
+.feedback-page {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 8px;
+}
+
+.feedback-intro {
+    margin: 4px 0 0;
+    color: var(--colorNeutralForeground3);
+}
+
+.feedback-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.feedback-filters {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.feedback-summary {
+    color: var(--colorNeutralForeground3);
+    font-size: 0.9rem;
+}
+
+/* Cards rather than a grid: comments must wrap at phone width. */
+.feedback-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr));
+    gap: 12px;
+}
+
+.feedback-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 16px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+    min-width: 0;
+}
+
+    .feedback-card.unreviewed {
+        border-left: 4px solid var(--colorBrandBackground);
+    }
+
+.feedback-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+
+.feedback-score {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+}
+
+    .feedback-score.up {
+        color: var(--colorPaletteGreenForeground1, #107c10);
+    }
+
+    .feedback-score.down {
+        color: var(--colorPaletteRedForeground1, #d13438);
+    }
+
+.feedback-stars {
+    font-size: 1.25rem;
+    letter-spacing: 2px;
+}
+
+    .feedback-stars .filled {
+        color: #f5a623;
+    }
+
+    .feedback-stars .empty {
+        color: var(--colorNeutralStroke1);
+    }
+
+.feedback-comment {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+    .feedback-comment.none {
+        color: var(--colorNeutralForeground3);
+        font-style: italic;
+    }
+
+.feedback-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    color: var(--colorNeutralForeground3);
+    font-size: 0.85rem;
+    overflow-wrap: anywhere;
+}
+
+.feedback-page-link {
+    color: inherit;
+}
+
+.feedback-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+}

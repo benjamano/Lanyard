@@ -1,0 +1,190 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@if (isOpen)
+{
+    WalkthroughStep step = steps[currentIndex];
+    bool isFirst = currentIndex == 0;
+    bool isLast = currentIndex == steps.Count - 1;
+
+    @* Swallows clicks so the wizard can't move underneath the walkthrough. *@
+    <div class="cw-blocker" @onclick="@(() => { })"></div>
+    <div class="cw-spotlight" @ref="spotlightRef"></div>
+
+    <div class="cw-callout" @ref="calloutRef" role="dialog" aria-modal="true" aria-labelledby="course-walkthrough-title"
+         aria-describedby="course-walkthrough-body" tabindex="-1" @onkeydown="HandleKeyDownAsync">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8px">
+            <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center"
+                         HorizontalAlignment="HorizontalAlignment.SpaceBetween">
+                <FluentText Size="TextSize.Size200" Class="cw-counter">Step @(currentIndex + 1) of @steps.Count</FluentText>
+                <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" OnClick="SkipAsync">
+                    Skip tour
+                </FluentButton>
+            </FluentStack>
+
+            <FluentText As="TextTag.H5" Size="TextSize.Size400" Weight="TextWeight.Semibold" Id="course-walkthrough-title">
+                @step.Title
+            </FluentText>
+            <FluentText Id="course-walkthrough-body">@step.Body</FluentText>
+
+            <div class="cw-dots" aria-hidden="true">
+                @for (int i = 0; i < steps.Count; i++)
+                {
+                    <span class="cw-dot @(i == currentIndex ? "cw-dot-active" : string.Empty)"></span>
+                }
+            </div>
+
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.End" HorizontalGap="8px">
+                @if (!isFirst)
+                {
+                    <FluentButton OnClick="Back">Back</FluentButton>
+                }
+                <FluentButton Appearance="ButtonAppearance.Primary" OnClick="NextAsync" data-walkthrough-primary>
+                    @(isLast ? "Finish" : isFirst ? "Show me" : "Next")
+                </FluentButton>
+            </FluentStack>
+        </FluentStack>
+    </div>
+}
+
+@code {
+    // Selectors point at the real player controls in CourseWizardRunner.razor. The stepper and
+    // its items are FluentWizard internals; a selector that matches nothing just centres the card.
+    public const string StepperSelector = ".take-course-wizard-host .fluent-wizard > ol";
+    public const string QuizStepSelector = ".take-course-wizard-host .fluent-wizard > ol > li:last-child";
+    public const string ContentSelector = ".take-course-wizard-host .fluent-wizard-content";
+    public const string NextSelector = "#take-course-next-slot";
+    public const string PreviousSelector = "#take-course-previous-slot";
+
+    [Parameter]
+    public bool HasQuiz { get; set; }
+
+    [Parameter]
+    public int PassMarkPercent { get; set; }
+
+    // Fires when the tour closes, whether the user finished it or skipped it.
+    [Parameter]
+    public EventCallback OnFinished { get; set; }
+
+    public bool IsOpen => isOpen;
+
+    private sealed record WalkthroughStep(string? Selector, string Title, string Body);
+
+    private List<WalkthroughStep> steps = [];
+    private bool isOpen;
+    private int currentIndex;
+    private bool needsPlacement;
+    private ElementReference spotlightRef;
+    private ElementReference calloutRef;
+
+    public void Start()
+    {
+        steps = BuildSteps();
+        currentIndex = 0;
+        isOpen = true;
+        needsPlacement = true;
+        StateHasChanged();
+    }
+
+    private List<WalkthroughStep> BuildSteps()
+    {
+        List<WalkthroughStep> list =
+        [
+            new(null, "Welcome to your training",
+                "Here's a quick tour of how a course works. It only takes a minute, and you can skip it at any time."),
+            new(StepperSelector, "Sections",
+                "Each course is split into sections, listed here in order. The one you're on is highlighted, and finished sections get a tick."),
+            new(ContentSelector, "Read each section",
+                "The section's content appears here. Read it all the way through and scroll down to the end."),
+            new(NextSelector, "Next",
+                "Next takes you to the following section. It unlocks once you've scrolled to the bottom of the section you're on."),
+            new(PreviousSelector, "Previous",
+                "Previous takes you back a section, so you can read something again at any point.")
+        ];
+
+        if (HasQuiz)
+        {
+            list.Add(new(QuizStepSelector, "The quiz",
+                $"After the last section there's a short quiz, one question at a time. You need {PassMarkPercent}% to pass, and you can retry if you don't get there first time."));
+        }
+
+        list.Add(new(null, "You're ready",
+            "That's everything. If you want to see this again, press How this works at the top of the course."));
+
+        return list;
+    }
+
+    private async Task NextAsync()
+    {
+        if (currentIndex == steps.Count - 1)
+        {
+            await CloseAsync();
+            return;
+        }
+
+        currentIndex++;
+        needsPlacement = true;
+    }
+
+    private void Back()
+    {
+        if (currentIndex > 0)
+        {
+            currentIndex--;
+            needsPlacement = true;
+        }
+    }
+
+    private Task SkipAsync() => CloseAsync();
+
+    private async Task HandleKeyDownAsync(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "Escape":
+                await CloseAsync();
+                break;
+            case "ArrowRight":
+                await NextAsync();
+                break;
+            case "ArrowLeft":
+                Back();
+                break;
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        isOpen = false;
+        needsPlacement = false;
+
+        try
+        {
+            await JS.InvokeVoidAsync("courseWalkthrough.hide");
+        }
+        catch (JSDisconnectedException) { }
+
+        await OnFinished.InvokeAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!isOpen || !needsPlacement)
+        {
+            return;
+        }
+
+        needsPlacement = false;
+        await JS.InvokeVoidAsync("courseWalkthrough.show", spotlightRef, calloutRef, steps[currentIndex].Selector);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("courseWalkthrough.hide");
+        }
+        catch (JSDisconnectedException) { }
+        catch (InvalidOperationException) { }
+    }
+}

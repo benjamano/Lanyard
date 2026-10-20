@@ -34,6 +34,13 @@ public static class ClientHubMethods
     public const string CaptureProjectionWindow = "CaptureProjectionWindow";
 
     /// <summary>
+    /// Kiosk to server, returns a <c>KioskMediaTokenDTO</c>: a short-lived token for the song and
+    /// audio-clip URLs the kiosk streams from, which can't carry its credential in a header.
+    /// Empty for a kiosk still on the old shared secret.
+    /// </summary>
+    public const string IssueMediaToken = "IssueMediaToken";
+
+    /// <summary>
     /// Server to kiosk, client result: takes a <c>KioskSelfTestRequestDTO</c>, checks the kiosk's
     /// audio, DMX, packet capture and WebView2, and returns a <c>KioskSelfTestResultDTO</c>.
     /// </summary>

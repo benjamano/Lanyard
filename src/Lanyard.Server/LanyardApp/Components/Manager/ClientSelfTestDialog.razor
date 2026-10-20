@@ -1,0 +1,208 @@
+@using System.Globalization
+@using Lanyard.App.Components.Clients
+@using Lanyard.Shared.Enum
+
+@inject IKioskSelfTestService _kioskSelfTestService
+
+<FluentDialogBody>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="18px" Class="w-100">
+            <FluentText>
+                Check <strong>@ClientName</strong>'s speakers, DMX lights, laser tag network card and projection display.
+                It takes a few seconds. A short beep plays if nothing else is, so it's best run with someone by the kiosk.
+            </FluentText>
+
+            <div class="self-test-controls">
+                <FluentSwitch @bind-Value="_flashDmx" Label="Flash the lights during the DMX check" Disabled="@_running" />
+                <p class="self-test-muted self-test-small">
+                    Every light goes to full for one second. Skipped while a lighting scene is running.
+                </p>
+            </div>
+
+            <FluentStack HorizontalGap="8px" VerticalAlignment="VerticalAlignment.Center" Wrap="true">
+                <FluentButton Appearance="ButtonAppearance.Primary" Loading="@_running"
+                              IconStart="@(new Icons.Regular.Size20.Stethoscope())"
+                              OnClick="RunAsync">
+                    @(_running ? "Testing…" : _selected == null ? "Run self-test" : "Run again")
+                </FluentButton>
+            </FluentStack>
+
+            @if (_error != null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">
+                    @_error
+                </FluentMessageBar>
+            }
+
+            @if (_selected != null)
+            {
+                <section class="self-test-result" aria-label="Self-test result">
+                    <FluentMessageBar Intent="@KioskSelfTestDisplay.SummaryIntent(_selected)" AllowDismiss="false">
+                        @(KioskSelfTestDisplay.Summary(_selected) ?? _selected.Error)
+                    </FluentMessageBar>
+
+                    <p class="self-test-muted self-test-small">
+                        @(_selected.Id == _history.FirstOrDefault()?.Id ? "Latest run" : "Earlier run"):
+                        @FormatTime(_selected.RequestedAtUtc, "d MMM HH:mm") by @KioskSelfTestDisplay.RequestedBy(_selected)
+                        @if (!string.IsNullOrEmpty(_selected.ClientVersion))
+                        {
+                            <span> · Lanyard Client @_selected.ClientVersion</span>
+                        }
+                        <span> · as reported by the kiosk</span>
+                    </p>
+
+                    @foreach (KioskSelfTestGroupView group in _selected.Groups)
+                    {
+                        <div class="self-test-group">
+                            <h3 class="self-test-group-title">@group.Title</h3>
+                            <ul class="self-test-checks">
+                                @foreach (KioskSelfTestCheckView check in group.Checks)
+                                {
+                                    <li class="self-test-check @KioskSelfTestDisplay.OutcomeClass(check.Outcome)">
+                                        <span class="self-test-icon" aria-hidden="true">
+                                            <FluentIcon Value="@OutcomeIcon(check.Outcome)" Color="Color.Custom" CustomColor="currentColor" />
+                                        </span>
+                                        <div class="self-test-body">
+                                            <div class="self-test-heading">
+                                                <span class="self-test-title">@check.Title</span>
+                                                <span class="self-test-outcome">@KioskSelfTestDisplay.OutcomeLabel(check.Outcome)</span>
+                                            </div>
+                                            @if (!string.IsNullOrEmpty(check.Detail))
+                                            {
+                                                <div class="self-test-detail">@check.Detail</div>
+                                            }
+                                            @if (check.Hint != null)
+                                            {
+                                                <div class="self-test-hint"><strong>What to do:</strong> @check.Hint</div>
+                                            }
+                                            @if (KioskSelfTestDisplay.AskSomeoneNearby(check) is string ask)
+                                            {
+                                                <div class="self-test-ask">@ask</div>
+                                            }
+                                        </div>
+                                    </li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                </section>
+            }
+
+            @if (_history.Count > 1)
+            {
+                <details class="self-test-history">
+                    <summary>History (@_history.Count runs)</summary>
+                    <ul>
+                        @foreach (KioskSelfTestRunView run in _history)
+                        {
+                            <li>
+                                <button type="button" class="self-test-history-item @(run.Id == _selected?.Id ? "self-test-history-selected" : null)"
+                                        @onclick="() => _selected = run">
+                                    <span>@FormatTime(run.RequestedAtUtc, "d MMM HH:mm")</span>
+                                    <span class="self-test-history-result">@KioskSelfTestDisplay.ShortResult(run)</span>
+                                    <span class="self-test-muted">@KioskSelfTestDisplay.RequestedBy(run)</span>
+                                </button>
+                            </li>
+                        }
+                    </ul>
+                </details>
+            }
+            else if (_selected == null && !_loading && _error == null)
+            {
+                <p class="self-test-muted">This kiosk hasn't been tested yet. Results are kept for 90 days.</p>
+            }
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentStack HorizontalGap="8px" HorizontalAlignment="HorizontalAlignment.End">
+            <FluentButton OnClick="@CloseAsync">Close</FluentButton>
+        </FluentStack>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public Guid ClientId { get; set; }
+
+    [Parameter]
+    public string ClientName { get; set; } = "this kiosk";
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private static readonly CultureInfo UkCulture = new("en-GB");
+
+    private List<KioskSelfTestRunView> _history = [];
+    private KioskSelfTestRunView? _selected;
+    private string? _error;
+    private bool _running;
+    private bool _loading = true;
+    private bool _flashDmx;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Opening the dialog shows the last result straight away, so a test run yesterday is
+        // there to compare with before running another.
+        await LoadHistoryAsync();
+        _selected = _history.FirstOrDefault();
+        _loading = false;
+    }
+
+    private async Task LoadHistoryAsync()
+    {
+        Result<List<KioskSelfTestRunView>> result = await _kioskSelfTestService.GetHistoryAsync(ClientId);
+
+        if (result.IsSuccess)
+        {
+            _history = result.Data ?? [];
+        }
+        else
+        {
+            _error = result.Error;
+        }
+    }
+
+    private async Task RunAsync()
+    {
+        _running = true;
+        _error = null;
+
+        try
+        {
+            Result<KioskSelfTestRunView> result = await _kioskSelfTestService.RunAsync(ClientId, _flashDmx);
+
+            if (result.IsSuccess)
+            {
+                await LoadHistoryAsync();
+                _selected = _history.FirstOrDefault(x => x.Id == result.Data!.Id) ?? result.Data;
+            }
+            else
+            {
+                _error = result.Error;
+            }
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        await Dialog.CloseAsync();
+    }
+
+    private static Icon OutcomeIcon(SelfTestOutcome outcome) => outcome switch
+    {
+        SelfTestOutcome.Pass => new Icons.Filled.Size20.CheckmarkCircle(),
+        SelfTestOutcome.Warn => new Icons.Filled.Size20.Warning(),
+        SelfTestOutcome.Fail => new Icons.Filled.Size20.DismissCircle(),
+        _ => new Icons.Regular.Size20.SubtractCircle()
+    };
+
+    // Kiosks and the venue are in the UK, but the server runs in UTC, so ToLocalTime() is wrong.
+    private static string FormatTime(DateTime utc, string format)
+    {
+        return RotaTime.ToVenueLocal(utc).ToString(format, UkCulture);
+    }
+}

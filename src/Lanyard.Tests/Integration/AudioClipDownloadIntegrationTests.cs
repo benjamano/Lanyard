@@ -9,12 +9,10 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Lanyard.Tests.Integration;
 
-// The kiosk's clip download through the real pipeline, behind the kiosk shared secret.
+// The kiosk's clip download through the real pipeline, behind the kiosk's own credential.
 [TestClass]
 public class AudioClipDownloadIntegrationTests
 {
-    private const string SharedSecret = "integration-test-kiosk-secret";
-
     private CustomWebApplicationFactory _baseFactory = null!;
     private WebApplicationFactory<Program> _factory = null!;
 
@@ -22,7 +20,7 @@ public class AudioClipDownloadIntegrationTests
     public void Setup()
     {
         _baseFactory = new CustomWebApplicationFactory();
-        _factory = _baseFactory.WithWebHostBuilder(builder => builder.UseSetting("Clients:SharedSecret", SharedSecret));
+        _factory = _baseFactory.WithWebHostBuilder(_ => { });
         _factory.CreateClient();
     }
 
@@ -52,21 +50,23 @@ public class AudioClipDownloadIntegrationTests
         return clip.Id;
     }
 
-    private async Task<HttpResponseMessage> GetAsync(Guid clipId, string? secret)
+    private Task<string> KioskTokenAsync() => KioskTestSupport.RegisterKioskWithCredentialAsync(_factory, Guid.NewGuid());
+
+    private async Task<HttpResponseMessage> GetAsync(Guid clipId, string? token)
     {
         HttpClient http = _factory.CreateClient();
         using HttpRequestMessage request = new(HttpMethod.Get, $"/api/audioclips/{clipId}/audio");
 
-        if (secret is not null)
+        if (token is not null)
         {
-            request.Headers.Add(ClientConnectionQuery.SecretHeader, secret);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
         }
 
         return await http.SendAsync(request);
     }
 
     [TestMethod]
-    public async Task Audio_WithoutTheSecret_IsRejected()
+    public async Task Audio_WithoutACredential_IsRejected()
     {
         Guid clipId = await SeedClipAsync("closing.mp3");
 
@@ -76,11 +76,11 @@ public class AudioClipDownloadIntegrationTests
     }
 
     [TestMethod]
-    public async Task Audio_WithTheSecret_IsServedWithTheTypeOfItsExtension()
+    public async Task Audio_WithAKioskCredential_IsServedWithTheTypeOfItsExtension()
     {
         Guid clipId = await SeedClipAsync("birthday.wav");
 
-        using HttpResponseMessage response = await GetAsync(clipId, SharedSecret);
+        using HttpResponseMessage response = await GetAsync(clipId, await KioskTokenAsync());
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.AreEqual("audio/wav", response.Content.Headers.ContentType?.MediaType);
@@ -92,7 +92,7 @@ public class AudioClipDownloadIntegrationTests
     {
         Guid clipId = await SeedClipAsync("closing.mp3", deleted: true);
 
-        using HttpResponseMessage response = await GetAsync(clipId, SharedSecret);
+        using HttpResponseMessage response = await GetAsync(clipId, await KioskTokenAsync());
 
         Assert.AreEqual(HttpStatusCode.NotFound, response.StatusCode);
     }
