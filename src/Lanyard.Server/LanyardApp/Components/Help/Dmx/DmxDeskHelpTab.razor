@@ -1,0 +1,31 @@
+<HelpTab>
+    <FluentText>
+        The <a href="/dmx">DMX Desk</a> controls the venue's lighting through a kiosk's DMX output. It needs the
+        Admin or CanManageDmxSystems role. Start by choosing the kiosk (client) whose lights you want to control.
+    </FluentText>
+
+    <HelpSection Title="The desk">
+        <ul>
+            <li>Each slider is one DMX channel. Drag it to set the level.</li>
+            <li><strong>Group by Fixture</strong> groups the sliders by light. <strong>Show all channels</strong> lists them
+                in order, with unpatched channels (ones no fixture uses) at the end.</li>
+            <li><strong>Fixture Preview</strong> shows each light as a coloured light on screen, so you can see a scene
+                without being in the room.</li>
+        </ul>
+    </HelpSection>
+
+    <HelpSection Title="Blind editing">
+        <FluentText>
+            With <strong>Blind Editing Mode</strong> on, you can change a scene without the real lights following.
+            Turning it off makes the desk drive the lights live, and stops any scenes running on that kiosk so
+            they don't fight you for the channels.
+        </FluentText>
+    </HelpSection>
+
+    <HelpSection Title="Which output the kiosk uses">
+        <FluentText>
+            On <a href="/manage/clients">Clients</a>, open the kiosk's <strong>Settings</strong>, go to the
+            <strong>DMX</strong> tab and pick the device under <strong>Use this Device</strong>.
+        </FluentText>
+    </HelpSection>
+</HelpTab>

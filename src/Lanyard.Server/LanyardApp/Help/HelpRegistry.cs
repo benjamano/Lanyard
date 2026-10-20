@@ -73,6 +73,10 @@ public static class HelpRegistry
     public const string Announcements = "announcements";
     public const string Files = "files";
     public const string Dashboards = "dashboards";
+    public const string Music = "music";
+    public const string Projection = "projection";
+    public const string Automation = "automation";
+    public const string Dmx = "dmx";
 
     public static IReadOnlyList<HelpArea> Areas { get; } =
     [
@@ -193,6 +197,58 @@ public static class HelpRegistry
             ],
             ["/files"],
             Roles: "Admin,CanManageFiles"),
+
+        new(Music,
+            "Music & Audio Clips",
+            "Playing music on a kiosk, the music schedule for each time of day, and audio clips over the music.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.MusicNote2(),
+            [
+                new("player", "Music"),
+                new("schedule", "Music Schedule"),
+                new("clips", "Audio Clips")
+            ],
+            ["/music", "/manage/music-schedule", "/manage/audio-clips"],
+            Roles: "Admin,Manager,CanControlMusic,CanPlayAudioClips"),
+
+        new(Projection,
+            "Projection",
+            "Building projection programs, controlling what's on screen, and step templates.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.ProjectionScreenText(),
+            [
+                new("programs", "Programs"),
+                new("control", "Projection Control"),
+                new("templates", "Templates")
+            ],
+            ["/manage/projectionprograms", "/manage/projectioncontrol", "/manage/projectiontemplates"],
+            Roles: "Admin,Manager"),
+
+        new(Automation,
+            "Automation",
+            "Rules that run music, projection, lighting and audio clips by themselves, and the execution log.",
+            HelpAudience.Admins,
+            () => new Icons.Regular.Size20.SettingsCogMultiple(),
+            [
+                new("rules", "Rules & Triggers"),
+                new("conditions", "Conditions & Actions"),
+                new("log", "Execution Log")
+            ],
+            ["/automation"],
+            Roles: "Admin"),
+
+        new(Dmx,
+            "DMX Lighting",
+            "The DMX desk, setting up fixtures, and building and running lighting scenes.",
+            HelpAudience.Admins,
+            () => new Icons.Regular.Size20.Lightbulb(),
+            [
+                new("desk", "The Desk"),
+                new("fixtures", "Fixtures"),
+                new("scenes", "Scenes")
+            ],
+            ["/dmx"],
+            Roles: "Admin,CanManageDmxSystems"),
 
         new(Users,
             "Users & Roles",
