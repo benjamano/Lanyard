@@ -754,7 +754,42 @@
       "New guides for Users & Roles, Compliance, Onboarding & Staff Documents and Your Account (notifications, Face ID or fingerprint sign-in and two-factor authentication), each with a Help button on its pages.",
       "Training help now says correctly that staff are emailed when a course is assigned and when it's due within 7 days.",
       "New guides for Chat (conversations, messages, reporting and blocking), Chat Channels & Reports, Announcements, the File Manager and Dashboards (including what every widget shows), each with a Help button on its pages.",
-      "New guides for Music & Audio Clips (the player, the music schedule and audio clips), Projection (programs, live control and templates), Automation (every trigger, condition and action, and the execution log) and DMX Lighting (the desk, fixtures and scenes)."
+      "New guides for Music & Audio Clips (the player, the music schedule and audio clips), Projection (programs, live control and templates), Automation (every trigger, condition and action, and the execution log) and DMX Lighting (the desk, fixtures and scenes).",
+      "New staff now get a short guided tour the first time they open a training course. It highlights the list of sections, where the content goes, and the Next and Previous buttons, and explains the quiz and its pass mark.",
+      "The tour only starts by itself until someone has finished or skipped it once, on any device. Press How this works at the top of a course to see it again. Managers can also run it from a course preview to see what their staff see.",
+      "Added a kiosk self-test. On Manage > Clients, the new Self-test button checks a kiosk's speakers, DMX lighting interface, laser tag network card and projection display, and shows a pass/fail checklist with what to do about anything that failed. It's for setting up a new venue PC or working out why one is misbehaving.",
+      "The self-test plays a short beep so someone by the kiosk can hear the speakers work, but skips it while music or an audio clip is playing. It can also flash every light for a second, but only if you ask and no lighting scene is running.",
+      "Self-test results are kept for 90 days, so you can compare a kiosk with how it was last week. The kiosk's Health tab shows when it was last tested."
+    ]
+  },
+  {
+    "version": "1.4.17",
+    "releaseDate": "2026-10-19",
+    "summary": "Each kiosk gets its own sign-in instead of one password shared by every kiosk, and new kiosks are added by typing in a pairing code.",
+    "details": [
+      "Kiosks are moving from one shared password to their own credential, so the server always knows which kiosk is talking to it and only ever shows it your company's music, files and screens.",
+      "Manage > Clients shows how each kiosk signed in last time. Kiosks still on the old shared password are marked \"Shared secret\". They move over by themselves once they update to the latest kiosk software, and nothing changes for them until then.",
+      "A kiosk the server has never seen is no longer added to the Clients list automatically. Add a new kiosk by pairing it instead.",
+      "To pair a kiosk, start Lanyard Client on the PC and it shows an 8-character pairing code. On Manage > Clients, press Add kiosk and type the code in. You'll see the PC's name, IP address and software version, so you can check it's the right one. Give it a name, pick its location and press Approve. It connects by itself a few seconds later.",
+      "Codes last 15 minutes. You can also press Reject if a code isn't one you expected. Only Admins can pair kiosks, and only into the company they're signed in to.",
+      "Pairing a PC that is already one of your kiosks, for example after it was reset, keeps all its settings.",
+      "Kiosk software 1.0.43: a kiosk your server already knows switches to its own credential by itself the first time it starts, with no code needed. A new kiosk shows its pairing code full screen until an Admin approves it.",
+      "The kiosk keeps its credential encrypted so only that PC can use it, and removes the old shared password from its settings file once it has switched.",
+      "Kiosks no longer put a password in the web addresses they use to play songs and audio clips. They use a short-lived pass instead, which only works for playing audio.",
+      "Each kiosk's settings have a new Security tab. It shows how the kiosk signs in, when its credential was issued and last used, and its history.",
+      "Rotate credential gives a connected kiosk a new credential and retires the old one, for example if you think it was copied. The old one stops working only once the kiosk has saved the new one, so it can't be locked out half way.",
+      "Revoke disconnects a kiosk straight away and stops it connecting again. It shows a pairing code instead, and works again once an Admin pairs it. Its settings are kept."
+    ]
+  },
+  {
+    "version": "1.4.18",
+    "releaseDate": "2026-10-19",
+    "summary": "The old shared kiosk password is switched off: every kiosk now signs in with its own credential. Send feedback about Lanyard from the top bar, and rate it out of 5 stars.",
+    "details": [
+      "Kiosks can no longer connect with the password that used to be shared by every kiosk. Each one uses its own credential, which an Admin can rotate or revoke.",
+      "A kiosk that still showed \"Shared secret\" on Manage > Clients can't connect any more. Pair it again with Add kiosk: it keeps its settings.",
+      "Tell us what you think: a new feedback button in the top bar lets you give Lanyard a thumbs up or down, with an optional comment, from any page. It goes straight to the Lanyard team.",
+      "Every month or so Lanyard asks you to rate it out of 5 stars and say why. Press Not now to be asked again in a week, or Don't ask again to stop it for good."
     ]
   }
 ]

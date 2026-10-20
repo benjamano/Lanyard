@@ -7,6 +7,7 @@
 @using Lanyard.Infrastructure.DTO.Training
 
 @inject ICourseAssignmentService _courseAssignmentService
+@inject ILogger<TakeCourse> _logger
 
 <PageTitle>@(assignment?.Course?.Name ?? "Training")</PageTitle>
 
@@ -19,11 +20,19 @@
 else
 {
     <FluentCard>
-        <FluentText As="TextTag.H4" Size="TextSize.Size500">@assignment.Course!.Name</FluentText>
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween"
+                     VerticalAlignment="VerticalAlignment.Center" Wrap="true">
+            <FluentText As="TextTag.H4" Size="TextSize.Size500">@assignment.Course!.Name</FluentText>
+            <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.QuestionCircle())"
+                          OnClick="@(() => runnerRef?.StartWalkthrough())">
+                How this works
+            </FluentButton>
+        </FluentStack>
 
-        <CourseWizardRunner Course="assignment.Course" EnableScrollGate="true"
+        <CourseWizardRunner @ref="runnerRef" Course="assignment.Course" EnableScrollGate="true"
                              GradeQuizAsync="GradeAsync" OnPassed="ShowCompletedDialogAsync"
-                             OnSectionTransition="HandleSectionTransition" />
+                             OnSectionTransition="HandleSectionTransition"
+                             ShowWalkthrough="showWalkthrough" OnWalkthroughFinished="HandleWalkthroughFinishedAsync" />
     </FluentCard>
 }
 
@@ -34,6 +43,9 @@ else
     private CourseAssignment? assignment;
     private bool isLoading;
     private string currentUserId = string.Empty;
+    private CourseWizardRunner? runnerRef;
+    private bool showWalkthrough;
+    private bool walkthroughRecorded;
 
     protected override async Task OnInitializedAsync()
     {
@@ -72,7 +84,41 @@ else
         }
 
         assignment = loadResult.Data;
+
+        // Not being able to check is no reason to block the course - just don't start the tour.
+        Result<bool> walkthroughResult = await _courseAssignmentService.ShouldShowCourseWalkthroughAsync(currentUserId);
+
+        if (walkthroughResult.IsSuccess)
+        {
+            showWalkthrough = walkthroughResult.Data;
+            walkthroughRecorded = !walkthroughResult.Data;
+        }
+        else
+        {
+            _logger.LogWarning("Could not check the course walkthrough for {UserId}: {Error}", currentUserId, walkthroughResult.Error);
+            walkthroughRecorded = true;
+        }
+
         isLoading = false;
+    }
+
+    // Finishing or skipping both count: the tour stops starting by itself after the first time.
+    // Replays from How this works don't write anything.
+    private async Task HandleWalkthroughFinishedAsync()
+    {
+        if (walkthroughRecorded)
+        {
+            return;
+        }
+
+        walkthroughRecorded = true;
+
+        Result<bool> result = await _courseAssignmentService.MarkCourseWalkthroughCompletedAsync(currentUserId);
+
+        if (!result.IsSuccess)
+        {
+            _logger.LogWarning("Could not save the course walkthrough for {UserId}: {Error}", currentUserId, result.Error);
+        }
     }
 
     private Task _pendingSectionTransition = Task.CompletedTask;
