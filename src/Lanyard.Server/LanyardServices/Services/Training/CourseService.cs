@@ -237,7 +237,7 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
                     Id = section.Id == Guid.Empty ? Guid.NewGuid() : section.Id,
                     CourseId = section.CourseId,
                     Title = section.Title.Trim(),
-                    BodyHtml = section.BodyHtml,
+                    BodyHtml = CourseHtml.Clean(section.BodyHtml),
                     SortOrder = nextSortOrder,
                     IsActive = true
                 };
@@ -248,7 +248,7 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
             {
                 targetSection = existingSection;
                 targetSection.Title = section.Title.Trim();
-                targetSection.BodyHtml = section.BodyHtml;
+                targetSection.BodyHtml = CourseHtml.Clean(section.BodyHtml);
                 targetSection.IsActive = true;
             }
 
