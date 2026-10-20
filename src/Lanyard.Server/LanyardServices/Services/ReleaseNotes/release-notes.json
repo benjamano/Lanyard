@@ -791,7 +791,9 @@
       "A kiosk that still showed \"Shared secret\" on Manage > Clients can't connect any more. Pair it again with Add kiosk: it keeps its settings.",
       "Tell us what you think: a new feedback button in the top bar lets you give Lanyard a thumbs up or down, with an optional comment, from any page. It goes straight to the Lanyard team.",
       "Every month or so Lanyard asks you to rate it out of 5 stars and say why. Press Not now to be asked again in a week, or Don't ask again to stop it for good.",
-      "Platform admins have a help page for Lanyard Feedback, with a Help button on the feedback inbox."
+      "Platform admins have a help page for Lanyard Feedback, with a Help button on the feedback inbox.",
+      "Kiosk projection screens only play programs the kiosk itself opened: a screen's web address no longer works on another computer or for another company's program, and it no longer shows the kiosk's and program's ids while loading.",
+      "A kiosk's list of cached songs is only shown on that kiosk's own page, not on every open Clients page."
     ]
   }
 ]

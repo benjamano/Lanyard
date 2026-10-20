@@ -3,10 +3,12 @@
 @attribute [Lanyard.App.Components.Layout.AllowWithoutTwoFactor]
 
 @using Lanyard.Application.Services
+@using Lanyard.Application.Services.VideoStreaming
 @using Lanyard.App.Components.Kiosk
 
 @inject IProjectionProgramService _projectionProgramService
 @inject IClientService _clientService
+@inject IVideoStreamTokenService _videoStreamTokenService
 
 <PageTitle>Kiosk</PageTitle>
 
@@ -22,11 +24,6 @@
 
                 <FluentSpinner Size="SpinnerSize.Large" />
             </FluentStack>
-            <FluentText Color="@Color.Info">
-                Client Id: @clientId
-                <br />
-                Projection Program Id: @projectionProgramId
-            </FluentText>
         </FluentStack>
     </FluentCard>
 }
@@ -105,6 +102,10 @@ else if (projectionProgram is not null && clientProjectionSettings is not null)
 
     private string? errorMessage { get; set; } = null;
 
+    // Deliberately the same for a missing, wrong or another kiosk's token, and for a program
+    // from another company.
+    private const string InvalidLinkMessage = "This display link isn't valid. Restart Lanyard Client on this PC to open it again.";
+
     // Matches ResolveScreen's fallback on the client, which treats an out-of-range or
     // absent display index as display 0.
     private int ResolvedDisplayIndex => DisplayIndex ?? 0;
@@ -125,6 +126,17 @@ else if (projectionProgram is not null && clientProjectionSettings is not null)
             return;
         }
 
+        // The page is anonymous (a kiosk's WebView2 has no sign-in), so knowing a kiosk's and a
+        // program's ids used to be enough to start or replace a run on a venue's screens and
+        // hardware (Security Issue 9.3). Only the kiosk itself can get this token, over its own
+        // authenticated hub connection, when it opens the window.
+        if (!_videoStreamTokenService.ValidateViewerToken(clientGuid, Token))
+        {
+            errorMessage = InvalidLinkMessage;
+
+            return;
+        }
+
         // The program and the client's settings are independent reads; overlap them.
         Task<Result<ProjectionProgram>> programTask = _projectionProgramService.GetProjectionProgramAsync(projectionProgramGuid);
         Task<Result<IEnumerable<ClientProjectionSettings>>> settingsTask = _clientService.GetClientProjectionSettingsAsync(clientGuid);
@@ -135,6 +147,17 @@ else if (projectionProgram is not null && clientProjectionSettings is not null)
         if (!getResult.IsSuccess || getResult.Data is null)
         {
             errorMessage = getResult.Error ?? "Projection program not found.";
+
+            return;
+        }
+
+        // Anonymous, so these reads aren't tenant-filtered: a valid kiosk must still only run its
+        // own company's programs.
+        Result<Client?> clientResult = await _clientService.GetClientFromIdAsync(clientGuid);
+
+        if (!clientResult.IsSuccess || clientResult.Data is null || clientResult.Data.CompanyId != getResult.Data.CompanyId)
+        {
+            errorMessage = InvalidLinkMessage;
 
             return;
         }
