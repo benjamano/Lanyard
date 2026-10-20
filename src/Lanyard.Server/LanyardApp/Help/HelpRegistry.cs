@@ -68,6 +68,11 @@ public static class HelpRegistry
     public const string Compliance = "compliance";
     public const string Onboarding = "onboarding";
     public const string Account = "account";
+    public const string Chat = "chat";
+    public const string ChatModeration = "chat-moderation";
+    public const string Announcements = "announcements";
+    public const string Files = "files";
+    public const string Dashboards = "dashboards";
 
     public static IReadOnlyList<HelpArea> Areas { get; } =
     [
@@ -127,6 +132,67 @@ public static class HelpRegistry
                 new("sign-in", "Signing In Securely")
             ],
             ["/account"]),
+
+        new(Chat,
+            "Chat",
+            "Messaging colleagues, groups and channels, replying and editing, and reporting or blocking someone.",
+            HelpAudience.Everyone,
+            () => new Icons.Regular.Size20.Chat(),
+            [
+                new("conversations", "Conversations"),
+                new("messages", "Messages"),
+                new("safety", "Reporting & Blocking")
+            ],
+            ["/chat"],
+            Feature: CompanyFeature.Chat),
+
+        new(Dashboards,
+            "Dashboards",
+            "Choosing your home screen, building dashboards, and what each widget shows.",
+            HelpAudience.Everyone,
+            () => new Icons.Regular.Size20.DataArea(),
+            [
+                new("overview", "Overview"),
+                new("editing", "Editing a Dashboard"),
+                new("widgets", "Widgets")
+            ],
+            ["/manage/dashboards"]),
+
+        new(ChatModeration,
+            "Chat Channels & Reports",
+            "Looking after location channels, pinned posts, and dealing with reported messages.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.ChatWarning(),
+            [
+                new("channels", "Channels"),
+                new("reports", "Reports")
+            ],
+            ["/manage/chat"],
+            Roles: "Admin,Manager",
+            Feature: CompanyFeature.Chat),
+
+        new(Announcements,
+            "Announcements",
+            "Posting notices to staff at a location, pinning, expiry and emailing them out.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.Megaphone(),
+            [
+                new("overview", "Announcements")
+            ],
+            ["/manage/announcements"],
+            Roles: "Admin,CanPostAnnouncements",
+            Feature: CompanyFeature.Announcements),
+
+        new(Files,
+            "File Manager",
+            "Folders, uploading, and moving, renaming and deleting your company's files.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.Folder(),
+            [
+                new("overview", "File Manager")
+            ],
+            ["/files"],
+            Roles: "Admin,CanManageFiles"),
 
         new(Users,
             "Users & Roles",

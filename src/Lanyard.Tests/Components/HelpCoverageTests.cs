@@ -34,11 +34,6 @@ public class HelpCoverageTests
         ["/video-publisher"] = "Rendered on kiosk screens, not by people",
 
         // Not written yet - each stacked help PR removes its own lines. Don't add to these.
-        ["/chat"] = "Pending help PR 4/6 (Comms)",
-        ["/manage/chat"] = "Pending help PR 4/6 (Comms)",
-        ["/manage/announcements"] = "Pending help PR 4/6 (Comms)",
-        ["/files"] = "Pending help PR 4/6 (Comms)",
-        ["/manage/dashboards"] = "Pending help PR 4/6 (Comms)",
         ["/music"] = "Pending help PR 5/6 (Venue tech)",
         ["/manage/music-schedule"] = "Pending help PR 5/6 (Venue tech)",
         ["/manage/audio-clips"] = "Pending help PR 5/6 (Venue tech)",

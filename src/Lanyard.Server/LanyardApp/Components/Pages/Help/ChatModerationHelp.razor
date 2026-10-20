@@ -1,0 +1,15 @@
+@page "/help/chat-moderation"
+@attribute [Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.Chat)]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.ChatModeration
+
+<HelpPage AreaKey="@HelpRegistry.ChatModeration">
+    <FluentTab Id="help-channels" Header="Channels" IconStart="@(new Icons.Regular.Size16.PeopleTeam())">
+        <ChatChannelsHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-reports" Header="Reports" IconStart="@(new Icons.Regular.Size16.Flag())" DeferredLoading="true">
+        <ChatReportsHelpTab />
+    </FluentTab>
+</HelpPage>

@@ -1,0 +1,17 @@
+@page "/help/dashboards"
+@attribute [Authorize]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.Dashboards
+
+<HelpPage AreaKey="@HelpRegistry.Dashboards">
+    <FluentTab Id="help-overview" Header="Overview" IconStart="@(new Icons.Regular.Size16.Info())">
+        <DashboardsOverviewHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-editing" Header="Editing a Dashboard" IconStart="@(new Icons.Regular.Size16.Edit())" DeferredLoading="true">
+        <EditingDashboardsHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-widgets" Header="Widgets" IconStart="@(new Icons.Regular.Size16.Grid())" DeferredLoading="true">
+        <WidgetsHelpTab />
+    </FluentTab>
+</HelpPage>
