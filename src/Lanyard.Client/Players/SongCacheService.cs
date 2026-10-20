@@ -1,3 +1,4 @@
+using Lanyard.Client.Security;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
@@ -57,7 +58,9 @@ public class SongCacheService : ISongCacheService, IDisposable
         _logger.LogInformation("SongCache: Cache miss for {SongId}, downloading", songId);
 
         string? downloaded = await DownloadToCache(songId);
-        return downloaded ?? BuildApiUrl(songId);
+
+        // Streamed by Media Foundation, which can't send headers: a media token goes in the URL.
+        return downloaded ?? await KioskMediaTokens.AppendToAsync(BuildApiUrl(songId));
     }
 
     public void SetActiveSong(Guid songId)
@@ -101,7 +104,10 @@ public class SongCacheService : ISongCacheService, IDisposable
             string url = BuildApiUrl(songId);
             string tempPath = cachedPath + ".tmp";
 
-            using HttpResponseMessage response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+            using HttpRequestMessage request = new(HttpMethod.Get, url);
+            KioskCredentials.ApplyTo(request);
+
+            using HttpResponseMessage response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
             response.EnsureSuccessStatusCode();
 
             await using (FileStream fs = File.Create(tempPath))
@@ -199,14 +205,9 @@ public class SongCacheService : ISongCacheService, IDisposable
     {
         string apiUrl = Environment.GetEnvironmentVariable("LANYARD_SERVER_URL")! + "/api";
 
-        // The secret is carried in the query string (not a header) because this URL is also handed
-        // directly to the audio player for streaming, which issues its own request without headers.
-        string? sharedSecret = Environment.GetEnvironmentVariable("LANYARD_CLIENT_SHARED_SECRET");
-        string secretQuery = string.IsNullOrWhiteSpace(sharedSecret)
-            ? string.Empty
-            : $"?secret={Uri.EscapeDataString(sharedSecret)}";
-
-        return $"{apiUrl}/music/audio/{songId}{secretQuery}";
+        // No credential here: a download sends it as a header, and a streamed URL gets a media
+        // token (KioskMediaTokens).
+        return $"{apiUrl}/music/audio/{songId}";
     }
 
     private void UpdateAccessTime(Guid songId)

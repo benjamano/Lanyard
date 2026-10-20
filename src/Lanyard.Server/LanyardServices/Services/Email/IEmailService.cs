@@ -1,4 +1,5 @@
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO.Feedback;
 using Lanyard.Infrastructure.DTO.Notifications;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
@@ -34,4 +35,7 @@ public interface IEmailService
     // An enquiry from the public homepage's contact form, to the site's contact address, with the
     // visitor as the reply-to.
     Task<Result<bool>> SendContactEnquiryEmailAsync(string toEmail, ContactEnquiry enquiry);
+
+    // A staff member's product feedback, to a platform admin, with the sender as the reply-to.
+    Task<Result<bool>> SendFeedbackReceivedEmailAsync(UserProfile admin, FeedbackEmail feedback);
 }

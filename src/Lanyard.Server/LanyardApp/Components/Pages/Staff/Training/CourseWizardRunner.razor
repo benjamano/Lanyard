@@ -95,14 +95,17 @@
                 bool onLastQuestion = !hasQuestions || currentQuestionIndex == Course.Questions.Count - 1;
                 bool showPrevious = isQuizStep ? (currentQuestionIndex > 0 || stepIndex > 0) : stepIndex > 0;
             }
-            <div>
-                @if (showPrevious)
+            <div id="take-course-previous-slot">
+                @* While the walkthrough runs on the first section there's no Previous yet, so it shows a
+                   disabled one to point at rather than an empty space. *@
+                @if (showPrevious || walkthroughRef?.IsOpen == true)
                 {
-                    <FluentButton OnClick="@(() => HandleWizardPreviousAsync(stepIndex))">Previous</FluentButton>
+                    <FluentButton Disabled="@(!showPrevious)"
+                                  OnClick="@(() => HandleWizardPreviousAsync(stepIndex))">Previous</FluentButton>
                 }
             </div>
             <FluentSpacer />
-            <div>
+            <div id="take-course-next-slot">
                 @if (isQuizStep && !onLastQuestion)
                 {
                     <FluentButton Appearance="ButtonAppearance.Primary" OnClick="GoToNextQuestion">Next</FluentButton>
@@ -130,6 +133,9 @@
     </FluentWizard>
 </div>
 
+<CourseWalkthrough @ref="walkthroughRef" HasQuiz="@(Course.Questions.Count > 0)"
+                   PassMarkPercent="Course.PassMarkPercent" OnFinished="HandleWalkthroughFinishedAsync" />
+
 @code {
     [Parameter, EditorRequired]
     public Course Course { get; set; } = null!;
@@ -151,6 +157,29 @@
     // finally ran, not when the learner actually moved to the next section.
     [Parameter]
     public Action<Guid?, Guid?, DateTime>? OnSectionTransition { get; set; }
+
+    // Starts the walkthrough by itself once the player has rendered. The page decides this, from
+    // whether the user has been through it before.
+    [Parameter]
+    public bool ShowWalkthrough { get; set; }
+
+    [Parameter]
+    public EventCallback OnWalkthroughFinished { get; set; }
+
+    private CourseWalkthrough? walkthroughRef;
+    private bool walkthroughAutoStarted;
+
+    public void StartWalkthrough()
+    {
+        walkthroughRef?.Start();
+        StateHasChanged();
+    }
+
+    private async Task HandleWalkthroughFinishedAsync()
+    {
+        StateHasChanged();
+        await OnWalkthroughFinished.InvokeAsync();
+    }
 
     protected StepperPosition stepperPosition = StepperPosition.Left;
 
@@ -183,6 +212,12 @@
         {
             _viewportRef = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("viewportWatcher.init", _viewportRef, 768);
+        }
+
+        if (ShowWalkthrough && !walkthroughAutoStarted)
+        {
+            walkthroughAutoStarted = true;
+            StartWalkthrough();
         }
 
         if (currentWizardStepIndex != lastTrackedStepIndexForTiming)

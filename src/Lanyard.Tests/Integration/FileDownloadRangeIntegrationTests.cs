@@ -9,8 +9,8 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Lanyard.Tests.Integration;
 
 // Drives the real FilesController / KioskMediaController through the HTTP pipeline (the test host
-// runs as Development, so files come from local disk and the unconfigured client secret allows
-// anonymous access) to prove Range requests produce a 206 with only the requested bytes.
+// runs as Development, so files come from local disk; FilesController is reached as a kiosk with
+// its own credential) to prove Range requests produce a 206 with only the requested bytes.
 [TestClass]
 public class FileDownloadRangeIntegrationTests
 {
@@ -62,6 +62,7 @@ public class FileDownloadRangeIntegrationTests
 
         using HttpRequestMessage request = new(HttpMethod.Get, $"/api/files/download/{file.Id}");
         request.Headers.Range = new RangeHeaderValue(10, 19);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await KioskTestSupport.RegisterKioskWithCredentialAsync(_factory, Guid.NewGuid()));
 
         HttpResponseMessage response = await client.SendAsync(request);
 
@@ -83,7 +84,10 @@ public class FileDownloadRangeIntegrationTests
         FileMetadata file = await SeedFileAsync("application/octet-stream", 40);
         HttpClient client = _factory.CreateClient();
 
-        HttpResponseMessage response = await client.GetAsync($"/api/files/download/{file.Id}");
+        using HttpRequestMessage request = new(HttpMethod.Get, $"/api/files/download/{file.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await KioskTestSupport.RegisterKioskWithCredentialAsync(_factory, Guid.NewGuid()));
+
+        HttpResponseMessage response = await client.SendAsync(request);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.AreEqual(40, (await response.Content.ReadAsByteArrayAsync()).Length);

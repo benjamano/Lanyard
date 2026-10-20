@@ -64,6 +64,8 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ClientRelease> ClientReleases { get; set; }
         public DbSet<ClientProjectionSettings> ClientProjectionSettings { get; set; }
         public DbSet<ClientHealthSnapshot> ClientHealthSnapshots { get; set; }
+        public DbSet<ClientCredential> ClientCredentials { get; set; }
+        public DbSet<ClientEnrolmentRequest> ClientEnrolmentRequests { get; set; }
         public DbSet<ClientSelfTestRun> ClientSelfTestRuns { get; set; }
         public DbSet<ClientSelfTestCheck> ClientSelfTestChecks { get; set; }
         public DbSet<ProjectionProgram> ProjectionPrograms { get; set; }
@@ -146,6 +148,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ChatBlock> ChatBlocks { get; set; }
         public DbSet<ChatReport> ChatReports { get; set; }
         public DbSet<ChatSuspension> ChatSuspensions { get; set; }
+        public DbSet<UserFeedback> UserFeedback { get; set; }
 
         // Connection string used only when the context is created without configured options -
         // i.e. by design-time tooling (dotnet ef migrations/database update). It reads
@@ -201,6 +204,21 @@ namespace Lanyard.Infrastructure.DataAccess
                     .HasForeignKey<ClientHealthSnapshot>(x => x.ClientId)
                     .OnDelete(DeleteBehavior.Cascade);
                 entity.Property(x => x.ClientVersion).HasMaxLength(ClientVersionFormat.MaxLength);
+            });
+
+            modelBuilder.Entity<ClientCredential>(entity =>
+            {
+                entity.HasOne(x => x.Client)
+                    .WithMany(x => x.Credentials)
+                    .HasForeignKey(x => x.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(x => new { x.ClientId, x.IsActive });
+            });
+
+            modelBuilder.Entity<ClientEnrolmentRequest>(entity =>
+            {
+                entity.HasIndex(x => new { x.PairingCodeHash, x.Status });
+                entity.HasIndex(x => x.ClientId);
             });
 
             modelBuilder.Entity<ClientSelfTestRun>(entity =>
@@ -918,6 +936,18 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<ChatSuspension>()
                 .HasIndex(x => new { x.UserId, x.CompanyId });
 
+            modelBuilder.Entity<UserFeedback>()
+                .HasIndex(x => x.CreatedUtc);
+
+            modelBuilder.Entity<UserFeedback>()
+                .HasIndex(x => new { x.UserId, x.CreatedUtc });
+
+            modelBuilder.Entity<UserFeedback>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             modelBuilder.Entity<ChatSuspension>()
                 .HasOne(x => x.User)
                 .WithMany()
@@ -1066,6 +1096,7 @@ namespace Lanyard.Infrastructure.DataAccess
 
             modelBuilder.Entity<ClientProjectionSettings>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientHealthSnapshot>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ClientCredential>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientSelfTestCheck>().HasQueryFilter(x => TenantFilterDisabled || x.Run!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableScreen>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableVideoDevice>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
