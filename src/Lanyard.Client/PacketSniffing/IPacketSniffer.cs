@@ -18,6 +18,12 @@ public interface IPacketSniffer
 
     DateTime? CaptureStartedUtc { get; }
 
+    /// <summary>
+    /// The BPF filter in use, or null when every packet is captured. With a filter, only game
+    /// packets reach the kiosk, so <see cref="LastPacketUtc"/> only moves when game packets arrive.
+    /// </summary>
+    string? CaptureFilter { get; }
+
     /// <summary>Any packet at all, which shows the card is plugged into something.</summary>
     DateTime? LastPacketUtc { get; }
 

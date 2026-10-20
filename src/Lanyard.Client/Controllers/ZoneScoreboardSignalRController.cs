@@ -8,6 +8,7 @@ using System.Text;
 using Lanyard.Infrastructure.Models.Dmx;
 using Lanyard.Infrastructure.DTO.ZoneScoreboard;
 using Lanyard.Client.PacketSniffing;
+using Lanyard.Shared.SignalR;
 
 namespace Lanyard.Client.Controllers;
 
@@ -22,7 +23,7 @@ public class ZoneScoreboardSignalRController(ILogger<ZoneScoreboardSignalRContro
     {
         _connection = connection;
 
-        _connection.On<ZoneScoreboardSettingsDTO>("ReceiveZoneScoreboardSettings", (settings) =>
+        _connection.On<ZoneScoreboardSettingsDTO>(ClientHubMethods.ReceiveZoneScoreboardSettings, (settings) =>
         {
             _logger.LogInformation("Received ZoneScoreboardSettingsUpdated event from server.");
             

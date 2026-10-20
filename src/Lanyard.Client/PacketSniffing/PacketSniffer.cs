@@ -26,6 +26,9 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
     private volatile ILiveDevice? _activeDevice;
     private volatile bool _isConfigured;
 
+    private readonly object _startLock = new();
+    private bool _promiscuous;
+
     public bool IsConfigured => _isConfigured;
     public bool IsCapturing => _activeDevice != null;
 
@@ -35,6 +38,9 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
     private long _lastGamePacketTicks;
 
     public string? PreferredMacAddress { get; private set; }
+
+    /// <summary>The BPF filter Npcap is applying, or null when every packet is captured.</summary>
+    public string? CaptureFilter { get; private set; }
     public string? ActiveDeviceName => _activeDevice?.Name;
     public DateTime? CaptureStartedUtc => FromTicks(ref _captureStartedTicks);
     public DateTime? LastPacketUtc => FromTicks(ref _lastPacketTicks);
@@ -47,7 +53,18 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
         return value == 0 ? null : new DateTime(value, DateTimeKind.Utc);
     }
 
-    public async Task StartSniffingAsync(ZoneScoreboardSettingsDTO settings)
+    public Task StartSniffingAsync(ZoneScoreboardSettingsDTO settings)
+    {
+        // Settings arrive on every connect and whenever an Admin saves them, possibly at once.
+        lock (_startLock)
+        {
+            StartSniffing(settings);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void StartSniffing(ZoneScoreboardSettingsDTO settings)
     {
         _isConfigured = true;
         PreferredMacAddress = settings.PreferredDeviceMacAddress;
@@ -62,6 +79,18 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
         }
 
         ApplyAddressFilter(settings);
+
+        string? captureFilter = null;
+
+        if (settings.UseCaptureFilter)
+        {
+            captureFilter = CaptureFilterBuilder.Build([settings.SourceIp], settings.DestinationIp);
+
+            if (captureFilter == null)
+            {
+                _logger.LogWarning("The capture filter is on but the source/destination IPs ({SourceIp} / {DestinationIp}) can't make one; capturing everything instead.", settings.SourceIp, settings.DestinationIp);
+            }
+        }
 
         PhysicalAddress.TryParse(settings.PreferredDeviceMacAddress, out PhysicalAddress? preferedInterfaceMacAddress);
 
@@ -81,8 +110,11 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
             return;
         }
 
-        if (ReferenceEquals(_activeDevice, device))
+        // The filter can change on a running capture; promiscuous mode only when the card is opened.
+        if (ReferenceEquals(_activeDevice, device) && _promiscuous == settings.PromiscuousCapture)
         {
+            ApplyCaptureFilter(device, captureFilter);
+
             _logger.LogInformation("Packet sniffer already running on {DeviceName}; re-applied filter settings without reopening.", device.Name);
             return;
         }
@@ -100,22 +132,59 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
             {
                 _logger.LogWarning(ex, "Error closing previous packet sniffing device {DeviceName}.", _activeDevice.Name);
             }
+
+            _activeDevice = null;
         }
 
         device.OnPacketArrival += OnPacketArrival;
 
         device.Open(new DeviceConfiguration
         {
-            Mode = DeviceModes.Promiscuous,
+            Mode = settings.PromiscuousCapture ? DeviceModes.Promiscuous : DeviceModes.None,
             ReadTimeout = 1000
         });
 
-        _logger.LogInformation("Started Packet Sniffer on device: {DeviceName} with MAC Address: {MacAddress}", device.Name, device.MacAddress);
+        _promiscuous = settings.PromiscuousCapture;
+
+        ApplyCaptureFilter(device, captureFilter);
+
+        _logger.LogInformation("Started Packet Sniffer on device: {DeviceName} with MAC Address: {MacAddress}, promiscuous: {Promiscuous}", device.Name, device.MacAddress, settings.PromiscuousCapture);
 
         device.StartCapture();
 
         Interlocked.Exchange(ref _captureStartedTicks, DateTime.UtcNow.Ticks);
         _activeDevice = device;
+    }
+
+    private void ApplyCaptureFilter(ILiveDevice device, string? captureFilter)
+    {
+        try
+        {
+            // An empty filter captures everything, which is how the kiosk always worked.
+            device.Filter = captureFilter ?? string.Empty;
+            CaptureFilter = captureFilter;
+
+            if (captureFilter != null)
+            {
+                _logger.LogInformation("Capture filter applied on {DeviceName}: {CaptureFilter}", device.Name, captureFilter);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Never let a filter Npcap won't take blind the kiosk: fall back to capturing everything.
+            _logger.LogWarning(ex, "Npcap rejected the capture filter {CaptureFilter}; capturing everything instead.", captureFilter);
+
+            try
+            {
+                device.Filter = string.Empty;
+            }
+            catch (Exception clearEx)
+            {
+                _logger.LogWarning(clearEx, "Couldn't clear the capture filter on {DeviceName}.", device.Name);
+            }
+
+            CaptureFilter = null;
+        }
     }
 
     private void ApplyAddressFilter(ZoneScoreboardSettingsDTO settings)

@@ -61,7 +61,8 @@ public static class SelfTestRules
         string? ActiveDeviceName,
         DateTime? CaptureStartedUtc,
         DateTime? LastPacketUtc,
-        DateTime? LastGamePacketUtc);
+        DateTime? LastGamePacketUtc,
+        bool CaptureFiltered = false);
 
     public sealed record ProjectionWindow(int DisplayIndex, bool IsLoaded, bool IsOffline);
 
@@ -305,7 +306,16 @@ public static class SelfTestRules
         // Too soon after starting to judge, e.g. the kiosk has just reconnected.
         bool justStarted = facts.CaptureStartedUtc != null && nowUtc - facts.CaptureStartedUtc.Value < TrafficWindow;
 
-        if (facts.LastPacketUtc == null || nowUtc - facts.LastPacketUtc.Value >= TrafficWindow)
+        if (facts.CaptureFiltered && (facts.LastGamePacketUtc == null || nowUtc - facts.LastGamePacketUtc.Value >= TrafficWindow))
+        {
+            // The capture filter drops everything but game messages, so silence between games
+            // says nothing about the cable or the network.
+            checks.Add(justStarted
+                ? Check(SelfTestCheckKeys.CaptureTraffic, SelfTestOutcome.Skipped, null, "Capture only just started. Run the test again in a minute.")
+                : Check(SelfTestCheckKeys.CaptureTraffic, SelfTestOutcome.Warn, SelfTestCodes.NoGamePackets,
+                    $"The capture filter is on, so only game messages are read, and none arrived in the last minute.{LastSeen(facts.LastGamePacketUtc, nowUtc)}"));
+        }
+        else if (facts.LastPacketUtc == null || nowUtc - facts.LastPacketUtc.Value >= TrafficWindow)
         {
             checks.Add(justStarted
                 ? Check(SelfTestCheckKeys.CaptureTraffic, SelfTestOutcome.Skipped, null, "Capture only just started. Run the test again in a minute.")

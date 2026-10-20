@@ -77,9 +77,15 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<bool>("PromiscuousCapture")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("SourceIp")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<bool>("UseCaptureFilter")
+                        .HasColumnType("boolean");
 
                     b.Property<int>("ZoneScoreboardVersion")
                         .HasColumnType("integer");

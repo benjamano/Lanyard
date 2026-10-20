@@ -791,7 +791,8 @@
       "A kiosk that still showed \"Shared secret\" on Manage > Clients can't connect any more. Pair it again with Add kiosk: it keeps its settings.",
       "Tell us what you think: a new feedback button in the top bar lets you give Lanyard a thumbs up or down, with an optional comment, from any page. It goes straight to the Lanyard team.",
       "Every month or so Lanyard asks you to rate it out of 5 stars and say why. Press Not now to be asked again in a week, or Don't ask again to stop it for good.",
-      "Kiosks use much less processing power while reading laser game traffic. They log far less during a game, handle game messages in the order the control box sent them, and send the scoreboard at most four updates a second, while game starts and ends still reach the server straight away."
+      "Kiosks use much less processing power while reading laser game traffic. They log far less during a game, handle game messages in the order the control box sent them, and send the scoreboard at most four updates a second, while game starts and ends still reach the server straight away.",
+      "A kiosk's Zone Scoreboard settings have two new switches. \"Only read laser game traffic\" has the network card throw away everything except the game's messages, which saves even more processing power on a busy network. \"Read traffic sent to other machines\" can be turned off where the control box sends to a broadcast address. Saved changes reach a connected kiosk straight away."
     ]
   }
 ]
