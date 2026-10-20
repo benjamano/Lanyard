@@ -19,17 +19,20 @@ public class GdprService : IGdprService
     private readonly IDbContextFactory<ApplicationDbContext> _factory;
     private readonly UserManager<UserProfile> _userManager;
     private readonly ISecurityService _securityService;
+    private readonly IFileService _fileService;
     private readonly ILogger<GdprService> _logger;
 
     public GdprService(
         IDbContextFactory<ApplicationDbContext> factory,
         UserManager<UserProfile> userManager,
         ISecurityService securityService,
+        IFileService fileService,
         ILogger<GdprService> logger)
     {
         _factory = factory;
         _userManager = userManager;
         _securityService = securityService;
+        _fileService = fileService;
         _logger = logger;
     }
 
@@ -70,6 +73,13 @@ public class GdprService : IGdprService
             if (!auditResult.IsSuccess)
             {
                 return Result<bool>.Fail($"Failed to record erasure audit trail: {auditResult.Error}");
+            }
+
+            Result<bool> documentsResult = await RemoveStaffDocumentsAsync(userId);
+
+            if (!documentsResult.IsSuccess)
+            {
+                return Result<bool>.Fail($"Failed to remove staff documents: {documentsResult.Error}");
             }
 
             Result<bool> anonymizeResult = await AnonymizeAttributionAsync(userId);
@@ -125,6 +135,74 @@ public class GdprService : IGdprService
             });
 
             await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    // Their right-to-work checks, ID and certificates: the rows and the files behind them.
+    // Deleting the user would cascade the rows away on its own, but the files would be left
+    // behind with nothing pointing at them (Security Issue 9.8). The rows are deactivated
+    // first because FileService refuses to delete a file an active staff document still uses,
+    // then each file goes through FileService, which removes the bytes from storage and the
+    // now-inactive rows with them. Every step is safe to repeat if an earlier attempt failed.
+    private async Task<Result<bool>> RemoveStaffDocumentsAsync(string userId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<StaffDocument> documents = await ctx.StaffDocuments
+                .Where(x => x.UserId == userId)
+                .ToListAsync();
+
+            if (documents.Count == 0)
+            {
+                return Result<bool>.Ok(true);
+            }
+
+            foreach (StaffDocument document in documents)
+            {
+                document.IsActive = false;
+            }
+
+            await ctx.SaveChangesAsync();
+
+            foreach (Guid fileId in documents.Select(x => x.FileMetadataId).Distinct())
+            {
+                Result<bool> deleted = await _fileService.DeleteRestrictedFileAsync(fileId, CancellationToken.None);
+
+                if (deleted.IsSuccess)
+                {
+                    continue;
+                }
+
+                // Uploaded before staff documents were made restricted and somehow missed by the
+                // migration that flagged them, or already deleted by an earlier attempt.
+                if (await ctx.FileMetadata.AsNoTracking().AnyAsync(x => x.Id == fileId && !x.IsRestricted))
+                {
+                    deleted = await _fileService.DeleteFileAsync(fileId, CancellationToken.None);
+                }
+                else if (!await ctx.FileMetadata.AsNoTracking().AnyAsync(x => x.Id == fileId))
+                {
+                    continue;
+                }
+
+                if (!deleted.IsSuccess)
+                {
+                    _logger.LogWarning("Could not delete staff document file {FileId} while erasing {UserId}: {Error}", fileId, userId, deleted.Error);
+                    return Result<bool>.Fail(deleted.Error ?? "A staff document's file couldn't be deleted.");
+                }
+            }
+
+            // FileService removes the rows that pointed at each file; this catches any it didn't.
+            await using ApplicationDbContext cleanup = await _factory.CreateDbContextAsync();
+            cleanup.StaffDocuments.RemoveRange(await cleanup.StaffDocuments.Where(x => x.UserId == userId).ToListAsync());
+            await cleanup.SaveChangesAsync();
 
             return Result<bool>.Ok(true);
         }
@@ -293,6 +371,17 @@ public class GdprService : IGdprService
             foreach (CourseAssignment assignment in assignedByRows)
             {
                 assignment.AssignedByUserId = null;
+            }
+
+            // Documents they uploaded for other people stay with those people; only the
+            // uploader's name is taken off them.
+            List<StaffDocument> documentsUploaded = await ctx.StaffDocuments
+                .Where(x => x.UploadedByUserId == userId)
+                .ToListAsync();
+
+            foreach (StaffDocument document in documentsUploaded)
+            {
+                document.UploadedByUserId = ApplicationDbContext.SystemDeletedUserPlaceholderId;
             }
 
             List<FileMetadata> uploadedFiles = await ctx.FileMetadata

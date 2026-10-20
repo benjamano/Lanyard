@@ -1,7 +1,7 @@
 # Data Retention & Erasure Policy
 
 > **Filled in from known operational details — still get a final legal/HR read before adopting.**
-> Last updated: 6 August 2026. Data controller / contact: Benjamin Mercer,
+> Last updated: 20 October 2026 (staff documents and erasure status: awaiting sign-off). Data controller / contact: Benjamin Mercer,
 > benmercer76@btinternet.com. Hosted on Railway (West Europe region); data does not leave the
 > UK/EU.
 
@@ -19,12 +19,24 @@
 
 ## Current implementation status
 
-The application currently uses **soft-delete only** (`DeleteDate` / `IsActive` flags); rows are
-never physically removed. This means:
+Most records are soft-deleted (`DeleteDate` / `IsActive` flags), and there is no general
+sweeper enforcing the retention periods above; the exceptions with their own purge job (chat,
+kiosk self-tests) are described below.
 
-- There is no automated enforcement of the retention periods above.
-- An erasure ("right to be forgotten") request cannot yet be fully satisfied in-app, because
-  soft-deleted rows and their personal data remain in the database.
+An erasure ("right to be forgotten") request **can** be satisfied in-app: an Admin erases a
+person from their user page, which runs `GdprService.EraseUserDataAsync`. It writes a
+`UserErasureRecord` audit row, scrubs the person's name from content they authored, deletes their
+own records, and deletes the account. Rota and timesheet records are kept and detached (see
+below).
+
+### Staff documents
+
+Staff documents are stored as restricted files: they never appear in the File Manager or reach a
+kiosk, and only Admins and the person's Managers can open them. Erasure deletes every one of the
+person's documents, including replaced (inactive) copies: the stored file is removed from the
+storage bucket, then its file and document rows. If a stored file can't be deleted, erasure stops
+with an error and can be retried; nothing is left half-erased. Documents the person uploaded for
+other people are kept, with the uploader shown as the deleted-user placeholder.
 
 ### Rota and timesheet records
 
@@ -163,18 +175,14 @@ the Admin while keeping the result.
 
 ## Required follow-up work (tracked separately)
 
-These are deliberately **not** implemented as part of the security-hardening change because they
-are destructive and need their own reviewed, tested change:
-
 1. **Retention sweeper** — a scheduled job that hard-deletes or anonymises records past their
-   retention period.
-2. **Erasure endpoint** — an admin action that hard-deletes or irreversibly anonymises a data
-   subject's personal data on a verified request (name, email, DOB → nulled/anonymised; logs
-   scrubbed of the subject's identifiers).
-3. **Subject Access Request (SAR) export** — an admin action that exports all personal data held
-   about a given staff member.
+   retention period (chat and kiosk self-tests already have one).
+2. **Subject Access Request (SAR) export** — there is no in-app export yet. Until there is, a SAR
+   is answered manually (below).
 
-## Handling a request today (manual process)
+## Handling a SAR today (manual process)
 
-Until the above is built, SAR / erasure requests must be handled manually by an administrator
-with database access.
+An administrator with database access gathers the person's records (account, attendance,
+staff documents and their files, training, time off, chat, feedback and notification settings)
+and sends them within one month of the request. Erasure no longer needs this: use the in-app
+erasure above.

@@ -1,5 +1,6 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
+using Lanyard.Application.Services;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Gdpr;
 using Lanyard.Infrastructure.DataAccess;
@@ -7,9 +8,11 @@ using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.Models.Dmx;
 using Lanyard.Infrastructure.Enum;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
@@ -65,7 +68,13 @@ public class GdprServiceTests
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options));
 
-        return new GdprService(factoryMock.Object, userManager, securityServiceMock.Object, NullLogger<GdprService>.Instance);
+        // A real FileService on the Development (local disk) path, so erasure can be checked
+        // down to the stored bytes.
+        Mock<IWebHostEnvironment> environment = new();
+        environment.SetupGet(x => x.EnvironmentName).Returns(Environments.Development);
+        FileService fileService = new(factoryMock.Object, Mock.Of<ICurrentUserAccessor>(), Mock.Of<ISongAnalysisQueue>(), environment.Object);
+
+        return new GdprService(factoryMock.Object, userManager, securityServiceMock.Object, fileService, NullLogger<GdprService>.Instance);
     }
 
     private static async Task<UserProfile> SeedUserAsync(
@@ -168,14 +177,14 @@ public class GdprServiceTests
         Mock<ISecurityService> securityServiceMock = BuildSecurityServiceMock(isAdmin: true, admin);
 
         // First CreateDbContextAsync call is the audit write, which must succeed and commit; the
-        // second is the anonymization pass, forced to fail here to prove the audit row (and the
+        // second is the first destructive step (staff documents), forced to fail here to prove the audit row (and the
         // still-intact account) survive a partial failure - the whole point of writing it first.
         Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
         factoryMock.SetupSequence(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options))
             .ThrowsAsync(new InvalidOperationException("simulated downstream failure"));
 
-        GdprService service = new(factoryMock.Object, userManager, securityServiceMock.Object, NullLogger<GdprService>.Instance);
+        GdprService service = new(factoryMock.Object, userManager, securityServiceMock.Object, Mock.Of<IFileService>(), NullLogger<GdprService>.Instance);
 
         Result<bool> result = await service.EraseUserDataAsync(target.Id);
 
@@ -610,4 +619,83 @@ public class GdprServiceTests
         Assert.IsFalse(await verifyCtx.StaffAvailabilities.IgnoreQueryFilters().AnyAsync(x => x.UserId == target.Id));
         Assert.IsNull((await verifyCtx.StaffAvailabilities.SingleAsync(x => x.Id == setForAdmin)).UpdatedByUserId);
     }
+
+    [TestMethod]
+    public async Task EraseUserDataAsync_RemovesTheirStaffDocuments_RowsFilesAndBytes()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        UserManager<UserProfile> userManager = BuildUserManager(options);
+
+        UserProfile admin = await SeedUserAsync(userManager, "Ada", "Min", "admin@example.com");
+        UserProfile target = await SeedUserAsync(userManager);
+        UserProfile colleague = await SeedUserAsync(userManager, "Col", "League", "colleague@example.com");
+
+        StaffDocumentType type = new() { Id = Guid.NewGuid(), CompanyId = 1, Name = "Passport", IsActive = true };
+        FileMetadata activeFile = NewStoredFile(restricted: true);
+        FileMetadata replacedFile = NewStoredFile(restricted: true);
+        FileMetadata legacyFile = NewStoredFile(restricted: false);
+        FileMetadata colleaguesFile = NewStoredFile(restricted: true);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.StaffDocumentTypes.Add(type);
+            ctx.FileMetadata.AddRange(activeFile, replacedFile, legacyFile, colleaguesFile);
+            ctx.StaffDocuments.AddRange(
+                NewDocument(target.Id, type.Id, activeFile.Id, isActive: true, uploadedBy: admin.Id),
+                NewDocument(target.Id, type.Id, replacedFile.Id, isActive: false, uploadedBy: admin.Id),
+                NewDocument(target.Id, type.Id, legacyFile.Id, isActive: true, uploadedBy: admin.Id),
+                // Uploaded by the person being erased, for someone else: stays, with the name taken off.
+                NewDocument(colleague.Id, type.Id, colleaguesFile.Id, isActive: true, uploadedBy: target.Id));
+            await ctx.SaveChangesAsync();
+        }
+
+        GdprService service = BuildService(options, userManager, BuildSecurityServiceMock(isAdmin: true, admin));
+
+        Result<bool> result = await service.EraseUserDataAsync(target.Id);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using ApplicationDbContext check = new(options);
+        Assert.IsFalse(await check.StaffDocuments.AnyAsync(x => x.UserId == target.Id));
+
+        foreach (FileMetadata erased in new[] { activeFile, replacedFile, legacyFile })
+        {
+            Assert.IsFalse(await check.FileMetadata.AnyAsync(x => x.Id == erased.Id), $"{erased.FileName} row left behind");
+            Assert.IsFalse(File.Exists(erased.FilePath), $"{erased.FileName} bytes left behind");
+        }
+
+        StaffDocument kept = await check.StaffDocuments.SingleAsync(x => x.UserId == colleague.Id);
+        Assert.AreEqual(ApplicationDbContext.SystemDeletedUserPlaceholderId, kept.UploadedByUserId);
+        Assert.IsTrue(File.Exists(colleaguesFile.FilePath));
+        File.Delete(colleaguesFile.FilePath);
+    }
+
+    private static FileMetadata NewStoredFile(bool restricted)
+    {
+        string path = Path.GetTempFileName();
+        File.WriteAllBytes(path, [1, 2, 3]);
+
+        return new FileMetadata
+        {
+            Id = Guid.NewGuid(),
+            FileName = Path.GetFileName(path),
+            FilePath = path,
+            FileSize = 3,
+            ContentType = "application/pdf",
+            UploadedAt = DateTime.UtcNow,
+            IsActive = true,
+            IsRestricted = restricted
+        };
+    }
+
+    private static StaffDocument NewDocument(string userId, Guid typeId, Guid fileId, bool isActive, string uploadedBy) => new()
+    {
+        Id = Guid.NewGuid(),
+        UserId = userId,
+        StaffDocumentTypeId = typeId,
+        FileMetadataId = fileId,
+        UploadedDate = DateTime.UtcNow,
+        UploadedByUserId = uploadedBy,
+        IsActive = isActive
+    };
 }
