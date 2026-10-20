@@ -14,10 +14,13 @@
 @* What staff at every company have said about Lanyard, from the header button and the star prompt.
    Platform admins only - each one is also emailed as it arrives. *@
 <div class="feedback-page">
-    <div>
-        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Lanyard Feedback</FluentText>
-        <p class="feedback-intro">Thumbs up/down from the header and star ratings from the occasional prompt, across every company.</p>
-    </div>
+    <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center" Wrap="true">
+        <div>
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Lanyard Feedback</FluentText>
+            <p class="feedback-intro">Thumbs up/down from the header and star ratings from the occasional prompt, across every company.</p>
+        </div>
+        <HelpButton AreaKey="@HelpRegistry.Feedback" Topic="inbox" />
+    </FluentStack>
 
     <div class="feedback-toolbar">
         <div class="feedback-filters" role="group" aria-label="Which feedback to show">

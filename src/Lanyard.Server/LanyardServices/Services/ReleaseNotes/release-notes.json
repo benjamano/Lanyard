@@ -792,5 +792,13 @@
       "Tell us what you think: a new feedback button in the top bar lets you give Lanyard a thumbs up or down, with an optional comment, from any page. It goes straight to the Lanyard team.",
       "Every month or so Lanyard asks you to rate it out of 5 stars and say why. Press Not now to be asked again in a week, or Don't ask again to stop it for good."
     ]
+  },
+  {
+    "version": "1.4.20",
+    "releaseDate": "2026-10-20",
+    "summary": "A new help page explains Lanyard Feedback: reading and reviewing feedback, and how staff send it.",
+    "details": [
+      "Platform admins now have a Help button on Lanyard Feedback, and a Lanyard Feedback card on the Help page. It covers the filters, replying, marking feedback as reviewed, and when the star rating prompt appears."
+    ]
   }
 ]

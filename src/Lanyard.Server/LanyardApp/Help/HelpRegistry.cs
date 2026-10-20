@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Lanyard.Infrastructure.Enum;
+using Lanyard.Infrastructure.Models;
 using Microsoft.FluentUI.AspNetCore.Components;
 using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons;
 
@@ -79,6 +80,7 @@ public static class HelpRegistry
     public const string Dmx = "dmx";
     public const string Kiosks = "kiosks";
     public const string Insights = "insights";
+    public const string Feedback = "feedback";
 
     public static IReadOnlyList<HelpArea> Areas { get; } =
     [
@@ -264,6 +266,18 @@ public static class HelpRegistry
             ],
             ["/manage/clients", "/manage/client-releases"],
             Roles: "Admin"),
+
+        new(Feedback,
+            "Lanyard Feedback",
+            "Reading and reviewing the thumbs up/down and star ratings staff send about Lanyard, and how they send them.",
+            HelpAudience.Admins,
+            () => new Icons.Regular.Size20.PersonFeedback(),
+            [
+                new("inbox", "Feedback Inbox"),
+                new("giving", "How Staff Give Feedback")
+            ],
+            ["/manage/feedback"],
+            Roles: LanyardRoles.PlatformAdmin),
 
         new(Insights,
             "Insights",
