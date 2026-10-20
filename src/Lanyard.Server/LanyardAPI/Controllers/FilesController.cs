@@ -25,8 +25,12 @@ namespace Lanyard.API.Controllers
             _fileService = fileService;
         }
 
+        // A little over FileUploadPolicy.MaxBytes for the multipart framing; FileService makes the
+        // real size and type check.
         [HttpPost("upload")]
         [Authorize(Roles = "Admin, CanManageFiles")]
+        [RequestSizeLimit(FileUploadPolicy.MaxBytes + 1024 * 1024)]
+        [RequestFormLimits(MultipartBodyLengthLimit = FileUploadPolicy.MaxBytes + 1024 * 1024)]
         public async Task<IActionResult> Upload([FromForm] IFormFile file, [FromForm] Guid? folderId, CancellationToken cancellationToken)
         {
             if (file == null)

@@ -297,6 +297,18 @@ public class AutomationRuleService(
             return conditionError;
         }
 
+        // The kiosk that fires the rule, under the same company rule as the condition kiosks below.
+        bool triggerClientFound = await ctx.Clients
+            .Where(c => c.Id == rule.TriggerClientId && (ruleCompanyId == null || c.CompanyId == ruleCompanyId))
+            .AsNoTracking()
+            .TagWithCallSite()
+            .AnyAsync();
+
+        if (!triggerClientFound)
+        {
+            return "The kiosk this rule is for doesn't exist.";
+        }
+
         List<Guid> conditionClientIds = rule.Conditions
             .Where(c => c.IsActive && c.ConditionType == AutomationConditionType.ClientGameStatus)
             .Select(c => AutomationConditionParameters.TryParse(c.ParametersJson, out ClientGameStatusConditionParameters? p) ? p.ClientId : Guid.Empty)
