@@ -1,0 +1,207 @@
+@page "/manage/feedback"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = LanyardRoles.PlatformAdmin)]
+
+@using Lanyard.App.Components.Rota
+@using Lanyard.Application.Services.Feedback
+@using Lanyard.Infrastructure.DTO.Feedback
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+
+@inject IFeedbackService FeedbackService
+
+<PageTitle>Lanyard Feedback</PageTitle>
+
+@* What staff at every company have said about Lanyard, from the header button and the star prompt.
+   Platform admins only - each one is also emailed as it arrives. *@
+<div class="feedback-page">
+    <div>
+        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Lanyard Feedback</FluentText>
+        <p class="feedback-intro">Thumbs up/down from the header and star ratings from the occasional prompt, across every company.</p>
+    </div>
+
+    <div class="feedback-toolbar">
+        <div class="feedback-filters" role="group" aria-label="Which feedback to show">
+            @foreach ((FeedbackInboxFilter value, string label) in Filters)
+            {
+                <FluentButton Appearance="@(filter == value ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                              aria-pressed="@(filter == value ? "true" : "false")" OnClick="() => SetFilterAsync(value)">@label</FluentButton>
+            }
+        </div>
+        <FluentSwitch Label="Unreviewed only" Value="@unreviewedOnly" ValueChanged="@OnUnreviewedChanged" />
+    </div>
+
+    @if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else if (items is null)
+    {
+        <FluentSpinner />
+    }
+    else if (items.Count == 0)
+    {
+        <FluentCard Height="auto">
+            <FluentText>@(unreviewedOnly ? "Nothing waiting - you're all caught up." : "No feedback yet.")</FluentText>
+        </FluentCard>
+    }
+    else
+    {
+        <div class="feedback-summary">@Summary</div>
+
+        <div class="feedback-cards">
+            @foreach (FeedbackInboxItem item in items)
+            {
+                <section class="feedback-card @(item.ReviewedUtc is null ? "unreviewed" : null)">
+                    <div class="feedback-card-top">
+                        @if (item.Kind == FeedbackKind.Thumbs)
+                        {
+                            <span class="feedback-score @(item.Score > 0 ? "up" : "down")">
+                                <FluentIcon Value="@(item.Score > 0 ? (Icon)new Icons.Filled.Size20.ThumbLike() : new Icons.Filled.Size20.ThumbDislike())" Color="Color.Custom" CustomColor="currentColor" />
+                                @(item.Score > 0 ? "Good" : "Not great")
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="feedback-stars" aria-label="@($"{item.Score} out of 5 stars")">
+                                <span class="filled" aria-hidden="true">@(new string('★', item.Score))</span><span class="empty" aria-hidden="true">@(new string('★', 5 - item.Score))</span>
+                            </span>
+                        }
+
+                        @if (item.ReviewedUtc is null)
+                        {
+                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Brand">New</FluentBadge>
+                        }
+                    </div>
+
+                    @if (item.Comment is string comment)
+                    {
+                        <div class="feedback-comment">“@comment”</div>
+                    }
+                    else
+                    {
+                        <div class="feedback-comment none">No comment</div>
+                    }
+
+                    <div class="feedback-meta">
+                        <span>@item.UserName@(item.UserEmail is string email ? $" · {email}" : null)</span>
+                        @if (Where(item) is string where)
+                        {
+                            <span>@where</span>
+                        }
+                        <span>
+                            @RotaTime.ToVenueLocal(item.CreatedUtc).ToString("ddd d MMM yyyy, HH:mm", RotaFormat.Uk) ·
+                            <a href="@item.PagePath" class="feedback-page-link">@item.PagePath</a>
+                        </span>
+                    </div>
+
+                    <div class="feedback-actions">
+                        @if (item.UserEmail is string replyTo)
+                        {
+                            <FluentAnchorButton Href="@($"mailto:{replyTo}?subject={Uri.EscapeDataString("Your Lanyard feedback")}")" Appearance="ButtonAppearance.Subtle"
+                                                IconStart="@(new Icons.Regular.Size16.Mail())">Reply</FluentAnchorButton>
+                        }
+                        <FluentButton Appearance="@(item.ReviewedUtc is null ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                      Disabled="@(busyId == item.Id)" OnClick="() => ToggleReviewedAsync(item)">
+                            @(item.ReviewedUtc is null ? "Mark reviewed" : "Mark unreviewed")
+                        </FluentButton>
+                    </div>
+                </section>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly (FeedbackInboxFilter Value, string Label)[] Filters =
+    [
+        (FeedbackInboxFilter.All, "All"),
+        (FeedbackInboxFilter.ThumbsUp, "Good"),
+        (FeedbackInboxFilter.ThumbsDown, "Not great"),
+        (FeedbackInboxFilter.Stars, "Star ratings")
+    ];
+
+    private List<FeedbackInboxItem>? items;
+    private FeedbackInboxFilter filter = FeedbackInboxFilter.All;
+    private bool unreviewedOnly = true;
+    private string? loadError;
+    private Guid? busyId;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        Result<List<FeedbackInboxItem>> result = await FeedbackService.GetInboxAsync(filter, unreviewedOnly);
+
+        loadError = result.IsSuccess ? null : result.Error;
+        items = result.Data ?? [];
+    }
+
+    private async Task SetFilterAsync(FeedbackInboxFilter value)
+    {
+        filter = value;
+        items = null;
+        await LoadAsync();
+    }
+
+    private async Task OnUnreviewedChanged(bool value)
+    {
+        unreviewedOnly = value;
+        items = null;
+        await LoadAsync();
+    }
+
+    private async Task ToggleReviewedAsync(FeedbackInboxItem item)
+    {
+        busyId = item.Id;
+
+        try
+        {
+            Result<bool> result = await FeedbackService.SetReviewedAsync(item.Id, item.ReviewedUtc is null);
+
+            if (!result.IsSuccess)
+            {
+                _toastService.ShowError(result.Error ?? "Couldn't update that feedback.");
+                return;
+            }
+
+            await LoadAsync();
+        }
+        finally
+        {
+            busyId = null;
+        }
+    }
+
+    private static string? Where(FeedbackInboxItem item)
+    {
+        string text = string.Join(" · ", new[] { item.CompanyName, item.LocationName }.Where(x => !string.IsNullOrWhiteSpace(x)));
+
+        return text.Length == 0 ? null : text;
+    }
+
+    // Over what's shown, so it follows the filters.
+    private string Summary
+    {
+        get
+        {
+            List<FeedbackInboxItem> list = items ?? [];
+            int up = list.Count(x => x.Kind == FeedbackKind.Thumbs && x.Score > 0);
+            int down = list.Count(x => x.Kind == FeedbackKind.Thumbs && x.Score < 0);
+            List<FeedbackInboxItem> stars = list.Where(x => x.Kind == FeedbackKind.StarRating).ToList();
+
+            List<string> parts = [$"{list.Count} shown"];
+
+            if (up + down > 0)
+            {
+                parts.Add($"{up} good, {down} not great");
+            }
+
+            if (stars.Count > 0)
+            {
+                parts.Add($"{stars.Average(x => x.Score):0.0}★ average from {stars.Count} rating{(stars.Count == 1 ? "" : "s")}");
+            }
+
+            return string.Join(" · ", parts);
+        }
+    }
+}

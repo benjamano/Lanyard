@@ -5,12 +5,18 @@ public static class ClientIdentity
     private const string ClientIdEnvironmentVariable = "LANYARD_CLIENT_ID";
     private const string ClientIdFileName = "client-id.txt";
 
+    // Outside Velopack's install folder, so the kiosk keeps its id (and its credential, which
+    // lives alongside) through updates.
+    public static string DataDirectory =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "lanyardClient");
+
+    public static string ClientIdPath => Path.Combine(DataDirectory, ClientIdFileName);
+
     public static Guid LoadOrCreateClientId()
     {
-        string baseDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "lanyardClient");
-        Directory.CreateDirectory(baseDir);
+        Directory.CreateDirectory(DataDirectory);
 
-        string path = Path.Combine(baseDir, ClientIdFileName);
+        string path = ClientIdPath;
 
         Guid savedClientId;
         if (File.Exists(path) && Guid.TryParse(File.ReadAllText(path), out savedClientId))

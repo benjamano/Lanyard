@@ -8,6 +8,7 @@
 @using Lanyard.Application.Services.Clients
 @using Lanyard.Shared.Contracts
 @using Lanyard.Shared.Enum
+@using Lanyard.Infrastructure.Enum
 @using System.Globalization
 
 @implements IDisposable
@@ -26,6 +27,13 @@
         </FluentText>
         <HelpButton AreaKey="@HelpRegistry.Kiosks" />
     </FluentStack>
+    <div class="clients-header">
+        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">
+            Clients
+        </FluentText>
+        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Add())"
+                      OnClick="OpenPairKioskDialogAsync">Add kiosk</FluentButton>
+    </div>
     @if (_versionCounts.Count > 0)
     {
         <div class="clients-version-summary">
@@ -42,11 +50,40 @@
             </FluentStack>
         </div>
     }
+    @if (_legacySecretCount > 0 || _credentialCount > 0)
+    {
+        <div class="clients-version-summary">
+            <span class="clients-muted">Kiosk sign-in</span>
+            <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="8px" VerticalGap="8px">
+                <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Success"
+                             Title="Kiosks that signed in with their own credential last time they connected">
+                    Own credential · @_credentialCount
+                </FluentBadge>
+                @if (_legacySecretCount > 0)
+                {
+                    <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Warning"
+                                 Title="@SharedSecretTooltip">
+                        Shared secret · @_legacySecretCount
+                    </FluentBadge>
+                }
+            </FluentStack>
+        </div>
+    }
     <div class="clients-grid-wrapper">
-        <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="minmax(0, 0.6fr) minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(125px, 1.1fr) minmax(0, 1.1fr) 180px" Class="clients-grid">
+        <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="minmax(0, 0.6fr) minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(125px, 1.1fr) minmax(0, 1.1fr) 224px" Class="clients-grid">
             <ChildContent>
                 <PropertyColumn Property="x => x.Id" Title="Client ID" Class="clients-col-id"/>
-                <PropertyColumn Sortable="true" Property="x => x.Name" Title="Name" />
+                <TemplateColumn Title="Name" Sortable="true" SortBy="@_sortByName">
+                    <div class="clients-name-cell">
+                        <span class="clients-name-text">@context.Name</span>
+                        @if (context.LastAuthMethod == ClientAuthMethod.LegacySecret)
+                        {
+                            <span class="clients-signin-warning" title="@SharedSecretTooltip" role="img" aria-label="Signs in with the shared secret">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Color="Color.Warning" />
+                            </span>
+                        }
+                    </div>
+                </TemplateColumn>
                 <PropertyColumn Property="x => x.MostRecentIpAddress" Title="IP Address" Class="clients-col-ip"/>
                 <TemplateColumn Title="Version" Class="clients-col-version">
                     <div class="clients-version-cell">
@@ -105,6 +142,11 @@
                                       IconStart="@(new Icons.Regular.Size20.Desktop())"
                                       Disabled="@(!context.IsCurrentlyConnected)"
                                       OnClick="() => OpenScreensDialogAsync(context)" />
+                        <FluentButton Appearance="ButtonAppearance.Transparent"
+                                      Title="@(context.IsCurrentlyConnected ? "Self-test" : "Self-test (client is offline)")"
+                                      IconStart="@(new Icons.Regular.Size20.Stethoscope())"
+                                      Disabled="@(!context.IsCurrentlyConnected)"
+                                      OnClick="() => OpenSelfTestDialogAsync(context)" />
                     </FluentStack>
                 </TemplateColumn>
             </ChildContent>
@@ -125,6 +167,10 @@
                     <div class="clients-phone-meta">
                         <span class="@(client.ReportedClientVersion is null ? "clients-muted" : null)">@VersionLabel(client.ReportedClientVersion)</span>
                         <ClientUpdateRingBadges Target="@TargetFor(client.Id)" />
+                        @if (client.LastAuthMethod == ClientAuthMethod.LegacySecret)
+                        {
+                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Warning" Title="@SharedSecretTooltip">Shared secret</FluentBadge>
+                        }
                         <span>·</span>
                         <KioskHealthBadge Health="@_health.GetValueOrDefault(client.Id)" IsConnected="@client.IsCurrentlyConnected" />
                         @if (client.LastLogin is DateTime lastLogin)
@@ -166,6 +212,11 @@
                                   IconStart="@(new Icons.Regular.Size20.Desktop())"
                                   Disabled="@(!client.IsCurrentlyConnected)"
                                   OnClick="() => OpenScreensDialogAsync(client)" />
+                    <FluentButton Appearance="ButtonAppearance.Transparent"
+                                  Title="@(client.IsCurrentlyConnected ? "Self-test" : "Self-test (client is offline)")"
+                                  IconStart="@(new Icons.Regular.Size20.Stethoscope())"
+                                  Disabled="@(!client.IsCurrentlyConnected)"
+                                  OnClick="() => OpenSelfTestDialogAsync(client)" />
                 </div>
             </div>
         }
@@ -184,6 +235,17 @@
     private sealed record ClientVersionCount(string? Version, int Count);
 
     private List<ClientVersionCount> _versionCounts = [];
+
+    // How the kiosks signed in on their latest connection. Kiosks that haven't connected since
+    // per-kiosk credentials shipped aren't counted either way.
+    private int _credentialCount;
+    private int _legacySecretCount;
+
+    private static readonly GridSort<ClientConnectedWithCapabilitiesDTO> _sortByName = GridSort<ClientConnectedWithCapabilitiesDTO>.ByAscending(x => x.Name);
+
+    // The shared secret isn't accepted any more, so these kiosks last connected before it was
+    // switched off and can't connect again until they're paired.
+    private const string SharedSecretTooltip = "Last signed in with the old shared kiosk secret, which no longer works. Pair it again with Add kiosk.";
 
     // Update ring and target per client. Empty (no badges) if releases couldn't be loaded, which
     // must not stop the rest of the page working.
@@ -261,6 +323,8 @@
             clients = result.Data!;
             _sortedClients = clients.OrderBy(x => x.Name).ToList().AsQueryable();
             _versionCounts = BuildVersionCounts(clients);
+            _credentialCount = clients.Count(x => x.LastAuthMethod == ClientAuthMethod.Credential);
+            _legacySecretCount = clients.Count(x => x.LastAuthMethod == ClientAuthMethod.LegacySecret);
 
             Result<IReadOnlyDictionary<Guid, ClientUpdateTargetDTO>> targets = await _updatePolicyService.GetTargetsAsync();
 
@@ -368,12 +432,41 @@
         });
     }
 
+    private async Task OpenPairKioskDialogAsync()
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<PairKioskDialog>(options =>
+        {
+            options.Header.Title = "Add kiosk";
+            options.Width = "min(520px, 95vw)";
+            options.Modal = true;
+        });
+
+        if (!result.Cancelled)
+        {
+            await GetClientsAsync();
+        }
+    }
+    
+    private async Task OpenSelfTestDialogAsync(ClientConnectedWithCapabilitiesDTO client)
+    {
+        await _dialogService.ShowDialogAsync<ClientSelfTestDialog>(options =>
+        {
+            options.Header.Title = $"Self-test: {client.Name}";
+            options.Width = "min(900px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ClientSelfTestDialog.ClientId), client.Id);
+            options.Parameters.Add(nameof(ClientSelfTestDialog.ClientName), client.Name);
+        });
+    }
+
     private async Task OpenClientSettingsDialog(Guid clientId)
     {
         await _dialogService.ShowDialogAsync<ClientSettingsDialog>(options =>
         {
             options.Header.Title = "Client Settings";
-            options.Width = "min(900px, 95vw)";
+            // Wide enough for every tab heading on one line: when they overflow, the tab strip
+            // scrolls and drags the open tab's content sideways with it.
+            options.Width = "min(1000px, 95vw)";
             options.Modal = true;
             options.Parameters.Add(nameof(ClientSettingsDialog.ClientId), clientId);
         });
