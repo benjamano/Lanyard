@@ -791,7 +791,10 @@
       "A kiosk that still showed \"Shared secret\" on Manage > Clients can't connect any more. Pair it again with Add kiosk: it keeps its settings.",
       "Tell us what you think: a new feedback button in the top bar lets you give Lanyard a thumbs up or down, with an optional comment, from any page. It goes straight to the Lanyard team.",
       "Every month or so Lanyard asks you to rate it out of 5 stars and say why. Press Not now to be asked again in a week, or Don't ask again to stop it for good.",
-      "Platform admins have a help page for Lanyard Feedback, with a Help button on the feedback inbox."
+      "Platform admins have a help page for Lanyard Feedback, with a Help button on the feedback inbox.",
+      "Changing your own password now asks for your current password, and getting new two-factor recovery codes asks for your password. Wrong guesses count towards locking the account.",
+      "A locked account can no longer finish signing in with a two-factor code, and the sign-in form only works from Lanyard's own sign-in page.",
+      "A set-password link only shows the account's username while the link is still valid."
     ]
   }
 ]

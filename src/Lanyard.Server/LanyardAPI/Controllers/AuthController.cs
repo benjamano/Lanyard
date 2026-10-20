@@ -92,6 +92,11 @@ namespace Lanyard.API.Controllers
         [Consumes("application/x-www-form-urlencoded")]
         public async Task<IActionResult> LoginForm([FromForm] string username, [FromForm] string password, [FromForm] bool rememberMe = false, [FromForm] string? returnUrl = null, [FromForm] int? locationId = null, [FromForm] int? company = null)
         {
+            if (IsCrossSiteFormPost())
+            {
+                return Redirect(BuildLoginErrorRedirect(CrossSiteFormMessage, company));
+            }
+
             SignInAttemptResult attempt = await AttemptPasswordSignInAsync(username, password, rememberMe, locationId);
 
             switch (attempt.Kind)
@@ -138,11 +143,25 @@ namespace Lanyard.API.Controllers
             // binder understands, so bind it as a string and use standard checkbox presence semantics.
             bool rememberMachineChecked = !string.IsNullOrEmpty(rememberMachine);
 
+            if (IsCrossSiteFormPost())
+            {
+                return Redirect(BuildLoginErrorRedirect(CrossSiteFormMessage, company));
+            }
+
             UserProfile? user = await _signInManager.GetTwoFactorAuthenticationUserAsync();
 
             if (user is null)
             {
                 return Redirect(BuildLoginErrorRedirect("Your session expired. Please log in again.", company));
+            }
+
+            // Checked before the code, not only after a wrong one (Security Issue 9.11): otherwise a
+            // locked-out account could still sign in with a correct guess, and lockout would never
+            // stop anyone guessing - only the per-IP rate limit would. Same order as the passkey path.
+            if (await _userManager.IsLockedOutAsync(user) || !await _signInManager.CanSignInAsync(user))
+            {
+                string lockedQuery = BuildTwoFactorRedirectQuery(rememberMe, returnUrl, locationId, company);
+                return Redirect($"/login/verify-2fa{lockedQuery}&error={Uri.EscapeDataString("Account temporarily locked due to repeated failed attempts. Try again later.")}");
             }
 
             bool isValid = provider == "RecoveryCode"
@@ -198,6 +217,11 @@ namespace Lanyard.API.Controllers
             [FromForm] int? locationId = null,
             [FromForm] int? company = null)
         {
+            if (IsCrossSiteFormPost())
+            {
+                return Redirect(BuildLoginErrorRedirect(CrossSiteFormMessage, company));
+            }
+
             UserProfile? user = await _signInManager.GetTwoFactorAuthenticationUserAsync();
 
             if (user is null)
@@ -332,6 +356,11 @@ namespace Lanyard.API.Controllers
             [FromForm] int? locationId = null,
             [FromForm] int? company = null)
         {
+            if (IsCrossSiteFormPost())
+            {
+                return Redirect(BuildLoginErrorRedirect(CrossSiteFormMessage, company));
+            }
+
             PasskeyAssertionResult<UserProfile> assertion;
 
             try
@@ -664,6 +693,39 @@ namespace Lanyard.API.Controllers
             }
 
             return "?" + string.Join("&", parts);
+        }
+
+        private const string CrossSiteFormMessage = "Please sign in from the Lanyard sign-in page.";
+
+        // Login CSRF defence for the sign-in form posts (Security Issue 9.14). A page on another
+        // site could otherwise post a form here and sign the victim in to the attacker's account.
+        // These forms are posted from the interactive login page, which has no antiforgery token to
+        // carry, so the browser's own Origin header is checked instead (OWASP's "verify origin with
+        // standard headers"): every browser sends it on a cross-site form POST. Referer is the
+        // fallback; a request with neither (not a browser) is let through, since a CSRF needs a
+        // victim's browser to send it. Host only, not scheme, because TLS ends at the proxy.
+        private bool IsCrossSiteFormPost()
+        {
+            string expectedHost = Request.Host.Value ?? string.Empty;
+
+            string? origin = Request.Headers.Origin.ToString();
+
+            if (!string.IsNullOrEmpty(origin))
+            {
+                return origin == "null"
+                    || !Uri.TryCreate(origin, UriKind.Absolute, out Uri? originUri)
+                    || !string.Equals(originUri.Authority, expectedHost, StringComparison.OrdinalIgnoreCase);
+            }
+
+            string? referer = Request.Headers.Referer.ToString();
+
+            if (!string.IsNullOrEmpty(referer))
+            {
+                return !Uri.TryCreate(referer, UriKind.Absolute, out Uri? refererUri)
+                    || !string.Equals(refererUri.Authority, expectedHost, StringComparison.OrdinalIgnoreCase);
+            }
+
+            return false;
         }
 
         private static string BuildLoginErrorRedirect(string error, int? companyId)
