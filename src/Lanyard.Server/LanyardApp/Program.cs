@@ -593,8 +593,10 @@ app.Use(async (context, next) =>
 
     context.Response.Headers["Content-Security-Policy"] =
         "default-src 'self'; " +
-        "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; " +
-        "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; " +
+        // Every script and stylesheet is served from Lanyard itself; third-party libraries are
+        // vendored under wwwroot/lib (see its README) rather than loaded from a CDN.
+        "script-src 'self' 'unsafe-inline'; " +
+        "style-src 'self' 'unsafe-inline'; " +
         "font-src 'self' data:; " +
         // blob: for the demo's "try your own branding" logo, which never leaves the visitor's browser.
         "img-src 'self' data: blob:; " +
