@@ -790,7 +790,8 @@
       "Kiosks can no longer connect with the password that used to be shared by every kiosk. Each one uses its own credential, which an Admin can rotate or revoke.",
       "A kiosk that still showed \"Shared secret\" on Manage > Clients can't connect any more. Pair it again with Add kiosk: it keeps its settings.",
       "Tell us what you think: a new feedback button in the top bar lets you give Lanyard a thumbs up or down, with an optional comment, from any page. It goes straight to the Lanyard team.",
-      "Every month or so Lanyard asks you to rate it out of 5 stars and say why. Press Not now to be asked again in a week, or Don't ask again to stop it for good."
+      "Every month or so Lanyard asks you to rate it out of 5 stars and say why. Press Not now to be asked again in a week, or Don't ask again to stop it for good.",
+      "Kiosks use much less processing power while reading laser game traffic. They log far less during a game, handle game messages in the order the control box sent them, and send the scoreboard at most four updates a second, while game starts and ends still reach the server straight away."
     ]
   }
 ]

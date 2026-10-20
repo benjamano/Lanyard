@@ -23,5 +23,7 @@ public interface IPacketSniffer
 
     /// <summary>A packet from the laser tag system, which shows the card is on the right network.</summary>
     DateTime? LastGamePacketUtc { get; }
-    Task HandlePacketAsync(string[] decodedData);
+
+    /// <summary>Handles one decoded game packet. Called on the capture thread, so packets stay in order.</summary>
+    void HandlePacket(string[] decodedData);
 }

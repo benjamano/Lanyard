@@ -9,6 +9,7 @@ using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Shared.DTO;
 using Lanyard.Shared.Enum;
+using Lanyard.Shared.SignalR;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -118,6 +119,12 @@ public class SignalRControlHubGameCaptureTests
                 ? [new PlayerScoreDTO { GunId = 1, Score = 500, Accuracy = 40, Team = Team.Red }]
                 : []
         };
+    }
+
+    [TestMethod]
+    public void UpdateLaserGameStatus_HubMethodName_MatchesTheNameKiosksCall()
+    {
+        Assert.AreEqual(ClientHubMethods.UpdateLaserGameStatus, nameof(SignalRControlHub.UpdateLaserGameStatus));
     }
 
     [TestMethod]
