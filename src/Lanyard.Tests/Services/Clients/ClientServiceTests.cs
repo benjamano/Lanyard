@@ -11,6 +11,7 @@ using Lanyard.Infrastructure.DTO.VideoDevices;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
 using Lanyard.Application.Services;
+using Lanyard.Application.Services.Clients;
 using Lanyard.Application.SignalR;
 using Microsoft.AspNetCore.SignalR;
 
@@ -28,7 +29,7 @@ namespace Lanyard.Tests.Services.Clients
                 .Options;
         }
 
-        private ClientService GetService(DbContextOptions<ApplicationDbContext> options)
+        private ClientService GetService(DbContextOptions<ApplicationDbContext> options, IKioskFleetEventBus fleetEvents = null)
         {
             var factoryMock = new Mock<IDbContextFactory<ApplicationDbContext>>();
             factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<System.Threading.CancellationToken>()))
@@ -45,7 +46,7 @@ namespace Lanyard.Tests.Services.Clients
             // throws on .Set() since CreateEntry() isn't stubbed.
             var cacheMock = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
 
-            return new ClientService(factoryMock.Object, hubContextMock.Object, loggerMock.Object, cacheMock);
+            return new ClientService(factoryMock.Object, hubContextMock.Object, loggerMock.Object, cacheMock, fleetEvents ?? new KioskFleetEventBus());
         }
 
         // SignalRControlHub.ConnectedIds is a private static set with no InternalsVisibleTo, so
@@ -60,7 +61,7 @@ namespace Lanyard.Tests.Services.Clients
                 Microsoft.Extensions.Logging.ILogger<ClientService> logger,
                 Microsoft.Extensions.Caching.Memory.IMemoryCache cache,
                 IReadOnlyCollection<string> connectedIds)
-                : base(factory, hubContext, logger, cache)
+                : base(factory, hubContext, logger, cache, new KioskFleetEventBus())
             {
                 _connectedIds = connectedIds;
             }
@@ -177,7 +178,7 @@ namespace Lanyard.Tests.Services.Clients
             var loggerMock = new Mock<Microsoft.Extensions.Logging.ILogger<ClientService>>();
             var cache = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
 
-            var service = new ClientService(factoryMock.Object, hubContextMock.Object, loggerMock.Object, cache);
+            var service = new ClientService(factoryMock.Object, hubContextMock.Object, loggerMock.Object, cache, new KioskFleetEventBus());
 
             var client = new Client { Id = Guid.NewGuid(), Name = "Kiosk", MostRecentConnectionId = "connection-1" };
 
@@ -1173,7 +1174,8 @@ namespace Lanyard.Tests.Services.Clients
                 factoryMock.Object,
                 hubContextMock.Object,
                 new Mock<Microsoft.Extensions.Logging.ILogger<ClientService>>().Object,
-                new Mock<Microsoft.Extensions.Caching.Memory.IMemoryCache>().Object);
+                new Mock<Microsoft.Extensions.Caching.Memory.IMemoryCache>().Object,
+                new KioskFleetEventBus());
 
             Result<Client?> clientResult = await service.CreateClientAsync(new Client
             {
@@ -1740,6 +1742,73 @@ namespace Lanyard.Tests.Services.Clients
 
             Assert.IsTrue(result.IsSuccess, result.Error);
             Assert.IsFalse(result.Data);
+        }
+
+        [TestMethod]
+        public async Task GetClientsWithCapabilitiesAsync_ShouldProjectTheUpdateSettingAndCompany()
+        {
+            var options = GetInMemoryOptions();
+
+            await using (var ctx = new ApplicationDbContext(options))
+            {
+                ctx.Clients.Add(new Client
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "Kiosk 1",
+                    CompanyId = 7,
+                    UpdateRing = Lanyard.Shared.Enum.ClientUpdateRing.Pinned,
+                    PinnedClientVersion = "1.0.40"
+                });
+                await ctx.SaveChangesAsync();
+            }
+
+            var result = await GetService(options).GetClientsWithCapabilitiesAsync();
+
+            var client = result.Data!.Single();
+
+            Assert.AreEqual(7, client.CompanyId);
+            Assert.AreEqual(Lanyard.Shared.Enum.ClientUpdateRing.Pinned, client.UpdateRing, "The Clients page works out update targets from this list.");
+            Assert.AreEqual("1.0.40", client.PinnedClientVersion);
+        }
+
+        [TestMethod]
+        public async Task CreateAndUpdateClientAsync_ShouldTellTheClientsCompanysPages()
+        {
+            var options = GetInMemoryOptions();
+            var fleetEvents = new KioskFleetEventBus();
+            var published = new List<int>();
+            fleetEvents.OnChanged += published.Add;
+
+            var service = GetService(options, fleetEvents);
+            var client = new Client { Id = Guid.NewGuid(), Name = "Kiosk 1", CompanyId = 3 };
+
+            await service.CreateClientAsync(client);
+
+            client.Name = "Renamed";
+            await service.UpdateClientAsync(client);
+
+            CollectionAssert.AreEqual(new[] { 3, 3 }, published);
+        }
+
+        [TestMethod]
+        public async Task SetClientAvailableDmxDevicesAsync_ShouldTellTheClientsCompanysPages()
+        {
+            var options = GetInMemoryOptions();
+            var clientId = Guid.NewGuid();
+
+            await using (var ctx = new ApplicationDbContext(options))
+            {
+                ctx.Clients.Add(new Client { Id = clientId, Name = "Kiosk 1", CompanyId = 4 });
+                await ctx.SaveChangesAsync();
+            }
+
+            var fleetEvents = new KioskFleetEventBus();
+            var published = new List<int>();
+            fleetEvents.OnChanged += published.Add;
+
+            await GetService(options, fleetEvents).SetClientAvailableDmxDevicesAsync(clientId, ["Enttec USB Pro"]);
+
+            CollectionAssert.AreEqual(new[] { 4 }, published, "DmxEnabled on the Clients page comes from these devices.");
         }
     }
 }

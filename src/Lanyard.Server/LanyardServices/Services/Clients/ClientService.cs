@@ -1,4 +1,5 @@
-﻿using Lanyard.Application.SignalR;
+﻿using Lanyard.Application.Services.Clients;
+using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Dmx;
@@ -24,12 +25,14 @@ namespace Lanyard.Application.Services;
 public class ClientService(IDbContextFactory<ApplicationDbContext> factory, 
     IHubContext<SignalRControlHub> hubContext, 
     ILogger<ClientService> logger, 
-    IMemoryCache cache) : IClientService
+    IMemoryCache cache,
+    IKioskFleetEventBus fleetEvents) : IClientService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly IHubContext<SignalRControlHub> _hubContext = hubContext;
     private readonly ILogger<ClientService> _logger = logger;
     private readonly IMemoryCache _cache = cache;
+    private readonly IKioskFleetEventBus _fleetEvents = fleetEvents;
 
     public async Task<Result<Client?>> GetClientFromIdAsync(Guid clientId)
     {
@@ -128,6 +131,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
 
             await ctx.SaveChangesAsync();
 
+            _fleetEvents.Publish(newClient.CompanyId);
+
             return Result<Client?>.Ok(newClient);
         }
         catch (Exception ex)
@@ -174,6 +179,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
                 _cache.Set(updatedClient.MostRecentConnectionId, updatedClient.Id, TimeSpan.FromMinutes(10));
             }
 
+            _fleetEvents.Publish(updatedClient.CompanyId);
+
             return Result<Client?>.Ok(updatedClient);
         }
         catch (Exception ex)
@@ -217,6 +224,23 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
         {
             _logger.LogError(ex, "Error recording the disconnect of client {ClientId}", clientId);
             return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    // For writes that only hold the client's id: the Clients page and the shared client list need
+    // the company to refresh.
+    private async Task PublishFleetChangeAsync(ApplicationDbContext ctx, Guid clientId)
+    {
+        int? companyId = await ctx.Clients
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => x.Id == clientId)
+            .Select(x => (int?)x.CompanyId)
+            .FirstOrDefaultAsync();
+
+        if (companyId is int id)
+        {
+            _fleetEvents.Publish(id);
         }
     }
 
@@ -310,6 +334,9 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
                     ReportedClientVersion = x.ReportedClientVersion,
                     ClientVersionReportedAt = x.ClientVersionReportedAt,
                     LastAuthMethod = x.LastAuthMethod,
+                    CompanyId = x.CompanyId,
+                    UpdateRing = x.UpdateRing,
+                    PinnedClientVersion = x.PinnedClientVersion,
                     IsCurrentlyConnected = ids.Contains(x.MostRecentConnectionId ?? ""),
                     ProjectionEnabled = ctx.ClientProjectionSettings
                         .AsNoTracking()
@@ -543,6 +570,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
 
             await ctx.SaveChangesAsync();
 
+            await PublishFleetChangeAsync(ctx, clientProjectionSettings.ClientId);
+
             await SendUpdatedProjectionProgramInfoToClientsAsync(clientProjectionSettings.ProjectionProgramId);
 
             return Result<Guid>.Ok(clientProjectionSettings.Id);
@@ -571,6 +600,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
             projectionSettings.IsActive = false;
 
             await ctx.SaveChangesAsync();
+
+            await PublishFleetChangeAsync(ctx, projectionSettings.ClientId);
 
             await SendUpdatedProjectionProgramInfoToClientsAsync(projectionSettings.ProjectionProgramId);
 
@@ -932,6 +963,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
             }
 
             await ctx.SaveChangesAsync();
+
+            _fleetEvents.Publish(client.CompanyId);
 
             _logger.LogInformation("Updated available DMX devices for client {ClientId}: {Devices}", clientId, string.Join(", ", dmxDevices));
         }

@@ -70,41 +70,115 @@ public class KioskHealthService(
     {
         try
         {
-            DateTime now = _timeProvider.GetUtcNow().UtcDateTime;
             HashSet<string> connectedIds = GetConnectedConnectionIds().ToHashSet();
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            var clients = await ctx.Clients
+            List<KioskHealthClient> clients = (await ctx.Clients
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Select(x => new { x.Id, x.MostRecentConnectionId, x.LastDisconnectDate })
-                .ToListAsync();
-
-            Dictionary<Guid, ClientHealthSnapshot> snapshots = await ctx.ClientHealthSnapshots
-                .AsNoTracking()
-                .TagWithCallSite()
-                .ToDictionaryAsync(x => x.ClientId);
-
-            string? newestVersion = KioskHealthEvaluator.Newest(snapshots.Values.Select(x => x.ClientVersion));
-
-            Dictionary<Guid, KioskHealthView> health = clients.ToDictionary(
-                x => x.Id,
-                x => KioskHealthEvaluator.Evaluate(
-                    snapshots.GetValueOrDefault(x.Id),
+                .ToListAsync())
+                .Select(x => new KioskHealthClient(
+                    x.Id,
                     x.MostRecentConnectionId != null && connectedIds.Contains(x.MostRecentConnectionId),
-                    x.LastDisconnectDate,
-                    now,
-                    _options,
-                    newestVersion));
+                    x.LastDisconnectDate))
+                .ToList();
 
-            return Result<Dictionary<Guid, KioskHealthView>>.Ok(health);
+            return Result<Dictionary<Guid, KioskHealthView>>.Ok(await EvaluateAsync(ctx, clients));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to load kiosk health");
             return Result<Dictionary<Guid, KioskHealthView>>.Fail($"Failed to load kiosk health: {ex.Message}");
         }
+    }
+
+    public async Task<Result<Dictionary<Guid, KioskHealthView>>> GetHealthAsync(IReadOnlyCollection<KioskHealthClient> clients)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            return Result<Dictionary<Guid, KioskHealthView>>.Ok(await EvaluateAsync(ctx, clients));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load kiosk health");
+            return Result<Dictionary<Guid, KioskHealthView>>.Fail($"Failed to load kiosk health: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<KioskHealthView?>> GetClientHealthAsync(Guid clientId)
+    {
+        try
+        {
+            HashSet<string> connectedIds = GetConnectedConnectionIds().ToHashSet();
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            var client = await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.Id == clientId)
+                .Select(x => new { x.Id, x.MostRecentConnectionId, x.LastDisconnectDate })
+                .FirstOrDefaultAsync();
+
+            if (client == null)
+            {
+                return Result<KioskHealthView?>.Ok(null);
+            }
+
+            ClientHealthSnapshot? snapshot = await ctx.ClientHealthSnapshots
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(x => x.ClientId == clientId);
+
+            // "A newer version is out there" compares against the whole company's kiosks, so the
+            // other snapshots' versions are still needed, just not their rows.
+            List<string?> versions = await ctx.ClientHealthSnapshots
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Select(x => x.ClientVersion)
+                .ToListAsync();
+
+            KioskHealthView view = KioskHealthEvaluator.Evaluate(
+                snapshot,
+                client.MostRecentConnectionId != null && connectedIds.Contains(client.MostRecentConnectionId),
+                client.LastDisconnectDate,
+                _timeProvider.GetUtcNow().UtcDateTime,
+                _options,
+                KioskHealthEvaluator.Newest(versions));
+
+            return Result<KioskHealthView?>.Ok(view);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load health for client {ClientId}", clientId);
+            return Result<KioskHealthView?>.Fail($"Failed to load kiosk health: {ex.Message}");
+        }
+    }
+
+    private async Task<Dictionary<Guid, KioskHealthView>> EvaluateAsync(ApplicationDbContext ctx, IReadOnlyCollection<KioskHealthClient> clients)
+    {
+        DateTime now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        Dictionary<Guid, ClientHealthSnapshot> snapshots = await ctx.ClientHealthSnapshots
+            .AsNoTracking()
+            .TagWithCallSite()
+            .ToDictionaryAsync(x => x.ClientId);
+
+        string? newestVersion = KioskHealthEvaluator.Newest(snapshots.Values.Select(x => x.ClientVersion));
+
+        return clients.ToDictionary(
+            x => x.Id,
+            x => KioskHealthEvaluator.Evaluate(
+                snapshots.GetValueOrDefault(x.Id),
+                x.IsConnected,
+                x.LastDisconnectDate,
+                now,
+                _options,
+                newestVersion));
     }
 
     // Same seam as ClientService.GetConnectedConnectionIds: the hub's connection set is
