@@ -24,6 +24,7 @@ public sealed class DemoResetService(
     IServiceScopeFactory scopeFactory,
     IOptions<DemoOptions> demoOptions,
     IDemoDirectory demoDirectory,
+    IHallOfFameCache hallOfFameCache,
     TimeProvider timeProvider,
     ILogger<DemoResetService> logger) : IDemoResetService
 {
@@ -71,6 +72,9 @@ public sealed class DemoResetService(
             }
 
             demoDirectory.Invalidate();
+
+            // The wipe and reseed replace every demo game behind GameResultService's back.
+            hallOfFameCache.Invalidate(companyId);
 
             logger.LogInformation("Demo company {CompanyId} reset", companyId);
 

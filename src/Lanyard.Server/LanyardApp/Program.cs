@@ -216,6 +216,7 @@ builder.Services.AddSingleton<IOflCatalogueService, OflCatalogueService>();
 
 builder.Services.AddSingleton<ILaserGameStatusStore, LaserGameStatusStore>();
 builder.Services.AddSingleton<IClientDiagnosticsStore, ClientDiagnosticsStore>();
+builder.Services.AddSingleton<IHallOfFameCache, HallOfFameCache>();
 builder.Services.AddScoped<IGameResultService, GameResultService>();
 builder.Services.AddSingleton<SignalRProjectionControlHubEvents>();
 builder.Services.AddSingleton<IVideoStreamTokenService, VideoStreamTokenService>();

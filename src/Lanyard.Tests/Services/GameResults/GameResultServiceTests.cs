@@ -1,4 +1,5 @@
 using Lanyard.Application.Services;
+using Lanyard.Application.Services.Tenancy;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
@@ -7,6 +8,7 @@ using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
 using Lanyard.Shared.Enum;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
@@ -39,7 +41,12 @@ public class GameResultServiceTests
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options));
 
-        return new GameResultService(factoryMock.Object, NullLogger<GameResultService>.Instance);
+        return new GameResultService(factoryMock.Object, new SystemDbContextFactory(options), NewCache(), TimeProvider.System, NullLogger<GameResultService>.Instance);
+    }
+
+    private static HallOfFameCache NewCache()
+    {
+        return new HallOfFameCache(new MemoryCache(new MemoryCacheOptions()), NullLogger<HallOfFameCache>.Instance);
     }
 
     private static GameResultService GetSignedInService(DbContextOptions<ApplicationDbContext> options, int companyId)
@@ -48,7 +55,11 @@ public class GameResultServiceTests
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options, new SignedInTenant(companyId)));
 
-        return new GameResultService(factoryMock.Object, NullLogger<GameResultService>.Instance);
+        Mock<ITenantContext> tenant = new();
+        tenant.SetupGet(x => x.IsSystem).Returns(false);
+        tenant.SetupGet(x => x.CompanyId).Returns(companyId);
+
+        return new GameResultService(factoryMock.Object, new SystemDbContextFactory(options), NewCache(), TimeProvider.System, NullLogger<GameResultService>.Instance, tenant.Object);
     }
 
     private static async Task<Guid> SeedClientAsync(DbContextOptions<ApplicationDbContext> options, int companyId)

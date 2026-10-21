@@ -1,4 +1,6 @@
+using Lanyard.Application.Services.Tenancy;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
@@ -11,10 +13,18 @@ namespace Lanyard.Application.Services;
 
 public class GameResultService(
     IDbContextFactory<ApplicationDbContext> factory,
-    ILogger<GameResultService> logger) : IGameResultService
+    ISystemDbContextFactory systemFactory,
+    IHallOfFameCache hallOfFameCache,
+    TimeProvider timeProvider,
+    ILogger<GameResultService> logger,
+    ITenantContext? tenant = null) : IGameResultService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly ISystemDbContextFactory _systemFactory = systemFactory;
+    private readonly IHallOfFameCache _hallOfFameCache = hallOfFameCache;
+    private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger<GameResultService> _logger = logger;
+    private readonly ITenantContext? _tenant = tenant;
 
     public async Task<Result<bool>> RecordCompletedGameAsync(Guid clientId, LaserGameStatusDTO status)
     {
@@ -69,6 +79,9 @@ public class GameResultService(
 
             await ctx.SaveChangesAsync();
 
+            // After the save, so a widget reloading on Changed is guaranteed to see this game.
+            _hallOfFameCache.Invalidate(gameResult.CompanyId);
+
             _logger.LogInformation("Recorded completed game {GameResultId} for client {ClientId} in company {CompanyId} with {PlayerCount} player(s)", gameResult.Id, clientId, gameResult.CompanyId, gameResult.PlayerScores.Count);
 
             return Result<bool>.Ok(true);
@@ -78,6 +91,46 @@ public class GameResultService(
             _logger.LogError(ex, "Failed to record completed game for client {ClientId}", clientId);
 
             return Result<bool>.Fail($"Failed to record the completed game: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<HallOfFameSnapshotDTO>> GetHallOfFameAsync(HallOfFamePeriod period, int take, Guid? clientId, int? companyId)
+    {
+        try
+        {
+            DateTime? fromUtc = GetLowerBound(period);
+
+            if (_tenant is not null && !_tenant.IsSystem)
+            {
+                // A signed-in caller only ever sees their own company's games - the tenant filter
+                // already guarantees that - so their own company is the only safe cache key. Keying
+                // on the companyId they passed would hand them another company's cached rows.
+                if (_tenant.CompanyId is not int tenantCompanyId || (companyId.HasValue && companyId.Value != tenantCompanyId))
+                {
+                    return Result<HallOfFameSnapshotDTO>.Ok(new HallOfFameSnapshotDTO());
+                }
+
+                companyId = tenantCompanyId;
+            }
+
+            if (companyId is not int effectiveCompanyId)
+            {
+                // System caller with no company: every company's games. No widget asks for this,
+                // and it has no single company to invalidate it by, so it isn't cached. (Signed-in
+                // callers never get here, so the unfiltered context can't leak to them.)
+                return Result<HallOfFameSnapshotDTO>.Ok(await LoadSnapshotAsync(fromUtc, take, clientId, null));
+            }
+
+            HallOfFameSnapshotDTO snapshot = await _hallOfFameCache.GetOrLoadAsync(effectiveCompanyId, clientId, fromUtc, take,
+                () => LoadSnapshotAsync(fromUtc, take, clientId, effectiveCompanyId));
+
+            return Result<HallOfFameSnapshotDTO>.Ok(snapshot);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load the Hall of Fame for period {Period}", period);
+
+            return Result<HallOfFameSnapshotDTO>.Fail($"Failed to load the Hall of Fame: {ex.Message}");
         }
     }
 
@@ -97,17 +150,7 @@ public class GameResultService(
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            List<HallOfFameTeamTotalDTO> totals = await BuildScoreQuery(ctx, period, clientId, companyId)
-                .Where(x => x.Team != null)
-                .GroupBy(x => x.Team!.Value)
-                .Select(g => new HallOfFameTeamTotalDTO
-                {
-                    Team = g.Key,
-                    TotalScore = g.Sum(x => x.Score),
-                    GameCount = g.Select(x => x.GameResultId).Distinct().Count()
-                })
-                .OrderByDescending(x => x.TotalScore)
-                .ToListAsync();
+            List<HallOfFameTeamTotalDTO> totals = await QueryTeamTotalsAsync(ctx, GetLowerBound(period), clientId, companyId);
 
             return Result<IReadOnlyList<HallOfFameTeamTotalDTO>>.Ok(totals);
         }
@@ -125,27 +168,7 @@ public class GameResultService(
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            IQueryable<GameResultPlayerScore> query = BuildScoreQuery(ctx, period, clientId, companyId);
-
-            // Ties break on the other metric, then on recency, so the board is stable between
-            // refreshes rather than reshuffling equal rows on every poll.
-            IOrderedQueryable<GameResultPlayerScore> orderedQuery = orderByAccuracy
-                ? query.OrderByDescending(x => x.Accuracy).ThenByDescending(x => x.Score)
-                : query.OrderByDescending(x => x.Score).ThenByDescending(x => x.Accuracy);
-
-            List<HallOfFameEntryDTO> entries = await orderedQuery
-                .ThenByDescending(x => x.GameResult!.PlayedAtUtc)
-                .Take(take)
-                .Select(x => new HallOfFameEntryDTO
-                {
-                    GunId = x.GunId,
-                    PlayerName = x.PlayerName,
-                    Score = x.Score,
-                    Accuracy = x.Accuracy,
-                    Team = x.Team,
-                    PlayedAtUtc = x.GameResult!.PlayedAtUtc
-                })
-                .ToListAsync();
+            List<HallOfFameEntryDTO> entries = await QueryTopEntriesAsync(ctx, GetLowerBound(period), take, clientId, companyId, orderByAccuracy);
 
             return Result<IReadOnlyList<HallOfFameEntryDTO>>.Ok(entries);
         }
@@ -157,14 +180,78 @@ public class GameResultService(
         }
     }
 
-    private static IQueryable<GameResultPlayerScore> BuildScoreQuery(ApplicationDbContext ctx, HallOfFamePeriod period, Guid? clientId, int? companyId)
+    // Throws on failure rather than returning a Result, so HallOfFameCache never stores a failed load.
+    // Unfiltered context on purpose: the result is shared with every circuit, so it mustn't depend
+    // on the one that happened to load it. If that circuit closed mid-load its tenant would fail
+    // closed and an empty board would be cached for everyone. companyId does the scoping instead.
+    private async Task<HallOfFameSnapshotDTO> LoadSnapshotAsync(DateTime? fromUtc, int take, Guid? clientId, int? companyId)
     {
-        DateTime? fromUtc = period.ToUtcLowerBound(DateTime.Now);
+        await using ApplicationDbContext ctx = await _systemFactory.CreateDbContextAsync();
 
+        return new HallOfFameSnapshotDTO
+        {
+            TopScores = await QueryTopEntriesAsync(ctx, fromUtc, take, clientId, companyId, orderByAccuracy: false),
+            TopAccuracy = await QueryTopEntriesAsync(ctx, fromUtc, take, clientId, companyId, orderByAccuracy: true),
+            TeamTotals = await QueryTeamTotalsAsync(ctx, fromUtc, clientId, companyId)
+        };
+    }
+
+    private static async Task<List<HallOfFameEntryDTO>> QueryTopEntriesAsync(ApplicationDbContext ctx, DateTime? fromUtc, int take, Guid? clientId, int? companyId, bool orderByAccuracy)
+    {
+        IQueryable<GameResultPlayerScore> query = BuildScoreQuery(ctx, fromUtc, clientId, companyId);
+
+        // Ties break on the other metric, then on recency, so the board is stable between
+        // refreshes rather than reshuffling equal rows on every reload.
+        IOrderedQueryable<GameResultPlayerScore> orderedQuery = orderByAccuracy
+            ? query.OrderByDescending(x => x.Accuracy).ThenByDescending(x => x.Score)
+            : query.OrderByDescending(x => x.Score).ThenByDescending(x => x.Accuracy);
+
+        return await orderedQuery
+            .ThenByDescending(x => x.GameResult!.PlayedAtUtc)
+            .Take(take)
+            .Select(x => new HallOfFameEntryDTO
+            {
+                GunId = x.GunId,
+                PlayerName = x.PlayerName,
+                Score = x.Score,
+                Accuracy = x.Accuracy,
+                Team = x.Team,
+                PlayedAtUtc = x.GameResult!.PlayedAtUtc
+            })
+            .ToListAsync();
+    }
+
+    private static async Task<List<HallOfFameTeamTotalDTO>> QueryTeamTotalsAsync(ApplicationDbContext ctx, DateTime? fromUtc, Guid? clientId, int? companyId)
+    {
+        return await BuildScoreQuery(ctx, fromUtc, clientId, companyId)
+            .Where(x => x.Team != null)
+            .GroupBy(x => x.Team!.Value)
+            .Select(g => new HallOfFameTeamTotalDTO
+            {
+                Team = g.Key,
+                TotalScore = g.Sum(x => x.Score),
+                GameCount = g.Select(x => x.GameResultId).Distinct().Count()
+            })
+            .OrderByDescending(x => x.TotalScore)
+            .ToListAsync();
+    }
+
+    // The venue's local "now" - the same zone ToUtcLowerBound converts back from - read through
+    // TimeProvider so tests can move the clock past midnight.
+    private DateTime? GetLowerBound(HallOfFamePeriod period)
+    {
+        DateTime localNow = TimeZoneInfo.ConvertTime(_timeProvider.GetUtcNow(), TimeZoneInfo.Local).DateTime;
+
+        return period.ToUtcLowerBound(localNow);
+    }
+
+    // No Include: every query that uses this ends in a projection, which reads GameResult through
+    // the join anyway.
+    private static IQueryable<GameResultPlayerScore> BuildScoreQuery(ApplicationDbContext ctx, DateTime? fromUtc, Guid? clientId, int? companyId)
+    {
         IQueryable<GameResultPlayerScore> query = ctx.GameResultPlayerScores
             .AsNoTracking()
-            .TagWithCallSite()
-            .Include(x => x.GameResult);
+            .TagWithCallSite();
 
         if (fromUtc.HasValue)
         {
