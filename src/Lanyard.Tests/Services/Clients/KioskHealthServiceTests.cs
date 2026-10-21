@@ -199,6 +199,95 @@ public class KioskHealthServiceTests
     }
 
     [TestMethod]
+    public async Task GetHealth_ForGivenKiosks_MatchesTheFullLoad()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid reporting = await SeedClientAsync(options, "conn-1");
+        Guid legacy = await SeedClientAsync(options, "conn-2");
+        TestClock clock = new(Start);
+        KioskHealthService service = GetService(options, clock, "conn-1", "conn-2");
+
+        await service.RecordReportAsync(reporting, Report());
+
+        Result<Dictionary<Guid, KioskHealthView>> full = await service.GetHealthAsync();
+        Result<Dictionary<Guid, KioskHealthView>> given = await service.GetHealthAsync(
+        [
+            new KioskHealthClient(reporting, true, null),
+            new KioskHealthClient(legacy, true, null)
+        ]);
+
+        Assert.IsTrue(given.IsSuccess);
+        CollectionAssert.AreEquivalent(full.Data!.Keys, given.Data!.Keys);
+
+        foreach (Guid id in full.Data.Keys)
+        {
+            Assert.AreEqual(full.Data[id].Status, given.Data[id].Status);
+            CollectionAssert.AreEqual(full.Data[id].Reasons.ToList(), given.Data[id].Reasons.ToList());
+        }
+    }
+
+    [TestMethod]
+    public async Task GetHealth_ForGivenKiosks_TakesTheConnectedFlagAsGiven()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = await SeedClientAsync(options, "conn-1");
+        TestClock clock = new(Start);
+
+        // The hub set says connected; the caller's own snapshot of it says not.
+        KioskHealthService service = GetService(options, clock, "conn-1");
+
+        await service.RecordReportAsync(clientId, Report());
+        clock.Advance(TimeSpan.FromSeconds(5));
+
+        Result<Dictionary<Guid, KioskHealthView>> health = await service.GetHealthAsync(
+            [new KioskHealthClient(clientId, false, Start.AddSeconds(2))]);
+
+        Assert.AreEqual(KioskHealthStatus.Disconnected, health.Data![clientId].Status);
+    }
+
+    [TestMethod]
+    public async Task GetHealth_ForGivenKiosks_StillComparesVersionsAcrossTheWholeCompany()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid older = await SeedClientAsync(options, "conn-1");
+        Guid newer = await SeedClientAsync(options, "conn-2");
+        TestClock clock = new(Start);
+        KioskHealthService service = GetService(options, clock, "conn-1", "conn-2");
+
+        await service.RecordReportAsync(older, Report(x => x.ClientVersion = "1.0.41"));
+        await service.RecordReportAsync(newer, Report(x => x.ClientVersion = "1.0.42"));
+
+        Result<Dictionary<Guid, KioskHealthView>> health = await service.GetHealthAsync([new KioskHealthClient(older, true, null)]);
+
+        Assert.AreEqual(1, health.Data!.Count, "Only the kiosks asked about are returned.");
+        Assert.AreEqual("1.0.42", health.Data[older].NewerVersionSeen);
+    }
+
+    [TestMethod]
+    public async Task GetClientHealth_ReturnsJustThatKiosk()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid older = await SeedClientAsync(options, "conn-1");
+        Guid newer = await SeedClientAsync(options, "conn-2");
+        Guid legacy = await SeedClientAsync(options, "conn-3");
+        TestClock clock = new(Start);
+        KioskHealthService service = GetService(options, clock, "conn-1", "conn-2", "conn-3");
+
+        await service.RecordReportAsync(older, Report(x => x.ClientVersion = "1.0.41"));
+        await service.RecordReportAsync(newer, Report(x => x.ClientVersion = "1.0.42"));
+
+        Result<KioskHealthView?> olderHealth = await service.GetClientHealthAsync(older);
+        Result<KioskHealthView?> legacyHealth = await service.GetClientHealthAsync(legacy);
+        Result<KioskHealthView?> unknown = await service.GetClientHealthAsync(Guid.NewGuid());
+
+        Assert.AreEqual(older, olderHealth.Data!.Snapshot!.ClientId);
+        Assert.AreEqual("1.0.42", olderHealth.Data.NewerVersionSeen);
+        Assert.AreEqual(KioskHealthStatus.NoTelemetry, legacyHealth.Data!.Status);
+        Assert.IsTrue(unknown.IsSuccess);
+        Assert.IsNull(unknown.Data);
+    }
+
+    [TestMethod]
     public async Task RecordReport_StoresTheOfflineFallbackFields()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();

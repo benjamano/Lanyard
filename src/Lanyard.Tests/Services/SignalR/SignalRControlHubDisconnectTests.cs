@@ -53,7 +53,8 @@ public class SignalRControlHubDisconnectTests
         string disconnectingConnectionId,
         string currentMostRecentConnectionId,
         out ILaserGameStatusStore statusStore,
-        out Mock<IClientService> clientService)
+        out Mock<IClientService> clientService,
+        IKioskFleetEventBus? fleetEvents = null)
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         ISystemDbContextFactory factory = GetFactory(options);
@@ -106,7 +107,8 @@ public class SignalRControlHubDisconnectTests
             Mock.Of<IKioskMediaTokenService>(),
             new KioskConnectionRegistry(),
             Mock.Of<IKioskHealthService>(),
-            Mock.Of<IAudioClipPlaybackService>())
+            Mock.Of<IAudioClipPlaybackService>(),
+            fleetEvents ?? new KioskFleetEventBus())
         {
             Context = hubCallerContextMock.Object,
             Groups = Mock.Of<IGroupManager>()
@@ -174,5 +176,36 @@ public class SignalRControlHubDisconnectTests
         // The old whole-row write lost a reconnect that landed between its read and its write.
         clientService.Verify(x => x.RecordDisconnectAsync(clientId, StaleConnectionId, It.IsAny<DateTime>()), Times.Once);
         clientService.Verify(x => x.UpdateClientAsync(It.IsAny<Client>()), Times.Never);
+    }
+
+    [TestMethod]
+    public async Task OnDisconnectedAsync_TellsTheKiosksCompanysPages()
+    {
+        KioskFleetEventBus fleetEvents = new();
+        List<int> published = [];
+        fleetEvents.OnChanged += published.Add;
+
+        SignalRControlHub hub = BuildHub(Guid.NewGuid(), CurrentConnectionId, CurrentConnectionId, out _, out _, fleetEvents);
+
+        // What OnConnectedAsync left behind for this connection.
+        hub.Context.Items["CompanyId"] = 9;
+
+        await hub.OnDisconnectedAsync(null);
+
+        CollectionAssert.AreEqual(new[] { 9 }, published, "The Clients page should show the kiosk going offline straight away.");
+    }
+
+    [TestMethod]
+    public async Task OnDisconnectedAsync_PublishesNothing_ForAConnectionThatNeverFinishedConnecting()
+    {
+        KioskFleetEventBus fleetEvents = new();
+        List<int> published = [];
+        fleetEvents.OnChanged += published.Add;
+
+        SignalRControlHub hub = BuildHub(Guid.NewGuid(), CurrentConnectionId, CurrentConnectionId, out _, out _, fleetEvents);
+
+        await hub.OnDisconnectedAsync(null);
+
+        Assert.AreEqual(0, published.Count);
     }
 }

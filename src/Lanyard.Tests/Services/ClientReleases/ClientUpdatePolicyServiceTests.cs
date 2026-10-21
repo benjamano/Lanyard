@@ -1,4 +1,5 @@
 using Lanyard.Application.Services.ClientReleases;
+using Lanyard.Application.Services.Clients;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
@@ -40,7 +41,7 @@ public class ClientUpdatePolicyServiceTests
     }
 
     private static (ClientUpdatePolicyService Service, Mock<IClientReleaseCatalogService> Catalog) GetService(
-        DbContextOptions<ApplicationDbContext> options, ITenantProvider? tenant = null)
+        DbContextOptions<ApplicationDbContext> options, ITenantProvider? tenant = null, IKioskFleetEventBus? fleetEvents = null)
     {
         Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
@@ -52,7 +53,7 @@ public class ClientUpdatePolicyServiceTests
         catalog.Setup(x => x.GetFeedForVersionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string version, CancellationToken _) => Result<ClientUpdateFeedResponse>.Ok(new ClientUpdateFeedResponse { TargetVersion = version }));
 
-        return (new ClientUpdatePolicyService(factoryMock.Object, catalog.Object, NullLogger<ClientUpdatePolicyService>.Instance), catalog);
+        return (new ClientUpdatePolicyService(factoryMock.Object, catalog.Object, fleetEvents ?? new KioskFleetEventBus(), NullLogger<ClientUpdatePolicyService>.Instance), catalog);
     }
 
     private static async Task<Guid> SeedClientAsync(DbContextOptions<ApplicationDbContext> options, int companyId = CompanyA,
@@ -168,6 +169,69 @@ public class ClientUpdatePolicyServiceTests
 
         Assert.IsTrue(result.IsSuccess, result.Error);
         CollectionAssert.AreEqual(new[] { companyAClient }, result.Data!.Keys.ToArray());
+    }
+
+    [TestMethod]
+    public async Task GetTargetsAsync_ForLoadedClients_MatchesTheFullLoad_WithoutReadingClients()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedClientAsync(options, ring: ClientUpdateRing.Stable, reported: "1.0.40");
+        await SeedClientAsync(options, ring: ClientUpdateRing.Canary, reported: "1.0.41");
+        await SeedClientAsync(options, ring: ClientUpdateRing.Pinned, pinned: "1.0.40", reported: "1.0.41");
+        ClientUpdatePolicyService service = GetService(options).Service;
+
+        Result<IReadOnlyDictionary<Guid, ClientUpdateTargetDTO>> full = await service.GetTargetsAsync();
+
+        List<Client> loaded;
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            loaded = await ctx.Clients.AsNoTracking().ToListAsync();
+        }
+
+        // Only the clients passed in count: one added afterwards doesn't appear.
+        await SeedClientAsync(options);
+
+        Result<IReadOnlyDictionary<Guid, ClientUpdateTargetDTO>> given = await service.GetTargetsAsync(loaded);
+
+        Assert.IsTrue(given.IsSuccess, given.Error);
+        CollectionAssert.AreEquivalent(full.Data!.Keys.ToList(), given.Data!.Keys.ToList());
+
+        foreach (Guid id in full.Data.Keys)
+        {
+            Assert.AreEqual(full.Data[id].Ring, given.Data[id].Ring);
+            Assert.AreEqual(full.Data[id].TargetVersion, given.Data[id].TargetVersion);
+            Assert.AreEqual(full.Data[id].Problem, given.Data[id].Problem);
+        }
+    }
+
+    [TestMethod]
+    public async Task SetUpdateRingAsync_TellsTheClientsCompanysPages()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid id = await SeedClientAsync(options, companyId: CompanyB);
+        KioskFleetEventBus fleetEvents = new();
+        List<int> published = [];
+        fleetEvents.OnChanged += published.Add;
+
+        Result<ClientUpdateTargetDTO> result = await GetService(options, fleetEvents: fleetEvents).Service.SetUpdateRingAsync(id, ClientUpdateRing.Canary, null);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        CollectionAssert.AreEqual(new[] { CompanyB }, published);
+    }
+
+    [TestMethod]
+    public async Task SetUpdateRingAsync_PublishesNothing_WhenTheSaveIsRefused()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid id = await SeedClientAsync(options);
+        KioskFleetEventBus fleetEvents = new();
+        List<int> published = [];
+        fleetEvents.OnChanged += published.Add;
+
+        Result<ClientUpdateTargetDTO> result = await GetService(options, fleetEvents: fleetEvents).Service.SetUpdateRingAsync(id, ClientUpdateRing.Pinned, "1.0.39");
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual(0, published.Count);
     }
 
     [TestMethod]

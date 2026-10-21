@@ -134,6 +134,7 @@ builder.Services.AddScoped<IClientReleaseAdminService, ClientReleaseAdminService
 builder.Services.AddScoped<IClientDiagnosticsService, ClientDiagnosticsService>();
 builder.Services.AddScoped<IKioskSelfTestService, KioskSelfTestService>();
 builder.Services.AddScoped<IKioskHealthService, KioskHealthService>();
+builder.Services.AddScoped<IKioskClientListService, KioskClientListService>();
 builder.Services.AddScoped<IKioskOfflineManifestService, KioskOfflineManifestService>();
 builder.Services.Configure<KioskHealthOptions>(builder.Configuration.GetSection(KioskHealthOptions.SectionName));
 builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>();
@@ -168,6 +169,8 @@ builder.Services.AddSingleton<ITerminalEphemeralTokenService, TerminalEphemeralT
 builder.Services.AddSingleton<ITerminalEventBus, TerminalEventBus>();
 builder.Services.AddSingleton<ITimeOffEventBus, TimeOffEventBus>();
 builder.Services.AddSingleton<IShiftClaimEventBus, ShiftClaimEventBus>();
+builder.Services.AddSingleton<IKioskFleetEventBus, KioskFleetEventBus>();
+builder.Services.AddSingleton<IKioskClientListCache, KioskClientListCache>();
 builder.Services.AddScoped<IShiftClaimService, ShiftClaimService>();
 builder.Services.AddSingleton<IChatEventBus, ChatEventBus>();
 builder.Services.AddSingleton<IChatPresence, ChatPresence>();
