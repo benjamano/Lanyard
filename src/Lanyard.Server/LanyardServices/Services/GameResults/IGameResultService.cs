@@ -20,6 +20,17 @@ public interface IGameResultService
     /// </remarks>
     Task<Result<bool>> RecordCompletedGameAsync(Guid clientId, LaserGameStatusDTO status);
 
+    /// <summary>
+    /// Top scores, best accuracy and team totals for one widget, served from <see cref="IHallOfFameCache"/>
+    /// and only recomputed after a game is recorded (or the period's window moves on).
+    /// </summary>
+    /// <remarks>
+    /// Signed-in callers always get their own company's leaderboard; a companyId naming a
+    /// different company returns empty. System callers (kiosk displays) must pass the dashboard's
+    /// company; with none they get an uncached, every-company result.
+    /// </remarks>
+    Task<Result<HallOfFameSnapshotDTO>> GetHallOfFameAsync(HallOfFamePeriod period, int take, Guid? clientId, int? companyId);
+
     // companyId limits results to one company's games. Kiosk displays run unfiltered (system
     // tenant), so they must pass the dashboard's company or they would see every company's games.
     // Null leaves it to the caller's tenant filter.

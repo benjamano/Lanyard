@@ -1,3 +1,4 @@
+using Lanyard.Application.Services;
 using Lanyard.Application.Services.Demo;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
@@ -6,6 +7,7 @@ using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
@@ -25,6 +27,7 @@ public class DemoResetServiceTests
     private SqliteConnection _connection = null!;
     private DbContextOptions<ApplicationDbContext> _options = null!;
     private ServiceProvider _provider = null!;
+    private HallOfFameCache _hallOfFameCache = null!;
 
     private sealed class TestHostEnvironment : IHostEnvironment
     {
@@ -37,6 +40,8 @@ public class DemoResetServiceTests
     [TestInitialize]
     public async Task Setup()
     {
+        _hallOfFameCache = new HallOfFameCache(new MemoryCache(new MemoryCacheOptions()), NullLogger<HallOfFameCache>.Instance);
+
         _connection = new SqliteConnection("DataSource=:memory:");
         await _connection.OpenAsync();
 
@@ -85,6 +90,7 @@ public class DemoResetServiceTests
         _provider.GetRequiredService<IServiceScopeFactory>(),
         Options.Create(new DemoOptions { Enabled = enabled }),
         new DemoDirectory(new SystemDbContextFactory(_options), TimeProvider.System),
+        _hallOfFameCache,
         TimeProvider.System,
         NullLogger<DemoResetService>.Instance);
 
@@ -196,6 +202,20 @@ public class DemoResetServiceTests
             Assert.AreEqual(stampBefore, staff.SecurityStamp);
             Assert.AreEqual(1, await ctx.Companies.CountAsync(x => x.IsDemo));
         }
+    }
+
+    [TestMethod]
+    public async Task Reset_InvalidatesTheDemoCompanysHallOfFame()
+    {
+        List<int> changed = [];
+        _hallOfFameCache.Changed += changed.Add;
+
+        Result<bool> result = await BuildService().ResetAsync();
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        // The wipe and reseed replace every demo game, so open leaderboards must reload.
+        CollectionAssert.AreEqual(new List<int> { await DemoCompanyIdAsync() }, changed);
     }
 
     [TestMethod]

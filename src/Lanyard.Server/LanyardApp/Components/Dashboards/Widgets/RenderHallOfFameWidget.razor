@@ -3,6 +3,8 @@
 @implements IDisposable
 
 @inject IGameResultService _gameResultService
+@inject IHallOfFameCache _hallOfFameCache
+@inject ILogger<RenderHallOfFameWidget> _logger
 
 @* Known limitation: the hardware identifies players by gun, not by person - nothing in the
    packet pipeline populates a player name - so entries read "Gun 4" rather than a person's
@@ -96,9 +98,10 @@
     [Parameter]
     public int? CompanyId { get; set; }
 
-    // Leaderboard rows only change when a game finishes, so this polls on a slow interval rather
-    // than subscribing to the live status store the way the scoreboard widget does.
-    private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(60);
+    // Leaderboard rows only change when a game finishes, and HallOfFameCache.Changed tells us when
+    // that happens. The timer only catches the period rolling over (midnight, Monday, the 1st) on a
+    // day nobody plays, and it reads through the shared cache, so it costs no queries otherwise.
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(5);
 
     private const int TakeCount = 3;
 
@@ -129,6 +132,8 @@
         _loadedClientId = Widget.ClientId;
         _loadedCompanyId = CompanyId;
 
+        _hallOfFameCache.Changed += OnHallOfFameChanged;
+
         await LoadAsync();
 
         _refreshCancellation = new CancellationTokenSource();
@@ -142,8 +147,7 @@
             {
                 while (await _refreshTimer.WaitForNextTickAsync(token))
                 {
-                    await LoadAsync();
-                    await InvokeAsync(StateHasChanged);
+                    await InvokeAsync(ReloadAndRenderAsync);
                 }
             }
             catch (OperationCanceledException)
@@ -151,6 +155,34 @@
                 // Expected when the component is disposed.
             }
         });
+    }
+
+    private void OnHallOfFameChanged(int companyId)
+    {
+        // Raised on the recording kiosk's hub call, not this circuit. Another company's game is
+        // ignored; an unsaved editor dashboard (no company) just reloads, which for anyone else's
+        // game is a cache hit.
+        if (CompanyId is > 0 && CompanyId != companyId)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(ReloadAndRenderAsync);
+    }
+
+    private async Task ReloadAndRenderAsync()
+    {
+        try
+        {
+            await LoadAsync();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            // Fire-and-forget from an event or the timer: an exception here would otherwise go
+            // unobserved, or take the circuit down.
+            _logger.LogWarning(ex, "Hall of Fame widget failed to refresh");
+        }
     }
 
     protected override async Task OnParametersSetAsync()
@@ -167,7 +199,7 @@
     {
         // A config change landing mid-poll cannot just be dropped: OnParametersSetAsync will not
         // fire again for it, so without this the widget would sit on the old period's rows until
-        // the next 60s tick. Hand the request to the in-flight load instead.
+        // the next tick. Hand the request to the in-flight load instead.
         if (_isRefreshing)
         {
             _reloadRequested = true;
@@ -191,20 +223,15 @@
                 int? requestedCompanyId = CompanyId;
                 int? companyId = requestedCompanyId is > 0 ? requestedCompanyId : null;
 
-                Result<IReadOnlyList<HallOfFameEntryDTO>> scoresResult =
-                    await _gameResultService.GetTopScoresAsync(period, TakeCount, clientId, companyId);
+                Result<HallOfFameSnapshotDTO> result =
+                    await _gameResultService.GetHallOfFameAsync(period, TakeCount, clientId, companyId);
 
-                Result<IReadOnlyList<HallOfFameEntryDTO>> accuracyResult =
-                    await _gameResultService.GetTopAccuracyAsync(period, TakeCount, clientId, companyId);
+                _hasError = !result.IsSuccess;
 
-                Result<IReadOnlyList<HallOfFameTeamTotalDTO>> teamResult =
-                    await _gameResultService.GetTopTeamTotalsAsync(period, clientId, companyId);
-
-                _hasError = !scoresResult.IsSuccess || !accuracyResult.IsSuccess || !teamResult.IsSuccess;
-
-                _topScores = scoresResult.Data?.ToList() ?? new List<HallOfFameEntryDTO>();
-                _topAccuracy = accuracyResult.Data?.ToList() ?? new List<HallOfFameEntryDTO>();
-                _teamTotals = teamResult.Data?.ToList() ?? new List<HallOfFameTeamTotalDTO>();
+                // Copies: the snapshot is shared with every other circuit through the cache.
+                _topScores = result.Data?.TopScores.ToList() ?? new List<HallOfFameEntryDTO>();
+                _topAccuracy = result.Data?.TopAccuracy.ToList() ?? new List<HallOfFameEntryDTO>();
+                _teamTotals = result.Data?.TeamTotals.ToList() ?? new List<HallOfFameTeamTotalDTO>();
 
                 _hasAnyResults = _topScores.Count > 0 || _topAccuracy.Count > 0 || _teamTotals.Count > 0;
 
@@ -238,6 +265,7 @@
 
     public void Dispose()
     {
+        _hallOfFameCache.Changed -= OnHallOfFameChanged;
         _refreshCancellation?.Cancel();
         _refreshTimer?.Dispose();
         _refreshCancellation?.Dispose();

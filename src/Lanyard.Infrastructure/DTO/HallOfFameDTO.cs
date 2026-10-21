@@ -23,3 +23,13 @@ public class HallOfFameTeamTotalDTO
     public int TotalScore { get; set; }
     public int GameCount { get; set; }
 }
+
+// Everything one Hall of Fame widget shows, loaded together so a refresh is one cache lookup (and
+// at most one DbContext) rather than three. Shared between circuits by HallOfFameCache, so treat
+// it as read-only.
+public class HallOfFameSnapshotDTO
+{
+    public IReadOnlyList<HallOfFameEntryDTO> TopScores { get; init; } = [];
+    public IReadOnlyList<HallOfFameEntryDTO> TopAccuracy { get; init; } = [];
+    public IReadOnlyList<HallOfFameTeamTotalDTO> TeamTotals { get; init; } = [];
+}
