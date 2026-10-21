@@ -89,6 +89,16 @@ public class ClientsPageRowsTests
     }
 
     [TestMethod]
+    public void SameKiosks_IgnoresHealthAndTargets_ButNotTheKiosksThemselves()
+    {
+        IReadOnlyList<ClientRowSignature> baseline = ClientsPageRows.Build([Kiosk()], Health(KioskHealthStatus.Healthy), Targets());
+
+        Assert.IsTrue(ClientsPageRows.SameKiosks(baseline, ClientsPageRows.Build([Kiosk()], Health(KioskHealthStatus.Offline, TimeSpan.FromHours(1)), Targets("1.0.42"))));
+        Assert.IsFalse(ClientsPageRows.SameKiosks(baseline, ClientsPageRows.Build([Kiosk(x => x.IsCurrentlyConnected = false)], Health(KioskHealthStatus.Healthy), Targets())));
+        Assert.IsFalse(ClientsPageRows.SameKiosks(baseline, ClientsPageRows.Build([Kiosk(x => x.Name = "Renamed")], Health(KioskHealthStatus.Healthy), Targets())));
+    }
+
+    [TestMethod]
     public void TargetInputs_ChangeWithTheRingPinOrReportedVersion_Only()
     {
         IReadOnlyList<(Guid, string?, ClientUpdateRing, string?)> baseline = ClientsPageRows.TargetInputs([Kiosk()]);

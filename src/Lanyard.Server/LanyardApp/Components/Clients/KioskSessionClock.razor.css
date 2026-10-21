@@ -1,0 +1,6 @@
+/* Fixed-width digits so the column doesn't twitch as the seconds tick, and never wrapped: a
+   clock split over two lines is hard to read. */
+.kiosk-session-clock {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}

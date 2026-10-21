@@ -66,6 +66,26 @@ public static class ClientsPageRows
     }
 
     /// <summary>
+    /// True when the kiosks themselves are unchanged and only their health or update targets moved.
+    /// The page then keeps the grid's Items as they are, since health and targets are looked up by
+    /// id as it renders: a new Items list makes the grid send every row to the browser again.
+    /// </summary>
+    public static bool SameKiosks(IReadOnlyList<ClientRowSignature> left, IReadOnlyList<ClientRowSignature> right)
+    {
+        return left.Select(KioskOnly).SequenceEqual(right.Select(KioskOnly));
+    }
+
+    private static ClientRowSignature KioskOnly(ClientRowSignature row) => row with
+    {
+        HealthStatus = null,
+        HealthDetails = string.Empty,
+        Ring = null,
+        PinnedVersion = null,
+        TargetVersion = null,
+        TargetProblem = null
+    };
+
+    /// <summary>
     /// What decides a kiosk's update target, so the page only asks for targets again (a release
     /// catalogue read) when one of these moved.
     /// </summary>

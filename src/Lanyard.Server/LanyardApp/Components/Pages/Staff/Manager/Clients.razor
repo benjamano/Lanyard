@@ -26,18 +26,15 @@
 <PageTitle>Clients</PageTitle>
 
 <FluentCard Height="auto">
-    <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center" Wrap="true">
-        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">
-            Clients
-        </FluentText>
-        <HelpButton AreaKey="@HelpRegistry.Kiosks" />
-    </FluentStack>
     <div class="clients-header">
         <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">
             Clients
         </FluentText>
-        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Add())"
-                      OnClick="OpenPairKioskDialogAsync">Add kiosk</FluentButton>
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px" VerticalAlignment="VerticalAlignment.Center" Width="auto">
+            <HelpButton AreaKey="@HelpRegistry.Kiosks" />
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Add())"
+                          OnClick="OpenPairKioskDialogAsync">Add kiosk</FluentButton>
+        </FluentStack>
     </div>
     @if (_versionCounts.Count > 0)
     {
@@ -75,7 +72,7 @@
         </div>
     }
     <div class="clients-grid-wrapper" @ref="_gridWrapper">
-        <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="minmax(0, 0.6fr) minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(125px, 1.1fr) minmax(0, 1.1fr) 224px" Class="clients-grid">
+        <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="minmax(0, 0.6fr) minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(125px, 1.1fr) minmax(112px, 1.1fr) 224px" Class="clients-grid">
             <ChildContent>
                 <PropertyColumn Property="x => x.Id" Title="Client ID" Class="clients-col-id"/>
                 <TemplateColumn Title="Name" Sortable="true" SortBy="@_sortByName">
@@ -222,8 +219,8 @@
 @code {
     private IEnumerable<ClientConnectedWithCapabilitiesDTO> clients = Array.Empty<ClientConnectedWithCapabilitiesDTO>();
 
-    // Sorted once per load and only replaced when something visible changed: the grid treats a
-    // new Items instance as new rows and refetches them.
+    // Sorted once per load and only replaced when the kiosks themselves changed (not just their
+    // health or targets): the grid treats a new Items instance as new rows and sends them all again.
     private IQueryable<ClientConnectedWithCapabilitiesDTO> _sortedClients = Enumerable.Empty<ClientConnectedWithCapabilitiesDTO>().AsQueryable();
 
     private Dictionary<Guid, KioskHealthView> _health = new();
@@ -284,7 +281,9 @@
     {
         _companyId = _tenantContext.CompanyId;
 
-        await RefreshAsync(showErrors: true, force: true);
+        // Not forced: the shared list is at most a few seconds old and dropped on every change, and
+        // this runs twice (prerender, then the live circuit), so the second load is a cache hit.
+        await RefreshAsync(showErrors: true);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -443,14 +442,20 @@
             return false;
         }
 
+        bool sameKiosks = _rows is not null && ClientsPageRows.SameKiosks(rows, _rows);
+
         _rows = rows;
-        clients = loaded;
-        _sortedClients = loaded.OrderBy(x => x.Name).ToList().AsQueryable();
         _health = health;
         _targets = targets;
-        _versionCounts = BuildVersionCounts(loaded);
-        _credentialCount = loaded.Count(x => x.LastAuthMethod == ClientAuthMethod.Credential);
-        _legacySecretCount = loaded.Count(x => x.LastAuthMethod == ClientAuthMethod.LegacySecret);
+
+        if (!sameKiosks)
+        {
+            clients = loaded;
+            _sortedClients = loaded.OrderBy(x => x.Name).ToList().AsQueryable();
+            _versionCounts = BuildVersionCounts(loaded);
+            _credentialCount = loaded.Count(x => x.LastAuthMethod == ClientAuthMethod.Credential);
+            _legacySecretCount = loaded.Count(x => x.LastAuthMethod == ClientAuthMethod.LegacySecret);
+        }
 
         return true;
     }
