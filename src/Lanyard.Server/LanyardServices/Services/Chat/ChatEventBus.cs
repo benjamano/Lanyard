@@ -11,8 +11,9 @@ public enum ChatEventKind
 }
 
 // Who a chat change concerns: the conversation's current members. Pages ignore events that
-// don't include their viewer.
-public record ChatEvent(Guid ConversationId, IReadOnlyCollection<string> MemberUserIds, ChatEventKind Kind);
+// don't include their viewer. A new message carries its id and time, so an open conversation
+// can fetch just that (IChatService.GetMessagesSinceAsync) rather than reload the lot.
+public record ChatEvent(Guid ConversationId, IReadOnlyCollection<string> MemberUserIds, ChatEventKind Kind, Guid? MessageId = null, DateTime? MessageCreateUtc = null);
 
 // Tells open chat pages and unread badges that something changed, in-process (the same
 // single-app-instance assumption as the other event buses).

@@ -5,6 +5,7 @@ using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Chat;
 using Lanyard.Infrastructure.DTO.Notifications;
+using Lanyard.Infrastructure.DTO.Scheduling;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Tests.Services.Scheduling;
@@ -35,7 +36,8 @@ public class ChatServiceTests
         RecordingNotificationDispatcher Notifications,
         ChatPresence Presence,
         ChatService Chat,
-        ChatModerationService Moderation);
+        ChatModerationService Moderation,
+        ChatEventBus Bus);
 
     private static async Task<World> SeedAsync()
     {
@@ -63,7 +65,8 @@ public class ChatServiceTests
 
         return new World(options, company, location, manager, amy, tom, priya, clock, notifications, presence,
             new ChatService(factory, notifications, bus, presence, clock, NullLogger<ChatService>.Instance),
-            new ChatModerationService(factory, notifications, bus, clock, NullLogger<ChatModerationService>.Instance));
+            new ChatModerationService(factory, notifications, bus, clock, NullLogger<ChatModerationService>.Instance),
+            bus);
     }
 
     private static async Task<ChatConversation> DirectAsync(World w, UserProfile a, UserProfile b) =>
@@ -470,6 +473,299 @@ public class ChatServiceTests
         ChatThread older = (await w.Chat.GetThreadAsync(w.Tom.Id, direct.Id, newest.Messages[0].Message.CreateUtc, take: 3)).Data!;
         Assert.IsFalse(older.HasOlder);
         CollectionAssert.AreEqual(new[] { "Message 0", "Message 1" }, older.Messages.Select(x => x.Message.BodyText).ToList());
+    }
+
+    [TestMethod]
+    public async Task Thread_PagesBackWithoutLosingMessagesSentInTheSameInstant()
+    {
+        World w = await SeedAsync();
+        ChatConversation direct = await DirectAsync(w, w.Amy, w.Tom);
+
+        for (int i = 0; i < 5; i++)
+        {
+            await SendAsync(w, w.Amy, direct, $"<p>Same instant {i}</p>");
+        }
+
+        List<Guid> seen = [];
+        ChatThread page = (await w.Chat.GetThreadAsync(w.Tom.Id, direct.Id, take: 2)).Data!;
+        seen.AddRange(page.Messages.Select(x => x.Message.Id));
+
+        while (page.HasOlder)
+        {
+            ChatMessage oldest = page.Messages[0].Message;
+            page = (await w.Chat.GetThreadAsync(w.Tom.Id, direct.Id, oldest.CreateUtc, take: 2, beforeId: oldest.Id)).Data!;
+            seen.AddRange(page.Messages.Select(x => x.Message.Id));
+        }
+
+        Assert.AreEqual(5, seen.Count, "Every message once");
+        Assert.AreEqual(5, seen.Distinct().Count(), "None repeated");
+    }
+
+    // ---- New messages for an open conversation ---------------------------------------------
+
+    [TestMethod]
+    public async Task Since_ReturnsOnlyMessagesFromThatPoint_OldestFirst()
+    {
+        World w = await SeedAsync();
+        ChatConversation direct = await DirectAsync(w, w.Amy, w.Tom);
+
+        w.Clock.Advance(TimeSpan.FromMinutes(1));
+        await SendAsync(w, w.Amy, direct, "<p>Before</p>");
+        w.Clock.Advance(TimeSpan.FromMinutes(1));
+        DateTime since = Now.AddMinutes(2);
+        await SendAsync(w, w.Amy, direct, "<p>First</p>");
+        w.Clock.Advance(TimeSpan.FromMinutes(1));
+        await SendAsync(w, w.Tom, direct, "<p>Second</p>");
+
+        ChatMessagesDelta delta = (await w.Chat.GetMessagesSinceAsync(w.Tom.Id, direct.Id, since)).Data!;
+
+        Assert.IsFalse(delta.Truncated);
+        CollectionAssert.AreEqual(new[] { "First", "Second" }, delta.Messages.Select(x => x.Message.BodyText).ToList());
+        Assert.IsFalse(delta.Messages[0].IsMine);
+        Assert.IsTrue(delta.Messages[1].IsMine);
+    }
+
+    [TestMethod]
+    public async Task Since_SaysWhenThereWereMoreThanAskedFor()
+    {
+        World w = await SeedAsync();
+        ChatConversation direct = await DirectAsync(w, w.Amy, w.Tom);
+
+        for (int i = 0; i < 4; i++)
+        {
+            w.Clock.Advance(TimeSpan.FromSeconds(1));
+            await SendAsync(w, w.Amy, direct, $"<p>Message {i}</p>");
+        }
+
+        ChatMessagesDelta delta = (await w.Chat.GetMessagesSinceAsync(w.Tom.Id, direct.Id, DateTime.MinValue, take: 3)).Data!;
+
+        Assert.IsTrue(delta.Truncated);
+        Assert.AreEqual(3, delta.Messages.Count);
+    }
+
+    [TestMethod]
+    public async Task Since_ReturnsEveryMessageSentInTheSameInstant()
+    {
+        World w = await SeedAsync();
+        ChatConversation direct = await DirectAsync(w, w.Amy, w.Tom);
+
+        ChatMessage first = await SendAsync(w, w.Amy, direct, "<p>One</p>");
+        ChatMessage second = await SendAsync(w, w.Tom, direct, "<p>Two</p>");
+
+        ChatMessagesDelta delta = (await w.Chat.GetMessagesSinceAsync(w.Amy.Id, direct.Id, first.CreateUtc)).Data!;
+
+        CollectionAssert.AreEquivalent(new[] { first.Id, second.Id }, delta.Messages.Select(x => x.Message.Id).ToList());
+    }
+
+    [TestMethod]
+    public async Task Since_WithTheOverlap_CatchesAMessageSavedAfterALaterOne()
+    {
+        World w = await SeedAsync();
+        ChatConversation direct = await DirectAsync(w, w.Amy, w.Tom);
+
+        w.Clock.Advance(TimeSpan.FromMinutes(1));
+        ChatMessage later = await SendAsync(w, w.Amy, direct, "<p>Saved first</p>");
+
+        // Stamped a moment earlier but saved afterwards, as two sends at once can be.
+        Guid lateId = Guid.NewGuid();
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            ctx.ChatMessages.Add(new ChatMessage
+            {
+                Id = lateId, ConversationId = direct.Id, AuthorUserId = w.Tom.Id,
+                BodyHtml = "<p>Saved second</p>", BodyText = "Saved second", CreateUtc = later.CreateUtc.AddMilliseconds(-5)
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        ChatMessagesDelta delta = (await w.Chat.GetMessagesSinceAsync(w.Amy.Id, direct.Id, later.CreateUtc - TimeSpan.FromSeconds(30))).Data!;
+
+        CollectionAssert.AreEqual(new[] { lateId, later.Id }, delta.Messages.Select(x => x.Message.Id).ToList());
+    }
+
+    [TestMethod]
+    public async Task Since_SameAnswerAsAMissingConversation_ForNonMembersLeaversAndClosedConversations()
+    {
+        World w = await SeedAsync();
+        ChatConversation direct = await DirectAsync(w, w.Amy, w.Tom);
+        ChatConversation group = (await w.Chat.CreateGroupAsync(w.Amy.Id, w.Company.Id, "Crew", [w.Tom.Id])).Data!;
+        ChatConversation closed = (await w.Chat.CreateGroupAsync(w.Amy.Id, w.Company.Id, "Old crew", [w.Tom.Id])).Data!;
+        await SendAsync(w, w.Amy, direct);
+        await SendAsync(w, w.Amy, group);
+        await w.Chat.LeaveGroupAsync(w.Tom.Id, group.Id);
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            (await ctx.ChatConversations.SingleAsync(x => x.Id == closed.Id)).IsActive = false;
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<ChatMessagesDelta> missing = await w.Chat.GetMessagesSinceAsync(w.Amy.Id, Guid.NewGuid(), DateTime.MinValue);
+        Result<ChatMessagesDelta>[] refused =
+        [
+            await w.Chat.GetMessagesSinceAsync(w.Priya.Id, direct.Id, DateTime.MinValue),
+            await w.Chat.GetMessagesSinceAsync(w.Manager.Id, direct.Id, DateTime.MinValue),
+            await w.Chat.GetMessagesSinceAsync(w.Tom.Id, group.Id, DateTime.MinValue),
+            await w.Chat.GetMessagesSinceAsync(w.Tom.Id, closed.Id, DateTime.MinValue)
+        ];
+
+        Assert.IsFalse(missing.IsSuccess);
+        foreach (Result<ChatMessagesDelta> result in refused)
+        {
+            Assert.IsFalse(result.IsSuccess);
+            Assert.AreEqual(missing.Error, result.Error);
+        }
+    }
+
+    [TestMethod]
+    public async Task Since_SomeoneFromAnotherCompany_CantReadIt()
+    {
+        World w = await SeedAsync();
+        (_, Location elsewhere) = await SchedulingTestHelpers.SeedCompanyAsync(w.Options, "Other Co", "Leeds");
+        UserProfile outsider = await SchedulingTestHelpers.SeedUserAsync(w.Options, elsewhere, "Olly");
+        ChatConversation direct = await DirectAsync(w, w.Amy, w.Tom);
+        await SendAsync(w, w.Amy, direct);
+
+        Assert.IsFalse((await w.Chat.GetMessagesSinceAsync(outsider.Id, direct.Id, DateTime.MinValue)).IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task Since_ReAddedMember_DoesntGetWhatWasSaidWhileTheyWereOut()
+    {
+        World w = await SeedAsync();
+        ChatConversation group = (await w.Chat.CreateGroupAsync(w.Amy.Id, w.Company.Id, "Crew", [w.Tom.Id])).Data!;
+        await w.Chat.LeaveGroupAsync(w.Tom.Id, group.Id);
+
+        w.Clock.Advance(TimeSpan.FromMinutes(5));
+        await SendAsync(w, w.Amy, group, "<p>While Tom's out</p>");
+
+        w.Clock.Advance(TimeSpan.FromMinutes(5));
+        await w.Chat.AddMembersAsync(w.Amy.Id, group.Id, [w.Tom.Id]);
+        w.Clock.Advance(TimeSpan.FromMinutes(1));
+        await SendAsync(w, w.Amy, group, "<p>Welcome back</p>");
+
+        ChatMessagesDelta delta = (await w.Chat.GetMessagesSinceAsync(w.Tom.Id, group.Id, DateTime.MinValue)).Data!;
+
+        Assert.AreEqual("Welcome back", delta.Messages.Single().Message.BodyText);
+    }
+
+    [TestMethod]
+    public async Task Since_ShowsMessagesExactlyAsTheThreadDoes()
+    {
+        World w = await SeedAsync();
+        ChatConversation group = (await w.Chat.CreateGroupAsync(w.Amy.Id, w.Company.Id, "Crew", [w.Tom.Id])).Data!;
+
+        ChatMessage early = await SendAsync(w, w.Amy, group, $"<p>{new string('x', 300)}</p>");
+        ChatMessage gone = await SendAsync(w, w.Tom, group, "<p>Oops</p>");
+        await w.Chat.DeleteOwnAsync(w.Tom.Id, gone.Id);
+
+        // Priya joins later: a reply to something from before shows as an earlier message.
+        w.Clock.Advance(TimeSpan.FromMinutes(1));
+        await w.Chat.AddMembersAsync(w.Amy.Id, group.Id, [w.Priya.Id]);
+        w.Clock.Advance(TimeSpan.FromMinutes(1));
+        await w.Chat.SendAsync(w.Tom.Id, group.Id, "<p>Replying</p>", early.Id);
+        await w.Chat.SendAsync(w.Amy.Id, group.Id, "<p>To the deleted one</p>", gone.Id);
+
+        foreach (UserProfile reader in new[] { w.Tom, w.Priya })
+        {
+            List<ChatMessageView> thread = (await w.Chat.GetThreadAsync(reader.Id, group.Id)).Data!.Messages;
+            List<ChatMessageView> since = (await w.Chat.GetMessagesSinceAsync(reader.Id, group.Id, DateTime.MinValue)).Data!.Messages;
+
+            Assert.AreEqual(thread.Count, since.Count);
+            foreach (ChatMessageView fromSince in since)
+            {
+                ChatMessageView fromThread = thread.Single(x => x.Message.Id == fromSince.Message.Id);
+                Assert.AreEqual(fromThread.AuthorName, fromSince.AuthorName);
+                Assert.AreEqual(fromThread.IsMine, fromSince.IsMine);
+                Assert.AreEqual(fromThread.ReplyTo, fromSince.ReplyTo);
+                Assert.AreEqual(fromThread.Message.BodyHtml, fromSince.Message.BodyHtml);
+                Assert.AreEqual(fromThread.Message.IsDeleted, fromSince.Message.IsDeleted);
+            }
+        }
+
+        ChatMessageView tomsReply = (await w.Chat.GetMessagesSinceAsync(w.Tom.Id, group.Id, DateTime.MinValue)).Data!.Messages
+            .Single(x => x.Message.BodyText == "Replying");
+        Assert.AreEqual("Amy", tomsReply.ReplyTo!.AuthorName.Split(' ')[0]);
+        Assert.AreEqual(ChatHtml.Preview(new string('x', 300), 100), tomsReply.ReplyTo.Text, "The preview is cut the same as before");
+
+        ChatMessageView priyasView = (await w.Chat.GetMessagesSinceAsync(w.Priya.Id, group.Id, DateTime.MinValue)).Data!.Messages
+            .Single(x => x.Message.BodyText == "Replying");
+        Assert.AreEqual("Earlier message", priyasView.ReplyTo!.AuthorName);
+    }
+
+    [TestMethod]
+    public async Task Since_AfterAnAccountIsErased_ShowsTheSameNameAsTheThread()
+    {
+        World w = await SeedAsync();
+        ChatConversation group = (await w.Chat.CreateGroupAsync(w.Amy.Id, w.Company.Id, "Crew", [w.Tom.Id])).Data!;
+        ChatMessage post = await SendAsync(w, w.Tom, group, "<p>Team post</p>");
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            // The stand-in author every real database has (DatabaseSeeder).
+            ctx.Users.Add(new UserProfile { Id = ApplicationDbContext.SystemDeletedUserPlaceholderId, UserName = "deleted-user", FirstName = "Deleted", LastName = "user" });
+            await ScheduleRetention.DetachUserAsync(ctx, w.Tom.Id, Now, gdprErasure: true);
+            await ctx.SaveChangesAsync();
+        }
+
+        ChatMessageView fromThread = (await w.Chat.GetThreadAsync(w.Amy.Id, group.Id)).Data!.Messages.Single(x => x.Message.Id == post.Id);
+        ChatMessageView fromSince = (await w.Chat.GetMessagesSinceAsync(w.Amy.Id, group.Id, DateTime.MinValue)).Data!.Messages.Single(x => x.Message.Id == post.Id);
+
+        Assert.AreEqual(ApplicationDbContext.SystemDeletedUserPlaceholderId, fromSince.Message.AuthorUserId);
+        Assert.AreEqual(fromThread.AuthorName, fromSince.AuthorName);
+        Assert.AreNotEqual(RotaNames.For(w.Tom), fromSince.AuthorName, "The erased person's name isn't shown");
+    }
+
+    [TestMethod]
+    public async Task Send_TellsOpenConversationsWhichMessageArrived()
+    {
+        World w = await SeedAsync();
+        ChatConversation direct = await DirectAsync(w, w.Amy, w.Tom);
+        List<ChatEvent> events = [];
+        w.Bus.OnChanged += events.Add;
+
+        ChatMessage sent = await SendAsync(w, w.Amy, direct);
+        await w.Chat.EditAsync(w.Amy.Id, sent.Id, "<p>Hello again</p>");
+        await w.Chat.DeleteOwnAsync(w.Amy.Id, sent.Id);
+
+        ChatEvent posted = events.Single(x => x.Kind == ChatEventKind.MessagePosted);
+        Assert.AreEqual(sent.Id, posted.MessageId);
+        Assert.AreEqual(sent.CreateUtc, posted.MessageCreateUtc);
+
+        // Edits and deletes still reload the conversation.
+        List<ChatEvent> changed = events.Where(x => x.Kind == ChatEventKind.MessageChanged).ToList();
+        Assert.AreEqual(2, changed.Count);
+        Assert.IsTrue(changed.All(x => x.MessageId is null));
+    }
+
+    [TestMethod]
+    public async Task MarkRead_OnlyWritesWhenThereIsSomethingNewToRead()
+    {
+        World w = await SeedAsync();
+        ChatConversation direct = await DirectAsync(w, w.Amy, w.Tom);
+        List<ChatEvent> reads = [];
+        w.Bus.OnChanged += e => { if (e.Kind == ChatEventKind.Read) reads.Add(e); };
+
+        w.Clock.Advance(TimeSpan.FromMinutes(1));
+        await SendAsync(w, w.Tom, direct);
+        w.Clock.Advance(TimeSpan.FromMinutes(1));
+
+        Assert.IsTrue((await w.Chat.MarkReadAsync(w.Amy.Id, direct.Id)).Data);
+        Assert.AreEqual(1, reads.Count);
+
+        Assert.IsFalse((await w.Chat.MarkReadAsync(w.Amy.Id, direct.Id)).Data, "Nothing new: no write");
+        Assert.AreEqual(1, reads.Count, "and no event");
+
+        w.Clock.Advance(TimeSpan.FromMinutes(1));
+        await SendAsync(w, w.Amy, direct, "<p>My own</p>");
+        Assert.IsFalse((await w.Chat.MarkReadAsync(w.Amy.Id, direct.Id)).Data, "Your own messages aren't unread");
+
+        w.Clock.Advance(TimeSpan.FromMinutes(1));
+        await SendAsync(w, w.Tom, direct, "<p>Another</p>");
+        w.Clock.Advance(TimeSpan.FromMinutes(1));
+        Assert.IsTrue((await w.Chat.MarkReadAsync(w.Amy.Id, direct.Id)).Data);
+        Assert.AreEqual(2, reads.Count);
+        Assert.AreEqual(0, (await w.Chat.GetUnreadTotalAsync(w.Amy.Id)).Data);
     }
 
     // ---- Unread email and account deletion -------------------------------------------------
