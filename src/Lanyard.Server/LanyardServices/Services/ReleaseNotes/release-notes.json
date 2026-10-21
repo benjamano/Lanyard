@@ -790,7 +790,9 @@
       "Kiosks can no longer connect with the password that used to be shared by every kiosk. Each one uses its own credential, which an Admin can rotate or revoke.",
       "A kiosk that still showed \"Shared secret\" on Manage > Clients can't connect any more. Pair it again with Add kiosk: it keeps its settings.",
       "Tell us what you think: a new feedback button in the top bar lets you give Lanyard a thumbs up or down, with an optional comment, from any page. It goes straight to the Lanyard team.",
-      "Every month or so Lanyard asks you to rate it out of 5 stars and say why. Press Not now to be asked again in a week, or Don't ask again to stop it for good."
+      "Every month or so Lanyard asks you to rate it out of 5 stars and say why. Press Not now to be asked again in a week, or Don't ask again to stop it for good.",
+      "Chat keeps up faster when someone posts: an open conversation now adds just the new message instead of reloading everything, so busy channels stay quick on phones.",
+      "Screen readers now read out new chat messages from other people as they arrive, with who sent them and the start of what they say."
     ]
   }
 ]
