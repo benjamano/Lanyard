@@ -1,0 +1,15 @@
+@page "/help/insights"
+@attribute [Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.Insights)]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.Insights
+
+<HelpPage AreaKey="@HelpRegistry.Insights">
+    <FluentTab Id="help-overview" Header="Figures" IconStart="@(new Icons.Regular.Size16.DataBarVertical())">
+        <InsightsOverviewHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-week" Header="Typical Week &amp; Flags" IconStart="@(new Icons.Regular.Size16.CalendarLtr())" DeferredLoading="true">
+        <InsightsWeekHelpTab />
+    </FluentTab>
+</HelpPage>
