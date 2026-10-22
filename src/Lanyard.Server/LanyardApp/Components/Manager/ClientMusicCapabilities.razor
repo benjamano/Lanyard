@@ -201,8 +201,14 @@
         await _musicPlayerService.GetCachedSongsAsync(ClientId.Value);
     }
 
-    private void HandleReceiveCachedSongs(Result<IEnumerable<CachedSongDTO>> cachedSongsResult)
+    private void HandleReceiveCachedSongs(Guid reportingClientId, Result<IEnumerable<CachedSongDTO>> cachedSongsResult)
     {
+        // Every open Clients page hears every kiosk; only show this page's kiosk.
+        if (reportingClientId != ClientId)
+        {
+            return;
+        }
+
         if (cachedSongsResult.IsSuccess)
         {
             IEnumerable<CachedSongDTO> cachedSongs = cachedSongsResult.Data!;

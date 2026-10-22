@@ -537,7 +537,20 @@ public class SignalRControlHub(
 
     public async Task ReceiveCachedSongs(Result<IEnumerable<CachedSongDTO>> cachedSongs)
     {
-        await _hubEvents.RaiseReceiveCachedSongs(cachedSongs);
+        // Which kiosk is reporting comes from its credential, never from the message.
+        if (KioskRequestAuthorization.GetClientId(Context.User) is not Guid clientId)
+        {
+            return;
+        }
+
+        Result<Client?> client = await _clientService.GetClientFromIdAsync(clientId);
+
+        if (!client.IsSuccess || client.Data is null)
+        {
+            return;
+        }
+
+        await _hubEvents.RaiseReceiveCachedSongs(clientId, client.Data.CompanyId, cachedSongs);
     }
 
     public async Task UpdateAvailableDmxDevices(IEnumerable<string> devices)

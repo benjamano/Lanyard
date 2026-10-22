@@ -12,5 +12,6 @@ public interface IMusicService
     Task<Result<Song>> GetSongAsync(Guid songId);
 
     /// <summary>Names for a set of song ids in one query (missing ids are simply absent).</summary>
-    Task<Result<IReadOnlyDictionary<Guid, string>>> GetSongNamesAsync(IReadOnlyCollection<Guid> songIds);
+    // companyId narrows the lookup explicitly, for callers whose context isn't tenant-filtered.
+    Task<Result<IReadOnlyDictionary<Guid, string>>> GetSongNamesAsync(IReadOnlyCollection<Guid> songIds, int? companyId = null);
 }

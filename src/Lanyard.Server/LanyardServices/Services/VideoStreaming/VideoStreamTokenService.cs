@@ -1,19 +1,34 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using Microsoft.AspNetCore.DataProtection;
 
 namespace Lanyard.Application.Services.VideoStreaming;
 
 public class VideoStreamTokenService : IVideoStreamTokenService
 {
-    // Publisher tokens only need to survive one Edge cold-start; viewer tokens must live as
-    // long as a kiosk runs, so their expiry slides forward on every successful validation.
+    // Publisher tokens only need to survive one Edge cold-start, so they live in memory.
     private static readonly TimeSpan PublisherTokenLifetime = TimeSpan.FromMinutes(5);
-    private static readonly TimeSpan ViewerTokenLifetime = TimeSpan.FromHours(12);
+
+    // Viewer tokens are in the kiosk page's URL, and the page now refuses to start a program
+    // without one (Security Issue 9.3). The kiosk window reloads that same URL after a lost
+    // connection, so the token has to outlive a server restart or deploy: it's signed with the
+    // Data Protection key ring (kept in the database) instead of held in memory, and lasts long
+    // enough for a kiosk that runs for weeks. The kiosk gets a new one each time it opens a window.
+    private static readonly TimeSpan ViewerTokenLifetime = TimeSpan.FromDays(30);
+    private const string ViewerPurpose = "Lanyard.KioskViewerToken.v1";
+
+    private readonly ITimeLimitedDataProtector _viewerProtector;
+
+    public VideoStreamTokenService(IDataProtectionProvider? dataProtectionProvider = null)
+    {
+        _viewerProtector = (dataProtectionProvider ?? new EphemeralDataProtectionProvider())
+            .CreateProtector(ViewerPurpose)
+            .ToTimeLimitedDataProtector();
+    }
 
     private enum TokenPurpose
     {
-        Publisher,
-        Viewer
+        Publisher
     }
 
     private sealed class TokenEntry
@@ -32,17 +47,30 @@ public class VideoStreamTokenService : IVideoStreamTokenService
 
     public bool ValidatePublisherToken(Guid clientId, string? token)
     {
-        return ValidateToken(clientId, TokenPurpose.Publisher, token, slideExpiry: false);
+        return ValidateToken(clientId, TokenPurpose.Publisher, token);
     }
 
     public string IssueViewerToken(Guid clientId)
     {
-        return IssueToken(clientId, TokenPurpose.Viewer, ViewerTokenLifetime);
+        return _viewerProtector.Protect(clientId.ToString("N"), DateTimeOffset.UtcNow.Add(ViewerTokenLifetime));
     }
 
     public bool ValidateViewerToken(Guid clientId, string? token)
     {
-        return ValidateToken(clientId, TokenPurpose.Viewer, token, slideExpiry: true);
+        if (string.IsNullOrEmpty(token))
+        {
+            return false;
+        }
+
+        try
+        {
+            // Unprotect throws for a tampered, expired or foreign-key token.
+            return _viewerProtector.Unprotect(token) == clientId.ToString("N");
+        }
+        catch (CryptographicException)
+        {
+            return false;
+        }
     }
 
     private string IssueToken(Guid clientId, TokenPurpose purpose, TimeSpan lifetime)
@@ -64,7 +92,7 @@ public class VideoStreamTokenService : IVideoStreamTokenService
         return token;
     }
 
-    private bool ValidateToken(Guid clientId, TokenPurpose purpose, string? token, bool slideExpiry)
+    private bool ValidateToken(Guid clientId, TokenPurpose purpose, string? token)
     {
         if (string.IsNullOrEmpty(token))
         {
@@ -85,11 +113,6 @@ public class VideoStreamTokenService : IVideoStreamTokenService
         {
             _tokens.TryRemove(token, out _);
             return false;
-        }
-
-        if (slideExpiry)
-        {
-            entry.ExpiresUtc = DateTime.UtcNow.Add(ViewerTokenLifetime);
         }
 
         return true;
