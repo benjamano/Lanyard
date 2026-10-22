@@ -10,7 +10,7 @@
             {
                 <FluentWizardStep Label="@courseSection.Title">
                     <div class="take-course-section-body ql-editor">
-                        @((MarkupString)courseSection.BodyHtml)
+                        @((MarkupString)SafeBody(courseSection))
                     </div>
                 </FluentWizardStep>
             }
@@ -137,6 +137,21 @@
                    PassMarkPercent="Course.PassMarkPercent" OnFinished="HandleWalkthroughFinishedAsync" />
 
 @code {
+    // Sections are cleaned when they're saved; this also covers ones saved before that, and is
+    // cached per section so stepping through the wizard doesn't re-sanitise on every render.
+    private readonly Dictionary<(Guid Id, string Html), string> safeBodies = [];
+
+    private string SafeBody(CourseSection section)
+    {
+        if (!safeBodies.TryGetValue((section.Id, section.BodyHtml), out string? safe))
+        {
+            safe = Lanyard.Application.Services.Training.CourseHtml.Clean(section.BodyHtml);
+            safeBodies[(section.Id, section.BodyHtml)] = safe;
+        }
+
+        return safe;
+    }
+
     [Parameter, EditorRequired]
     public Course Course { get; set; } = null!;
 
