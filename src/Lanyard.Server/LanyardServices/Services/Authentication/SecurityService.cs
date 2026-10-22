@@ -589,11 +589,14 @@ public class SecurityService : ISecurityService
         }
     }
 
-    public async Task<Result<string>> GetUsernameForSetPasswordAsync(string userId)
+    // The username is only shown for a link whose token is still valid: the user id alone is not
+    // a secret, and anyone holding one could otherwise read the username it belongs to.
+    public async Task<Result<string>> GetUsernameForSetPasswordAsync(string userId, string token)
     {
         UserProfile? user = await _userManager.FindByIdAsync(userId);
 
-        if (user is null || string.IsNullOrEmpty(user.UserName))
+        if (user is null || string.IsNullOrEmpty(user.UserName)
+            || !await _userManager.VerifyUserTokenAsync(user, _userManager.Options.Tokens.PasswordResetTokenProvider, UserManager<UserProfile>.ResetPasswordTokenPurpose, token))
         {
             return Result<string>.Fail("This link is invalid or has expired.");
         }
@@ -803,7 +806,10 @@ public class SecurityService : ISecurityService
         }
     }
 
-    public async Task<Result<bool>> ChangePasswordAsync(string userId, string newPassword)
+    // Changing your own password needs your current one (Security Issue 9.7): otherwise anyone at
+    // an unlocked session - a shared PC, a stolen cookie - could take the account over for good.
+    // Setting someone else's password is a manager's job and needs no password of theirs.
+    public async Task<Result<bool>> ChangePasswordAsync(string userId, string newPassword, string? currentPassword = null)
     {
         // Everyone shares the demo accounts, so nothing that could lock the next visitor out.
         if (await IsDemoSessionAsync())
@@ -825,14 +831,33 @@ public class SecurityService : ISecurityService
                 return Result<bool>.Fail("User not found!");
             }
 
+            bool isOwnAccount = user.Id == (await GetCurrentUserIdAsync()).Data;
+
             // Anyone may change their own password; someone else's only as their manager.
-            if (user.Id != (await GetCurrentUserIdAsync()).Data && await GetManageUserErrorAsync(user) is string manageError)
+            if (!isOwnAccount && await GetManageUserErrorAsync(user) is string manageError)
             {
                 return Result<bool>.Fail(manageError);
             }
 
-            string resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
-            IdentityResult result = await _userManager.ResetPasswordAsync(user, resetToken, newPassword);
+            IdentityResult result;
+
+            if (isOwnAccount && await _userManager.HasPasswordAsync(user))
+            {
+                if (string.IsNullOrEmpty(currentPassword) || !await _userManager.CheckPasswordAsync(user, currentPassword))
+                {
+                    // Counted like a failed sign-in, so this can't be used to guess the password.
+                    await _userManager.AccessFailedAsync(user);
+                    return Result<bool>.Fail("Your current password is incorrect.");
+                }
+
+                result = await _userManager.ChangePasswordAsync(user, currentPassword, newPassword);
+            }
+            else
+            {
+                string resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
+                result = await _userManager.ResetPasswordAsync(user, resetToken, newPassword);
+            }
+
             _cachedCurrentProfile = null;
 
             if (!result.Succeeded)
@@ -1038,7 +1063,8 @@ public class SecurityService : ISecurityService
         }
     }
 
-    public async Task<Result<List<string>>> RegenerateRecoveryCodesAsync()
+    // Needs the password, like turning 2FA off: new codes invalidate the old ones and are a way in.
+    public async Task<Result<List<string>>> RegenerateRecoveryCodesAsync(string currentPassword)
     {
         // Everyone shares the demo accounts, so nothing that could lock the next visitor out.
         if (await IsDemoSessionAsync())
@@ -1058,6 +1084,12 @@ public class SecurityService : ISecurityService
             if (!await _userManager.GetTwoFactorEnabledAsync(user))
             {
                 return Result<List<string>>.Fail("Two-factor authentication is not enabled.");
+            }
+
+            if (string.IsNullOrEmpty(currentPassword) || !await _userManager.CheckPasswordAsync(user, currentPassword))
+            {
+                await _userManager.AccessFailedAsync(user);
+                return Result<List<string>>.Fail("Incorrect password.");
             }
 
             IEnumerable<string> codes = await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 8) ?? [];

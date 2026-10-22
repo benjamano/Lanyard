@@ -1,0 +1,101 @@
+@using Lanyard.Application.Services.Authentication
+@using System.ComponentModel.DataAnnotations
+
+@inject INotificationService ToastService
+
+@* New recovery codes replace the old ones and are a way into the account, so this asks for the
+   password the way turning two-factor off does. Closes with the new codes. *@
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size24.ArrowSync())" Margin="@Margin.End2" />
+            <FluentText As="@TextTag.H4" Weight="TextWeight.Semibold" Color="Color.Default">
+                New Recovery Codes
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="disable-2fa-dialog">
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+                <FluentMessageBar Intent="MessageBarIntent.Info">
+                    Your old recovery codes will stop working. Enter your password to confirm.
+                </FluentMessageBar>
+
+                <EditForm Model="@model" OnValidSubmit="HandleRegenerate">
+                    <DataAnnotationsValidator />
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                        <FluentTextInput @bind-Value="model.CurrentPassword" Label="Password" Required="true"
+                                         TextInputType="TextInputType.Password" Placeholder="Enter your password" Class="disable-2fa-field"
+                                         MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Key())" Slot="start" />
+                        </FluentTextInput>
+
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6">
+                            <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
+                                          Disabled="@isSubmitting">
+                                @if (isSubmitting)
+                                {
+                                    <FluentSpinner Class="disable-2fa-spinner" />
+                                    <span class="ms-2">Generating...</span>
+                                }
+                                else
+                                {
+                                    <span>Get New Codes</span>
+                                }
+                            </FluentButton>
+                            <FluentButton Appearance="ButtonAppearance.Default" OnClick="@CancelDialog"
+                                          Disabled="@isSubmitting">
+                                Cancel
+                            </FluentButton>
+                        </FluentStack>
+                    </FluentStack>
+                </EditForm>
+            </FluentStack>
+        </div>
+    </ChildContent>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private bool isSubmitting;
+    private PasswordModel model = new();
+
+    private async Task HandleRegenerate()
+    {
+        isSubmitting = true;
+        StateHasChanged();
+
+        try
+        {
+            Result<List<string>> result = await _securityService.RegenerateRecoveryCodesAsync(model.CurrentPassword);
+
+            if (result.IsSuccess && result.Data is not null)
+            {
+                await Dialog.CloseAsync(result.Data);
+            }
+            else
+            {
+                ToastService.ShowError($"Failed to regenerate recovery codes: {result.Error}");
+            }
+        }
+        finally
+        {
+            isSubmitting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CancelDialog()
+    {
+        await Dialog.CancelAsync();
+    }
+
+    private class PasswordModel
+    {
+        [Required(ErrorMessage = "Password is required.")]
+        [DataType(DataType.Password)]
+        public string CurrentPassword { get; set; } = string.Empty;
+    }
+}

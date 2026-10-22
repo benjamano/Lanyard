@@ -1,0 +1,8 @@
+.disable-2fa-dialog ::deep .disable-2fa-field {
+    width: 100%;
+}
+
+.disable-2fa-dialog ::deep .disable-2fa-spinner {
+    width: 16px;
+    height: 16px;
+}

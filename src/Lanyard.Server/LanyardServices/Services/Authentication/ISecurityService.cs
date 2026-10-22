@@ -20,16 +20,17 @@ namespace Lanyard.Application.Services.Authentication
             string? welcomeEmailSubjectOverride = null, string? welcomeEmailBodyHtmlOverride = null);
         Task<Result<bool>> DeleteUserAsync(string userId);
         Task<Result<bool>> UnlockUserAsync(string userId);
-        Task<Result<bool>> ChangePasswordAsync(string userId, string newPassword);
+        // currentPassword is required when userId is the caller's own account.
+        Task<Result<bool>> ChangePasswordAsync(string userId, string newPassword, string? currentPassword = null);
         Task<Result<bool>> SendSetPasswordLinkAsync(string userId);
         Task<Result<bool>> SetPasswordFromTokenAsync(string userId, string token, string newPassword);
-        Task<Result<string>> GetUsernameForSetPasswordAsync(string userId);
+        Task<Result<string>> GetUsernameForSetPasswordAsync(string userId, string token);
 
         Task<Result<TwoFactorStatusDto>> GetTwoFactorStatusAsync();
         Task<Result<AuthenticatorEnrollmentDto>> BeginAuthenticatorEnrollmentAsync();
         Task<Result<List<string>>> ConfirmAuthenticatorEnrollmentAsync(string code);
         Task<Result<List<string>>> EnableEmailTwoFactorAsync();
         Task<Result<bool>> DisableTwoFactorAsync(string currentPassword);
-        Task<Result<List<string>>> RegenerateRecoveryCodesAsync();
+        Task<Result<List<string>>> RegenerateRecoveryCodesAsync(string currentPassword);
     }
 }

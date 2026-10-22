@@ -90,6 +90,14 @@ else
                 <EditForm Model="@passwordModel" OnValidSubmit="HandleChangePassword">
                     <DataAnnotationsValidator />
                     <FluentStack Orientation="Orientation.Vertical" VerticalGap="6" Class="user-editor-tab-content">
+                        @if (isOwnAccount)
+                        {
+                            @* Your own password needs your current one; someone else's doesn't. *@
+                            <FluentTextInput @bind-Value="passwordModel.CurrentPassword" Label="Current Password" Required="true"
+                                             TextInputType="TextInputType.Password">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.LockClosed())" Slot="start" />
+                            </FluentTextInput>
+                        }
                         <FluentTextInput @bind-Value="passwordModel.NewPassword" Label="New Password" Required="true"
                                          TextInputType="TextInputType.Password"
                                          MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
@@ -243,6 +251,7 @@ else
     private string? activeTabId;
 
     private UserProfile? user;
+    private bool isOwnAccount;
     private bool isLoadingUser = true;
     private string? loadError;
 
@@ -316,6 +325,7 @@ else
         }
 
         user = result.Data;
+        isOwnAccount = (await _securityService.GetCurrentUserIdAsync()).Data == user.Id;
 
         detailsModel.FirstName = user.FirstName ?? string.Empty;
         detailsModel.LastName = user.LastName ?? string.Empty;
@@ -434,11 +444,17 @@ else
             return;
         }
 
+        if (isOwnAccount && string.IsNullOrEmpty(passwordModel.CurrentPassword))
+        {
+            ToastService.ShowError("Enter your current password to change it.");
+            return;
+        }
+
         isChangingPassword = true;
 
         try
         {
-            Result<bool> result = await _securityService.ChangePasswordAsync(user.Id, passwordModel.NewPassword);
+            Result<bool> result = await _securityService.ChangePasswordAsync(user.Id, passwordModel.NewPassword, isOwnAccount ? passwordModel.CurrentPassword : null);
 
             if (result.IsSuccess)
             {
@@ -589,6 +605,9 @@ else
 
     private class PasswordModel
     {
+        [DataType(DataType.Password)]
+        public string CurrentPassword { get; set; } = string.Empty;
+
         [Required(ErrorMessage = "New password is required.")]
         [StringLength(100, MinimumLength = 6, ErrorMessage = "Password must be at least 6 characters long.")]
         [DataType(DataType.Password)]

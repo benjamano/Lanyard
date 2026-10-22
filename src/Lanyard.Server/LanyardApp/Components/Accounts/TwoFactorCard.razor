@@ -136,15 +136,19 @@
 
     private async Task RegenerateRecoveryCodes()
     {
-        Result<List<string>> result = await _securityService.RegenerateRecoveryCodesAsync();
-
-        if (!result.IsSuccess || result.Data is null)
+        DialogResult result = await _dialogService.ShowDialogAsync<RegenerateRecoveryCodesDialog>(options =>
         {
-            ToastService.ShowError($"Failed to regenerate recovery codes: {result.Error}");
+            options.Header.Title = "New Recovery Codes";
+            options.Width = "420px";
+            options.Modal = true;
+        });
+
+        if (result.Value is not List<string> codes)
+        {
             return;
         }
 
-        await ShowRecoveryCodes(result.Data);
+        await ShowRecoveryCodes(codes);
         await LoadStatus();
         StateHasChanged();
     }

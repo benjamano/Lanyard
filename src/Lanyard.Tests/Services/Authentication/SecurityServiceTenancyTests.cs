@@ -193,8 +193,44 @@ public class SecurityServiceTenancyTests
         Fixture f = await SeedAsync();
         SecurityService service = ServiceFor(f);
 
-        Assert.IsTrue((await service.ChangePasswordAsync(f.CallerB.Id, "New-Own-Pw1")).IsSuccess);
+        Assert.IsTrue((await service.ChangePasswordAsync(f.CallerB.Id, "New-Own-Pw1", "Original-Pw1")).IsSuccess);
         Assert.IsTrue((await service.ChangePasswordAsync(f.StaffB.Id, "New-Staff-Pw1")).IsSuccess);
+    }
+
+    // Security Issue 9.7: anyone at an unlocked session could otherwise change the password and
+    // keep the account. Someone else's password (a manager resetting staff) needs no password of theirs.
+    [TestMethod]
+    public async Task OwnPassword_NeedsTheCurrentPassword()
+    {
+        Fixture f = await SeedAsync();
+        SecurityService service = ServiceFor(f);
+
+        Result<bool> missing = await service.ChangePasswordAsync(f.CallerB.Id, "Hijacked-Pw1");
+        Result<bool> wrong = await service.ChangePasswordAsync(f.CallerB.Id, "Hijacked-Pw1", "not-it");
+
+        Assert.IsFalse(missing.IsSuccess);
+        Assert.IsFalse(wrong.IsSuccess);
+        Assert.AreEqual("Your current password is incorrect.", wrong.Error);
+
+        UserProfile caller = (await f.UserManager.FindByIdAsync(f.CallerB.Id))!;
+        Assert.IsTrue(await f.UserManager.CheckPasswordAsync(caller, "Original-Pw1"));
+        Assert.AreEqual(2, await f.UserManager.GetAccessFailedCountAsync(caller), "Wrong guesses count towards lockout");
+    }
+
+    [TestMethod]
+    public async Task SetPasswordLink_ShowsTheUsernameOnlyForAValidToken()
+    {
+        Fixture f = await SeedAsync();
+        SecurityService service = ServiceFor(f);
+
+        UserProfile staff = (await f.UserManager.FindByIdAsync(f.StaffB.Id))!;
+        string token = await f.UserManager.GeneratePasswordResetTokenAsync(staff);
+
+        Assert.IsFalse((await service.GetUsernameForSetPasswordAsync(staff.Id, "made-up-token")).IsSuccess);
+
+        Result<string> valid = await service.GetUsernameForSetPasswordAsync(staff.Id, token);
+        Assert.IsTrue(valid.IsSuccess, valid.Error);
+        Assert.AreEqual(staff.UserName, valid.Data);
     }
 
     // The Manage page loads (and caches) the profile, the user changes their password or turns on
@@ -208,7 +244,7 @@ public class SecurityServiceTenancyTests
 
         UserProfile stale = (await service.GetCurrentUserProfileAsync()).Data!;
 
-        Assert.IsTrue((await service.ChangePasswordAsync(f.CallerB.Id, "Brand-New-Pw1")).IsSuccess);
+        Assert.IsTrue((await service.ChangePasswordAsync(f.CallerB.Id, "Brand-New-Pw1", "Original-Pw1")).IsSuccess);
         UserProfile tracked = (await f.UserManager.FindByIdAsync(f.CallerB.Id))!;
         await f.UserManager.SetTwoFactorEnabledAsync(tracked, true);
 
