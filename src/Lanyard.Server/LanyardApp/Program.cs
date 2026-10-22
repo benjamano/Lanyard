@@ -1,4 +1,5 @@
-﻿using Amazon.S3;
+﻿using System.Security.Cryptography.X509Certificates;
+using Amazon.S3;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Lanyard.App;
@@ -445,11 +446,24 @@ builder.Services.ConfigureApplicationCookie(options =>
 
 if (builder.Environment.IsDevelopment() == false)
 {
+    // Railway's edge proxy has no published address range, so by default any source is trusted
+    // to send X-Forwarded-For. ForwardLimit = 1 takes only the last hop - the address Railway's
+    // proxy saw - so a client can't spoof the per-IP rate limit by adding its own entries in front.
+    // If the proxy range is ever known, set ForwardedHeaders:KnownNetworks (comma-separated CIDRs)
+    // and only those sources are trusted (Security review, smaller items).
+    string? knownProxyNetworks = builder.Configuration["ForwardedHeaders:KnownNetworks"];
+
     builder.Services.Configure<ForwardedHeadersOptions>(options =>
     {
         options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        options.ForwardLimit = 1;
         options.KnownIPNetworks.Clear();
         options.KnownProxies.Clear();
+
+        foreach (string network in (knownProxyNetworks ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));
+        }
     });
 }
 
@@ -550,10 +564,36 @@ builder.Services.AddRateLimiter(options =>
     };
 });
 
-builder.Services.AddDataProtection()
+// The key ring signs sign-in cookies, password-reset links and 2FA "remember me" cookies, so anyone
+// who could read it from the database could forge them (Security Issue 9.13). With a certificate
+// configured, new keys are stored encrypted with it. Keys written before that stay readable (they
+// were stored unencrypted), and are retired by the normal 90-day key rotation.
+IDataProtectionBuilder dataProtection = builder.Services.AddDataProtection()
     .PersistKeysToDbContext<ApplicationDbContext>();
 
+string? dataProtectionCertificate = builder.Configuration["DataProtection:CertificateBase64"];
+bool dataProtectionKeysEncrypted = false;
+
+if (!string.IsNullOrWhiteSpace(dataProtectionCertificate))
+{
+    X509Certificate2 keyRingCertificate = X509CertificateLoader.LoadPkcs12(
+        Convert.FromBase64String(dataProtectionCertificate),
+        builder.Configuration["DataProtection:CertificatePassword"],
+        X509KeyStorageFlags.EphemeralKeySet);
+
+    dataProtection
+        .ProtectKeysWithCertificate(keyRingCertificate)
+        .UnprotectKeysWithAnyCertificate(keyRingCertificate);
+
+    dataProtectionKeysEncrypted = true;
+}
+
 var app = builder.Build();
+
+if (!dataProtectionKeysEncrypted && !app.Environment.IsDevelopment())
+{
+    app.Logger.LogWarning("Data Protection keys are stored unencrypted. Set DataProtection__CertificateBase64 (see docs/DATA_PROTECTION_KEYS.md).");
+}
 
 if (app.Environment.IsDevelopment() == false)
 {
