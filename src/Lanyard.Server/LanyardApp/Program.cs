@@ -21,6 +21,7 @@ using Lanyard.Application.Services.Compliance;
 using Lanyard.Application.Services.Insights;
 using Lanyard.Application.Services.Onboarding;
 using Lanyard.Application.Services.Notifications;
+using Lanyard.Application.Services.Parties;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
@@ -163,6 +164,10 @@ builder.Services.AddScoped<ISchedulingSettingsService, SchedulingSettingsService
 builder.Services.AddScoped<IRotaService, RotaService>();
 builder.Services.AddScoped<IShiftSuggestionService, ShiftSuggestionService>();
 builder.Services.AddScoped<IStaffAvailabilityService, StaffAvailabilityService>();
+builder.Services.AddScoped<IPartyBookingService, PartyBookingService>();
+builder.Services.AddScoped<IPartySettingsService, PartySettingsService>();
+builder.Services.AddScoped<IPartyTemplateService, PartyTemplateService>();
+builder.Services.AddScoped<IPartyDocumentService, PartyDocumentService>();
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ITerminalEphemeralTokenService, TerminalEphemeralTokenService>();
 builder.Services.AddSingleton<ITerminalEventBus, TerminalEventBus>();

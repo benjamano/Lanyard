@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
@@ -28,14 +29,26 @@ public class CurrentLocationContextService(
         {
             AuthenticationState authState = await _authStateProvider.GetAuthenticationStateAsync();
 
-            if (authState.User?.Identity?.IsAuthenticated != true)
+            return await GetScopeAsync(authState.User);
+        }
+        catch (Exception ex)
+        {
+            return Result<LocationScope>.Fail($"Failed to resolve location scope: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<LocationScope>> GetScopeAsync(ClaimsPrincipal user)
+    {
+        try
+        {
+            if (user?.Identity?.IsAuthenticated != true)
             {
                 return Result<LocationScope>.Fail("User is not authenticated.");
             }
 
-            bool isAdmin = authState.User.IsInRole("Admin");
-            bool isManager = authState.User.IsInRole("Manager");
-            string? locationIdClaim = authState.User.FindFirst(LocationClaimTypes.LocationId)?.Value;
+            bool isAdmin = user.IsInRole("Admin");
+            bool isManager = user.IsInRole("Manager");
+            string? locationIdClaim = user.FindFirst(LocationClaimTypes.LocationId)?.Value;
 
             string cacheKey = $"{isAdmin}|{isManager}|{locationIdClaim}";
 
