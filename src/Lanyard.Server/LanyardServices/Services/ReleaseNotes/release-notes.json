@@ -792,7 +792,31 @@
       "Tell us what you think: a new feedback button in the top bar lets you give Lanyard a thumbs up or down, with an optional comment, from any page. It goes straight to the Lanyard team.",
       "Every month or so Lanyard asks you to rate it out of 5 stars and say why. Press Not now to be asked again in a week, or Don't ask again to stop it for good.",
       "Kiosks use much less processing power while reading laser game traffic. They log far less during a game, handle game messages in the order the control box sent them, and send the scoreboard at most four updates a second, while game starts and ends still reach the server straight away.",
-      "A kiosk's Zone Scoreboard settings have two new switches. \"Only read laser game traffic\" has the network card throw away everything except the game's messages, which saves even more processing power on a busy network. \"Read traffic sent to other machines\" can be turned off where the control box sends to a broadcast address. Saved changes reach a connected kiosk straight away."
+      "A kiosk's Zone Scoreboard settings have two new switches. \"Only read laser game traffic\" has the network card throw away everything except the game's messages, which saves even more processing power on a busy network. \"Read traffic sent to other machines\" can be turned off where the control box sends to a broadcast address. Saved changes reach a connected kiosk straight away.",
+      "Platform admins have a help page for Lanyard Feedback, with a Help button on the feedback inbox."
+    ]
+  },
+  {
+    "version": "1.4.19",
+    "releaseDate": "2026-10-20",
+    "summary": "Book kids' parties in Lanyard and print every party document from it.",
+    "details": [
+      "New Parties section under Management. Book a party with the birthday child's name and age, the parent's contact details, how many children and adults are coming, the room, the eating and laser tag times, hot or cold food and the party host.",
+      "The Parties page lists upcoming parties day by day, with filters for past parties, cancelled parties and payment status.",
+      "Record the total price and deposit, then mark the deposit and the balance as paid. Each party shows whether it's unpaid, deposit paid or paid in full, and how much is still to pay.",
+      "Parties can be cancelled and reinstated. Admins can switch between locations; managers see the parties at their own location.",
+      "Admins can switch Parties on or off for each company under Manage > Companies & Locations.",
+      "Each party now has a Print card with a reserved table card, the food sheet, and a Print everything button that puts them in one document. They open in a new tab, ready to print.",
+      "The reserved table card folds in half so the child's name reads from both sides of the table.",
+      "Hot parties get a food sheet with the party details and allergy notes at the top, then every meal with its allergens and a row per side to tally. Cold parties get a row per child for their sandwich choice and an allergy panel.",
+      "New Party Settings page for each location: set the hot and cold menus with their allergens, and how long a party lasts and when the children eat and play laser tag.",
+      "When you book a party, Lanyard now fills in the finish, eating and laser tag times from the arrival time using those settings. You can still change them on any party.",
+      "Each party's Print card now has a Free return voucher and a Feedback form. The voucher shows the child's name, the party date, an expiry date and \"Authorised by\" with the name of whoever prints it. The feedback form has the party name and host filled in.",
+      "New Parties > Printouts page: upload your own blank artwork for the voucher and feedback form, and Lanyard prints each party's details into the boxes. A drawing of the artwork shows where every box goes as you move it, and Preview prints a sample.",
+      "Choose how many months a voucher is valid for (12 by default).",
+      "Without your own artwork, Lanyard prints a standard voucher and feedback form with your logo and colour.",
+      "A5 printouts print at their real size on A4. Print everything puts the voucher and feedback form side by side on one sheet.",
+      "New Parties help page, with a Help button on every Parties page: booking, payments, printing, menus and printouts."
     ]
   }
 ]
