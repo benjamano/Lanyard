@@ -14,7 +14,22 @@
         <li><strong>Music</strong>: the <strong>Default Audio Output</strong>. The kiosk checks every minute and switches back
             to it, so a TV or projector that reconnects can't take over the sound. Also the music cache limit.</li>
         <li><strong>DMX</strong>: which DMX device the kiosk sends lighting to.</li>
-        <li><strong>Zone Scoreboard</strong>: the network settings for reading the laser game's scores.</li>
+        <li><strong>Zone Scoreboard</strong>: the network settings for reading the laser game's scores. The
+            <strong>Source IP</strong> is the laser game control box, and the <strong>Destination IP</strong> is where it
+            sends to, usually a broadcast address like 192.168.0.255. Pick the network card that's plugged into the
+            game's network.
+            <ul>
+                <li><strong>Only read laser game traffic (capture filter)</strong>: the network card throws away
+                    everything except the game's messages, so a busy network uses far less of the kiosk's processor.
+                    A connected kiosk applies it straight away. Turn it on, play a game and check the scoreboard
+                    still updates. If it doesn't, turn it off again.</li>
+                <li><strong>Read traffic sent to other machines (promiscuous mode)</strong>: only needed if the
+                    control box sends to a different machine rather than a broadcast address. Leave it on unless
+                    you've checked a game works with it off.</li>
+                <li>With the capture filter on, the kiosk self-test can only see game messages, so between games it
+                    shows a warning rather than "no network traffic".</li>
+            </ul>
+        </li>
         <li><strong>Auto Restart</strong>: restart the PC on a schedule (every so many days or weeks, or monthly, at a set time).</li>
         <li><strong>Updates</strong>: which version the PC runs (see the next tab).</li>
     </ul>

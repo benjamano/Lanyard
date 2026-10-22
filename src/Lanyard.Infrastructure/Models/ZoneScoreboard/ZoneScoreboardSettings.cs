@@ -20,5 +20,12 @@ public class ZoneScoreboardSettings
     // REQUIRED: THE IP ADDRESS OF THE SOURCE DEVICE THAT IS SENDING THE PACKETS
     public required string SourceIp { get; set; }
 
+    // Has Npcap drop everything but the game's UDP traffic before the kiosk sees it. Off until a
+    // venue has been checked with it on.
+    public bool UseCaptureFilter { get; set; }
+
+    // Only needed when the control box sends to some other machine. Broadcasts reach the kiosk anyway.
+    public bool PromiscuousCapture { get; set; } = true;
+
     public bool IsActive { get; set; }
 }

@@ -10,4 +10,9 @@ public class ZoneScoreboardSettingsDTO
 
     public string? DestinationIp { get; set; }
     public required string SourceIp { get; set; }
+
+    // Defaults match how kiosks captured before these settings existed, so a server that doesn't
+    // send them leaves a kiosk unchanged.
+    public bool UseCaptureFilter { get; set; }
+    public bool PromiscuousCapture { get; set; } = true;
 }
