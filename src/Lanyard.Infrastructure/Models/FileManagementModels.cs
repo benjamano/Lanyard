@@ -31,6 +31,11 @@ namespace Lanyard.Infrastructure.Models
         public TimeSpan? VideoLength { get; set; }
 
         public bool IsActive { get; set; } = true;
+
+        // A file that belongs to a feature which decides for itself who may read it (a staff
+        // member's HR document). The File Manager list/download/rename/move/delete paths treat it
+        // as not found: api/files/download lets in every signed-in user and every kiosk in the company.
+        public bool IsRestricted { get; set; }
     }
 
     public class Folder : ICompanyOwned

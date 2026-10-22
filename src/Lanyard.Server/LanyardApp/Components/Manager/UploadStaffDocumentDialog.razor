@@ -104,6 +104,15 @@
             return;
         }
 
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            ToastService.ShowError(scopeResult.Error ?? "Could not work out your location.");
+            isUploading = false;
+            return;
+        }
+
         using FileStream fileStream = file.LocalFile!.OpenRead();
 
         IFormFile formFile = new FormFile(fileStream, 0, fileStream.Length, "file", file.Name)
@@ -113,7 +122,7 @@
         };
 
         Result<StaffDocument> uploadResult = await _staffDocumentService.UploadStaffDocumentAsync(
-            UserId, selectedDocumentType.Id, formFile, expiryDate, reminderDate, currentUserResult.Data, CancellationToken.None);
+            scopeResult.Data, UserId, selectedDocumentType.Id, formFile, expiryDate, reminderDate, currentUserResult.Data, CancellationToken.None);
 
         uploadProgressPercent = 0;
         isUploading = false;

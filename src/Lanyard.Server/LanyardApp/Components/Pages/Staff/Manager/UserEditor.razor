@@ -174,7 +174,7 @@ else
                                             </div>
                                             <div class="documents-list-actions">
                                                 <FluentButton IconStart="@(new Icons.Regular.Size16.ArrowDownload())" Title="Download"
-                                                              OnClick="@(() => DownloadDocument(doc.FileMetadataId))" />
+                                                              OnClick="@(() => DownloadDocument(doc.Id))" />
                                                 <FluentButton IconStart="@(new Icons.Regular.Size16.Delete())" Title="Delete"
                                                               OnClick="@(() => DeleteDocumentAsync(doc.Id))" />
                                             </div>
@@ -350,7 +350,10 @@ else
         }
 
         Result<List<StaffDocumentType>> typesResult = await _staffDocumentTypeService.GetDocumentTypesAsync(brandingResult.Data.CompanyId);
-        Result<List<StaffDocument>> documentsResult = await _staffDocumentService.GetStaffDocumentsForUserAsync(user.Id);
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+        Result<List<StaffDocument>> documentsResult = scopeResult.IsSuccess && scopeResult.Data is not null
+            ? await _staffDocumentService.GetStaffDocumentsForUserAsync(scopeResult.Data, user.Id)
+            : Result<List<StaffDocument>>.Fail(scopeResult.Error ?? "Could not work out your location.");
 
         documentTypes = typesResult.IsSuccess ? typesResult.Data : [];
         staffDocuments = documentsResult.IsSuccess ? documentsResult.Data : [];
@@ -379,14 +382,22 @@ else
         }
     }
 
-    private void DownloadDocument(Guid fileMetadataId)
+    private void DownloadDocument(Guid staffDocumentId)
     {
-        _navigationManager.NavigateTo($"api/Files/download/{fileMetadataId}", forceLoad: true);
+        _navigationManager.NavigateTo($"api/staff-documents/{staffDocumentId}/file", forceLoad: true);
     }
 
     private async Task DeleteDocumentAsync(Guid staffDocumentId)
     {
-        Result<bool> result = await _staffDocumentService.DeleteStaffDocumentAsync(staffDocumentId, CancellationToken.None);
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            ToastService.ShowError(scopeResult.Error ?? "Could not work out your location.");
+            return;
+        }
+
+        Result<bool> result = await _staffDocumentService.DeleteStaffDocumentAsync(scopeResult.Data, staffDocumentId, CancellationToken.None);
 
         if (!result.IsSuccess)
         {

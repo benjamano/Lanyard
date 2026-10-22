@@ -520,6 +520,69 @@ public class FileServiceTests
         Assert.AreEqual(999, fallback.total);
     }
 
+    // A staff HR document is restricted: api/files/download admits every signed-in user and kiosk
+    // in the company, so none of the File Manager paths may reach it.
+    [TestMethod]
+    public async Task RestrictedFile_IsInvisibleToEveryFileManagerPath()
+    {
+        FileMetadata restricted = NewFile("right-to-work.pdf", null);
+        restricted.IsRestricted = true;
+        File.WriteAllBytes(restricted.FilePath, [1, 2, 3, 4, 5]);
+        _dbContext.FileMetadata.Add(restricted);
+        await _dbContext.SaveChangesAsync();
+
+        Result<IReadOnlyList<FileMetadata>> listed = await _fileService.ListFilesAsync(null, CancellationToken.None);
+        Assert.IsFalse(listed.Data!.Any(x => x.Id == restricted.Id));
+
+        Assert.IsFalse((await _fileService.OpenFileContentAsync(restricted.Id, null, CancellationToken.None)).Success);
+        Assert.IsFalse((await _fileService.DownloadFileAsync(restricted.Id, CancellationToken.None)).Success);
+        Assert.IsFalse((await _fileService.GetFileMetadataAsync(restricted.Id, CancellationToken.None)).Success);
+        Assert.IsFalse((await _fileService.RenameFileAsync(restricted.Id, "renamed.pdf", CancellationToken.None)).Success);
+        Assert.IsFalse((await _fileService.MoveFileAsync(restricted.Id, null, CancellationToken.None)).Success);
+        Assert.IsFalse((await _fileService.DeleteFileAsync(restricted.Id, CancellationToken.None)).Success);
+
+        FileMetadata? stillThere = await FindFileFreshAsync(restricted.Id);
+        Assert.IsNotNull(stillThere);
+        Assert.AreEqual("right-to-work.pdf", stillThere.FileName);
+    }
+
+    [TestMethod]
+    public async Task RestrictedFile_OpensThroughTheRestrictedPathOnly()
+    {
+        FileMetadata restricted = NewFile("right-to-work.pdf", null);
+        restricted.IsRestricted = true;
+        File.WriteAllBytes(restricted.FilePath, [1, 2, 3, 4, 5]);
+        FileMetadata ordinary = NewFile("menu.pdf", null);
+        File.WriteAllBytes(ordinary.FilePath, [1, 2, 3, 4, 5]);
+        _dbContext.FileMetadata.AddRange(restricted, ordinary);
+        await _dbContext.SaveChangesAsync();
+
+        Result<FileContent> opened = await _fileService.OpenRestrictedFileContentAsync(restricted.Id, null, CancellationToken.None);
+        Assert.IsTrue(opened.Success, opened.Error);
+        await opened.Data!.DisposeAsync();
+
+        Assert.IsFalse((await _fileService.OpenRestrictedFileContentAsync(ordinary.Id, null, CancellationToken.None)).Success,
+            "The restricted path isn't a way round an ordinary file's own rules either");
+    }
+
+    [TestMethod]
+    public async Task UploadFileAsync_RestrictedOption_IsStoredOnTheRow()
+    {
+        Mock<IFormFile> fileMock = new();
+        MemoryStream content = new("%PDF-1.7"u8.ToArray());
+        fileMock.Setup(f => f.FileName).Returns("right-to-work.pdf");
+        fileMock.Setup(f => f.Length).Returns(content.Length);
+        fileMock.Setup(f => f.ContentType).Returns("application/pdf");
+        fileMock.Setup(f => f.CopyToAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .Returns((Stream s, CancellationToken ct) => content.CopyToAsync(s, ct));
+
+        Result<FileMetadata> result = await _fileService.UploadFileAsync(fileMock.Object, null, "admin",
+            new FileUploadOptions(AddAudioToMusicLibrary: false, IsRestricted: true), CancellationToken.None);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.IsTrue((await FindFileFreshAsync(result.Data!.Id))!.IsRestricted);
+    }
+
     private static FileMetadata NewFile(string name, Guid? folderId) => new()
     {
         Id = Guid.NewGuid(),
