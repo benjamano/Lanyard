@@ -146,6 +146,35 @@ public class ClientReleaseCatalogServiceTests
     }
 
     [TestMethod]
+    public async Task GetFeedForVersionAsync_PassesThePackageSignatureThrough()
+    {
+        FakeGitHubClientReleaseSource gitHub = new();
+        GitHubClientRelease release = GitHubRelease("1.0.41");
+        ((Dictionary<string, string>)release.AssetDownloadUrls)["LanyardClient-1.0.41-full.nupkg.sig"] = "https://github.example/1.0.41/LanyardClient-1.0.41-full.nupkg.sig";
+        gitHub.Releases.Add(release);
+        gitHub.Files["https://github.example/1.0.41/releases.win.json"] = FeedJson;
+        gitHub.Files["https://github.example/1.0.41/LanyardClient-1.0.41-full.nupkg.sig"] = "c2lnbmF0dXJl\n";
+
+        Result<ClientUpdateFeedResponse> signed = await GetService(GetInMemoryOptions(), gitHub).GetFeedForVersionAsync("1.0.41");
+
+        Assert.IsTrue(signed.IsSuccess, signed.Error);
+        Assert.AreEqual("c2lnbmF0dXJl", signed.Data!.PackageSignature);
+    }
+
+    [TestMethod]
+    public async Task GetFeedForVersionAsync_LeavesTheSignatureEmpty_ForAnUnsignedRelease()
+    {
+        FakeGitHubClientReleaseSource gitHub = new();
+        gitHub.Releases.Add(GitHubRelease("1.0.41"));
+        gitHub.Files["https://github.example/1.0.41/releases.win.json"] = FeedJson;
+
+        Result<ClientUpdateFeedResponse> result = await GetService(GetInMemoryOptions(), gitHub).GetFeedForVersionAsync("1.0.41");
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.IsNull(result.Data!.PackageSignature, "The kiosk refuses it; the server just doesn't vouch for it.");
+    }
+
+    [TestMethod]
     public async Task GetFeedForVersionAsync_Fails_ForAVersionGitHubDoesNotHave()
     {
         FakeGitHubClientReleaseSource gitHub = new();

@@ -35,13 +35,8 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
         bool allowInsecureSsl = ShouldAllowInsecureSsl();
 
         // The kiosk's own credential goes in the Authorization header (AccessTokenProvider, in
-        // BuildConnection), never the URL. Only a kiosk still on the old shared secret puts that
-        // in the query string, as every kiosk did before 1.0.43.
-        string? legacySecret = KioskCredentials.Current is null ? KioskCredentials.LegacySecret : null;
-
-        string secretQuery = legacySecret is null
-            ? string.Empty
-            : $"&{ClientConnectionQuery.Secret}={Uri.EscapeDataString(legacySecret)}";
+        // BuildConnection), never the URL. The old shared secret used to go in the query string;
+        // the server stopped accepting it (#297), so it's no longer sent at all.
 
         // Lets the server show which build each kiosk runs. Left off entirely for a dev build
         // that isn't a Velopack install, so the server keeps "unknown" rather than a fake value.
@@ -52,7 +47,7 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
 
         // dmxBatch=1 tells the server this client handles "ReceiveDmxChannelValues". Clients
         // older than 1.0.40 don't send it, and the server falls back to one message per channel.
-        string url = serverUrl + $"?{ClientConnectionQuery.ClientId}={clientId}{secretQuery}&{ClientConnectionQuery.DmxBatch}=1{versionQuery}";
+        string url = serverUrl + $"?{ClientConnectionQuery.ClientId}={clientId}&{ClientConnectionQuery.DmxBatch}=1{versionQuery}";
 
         _logger.LogInformation("Waiting 5 seconds to start the SignalR connection.");
 

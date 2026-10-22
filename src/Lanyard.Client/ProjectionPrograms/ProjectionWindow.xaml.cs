@@ -1,3 +1,4 @@
+using Lanyard.Shared.Kiosk;
 using Lanyard.Shared.Contracts;
 using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
@@ -248,12 +249,13 @@ public partial class ProjectionWindow : Window
 
     // Each program gets a fresh user-data-dir (see CoreWebView2Environment creation), so
     // camera/mic permission grants never persist across programs; auto-accept is required for
-    // Live Capture steps to start without a prompt.
-    private static void OnPermissionRequested(object? sender, CoreWebView2PermissionRequestedEventArgs e)
+    // Live Capture steps to start without a prompt. Only for the page this window opened, though:
+    // anything it navigates to elsewhere gets the default (no prompt on a kiosk, so denied).
+    private void OnPermissionRequested(object? sender, CoreWebView2PermissionRequestedEventArgs e)
     {
         if (e.PermissionKind is CoreWebView2PermissionKind.Camera or CoreWebView2PermissionKind.Microphone)
         {
-            e.State = CoreWebView2PermissionState.Allow;
+            e.State = KioskUrls.IsSameOrigin(e.Uri, _url) ? CoreWebView2PermissionState.Allow : CoreWebView2PermissionState.Deny;
         }
     }
 

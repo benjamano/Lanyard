@@ -19,12 +19,11 @@ public static class KioskMediaTokens
     {
         string separator = url.Contains('?') ? "&" : "?";
 
+        // A kiosk with no credential of its own has nothing the server will accept, and the old
+        // shared secret no longer goes into URLs.
         if (KioskCredentials.Current is null)
         {
-            // Still on the old shared secret: what every kiosk sent before 1.0.43.
-            return KioskCredentials.LegacySecret is string secret
-                ? $"{url}{separator}{ClientConnectionQuery.Secret}={Uri.EscapeDataString(secret)}"
-                : url;
+            return url;
         }
 
         string? token = await GetAsync();
