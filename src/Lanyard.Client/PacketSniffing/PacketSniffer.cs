@@ -1,21 +1,19 @@
-﻿using Microsoft.Build.Framework;
+﻿using Lanyard.Infrastructure.DTO.ZoneScoreboard;
+using Lanyard.Shared.LaserGame;
 using Microsoft.Extensions.Logging;
 using PacketDotNet;
 using SharpPcap;
-using System;
-using System.Collections.Generic;
+using System.Net;
 using System.Net.NetworkInformation;
-using System.Text;
-using Lanyard.Client.PacketSniffing;
-using System.Threading.Tasks;
-using Lanyard.Infrastructure.DTO.ZoneScoreboard;
 
 namespace Lanyard.Client.PacketSniffing;
 
 public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actions) : IPacketSniffer
 {
-    private List<string> SourceIPs = ["192.168.0.10", "192.168.0.11", "192.168.2.42"];
-    private string? DestinationIP = "192.168.0.255";
+    // Parsed once when settings arrive, so each packet is matched without building strings.
+    // Replaced whole rather than mutated, because the capture thread reads them.
+    private volatile IPAddress[] _sourceIps = [IPAddress.Parse("192.168.0.10"), IPAddress.Parse("192.168.0.11"), IPAddress.Parse("192.168.2.42")];
+    private volatile IPAddress? _destinationIp = IPAddress.Parse("192.168.0.255");
 
     private readonly ILogger<PacketSniffer> _logger = logger;
     private readonly IActionFunctions _actions = actions;
@@ -63,13 +61,13 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
             return;
         }
 
-        DestinationIP = settings.DestinationIp;
+        ApplyAddressFilter(settings);
 
-        SourceIPs = [settings.SourceIp];
+        PhysicalAddress.TryParse(settings.PreferredDeviceMacAddress, out PhysicalAddress? preferedInterfaceMacAddress);
 
-        PhysicalAddress preferedInterfaceMacAddress = PhysicalAddress.Parse(settings.PreferredDeviceMacAddress);
-
-        ILiveDevice? device = devices.FirstOrDefault(x => x.MacAddress?.ToString() == preferedInterfaceMacAddress.ToString());
+        ILiveDevice? device = preferedInterfaceMacAddress == null
+            ? null
+            : devices.FirstOrDefault(x => preferedInterfaceMacAddress.Equals(x.MacAddress));
 
         if (device == null && devices.Any())
         {
@@ -120,96 +118,122 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
         _activeDevice = device;
     }
 
+    private void ApplyAddressFilter(ZoneScoreboardSettingsDTO settings)
+    {
+        if (IPAddress.TryParse(settings.SourceIp, out IPAddress? sourceIp))
+        {
+            _sourceIps = [sourceIp];
+        }
+        else
+        {
+            _logger.LogWarning("The zone scoreboard source IP {SourceIp} isn't a valid address; no game packets will match.", settings.SourceIp);
+            _sourceIps = [];
+        }
+
+        // A missing destination never matched before either, so keep it that way rather than
+        // suddenly accepting the source's traffic to anywhere.
+        _destinationIp = IPAddress.TryParse(settings.DestinationIp, out IPAddress? destinationIp) ? destinationIp : null;
+
+        if (_destinationIp == null)
+        {
+            _logger.LogWarning("The zone scoreboard destination IP {DestinationIp} isn't a valid address; no game packets will match.", settings.DestinationIp);
+        }
+    }
+
+    // Runs on SharpPcap's capture thread, one packet at a time. Packets are handled here rather
+    // than on the thread pool so they reach the game state in the order the control box sent them:
+    // a game start or end handled out of order would publish the wrong status edge.
     private void OnPacketArrival(object sender, PacketCapture e)
     {
         Interlocked.Exchange(ref _lastPacketTicks, DateTime.UtcNow.Ticks);
 
         try
         {
-            Packet packet = Packet.ParsePacket(e.GetPacket().LinkLayerType, e.GetPacket().Data);
-            IPPacket ipPacket = packet.Extract<IPPacket>();
+            RawCapture raw = e.GetPacket();
+            Packet packet = Packet.ParsePacket(raw.LinkLayerType, raw.Data);
 
-            if (ipPacket == null)
+            UdpPacket? udpPacket = packet.Extract<UdpPacket>();
+
+            if (udpPacket?.ParentPacket is not IPPacket ipPacket || !IsGamePacket(ipPacket))
             {
                 return;
             }
 
-            if (SourceIPs.Contains(ipPacket.SourceAddress.ToString()) && ipPacket.DestinationAddress.ToString() == DestinationIP)
+            Interlocked.Exchange(ref _lastGamePacketTicks, DateTime.UtcNow.Ticks);
+
+            byte[] rawBytes = udpPacket.PayloadData;
+
+            if (rawBytes == null || rawBytes.Length == 0)
             {
-                Interlocked.Exchange(ref _lastGamePacketTicks, DateTime.UtcNow.Ticks);
-
-                _logger.LogInformation("Recieved a packet that aligns with the filters!, Source: {source}, Destination {dest}", ipPacket.SourceAddress.ToString(), ipPacket.DestinationAddress.ToString());
-
-                UdpPacket udpPacket = packet.Extract<UdpPacket>();
-                if (udpPacket == null)
-                {
-                    return;
-                }
-
-                byte[] rawBytes = udpPacket.PayloadData;
-
-                if (rawBytes == null || rawBytes.Length == 0)
-                {
-                    return;
-                }
-
-                string hex = BitConverter.ToString(rawBytes).Replace("-", "");
-
-                string[] decodedData = HexToAscii(hex).Split(",");
-
-                Task.Run(() => HandlePacketAsync(decodedData));
+                return;
             }
+
+            string[] decodedData = LaserPacketDecoder.Decode(rawBytes);
+
+            if (_logger.IsEnabled(LogLevel.Trace))
+            {
+                _logger.LogTrace("Game packet from {Source} to {Destination}: {Payload}", ipPacket.SourceAddress, ipPacket.DestinationAddress, string.Join(',', decodedData));
+            }
+
+            HandlePacket(decodedData);
         }
         catch (Exception ex)
         {
-            _logger.LogError("Error occured handling a packet: {ex}", ex.Message);
-            _logger.LogTrace(ex.StackTrace);
+            _logger.LogError(ex, "Error occured handling a packet.");
         }
     }
 
-    public async Task HandlePacketAsync(string[] decodedData)
+    private bool IsGamePacket(IPPacket ipPacket)
     {
-        if (int.TryParse(decodedData[0].ToString(), out int packetType))
+        IPAddress? destinationIp = _destinationIp;
+
+        if (destinationIp == null || !destinationIp.Equals(ipPacket.DestinationAddress))
         {
-            switch (packetType)
+            return false;
+        }
+
+        foreach (IPAddress sourceIp in _sourceIps)
+        {
+            if (sourceIp.Equals(ipPacket.SourceAddress))
             {
-                case 1:
-                    // Timing Packet
-                    await _actions.HandleTimingPacketAsync(decodedData);
-                    break;
-                case 2:
-                    // Team Score Packet
-                    // DON'T CARE ABOUT THIS AS THE TEAM SCORE CAN ALREADY BE WORKED OUT WITH PLAYER SCORES
-                    break;
-                case 3:
-                    // Player Score Packet
-                    await _actions.HandlePlayerScorePacketAsync(decodedData);
-                    break;
-                case 4:
-                    // Game Status Packet
-                    await _actions.HandleGameStatusPacketAsync(decodedData);
-                    break;
-                case 5:
-                    // Shot Confirmed Packet
-                    await _actions.HandleShotConfirmedPacketAsync(decodedData);
-                    break;
+                return true;
             }
         }
-        else
-        {
-            _logger.LogWarning("Invalid number for packet type recieved: {value}", decodedData[0]);
-        }
+
+        return false;
     }
 
-    private static string HexToAscii(string hex)
+    public void HandlePacket(string[] decodedData)
     {
-        StringBuilder sb = new();
-
-        for (int i = 0; i < hex.Length; i += 2)
+        if (decodedData.Length == 0 || !int.TryParse(decodedData[0], out int packetType))
         {
-            sb.Append(Convert.ToChar(Convert.ToByte(hex.Substring(i, 2), 16)));
+            _logger.LogDebug("Invalid number for packet type recieved: {value}", decodedData.FirstOrDefault());
+            return;
         }
 
-        return sb.ToString();
+        if (decodedData.Length < LaserPacketDecoder.MinimumFieldCount(packetType))
+        {
+            _logger.LogDebug("Dropped a type {PacketType} packet with only {FieldCount} fields.", packetType, decodedData.Length);
+            return;
+        }
+
+        switch (packetType)
+        {
+            case LaserPacketDecoder.TimingPacket:
+                _actions.HandleTimingPacket(decodedData);
+                break;
+            case LaserPacketDecoder.TeamScorePacket:
+                // DON'T CARE ABOUT THIS AS THE TEAM SCORE CAN ALREADY BE WORKED OUT WITH PLAYER SCORES
+                break;
+            case LaserPacketDecoder.PlayerScorePacket:
+                _actions.HandlePlayerScorePacket(decodedData);
+                break;
+            case LaserPacketDecoder.GameStatusPacket:
+                _actions.HandleGameStatusPacket(decodedData);
+                break;
+            case LaserPacketDecoder.ShotConfirmedPacket:
+                _actions.HandleShotConfirmedPacket(decodedData);
+                break;
+        }
     }
 }

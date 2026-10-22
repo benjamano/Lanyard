@@ -479,7 +479,7 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
 
     public async Task SendLaserGameStatusAsync(LaserGameStatusDTO status)
     {
-        await _connection!.InvokeAsync("UpdateLaserGameStatus", status);
+        await _connection!.InvokeAsync(ClientHubMethods.UpdateLaserGameStatus, status);
     }
 
     public bool IsConnected => _connection?.State == HubConnectionState.Connected;
