@@ -117,6 +117,7 @@ if (!builder.Environment.IsDevelopment())
 }
 builder.Services.AddScoped<ApplicationRolesService>();
 builder.Services.AddScoped<IPlaylistService, PlaylistService>();
+builder.Services.AddSingleton<IMusicLibraryEvents, MusicLibraryEvents>();
 builder.Services.AddScoped<IMusicScheduleService, MusicScheduleService>();
 // Singleton: it remembers what it last applied to each kiosk between ticks.
 builder.Services.AddSingleton<IMusicScheduleEngine, MusicScheduleEngine>();

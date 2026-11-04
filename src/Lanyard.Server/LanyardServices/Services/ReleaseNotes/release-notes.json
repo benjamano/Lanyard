@@ -830,7 +830,11 @@
       "Previous restarts the song if it's more than 3 seconds in, otherwise goes back one.",
       "A kiosk reconnecting no longer briefly shows the wrong song or loses its place in the queue.",
       "Music commands that fail (for example when a kiosk has just dropped off) now say so instead of failing silently.",
-      "The music schedule retries a playlist that failed to start, and no longer jumps the volume up from silence on a kiosk that hasn't reported its volume yet."
+      "The music schedule retries a playlist that failed to start, and no longer jumps the volume up from silence on a kiosk that hasn't reported its volume yet.",
+      "Adding a song back to a playlist it was removed from now works, instead of failing with an error.",
+      "Playlists keep their own song order, ready for reordering on the Music page.",
+      "Playlist pickers list playlists alphabetically.",
+      "Editing a playlist while it's playing updates what plays next without interrupting the song."
     ]
   }
 ]
