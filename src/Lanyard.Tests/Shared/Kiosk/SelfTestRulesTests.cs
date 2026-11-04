@@ -289,6 +289,27 @@ public class SelfTestRulesTests
     }
 
     [TestMethod]
+    public void EvaluateCapture_WithCaptureFilter_SilenceIsOnlyAWarning()
+    {
+        // The filter drops everything but game messages, so no packets at all between games is normal.
+        CaptureFacts facts = Capture(lastPacket: Now.AddMinutes(-20), lastGame: Now.AddMinutes(-20)) with { CaptureFiltered = true };
+
+        KioskSelfTestCheckDTO check = Get(EvaluateCapture(facts, Now), SelfTestCheckKeys.CaptureTraffic);
+
+        Assert.AreEqual(SelfTestOutcome.Warn, check.Outcome);
+        Assert.AreEqual(SelfTestCodes.NoGamePackets, check.Code);
+        StringAssert.Contains(check.Detail, "capture filter");
+    }
+
+    [TestMethod]
+    public void EvaluateCapture_WithCaptureFilter_GameMessagesPass()
+    {
+        CaptureFacts facts = Capture() with { CaptureFiltered = true };
+
+        Assert.AreEqual(SelfTestOutcome.Pass, Get(EvaluateCapture(facts, Now), SelfTestCheckKeys.CaptureTraffic).Outcome);
+    }
+
+    [TestMethod]
     public void EvaluateCapture_JustStarted_DoesNotJudgeTraffic()
     {
         DateTime? never = null;

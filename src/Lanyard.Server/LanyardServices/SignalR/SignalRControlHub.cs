@@ -12,6 +12,7 @@ using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.Contracts;
 using Lanyard.Shared.DTO;
 using Lanyard.Shared.Enum;
+using Lanyard.Shared.SignalR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -454,15 +455,9 @@ public class SignalRControlHub(
 
         ZoneScoreboardSettings settings = getResult.Data;
 
-        ZoneScoreboardSettingsDTO settingsDto = new()
-        {
-            PreferredDeviceMacAddress = settings.PreferredDeviceMacAddress,
-            ZoneScoreboardVersion = settings.ZoneScoreboardVersion,
-            SourceIp = settings.SourceIp,
-            DestinationIp = settings.DestinationIp
-        };
+        ZoneScoreboardSettingsDTO settingsDto = ClientZoneScoreboardService.ToDto(settings);
 
-        await Clients.Caller.SendAsync("ReceiveZoneScoreboardSettings", settingsDto);
+        await Clients.Caller.SendAsync(ClientHubMethods.ReceiveZoneScoreboardSettings, settingsDto);
         _logger.LogInformation("Sent zone scoreboard settings to client {ClientId}", client.Id);
     }
 

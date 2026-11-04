@@ -1,0 +1,59 @@
+@page "/manage/parties/printouts"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.Parties)]
+
+@using Lanyard.App.Components.Parties
+
+<PageTitle>Printouts</PageTitle>
+
+<div class="printouts-page">
+    <div class="printouts-header">
+        <div class="printouts-title">
+            <h1>Printouts</h1>
+            <HelpButton AreaKey="@HelpRegistry.Parties" Topic="settings" />
+        </div>
+        <p>
+            Use your own artwork for the free return voucher and the feedback form. Export the blank design (with the boxes left
+            empty) as a PNG or JPEG, upload it, and Lanyard prints each party's details into the boxes. Without artwork, Lanyard
+            prints its standard design with your logo and colour. These apply at every location in your company.
+        </p>
+    </div>
+
+    @if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else if (scope is not null && companyId is int company)
+    {
+        <PartyTemplateEditor Scope="@scope" CompanyId="@company" Document="PartyArtworkDocument.Voucher" Title="Free return voucher"
+                             Intro="Given to the birthday child. Signed by whoever prints it, and valid for the number of months you choose." />
+
+        <PartyTemplateEditor Scope="@scope" CompanyId="@company" Document="PartyArtworkDocument.FeedbackForm" Title="Feedback form"
+                             Intro="Left on the table for the parent, with the party name and host filled in." />
+    }
+</div>
+
+@code {
+    private LocationScope? scope;
+    private int? companyId;
+    private string? loadError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> result = await _currentLocationContext.GetScopeAsync();
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            loadError = $"Couldn't work out which location you're signed in to: {result.Error}";
+            return;
+        }
+
+        scope = result.Data;
+        companyId = scope.CompanyId;
+
+        if (companyId is null)
+        {
+            loadError = "Sign in at one of your company's locations to set up its printouts.";
+        }
+    }
+}
