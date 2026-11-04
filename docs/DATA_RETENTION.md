@@ -161,6 +161,16 @@ ran the test, and **purged after 90 days** (`Kiosks:SelfTest:RetentionDays`). Th
 the kiosk, only visible to Admins of the kiosk's own company, and GDPR erasure clears the link to
 the Admin while keeping the result.
 
+### Party bookings
+
+A party booking (`PartyBooking`) holds personal data about customers, not staff: the birthday
+child's name and age, and the booking parent's name, phone number and optional email address,
+plus free-text allergy and dietary notes. None of these people have a Lanyard account, so staff
+GDPR erasure doesn't touch them. Cancelling a party keeps the row (it can be reinstated); there is
+**no retention period or automatic deletion yet**. A period for customer party data still needs
+deciding, and a customer erasure request currently means deleting or blanking their bookings by
+hand. If a party's host leaves and their account is deleted, the party just loses its host.
+
 ## Required follow-up work (tracked separately)
 
 These are deliberately **not** implemented as part of the security-hardening change because they

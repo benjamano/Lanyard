@@ -34,8 +34,13 @@ public interface IChatService
 
     // The newest messages (or those before `before`, for scrolling back), oldest first. The scope
     // (the signed-in location) decides whether a channel shows its moderator options
-    // (ChatChannels.CanModerate); without one it doesn't.
-    Task<Result<ChatThread>> GetThreadAsync(string userId, Guid conversationId, DateTime? before = null, int take = 50, LocationScope? scope = null);
+    // (ChatChannels.CanModerate); without one it doesn't. beforeId: the id of the message at
+    // `before`, so messages sent in the same instant aren't skipped at the page boundary.
+    Task<Result<ChatThread>> GetThreadAsync(string userId, Guid conversationId, DateTime? before = null, int take = 50, LocationScope? scope = null, Guid? beforeId = null);
+
+    // Messages from sinceUtc on, oldest first, for an open conversation to add as they're posted.
+    // The same membership rules as GetThreadAsync; nothing else about the conversation is loaded.
+    Task<Result<ChatMessagesDelta>> GetMessagesSinceAsync(string userId, Guid conversationId, DateTime sinceUtc, int take = 50);
 
     // scope: lets a channel's moderators post while staff posting is off.
     Task<Result<ChatMessage>> SendAsync(string userId, Guid conversationId, string html, Guid? replyToMessageId = null, LocationScope? scope = null);
@@ -44,6 +49,8 @@ public interface IChatService
 
     Task<Result<bool>> DeleteOwnAsync(string userId, Guid messageId);
 
+    // True when it moved the read marker; false when everything was already read (nothing is
+    // written and no event goes out).
     Task<Result<bool>> MarkReadAsync(string userId, Guid conversationId);
 
     Task<Result<int>> GetUnreadTotalAsync(string userId);

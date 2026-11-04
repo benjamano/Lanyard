@@ -9,11 +9,14 @@
 @inject IChatTyping Typing
 @inject Lanyard.Application.Services.Scheduling.IShiftClaimEventBus ShiftClaimEvents
 @inject IJSRuntime JS
+@inject ILogger<ChatThreadView> _logger
 
 @* One open conversation: its messages (newest at the bottom, older ones on demand), the message
    box, and the conversation's menu. Stays live: new messages, edits and removals appear as they
    happen, and while it's open its messages count as read and don't send push notifications.
-   Shows who else is typing, and tells the others when this person is. *@
+   Shows who else is typing, and tells the others when this person is. A new message fetches only
+   what's arrived (GetMessagesSinceAsync) and is read out to screen readers; anything else
+   reloads the conversation. *@
 <div class="thread">
     <header class="thread-header">
         @if (ShowBack)
@@ -248,6 +251,10 @@
         }
     </div>
 
+    @* Read out by screen readers when someone else's message arrives; never for history or for
+       the reader's own messages. *@
+    <div class="visually-hidden" aria-live="polite" aria-atomic="true">@announcement</div>
+
     <ChatComposer @ref="composer" Submit="SubmitAsync" OnCancelContext="CancelContext" OnTyping="OnComposerTyping"
                   DisabledReason="@thread?.CannotPostReason" Context="@composerContext" ContextIsEdit="@(editing is not null)"
                   Placeholder="@(thread is null ? "Write a message" : $"Message {thread.Title}")" />
@@ -308,6 +315,22 @@
 
     // "Tom is typing", "Tom and Amy are typing": the other members typing here right now.
     private string? typingLabel;
+
+    // One load at a time: a new message arriving mid-reload (or mid-switch) waits for it, so the
+    // two never merge different versions of the list.
+    private readonly SemaphoreSlim loadLock = new(1, 1);
+
+    // A new message fetches from a little before the newest one shown: two sent at once can be
+    // saved in the other order, and this catches the one that lands second.
+    private static readonly TimeSpan NewMessageOverlap = TimeSpan.FromSeconds(30);
+
+    // Marking read waits for a pause, so a burst of messages is one write rather than one each.
+    private static readonly TimeSpan MarkReadDelay = TimeSpan.FromSeconds(2);
+    private Timer? markReadTimer;
+    private Guid? markReadPending;
+
+    // "New message from Tom: ..." for screen readers.
+    private string? announcement;
 
     private string? composerContext => editing is not null ? "Editing your message"
         : replyingTo is not null ? $"Replying to {replyingTo.AuthorName}: {ChatHtml.Preview(replyingTo.Message.BodyText, 60)}"
@@ -444,7 +467,24 @@
             return;
         }
 
+        await loadLock.WaitAsync();
+
+        try
+        {
+            await OpenConversationAsync();
+        }
+        finally
+        {
+            loadLock.Release();
+        }
+    }
+
+    private async Task OpenConversationAsync()
+    {
         bool switching = loadedId != Guid.Empty;
+
+        // Whatever was read in the conversation being left counts, without waiting for the pause.
+        await FlushMarkReadAsync();
 
         if (switching)
         {
@@ -455,6 +495,7 @@
         thread = null;
         messages = [];
         typingLabel = null;
+        announcement = null;
         replyingTo = null;
         editing = null;
         menuOpen = false;
@@ -472,10 +513,28 @@
 
         scope ??= (await _currentLocationContext.GetScopeAsync()).Data;
 
-        await LoadLatestAsync(scroll: true);
+        await LoadLatestUnlockedAsync(scroll: true);
+
+        // Opening it reads it straight away, so the unread count clears at once.
+        await FlushMarkReadAsync();
     }
 
     private async Task LoadLatestAsync(bool scroll)
+    {
+        await loadLock.WaitAsync();
+
+        try
+        {
+            await LoadLatestUnlockedAsync(scroll);
+        }
+        finally
+        {
+            loadLock.Release();
+        }
+    }
+
+    // Call with loadLock held.
+    private async Task LoadLatestUnlockedAsync(bool scroll)
     {
         // Reload as far back as the reader has scrolled (up to the page limit), so edits and
         // removals of older messages show too, not just the newest page.
@@ -493,17 +552,112 @@
         thread = result.Data;
 
         // Keep anything older the reader had scrolled back to; take the newest page as it now is.
-        DateTime? oldestFetched = result.Data.Messages.FirstOrDefault()?.Message.CreateUtc;
-        List<ChatMessageView> older = oldestFetched is DateTime cutoff ? messages.Where(x => x.Message.CreateUtc < cutoff).ToList() : [];
+        ChatMessageView? oldestFetched = result.Data.Messages.FirstOrDefault();
+        List<ChatMessageView> older = oldestFetched is not null ? messages.Where(x => ChatThreadMerge.Compare(x, oldestFetched) < 0).ToList() : [];
 
         hasOlder = older.Count > 0 ? hasOlder : result.Data.HasOlder;
         messages = [.. older, .. result.Data.Messages];
         scrollToBottom = scrollToBottom || scroll;
         RefreshTyping();
+        ScheduleMarkRead();
+    }
 
-        if (pageVisible)
+    // A new message: fetch what's arrived since the newest one shown, rather than the whole
+    // conversation. Anything this can't account for (a long gap, the message not there yet, a
+    // newcomer to the channel) reloads instead.
+    private async Task AppendNewAsync(Guid conversationId, Guid messageId, bool scroll)
+    {
+        await loadLock.WaitAsync();
+
+        try
         {
-            await ChatService.MarkReadAsync(UserId, ConversationId);
+            if (conversationId != ConversationId || messages.Any(x => x.Message.Id == messageId))
+            {
+                return;
+            }
+
+            if (thread is null)
+            {
+                await LoadLatestUnlockedAsync(scroll);
+                return;
+            }
+
+            DateTime since = messages.Count == 0 ? DateTime.MinValue : messages[^1].Message.CreateUtc - NewMessageOverlap;
+            Result<ChatMessagesDelta> result = await ChatService.GetMessagesSinceAsync(UserId, ConversationId, since);
+
+            ChatMessageView? posted = result.Data?.Messages.FirstOrDefault(x => x.Message.Id == messageId);
+
+            if (!result.IsSuccess || result.Data is not { Truncated: false } delta || posted is null
+                || thread.Members.All(m => m.UserId != posted.Message.AuthorUserId))
+            {
+                await LoadLatestUnlockedAsync(scroll);
+                return;
+            }
+
+            List<ChatMessageView> added = ChatThreadMerge.Added(messages, delta.Messages);
+            messages = ChatThreadMerge.Merge(messages, delta.Messages);
+            scrollToBottom = scrollToBottom || scroll;
+            Announce(added.Where(x => !x.IsMine).ToList());
+            ScheduleMarkRead();
+        }
+        finally
+        {
+            loadLock.Release();
+        }
+    }
+
+    private void Announce(List<ChatMessageView> fromOthers)
+    {
+        if (fromOthers.Count == 0)
+        {
+            return;
+        }
+
+        ChatMessageView latest = fromOthers[^1];
+        string text = latest.Card?.Title ?? ChatHtml.Preview(latest.Message.BodyText, 100);
+
+        announcement = fromOthers.Count == 1
+            ? $"New message from {latest.AuthorName}: {text}"
+            : $"{fromOthers.Count} new messages, latest from {latest.AuthorName}";
+    }
+
+    // Marks the conversation read after a short pause, while it's on screen.
+    private void ScheduleMarkRead()
+    {
+        if (!pageVisible)
+        {
+            return;
+        }
+
+        markReadPending = ConversationId;
+        markReadTimer ??= new Timer(_ => _ = InvokeAsync(async () =>
+        {
+            await FlushMarkReadAsync();
+            StateHasChanged();
+        }));
+        markReadTimer.Change(MarkReadDelay, Timeout.InfiniteTimeSpan);
+    }
+
+    private async Task FlushMarkReadAsync()
+    {
+        markReadTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+
+        if (markReadPending is not Guid conversationId)
+        {
+            return;
+        }
+
+        markReadPending = null;
+        Result<bool> result = await ChatService.MarkReadAsync(UserId, conversationId);
+
+        if (!result.IsSuccess)
+        {
+            _logger.LogWarning("Couldn't mark chat {ConversationId} read for {UserId}: {Error}", conversationId, UserId, result.Error);
+            return;
+        }
+
+        if (conversationId == ConversationId && pageVisible)
+        {
             clearNotifications = true;
         }
     }
@@ -520,7 +674,12 @@
         presence?.Dispose();
         presence = null;
 
-        if (visible)
+        if (!visible)
+        {
+            // What was on screen until now has been read.
+            await FlushMarkReadAsync();
+        }
+        else
         {
             // Back on screen: count as reading again and catch up.
             presence = Presence.Enter(UserId, ConversationId);
@@ -553,7 +712,15 @@
             {
             }
 
-            await LoadLatestAsync(scroll: nearBottom && chatEvent.Kind == ChatEventKind.MessagePosted);
+            if (chatEvent is { Kind: ChatEventKind.MessagePosted, MessageId: Guid messageId })
+            {
+                await AppendNewAsync(chatEvent.ConversationId, messageId, scroll: nearBottom);
+            }
+            else
+            {
+                await LoadLatestAsync(scroll: nearBottom && chatEvent.Kind == ChatEventKind.MessagePosted);
+            }
+
             StateHasChanged();
         });
     }
@@ -603,25 +770,35 @@
         }
 
         loadingOlder = true;
-        Result<ChatThread> result = await ChatService.GetThreadAsync(UserId, ConversationId, messages[0].Message.CreateUtc, scope: scope);
-        loadingOlder = false;
-
-        if (!result.IsSuccess || result.Data is null)
-        {
-            _toastService.ShowError(result.Error ?? "Couldn't load earlier messages.");
-            return;
-        }
+        await loadLock.WaitAsync();
 
         try
         {
-            keepFromHeight = await JS.InvokeAsync<double>("lanyardChat.scrollHeight", scroller);
-        }
-        catch (JSDisconnectedException)
-        {
-        }
+            ChatMessage oldest = messages[0].Message;
+            Result<ChatThread> result = await ChatService.GetThreadAsync(UserId, ConversationId, oldest.CreateUtc, scope: scope, beforeId: oldest.Id);
 
-        messages = [.. result.Data.Messages, .. messages];
-        hasOlder = result.Data.HasOlder;
+            if (!result.IsSuccess || result.Data is null)
+            {
+                _toastService.ShowError(result.Error ?? "Couldn't load earlier messages.");
+                return;
+            }
+
+            try
+            {
+                keepFromHeight = await JS.InvokeAsync<double>("lanyardChat.scrollHeight", scroller);
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+
+            messages = [.. result.Data.Messages, .. messages];
+            hasOlder = result.Data.HasOlder;
+        }
+        finally
+        {
+            loadingOlder = false;
+            loadLock.Release();
+        }
     }
 
     private async Task<bool> SubmitAsync(string html)
@@ -871,6 +1048,20 @@
         Typing.OnChanged -= OnTypingChanged;
         Typing.Stopped(UserId, ConversationId);
         presence?.Dispose();
+
+        if (markReadTimer is not null)
+        {
+            await markReadTimer.DisposeAsync();
+        }
+
+        try
+        {
+            await FlushMarkReadAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Couldn't mark chat {ConversationId} read on close for {UserId}", ConversationId, UserId);
+        }
 
         try
         {

@@ -10,6 +10,15 @@ public static class ClientHubMethods
     /// <summary>Server to kiosk, client result: returns a <c>ClientLogTailDTO</c>.</summary>
     public const string RequestLogTail = "RequestLogTail";
 
+    /// <summary>Kiosk to server: sends a <c>LaserGameStatusDTO</c> with the live laser game state.</summary>
+    public const string UpdateLaserGameStatus = "UpdateLaserGameStatus";
+
+    /// <summary>
+    /// Server to kiosk: sends a <c>ZoneScoreboardSettingsDTO</c>, on every connect and whenever an
+    /// Admin saves the kiosk's zone scoreboard settings.
+    /// </summary>
+    public const string ReceiveZoneScoreboardSettings = "ReceiveZoneScoreboardSettings";
+
     /// <summary>Server to kiosk: play an <c>AudioClipPlayCommand</c> over the music, ducking it.</summary>
     public const string PlayAudioClip = "PlayAudioClip";
 
