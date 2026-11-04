@@ -1,0 +1,50 @@
+@using NAudio.Wave
+
+@* Every kiosk at a glance - what it's playing, or that it's offline - and which one the page
+   controls. A row of tabs on a wide screen, a sideways-scrolling row on a phone. *@
+<nav class="music-kiosk-strip" aria-label="Kiosks">
+    <div class="music-kiosk-strip-scroll" role="tablist">
+        @foreach (MusicKiosk kiosk in Kiosks)
+        {
+            MusicNowPlayingSnapshot? snapshot = Snapshots.GetValueOrDefault(kiosk.Id);
+            bool connected = snapshot?.IsConnected ?? kiosk.IsConnected;
+            bool playing = connected && snapshot?.State == PlaybackState.Playing;
+            bool selected = kiosk.Id == SelectedId;
+
+            <button type="button" role="tab" @key="kiosk.Id"
+                    class="music-kiosk-chip @(selected ? "is-selected" : "") @(connected ? "" : "is-offline")"
+                    aria-selected="@(selected ? "true" : "false")"
+                    @onclick="() => OnSelect.InvokeAsync(kiosk.Id)">
+                <span class="music-status-dot @(connected ? playing ? "is-playing" : "is-idle" : "is-offline")" aria-hidden="true"></span>
+                <span class="music-kiosk-chip-text">
+                    <span class="music-kiosk-chip-name">@kiosk.Name</span>
+                    <span class="music-kiosk-chip-song">@Describe(snapshot, connected, playing)</span>
+                </span>
+            </button>
+        }
+    </div>
+</nav>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<MusicKiosk> Kiosks { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyDictionary<Guid, MusicNowPlayingSnapshot> Snapshots { get; set; } = new Dictionary<Guid, MusicNowPlayingSnapshot>();
+    [Parameter] public Guid? SelectedId { get; set; }
+    [Parameter] public EventCallback<Guid> OnSelect { get; set; }
+
+    private static string Describe(MusicNowPlayingSnapshot? snapshot, bool connected, bool playing)
+    {
+        if (!connected)
+        {
+            return "Offline";
+        }
+
+        if (snapshot?.Song is not { } song)
+        {
+            return "Nothing playing";
+        }
+
+        return playing ? song.Name
+            : snapshot.State == PlaybackState.Paused ? $"Paused · {song.Name}"
+            : $"Stopped · {song.Name}";
+    }
+}

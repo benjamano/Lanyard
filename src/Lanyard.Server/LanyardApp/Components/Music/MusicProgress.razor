@@ -1,0 +1,128 @@
+@using NAudio.Wave
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject IMusicPlayerService _player
+
+@* The browser moves this on between server updates (musicPlayer.js), so Blazor only touches it
+   when something actually changes. The range input deliberately has no value binding: Blazor
+   writing it back on every render is what made the old slider fight the user's thumb. *@
+<div class="music-progress @(Compact ? "is-compact" : "")" @ref="_root">
+    @if (!Compact)
+    {
+        <button type="button" class="music-progress-time is-elapsed" data-music-elapsed
+                title="Show time left" aria-label="Elapsed time. Select to show time left">0:00</button>
+    }
+    <input type="range" class="music-progress-range" min="0" max="1" step="1" value="0"
+           aria-label="Song position" disabled="@(ReadOnly || Snapshot.LengthSeconds <= 0)" />
+    @if (!Compact)
+    {
+        <span class="music-progress-time is-total" data-music-total>@FormatTime(Snapshot.LengthSeconds)</span>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public MusicNowPlayingSnapshot Snapshot { get; set; } = default!;
+
+    /// <summary>A thin line with no times or thumb, for the compact player.</summary>
+    [Parameter] public bool Compact { get; set; }
+
+    /// <summary>Shows progress without letting anyone seek.</summary>
+    [Parameter] public bool ReadOnly { get; set; }
+
+    private ElementReference _root;
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<MusicProgress>? _ref;
+
+    // What the browser was last told, so it's only told again when something changed.
+    private (Guid? SongId, double Position, double Length, bool Playing, DateTime At, bool ReadOnly)? _sent;
+
+    public static string FormatTime(double seconds)
+    {
+        TimeSpan t = TimeSpan.FromSeconds(Math.Max(0, Math.Floor(seconds)));
+        return t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : $"{(int)t.TotalMinutes}:{t.Seconds:00}";
+    }
+
+    // Only the browser draws this, so a parent re-rendering for anything else never touches it.
+    protected override bool ShouldRender() => _module is null;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_module is not null)
+        {
+            await PushAsync();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/musicPlayer.js");
+            _ref = DotNetObjectReference.Create(this);
+            await _module.InvokeVoidAsync("initProgress", _root, _ref);
+            await PushAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    private async Task PushAsync()
+    {
+        var current = (Snapshot.Song?.Id, Snapshot.PositionSeconds, Snapshot.LengthSeconds,
+            Snapshot.State == PlaybackState.Playing && Snapshot.IsConnected, Snapshot.PositionAtUtc, ReadOnly);
+
+        if (_sent == current || _module is null)
+        {
+            return;
+        }
+
+        _sent = current;
+
+        try
+        {
+            await _module.InvokeVoidAsync("setProgress", _root, Snapshot.PositionSeconds, Snapshot.LengthSeconds,
+                current.Item4, ReadOnly);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    [JSInvokable]
+    public async Task SeekTo(double seconds)
+    {
+        if (ReadOnly)
+        {
+            return;
+        }
+
+        Result<bool> result = await _player.Seek(Snapshot.ClientId, seconds);
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowWarning(result.Error ?? "Couldn't move to that point in the song.");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.InvokeVoidAsync("disposeProgress", _root);
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+
+        _ref?.Dispose();
+    }
+}

@@ -822,7 +822,7 @@
   {
     "version": "1.4.20",
     "releaseDate": "2026-11-04",
-    "summary": "Music overhaul: shuffle, skipping and the kiosk player are more reliable.",
+    "summary": "A redesigned Music page that works on phones, and a more reliable music player.",
     "details": [
       "Shuffle now plays every song in a playlist once before any repeat, and Previous goes back to the song that actually played before.",
       "Turning shuffle off carries on in playlist order from the song that's playing.",
@@ -834,7 +834,12 @@
       "Adding a song back to a playlist it was removed from now works, instead of failing with an error.",
       "Playlists keep their own song order, ready for reordering on the Music page.",
       "Playlist pickers list playlists alphabetically.",
-      "Editing a playlist while it's playing updates what plays next without interrupting the song."
+      "Editing a playlist while it's playing updates what plays next without interrupting the song.",
+      "The Music page is redesigned. Every kiosk is shown along the top with what it's playing, and the player shows the song, its playlist and what's up next.",
+      "The page now fits phones properly: two-line song lists, bigger controls, and a small player along the bottom while you scroll through songs.",
+      "Songs in All songs can now be played, and the library and playlists can be searched.",
+      "Playlists can be renamed, deleted and reordered (drag on a computer, or Move up/down in a song's ⋯ menu).",
+      "The Music page and the music timeline dashboard widget no longer refresh every second while music plays, and update straight away when a kiosk goes offline or comes back."
     ]
   }
 ]

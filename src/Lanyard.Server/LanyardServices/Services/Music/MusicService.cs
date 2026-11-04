@@ -75,6 +75,36 @@ public class MusicService(IDbContextFactory<ApplicationDbContext> factory) : IMu
         }
     }
 
+    public async Task<Result<IReadOnlyList<MusicKiosk>>> GetKiosksAsync()
+    {
+        try
+        {
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+
+            var rows = await context.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Select(x => new { x.Id, x.Name, x.MostRecentConnectionId })
+                .ToListAsync();
+
+            List<MusicKiosk> kiosks = rows
+                .Select(x => new MusicKiosk(x.Id, x.Name, IsConnected(x.MostRecentConnectionId)))
+                .OrderByDescending(x => x.IsConnected)
+                .ThenBy(x => x.Name, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+
+            return Result<IReadOnlyList<MusicKiosk>>.Ok(kiosks);
+        }
+        catch (Exception ex)
+        {
+            return Result<IReadOnlyList<MusicKiosk>>.Fail($"An error occurred while loading kiosks: {ex.Message}");
+        }
+    }
+
+    // SignalRControlHub.ConnectedIds is process-static, so tests override this.
+    protected virtual bool IsConnected(string? connectionId) =>
+        !string.IsNullOrEmpty(connectionId) && Lanyard.Application.SignalR.SignalRControlHub.ConnectedIds.Contains(connectionId);
+
     public async Task<Result<IReadOnlyDictionary<Guid, string>>> GetSongNamesAsync(IReadOnlyCollection<Guid> songIds)
     {
         try

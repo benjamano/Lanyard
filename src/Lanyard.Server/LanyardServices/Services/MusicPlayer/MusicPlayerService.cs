@@ -312,8 +312,10 @@ public class MusicPlayerService : IMusicPlayerService
 
         lock (_lock)
         {
+            // A kiosk seen for the first time since the server started is news too.
+            bool isNew = !_stateByClientId.ContainsKey(clientId);
             ClientMusicState state = GetOrCreateStateLocked(clientId);
-            changed = !state.IsConnected;
+            changed = isNew || !state.IsConnected;
             state.IsConnected = true;
         }
 
