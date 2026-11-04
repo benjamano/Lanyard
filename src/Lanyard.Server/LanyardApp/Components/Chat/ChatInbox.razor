@@ -45,8 +45,12 @@
         <ul class="inbox-list">
             @foreach (ChatInboxItem item in Items)
             {
+                // The open conversation is being read: it's marked read a moment after a message
+                // arrives, so it never shows as unread in the meantime.
+                bool unread = item.UnreadCount > 0 && item.ConversationId != SelectedId;
+
                 <li>
-                    <a href="@($"/chat/{item.ConversationId}")" class="inbox-item @(item.ConversationId == SelectedId ? "is-selected" : string.Empty) @(item.UnreadCount > 0 ? "is-unread" : string.Empty)">
+                    <a href="@($"/chat/{item.ConversationId}")" class="inbox-item @(item.ConversationId == SelectedId ? "is-selected" : string.Empty) @(unread ? "is-unread" : string.Empty)">
                         <span class="inbox-avatar @(item.Kind != ChatConversationKind.Direct ? "is-group" : string.Empty) @(IsChannel(item) ? "is-channel" : string.Empty)" aria-hidden="true">
                             @if (IsChannel(item))
                             {
@@ -72,7 +76,7 @@
                                 {
                                     <FluentIcon Value="@(new Icons.Regular.Size16.AlertOff())" Color="Color.Custom" CustomColor="var(--colorNeutralForeground3)" Title="Muted" />
                                 }
-                                @if (item.UnreadCount > 0)
+                                @if (unread)
                                 {
                                     <span class="inbox-count" aria-label="@($"{item.UnreadCount} unread")">@(item.UnreadCount > 99 ? "99+" : item.UnreadCount.ToString())</span>
                                 }
