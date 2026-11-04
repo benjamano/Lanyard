@@ -818,5 +818,13 @@
       "A5 printouts print at their real size on A4. Print everything puts the voucher and feedback form side by side on one sheet.",
       "New Parties help page, with a Help button on every Parties page: booking, payments, printing, menus and printouts."
     ]
+  },
+  {
+    "version": "1.4.20",
+    "releaseDate": "2026-11-04",
+    "summary": "Fixed the party Print and Preview buttons showing a Not Found page.",
+    "details": [
+      "The Print buttons on a party (Print everything, reserved table card, food sheet, voucher and feedback form) and Preview saved version on the Printouts page now open the PDF in a new tab again, instead of showing Not Found."
+    ]
   }
 ]
