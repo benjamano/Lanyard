@@ -118,6 +118,24 @@ public class CompanyFeatureServiceTests
     }
 
     [TestMethod]
+    public async Task IsEnabledForCompanyAsync_FollowsTheCompanysSwitch_EvenForAnAdmin()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, _) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        (Company other, _) = await SchedulingTestHelpers.SeedCompanyAsync(options, "Other Co", "Elsewhere");
+
+        CompanyFeatureService admin = GetService(options, SignedIn("Admin"));
+        await admin.SetFeatureEnabledAsync(SchedulingTestHelpers.AdminScope, company.Id, CompanyFeature.AudioClips, false, "admin");
+
+        Assert.IsFalse(await admin.IsEnabledForCompanyAsync(company.Id, CompanyFeature.AudioClips));
+        Assert.IsTrue(await admin.IsEnabledForCompanyAsync(company.Id, CompanyFeature.Training));
+        Assert.IsTrue(await admin.IsEnabledForCompanyAsync(other.Id, CompanyFeature.AudioClips));
+
+        // The per-user check still lets an Admin see everything.
+        Assert.IsTrue(await admin.IsEnabledForCurrentUserAsync(CompanyFeature.AudioClips));
+    }
+
+    [TestMethod]
     public async Task GetHiddenFeaturesForCurrentUserAsync_HidesWhatTheStaffMembersCompanyHasTurnedOff()
     {
         DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();

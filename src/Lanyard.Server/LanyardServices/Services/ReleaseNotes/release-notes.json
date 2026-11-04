@@ -818,5 +818,15 @@
       "A5 printouts print at their real size on A4. Print everything puts the voucher and feedback form side by side on one sheet.",
       "New Parties help page, with a Help button on every Parties page: booking, payments, printing, menus and printouts."
     ]
+  },
+  {
+    "version": "1.4.20",
+    "releaseDate": "2026-11-04",
+    "summary": "Audio clips can now be switched on or off for each company.",
+    "details": [
+      "Admins can switch Audio clips on or off for each company under Manage > Companies & Locations. It stays on for every company until someone turns it off.",
+      "With Audio clips off, the Audio Clips page and its menu link are hidden, the Play Audio Clip action is no longer offered in automation rules, and the Audio Clips tab disappears from Music help.",
+      "Clips no longer play for a company with Audio clips off, whether from a schedule, an automation rule or the Play button. Nothing is deleted, so switching it back on brings every clip and schedule back."
+    ]
   }
 ]
