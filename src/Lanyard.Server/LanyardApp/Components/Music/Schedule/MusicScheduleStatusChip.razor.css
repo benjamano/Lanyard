@@ -1,0 +1,30 @@
+/* Icon and text on one line; the Resume button drops underneath when there isn't room. */
+.schedule-status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    max-width: 100%;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    background: var(--colorNeutralBackground3);
+    color: var(--colorNeutralForeground2);
+}
+
+.schedule-status.is-overridden {
+    background: color-mix(in srgb, #eaa300 18%, transparent);
+    color: var(--colorNeutralForeground1);
+}
+
+.schedule-status-text {
+    flex: 1 1 12em;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+/* Inline with the first line of text, so it stays put when the text wraps. */
+.schedule-status-text ::deep .schedule-status-icon {
+    vertical-align: -3px;
+    margin-right: 6px;
+}

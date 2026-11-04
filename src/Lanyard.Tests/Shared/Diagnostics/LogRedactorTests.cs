@@ -72,4 +72,20 @@ public class LogRedactorTests
     {
         Assert.AreEqual(string.Empty, LogRedactor.Redact(null));
     }
+
+    [TestMethod]
+    public void Redact_RemovesAKioskCredential_KeepingItsId()
+    {
+        string redacted = LogRedactor.Redact("Saved credential lk1.0123456789abcdef0123456789abcdef.Zx9_-abcDEF123 for later");
+
+        Assert.AreEqual("Saved credential lk1.0123456789abcdef0123456789abcdef.[REDACTED] for later", redacted);
+    }
+
+    [TestMethod]
+    public void Redact_RemovesMediaTokens()
+    {
+        string redacted = LogRedactor.Redact("Streaming https://host/api/music/audio/7c9e6679-7425-40de-944b-e07fc1f90ae7?mt=CfDJ8Abc-def_123");
+
+        Assert.AreEqual("Streaming https://host/api/music/audio/7c9e6679-7425-40de-944b-e07fc1f90ae7?mt=[REDACTED]", redacted);
+    }
 }

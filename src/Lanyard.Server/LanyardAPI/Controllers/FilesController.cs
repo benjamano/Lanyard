@@ -19,12 +19,10 @@ namespace Lanyard.API.Controllers
     public class FilesController : ControllerBase
     {
         private readonly IFileService _fileService;
-        private readonly IClientSecretValidator _clientSecretValidator;
 
-        public FilesController(IFileService fileService, IClientSecretValidator clientSecretValidator)
+        public FilesController(IFileService fileService)
         {
             _fileService = fileService;
-            _clientSecretValidator = clientSecretValidator;
         }
 
         [HttpPost("upload")]
@@ -42,8 +40,8 @@ namespace Lanyard.API.Controllers
         [HttpGet("download/{id}")]
         public async Task<IActionResult> Download(Guid id, CancellationToken cancellationToken)
         {
-            if (!ClientRequestAuthorization.IsAuthorized(HttpContext, _clientSecretValidator))
-                return Unauthorized();
+            if (await KioskRequestAuthorization.AuthorizeAsync(HttpContext) == KioskRequestAccess.Denied)
+                return Challenge(KioskAuthenticationDefaults.Scheme);
 
             // One metadata lookup (was two), Range requests honoured against the bucket, and a
             // cache header so a thumbnail grid or a kiosk isn't re-fetching the same bytes.
@@ -57,8 +55,8 @@ namespace Lanyard.API.Controllers
         [HttpGet("list")]
         public async Task<IActionResult> List([FromQuery] Guid? folderId, CancellationToken cancellationToken)
         {
-            if (!ClientRequestAuthorization.IsAuthorized(HttpContext, _clientSecretValidator))
-                return Unauthorized();
+            if (await KioskRequestAuthorization.AuthorizeAsync(HttpContext) == KioskRequestAccess.Denied)
+                return Challenge(KioskAuthenticationDefaults.Scheme);
 
             Result<IReadOnlyList<FileMetadata>> result = await _fileService.ListFilesAsync(folderId, cancellationToken);
             return result.ToActionResult();
@@ -116,8 +114,8 @@ namespace Lanyard.API.Controllers
         [HttpGet("folders/list")]
         public async Task<IActionResult> ListFolders([FromQuery] Guid? parentFolderId, CancellationToken cancellationToken)
         {
-            if (!ClientRequestAuthorization.IsAuthorized(HttpContext, _clientSecretValidator))
-                return Unauthorized();
+            if (await KioskRequestAuthorization.AuthorizeAsync(HttpContext) == KioskRequestAccess.Denied)
+                return Challenge(KioskAuthenticationDefaults.Scheme);
 
             Result<IReadOnlyList<Folder>> result = await _fileService.ListFoldersAsync(parentFolderId, cancellationToken);
             return result.ToActionResult();

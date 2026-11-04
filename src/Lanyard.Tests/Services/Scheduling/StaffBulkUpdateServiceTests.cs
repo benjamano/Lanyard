@@ -12,8 +12,8 @@ namespace Lanyard.Tests.Services.Scheduling;
 [TestClass]
 public class StaffBulkUpdateServiceTests
 {
-    private static StaffBulkUpdateService GetService(DbContextOptions<ApplicationDbContext> options) =>
-        new(SchedulingTestHelpers.GetFactory(options), NullLogger<StaffBulkUpdateService>.Instance);
+    private static StaffBulkUpdateService GetService(DbContextOptions<ApplicationDbContext> options, IRequiredTrainingService? requiredTraining = null) =>
+        new(SchedulingTestHelpers.GetFactory(options), requiredTraining ?? SchedulingTestHelpers.NoRequiredTraining(), NullLogger<StaffBulkUpdateService>.Instance);
 
     private static async Task GivePositionAsync(DbContextOptions<ApplicationDbContext> options, string userId, Guid positionId, bool isPrimary)
     {
@@ -105,11 +105,11 @@ public class StaffBulkUpdateServiceTests
         StaffPosition supervisor = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Supervisor", 1);
         await GivePositionAsync(options, ben.Id, advisor.Id, isPrimary: true);
 
-        Result<int> result = await GetService(options).ApplyPositionsAsync(SchedulingTestHelpers.AdminScope, company.Id, location.Id,
-            [ben.Id, amy.Id], new BulkPositionChange(BulkPositionMode.Add, [supervisor.Id], null));
+        Result<BulkPositionsApplied> result = await GetService(options).ApplyPositionsAsync(SchedulingTestHelpers.AdminScope, company.Id, location.Id,
+            [ben.Id, amy.Id], new BulkPositionChange(BulkPositionMode.Add, [supervisor.Id], null), "manager");
 
         Assert.IsTrue(result.IsSuccess, result.Error);
-        Assert.AreEqual(2, result.Data);
+        Assert.AreEqual(2, result.Data!.Changed);
 
         List<UserPosition> bens = await PositionsOfAsync(options, ben.Id);
         Assert.AreEqual(2, bens.Count);
@@ -130,8 +130,8 @@ public class StaffBulkUpdateServiceTests
         StaffPosition supervisor = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Supervisor", 1);
         await GivePositionAsync(options, ben.Id, advisor.Id, isPrimary: true);
 
-        Result<int> result = await GetService(options).ApplyPositionsAsync(SchedulingTestHelpers.AdminScope, company.Id, location.Id,
-            [ben.Id], new BulkPositionChange(BulkPositionMode.Add, [supervisor.Id], supervisor.Id));
+        Result<BulkPositionsApplied> result = await GetService(options).ApplyPositionsAsync(SchedulingTestHelpers.AdminScope, company.Id, location.Id,
+            [ben.Id], new BulkPositionChange(BulkPositionMode.Add, [supervisor.Id], supervisor.Id), "manager");
 
         Assert.IsTrue(result.IsSuccess, result.Error);
         List<UserPosition> bens = await PositionsOfAsync(options, ben.Id);
@@ -150,11 +150,11 @@ public class StaffBulkUpdateServiceTests
         await GivePositionAsync(options, ben.Id, advisor.Id, isPrimary: true);
         await GivePositionAsync(options, ben.Id, supervisor.Id, isPrimary: false);
 
-        Result<int> result = await GetService(options).ApplyPositionsAsync(SchedulingTestHelpers.AdminScope, company.Id, location.Id,
-            [ben.Id, amy.Id], new BulkPositionChange(BulkPositionMode.Remove, [advisor.Id], null));
+        Result<BulkPositionsApplied> result = await GetService(options).ApplyPositionsAsync(SchedulingTestHelpers.AdminScope, company.Id, location.Id,
+            [ben.Id, amy.Id], new BulkPositionChange(BulkPositionMode.Remove, [advisor.Id], null), "manager");
 
         Assert.IsTrue(result.IsSuccess, result.Error);
-        Assert.AreEqual(1, result.Data, "Amy held nothing to remove, so only Ben changed.");
+        Assert.AreEqual(1, result.Data!.Changed, "Amy held nothing to remove, so only Ben changed.");
         UserPosition remaining = (await PositionsOfAsync(options, ben.Id)).Single();
         Assert.AreEqual(supervisor.Id, remaining.StaffPositionId);
         Assert.IsTrue(remaining.IsPrimary);
@@ -171,8 +171,8 @@ public class StaffBulkUpdateServiceTests
         StaffPosition host = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Party Host", 2);
         await GivePositionAsync(options, ben.Id, advisor.Id, isPrimary: true);
 
-        Result<int> result = await GetService(options).ApplyPositionsAsync(SchedulingTestHelpers.AdminScope, company.Id, location.Id,
-            [ben.Id], new BulkPositionChange(BulkPositionMode.Replace, [supervisor.Id, host.Id], host.Id));
+        Result<BulkPositionsApplied> result = await GetService(options).ApplyPositionsAsync(SchedulingTestHelpers.AdminScope, company.Id, location.Id,
+            [ben.Id], new BulkPositionChange(BulkPositionMode.Replace, [supervisor.Id, host.Id], host.Id), "manager");
 
         Assert.IsTrue(result.IsSuccess, result.Error);
         List<UserPosition> bens = await PositionsOfAsync(options, ben.Id);
@@ -190,8 +190,8 @@ public class StaffBulkUpdateServiceTests
         UserProfile outsider = await SchedulingTestHelpers.SeedUserAsync(options, otherLocation, "Outsider");
         StaffPosition advisor = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Advisor");
 
-        Result<int> result = await GetService(options).ApplyPositionsAsync(SchedulingTestHelpers.ManagerScopeFor(location), company.Id, location.Id,
-            [ben.Id, outsider.Id], new BulkPositionChange(BulkPositionMode.Add, [advisor.Id], null));
+        Result<BulkPositionsApplied> result = await GetService(options).ApplyPositionsAsync(SchedulingTestHelpers.ManagerScopeFor(location), company.Id, location.Id,
+            [ben.Id, outsider.Id], new BulkPositionChange(BulkPositionMode.Add, [advisor.Id], null), "manager");
 
         Assert.IsFalse(result.IsSuccess);
         Assert.AreEqual(0, (await PositionsOfAsync(options, ben.Id)).Count);
@@ -400,5 +400,27 @@ public class StaffBulkUpdateServiceTests
         Assert.IsFalse(result.IsSuccess);
         await using ApplicationDbContext ctx = new(options);
         Assert.IsFalse(await ctx.ContractRequirements.AnyAsync());
+    }
+
+    [TestMethod]
+    public async Task ApplyPositionsAsync_AddAssignsTheNewPositionsTraining_RemoveAssignsNothing()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        StaffPosition marshal = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Marshal");
+        Course arena = await RequiredTrainingTestHelpers.CourseAsync(options, company, "Laser Arena Safety", location.Id);
+        await RequiredTrainingTestHelpers.RequireAsync(options, marshal, arena);
+        UserProfile ben = await SchedulingTestHelpers.SeedUserAsync(options, location, "Ben");
+        UserProfile amy = await SchedulingTestHelpers.SeedUserAsync(options, location, "Amy");
+        StaffBulkUpdateService service = GetService(options, RequiredTrainingTestHelpers.Build(options));
+
+        Result<BulkPositionsApplied> added = await service.ApplyPositionsAsync(SchedulingTestHelpers.ManagerScopeFor(location), company.Id, location.Id,
+            [ben.Id, amy.Id], new BulkPositionChange(BulkPositionMode.Add, [marshal.Id], null), "manager");
+        Result<BulkPositionsApplied> removed = await service.ApplyPositionsAsync(SchedulingTestHelpers.ManagerScopeFor(location), company.Id, location.Id,
+            [ben.Id], new BulkPositionChange(BulkPositionMode.Remove, [marshal.Id], null), "manager");
+
+        Assert.IsTrue(added.IsSuccess, added.Error);
+        Assert.AreEqual("Assigned Laser Arena Safety to 2 people.", added.Data!.Training.Summary());
+        Assert.AreSame(RequiredTrainingAssignResult.Empty, removed.Data!.Training);
     }
 }

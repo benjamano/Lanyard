@@ -14,12 +14,13 @@ using System.Text.Json;
 
 namespace Lanyard.Tests.Integration;
 
-// The kiosk update path end to end: the feed endpoint behind the shared-secret check, and the
+// The kiosk update path end to end: the feed endpoint behind the kiosk's own credential, and the
 // "Update now" hub call reaching a handler registered under the same shared constant the kiosk uses.
 [TestClass]
 public class ClientUpdatesIntegrationTests
 {
-    private const string SharedSecret = "integration-test-kiosk-secret";
+    // Each test kiosk's own credential.
+    private readonly Dictionary<Guid, string> _tokens = [];
 
     private CustomWebApplicationFactory _baseFactory = null!;
     private WebApplicationFactory<Program> _factory = null!;
@@ -38,7 +39,7 @@ public class ClientUpdatesIntegrationTests
         _baseFactory.GitHubReleases.Files["https://github.example/1.0.41/releases.win.json"] =
             """{"Assets":[{"PackageId":"LanyardClient","Version":"1.0.41","Type":"Full","FileName":"LanyardClient-1.0.41-full.nupkg","SHA1":"A","SHA256":"B","Size":1}]}""";
 
-        _factory = _baseFactory.WithWebHostBuilder(builder => builder.UseSetting("Clients:SharedSecret", SharedSecret));
+        _factory = _baseFactory.WithWebHostBuilder(_ => { });
         _factory.CreateClient();
     }
 
@@ -51,14 +52,18 @@ public class ClientUpdatesIntegrationTests
 
     private async Task<HubConnection> ConnectKioskAsync(Guid clientId, Action<HubConnection> register)
     {
+        string token = await KioskTestSupport.RegisterKioskWithCredentialAsync(_factory, clientId);
+        _tokens[clientId] = token;
+
         Uri hubUri = new(_factory.Server.BaseAddress,
-            $"/websocket?{ClientConnectionQuery.ClientId}={clientId}&{ClientConnectionQuery.Secret}={SharedSecret}&{ClientConnectionQuery.ClientVersion}=1.0.41");
+            $"/websocket?{ClientConnectionQuery.ClientVersion}=1.0.41");
 
         HubConnection connection = new HubConnectionBuilder()
             .WithUrl(hubUri, options =>
             {
                 options.Transports = HttpTransportType.LongPolling;
                 options.HttpMessageHandlerFactory = _ => _factory.Server.CreateHandler();
+                options.AccessTokenProvider = () => Task.FromResult<string?>(token);
             })
             .Build();
 
@@ -69,37 +74,27 @@ public class ClientUpdatesIntegrationTests
         return connection;
     }
 
-    private async Task<HttpResponseMessage> GetFeedAsync(Guid clientId, string? secret)
+    private async Task<HttpResponseMessage> GetFeedAsync(Guid clientId, string? token)
     {
         HttpClient http = _factory.CreateClient();
         using HttpRequestMessage request = new(HttpMethod.Get, "/" + ClientUpdateRoutes.Feed(clientId));
 
-        if (secret is not null)
+        if (token is not null)
         {
-            request.Headers.Add(ClientConnectionQuery.SecretHeader, secret);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
         }
 
         return await http.SendAsync(request);
     }
 
     [TestMethod]
-    public async Task Feed_RejectsRequestsWithoutTheSharedSecret()
+    public async Task Feed_RejectsRequestsWithoutACredential()
     {
-        HttpResponseMessage response = await GetFeedAsync(Guid.NewGuid(), secret: null);
+        HttpResponseMessage response = await GetFeedAsync(Guid.NewGuid(), token: null);
 
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
-    [TestMethod]
-    public async Task Feed_IsEmpty_ForAKioskTheServerDoesNotKnow()
-    {
-        HttpResponseMessage response = await GetFeedAsync(Guid.NewGuid(), SharedSecret);
-
-        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        Result<ClientUpdateFeedResponse>? result = await response.Content.ReadFromJsonAsync<Result<ClientUpdateFeedResponse>>(JsonSerializerOptions.Web);
-        Assert.IsTrue(result!.IsSuccess);
-        Assert.IsNull(result.Data!.TargetVersion);
-    }
 
     [TestMethod]
     public async Task Feed_GivesARegisteredKioskItsStableTarget()
@@ -112,7 +107,7 @@ public class ClientUpdatesIntegrationTests
 
         for (int attempt = 0; attempt < 50 && result?.Data?.TargetVersion is null; attempt++)
         {
-            HttpResponseMessage response = await GetFeedAsync(clientId, SharedSecret);
+            HttpResponseMessage response = await GetFeedAsync(clientId, _tokens[clientId]);
             result = await response.Content.ReadFromJsonAsync<Result<ClientUpdateFeedResponse>>(JsonSerializerOptions.Web);
             await Task.Delay(100);
         }

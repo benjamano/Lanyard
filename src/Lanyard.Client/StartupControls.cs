@@ -18,6 +18,7 @@ public static class StartupControls
             Console.WriteLine("1. Reset client ID (This will create a new client ID and disconnect from the server if already connected)");
             Console.WriteLine("2. Reset Config (This will clear all saved environment variables and ask for them again on next startup)");
             Console.WriteLine("3. Continue with normal startup");
+            Console.WriteLine("4. Pair this kiosk again (Forgets its credential and shows a new pairing code)");
             Console.WriteLine("Enter an option: ");
 
             string? input = Console.ReadLine();
@@ -47,6 +48,10 @@ public static class StartupControls
                 throw new InvalidOperationException("Config reset. Please restart the application.");
             case 3:
                 Console.WriteLine("Continuing with normal startup...");
+                break;
+            case 4:
+                Lanyard.Client.Security.KioskCredentials.Forget();
+                Console.WriteLine("This kiosk's credential is forgotten. It will show a pairing code now.");
                 break;
             default:
                 Console.WriteLine("Unknown option selected.");

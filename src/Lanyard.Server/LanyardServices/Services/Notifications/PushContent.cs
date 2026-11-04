@@ -39,6 +39,7 @@ public static class PushContentBuilder
             $"/chat/{pinned.ConversationId}", $"pinned-{pinned.ConversationId:N}", PushMessageUrgency.Normal, TimeSpan.FromDays(3)),
         _ when ChatNotices.Handles(payload) => FromChatNotice(payload),
         AnnouncementPayload announcement => Announcement(announcement),
+        _ when KioskNotices.Handles(payload) => FromKioskNotice(payload),
         _ => throw new ArgumentOutOfRangeException(nameof(payload), payload.GetType().Name, "No push wording for this payload.")
     };
 
@@ -136,6 +137,16 @@ public static class PushContentBuilder
         Notice notice = ChatNotices.For(payload);
 
         return new PushContent(notice.Title, string.Join(" · ", notice.Lines), notice.Url, notice.Tag, PushMessageUrgency.Normal, TimeSpan.FromDays(2));
+    }
+
+    // Offline is urgent so it wakes a phone in power saving; the rest can wait. A day's TTL: an
+    // alert that arrives later than that is out of date.
+    private static PushContent FromKioskNotice(NotificationPayload payload)
+    {
+        Notice notice = KioskNotices.For(payload);
+        PushMessageUrgency urgency = payload is KioskOfflinePayload ? PushMessageUrgency.High : PushMessageUrgency.Normal;
+
+        return new PushContent(notice.Title, string.Join(" · ", notice.Lines), notice.Url, notice.Tag, urgency, TimeSpan.FromDays(1));
     }
 
     // The body is cut to lock-screen length; the tap opens the home page, where the

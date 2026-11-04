@@ -1,4 +1,5 @@
-﻿using Lanyard.Client.ProjectionPrograms;
+using Lanyard.Client.ProjectionPrograms;
+using Lanyard.Client.ProjectionPrograms.Offline;
 using Lanyard.Shared.DTO;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Logging;
@@ -8,10 +9,11 @@ using System.Text;
 
 namespace Lanyard.Client.Controllers;
 
-public class ProjectionProgramController(IProjectionProgramsService projectionProgramsService, ILogger<ProjectionProgramController> logger)
+public class ProjectionProgramController(IProjectionProgramsService projectionProgramsService, IKioskOfflineCache offlineCache, ILogger<ProjectionProgramController> logger)
 {
     private HubConnection? _connection;
     private readonly IProjectionProgramsService _projectionProgramsService = projectionProgramsService;
+    private readonly IKioskOfflineCache _offlineCache = offlineCache;
     private readonly ILogger<ProjectionProgramController> _logger = logger;
 
     public void Register(HubConnection connection)
@@ -21,6 +23,10 @@ public class ProjectionProgramController(IProjectionProgramsService projectionPr
         connection.On<IEnumerable<ClientProjectionSettingsDTO>>("ReceiveProjectionPrograms", async (programs) =>
         {
             _logger.LogInformation("Received command to start projection programs");
+
+            // The server sends this on connect and whenever a program or this kiosk's settings
+            // change, so it's also the cue to refresh the offline copy.
+            _offlineCache.RequestSync();
 
             await _projectionProgramsService.StartProjectingAsync(programs);
         });
@@ -47,7 +53,17 @@ public class ProjectionProgramController(IProjectionProgramsService projectionPr
                 await _projectionProgramsService.TriggerTemporaryProjectionProgramAsync(projectionProgramId, displayIndex, async () =>
                 {
                     _logger.LogInformation("Triggered projection program {ProgramId} completed, notifying server", projectionProgramId);
-                    await _connection!.InvokeAsync("ProjectionProgramCompleted");
+
+                    try
+                    {
+                        await _connection!.InvokeAsync("ProjectionProgramCompleted");
+                    }
+                    catch (Exception ex)
+                    {
+                        // The connection dropped while it ran (the window is closed when the kiosk
+                        // goes offline). The server restores the ambient program when it reconnects.
+                        _logger.LogWarning("Couldn't report that triggered program {ProgramId} completed: {Message}", projectionProgramId, ex.Message);
+                    }
                 });
             });
 

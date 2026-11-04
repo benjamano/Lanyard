@@ -1,0 +1,102 @@
+@page "/help"
+@attribute [Authorize]
+
+@* The help hub: every help page this user can open, grouped by who it's for. Cards come from
+   HelpRegistry and are filtered the same way the nav is - by role and by the company's modules -
+   so nobody is offered help for a page they can't reach. *@
+
+@using Microsoft.AspNetCore.Authorization
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ICompanyFeatureService CompanyFeatures
+
+<PageTitle>Help</PageTitle>
+
+<FluentCard Height="auto">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16px">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="4px">
+            <FluentText As="TextTag.H4" Size="TextSize.Size500">Help</FluentText>
+            <FluentText>Guides for each part of Lanyard. Pick an area, or search for what you're trying to do.</FluentText>
+        </FluentStack>
+
+        <div>
+            <FluentTextInput Value="@_search" ValueChanged="@(v => _search = v ?? string.Empty)" Immediate="true"
+                             Placeholder="Search help" aria-label="Search help"
+                             IconStart="@(new Icons.Regular.Size16.Search())" />
+        </div>
+
+        @if (_visible.Count == 0)
+        {
+            <FluentText>There's no help available for your account yet.</FluentText>
+        }
+        else if (!Filtered.Any())
+        {
+            <FluentText>Nothing matches "@_search". Try a shorter word.</FluentText>
+        }
+        else
+        {
+            @foreach (IGrouping<HelpAudience, HelpArea> group in Filtered.GroupBy(a => a.Audience).OrderBy(g => g.Key))
+            {
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="8px">
+                    <FluentText As="TextTag.H5" Size="TextSize.Size400" Weight="TextWeight.Semibold">@HeadingFor(group.Key)</FluentText>
+
+                    <div class="help-grid">
+                        @foreach (HelpArea area in group.OrderBy(a => a.Title))
+                        {
+                            <div class="help-card">
+                                <a class="help-card-title" href="@area.Route">
+                                    <FluentIcon Value="@area.Icon()" />
+                                    <span>@area.Title</span>
+                                </a>
+                                <p class="help-card-summary">@area.Summary</p>
+                                <ul class="help-card-topics">
+                                    @foreach (HelpTopic topic in area.Topics)
+                                    {
+                                        <li><a href="@area.UrlFor(topic.Key)">@topic.Title</a></li>
+                                    }
+                                </ul>
+                            </div>
+                        }
+                    </div>
+                </FluentStack>
+            }
+        }
+    </FluentStack>
+</FluentCard>
+
+@code {
+    private List<HelpArea> _visible = [];
+    private string _search = string.Empty;
+
+    private IEnumerable<HelpArea> Filtered
+    {
+        get
+        {
+            string term = _search.Trim();
+
+            if (term.Length == 0)
+            {
+                return _visible;
+            }
+
+            return _visible.Where(a =>
+                a.Title.Contains(term, StringComparison.OrdinalIgnoreCase)
+                || a.Summary.Contains(term, StringComparison.OrdinalIgnoreCase)
+                || a.Topics.Any(t => t.Title.Contains(term, StringComparison.OrdinalIgnoreCase)));
+        }
+    }
+
+    private static string HeadingFor(HelpAudience audience) => audience switch
+    {
+        HelpAudience.Everyone => "For everyone",
+        HelpAudience.Managers => "For managers",
+        _ => "For admins"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthenticationState state = await AuthStateProvider.GetAuthenticationStateAsync();
+        IReadOnlySet<CompanyFeature> hidden = await CompanyFeatures.GetHiddenFeaturesForCurrentUserAsync();
+
+        _visible = HelpRegistry.Areas.Where(a => a.IsVisibleTo(state.User, hidden)).ToList();
+    }
+}

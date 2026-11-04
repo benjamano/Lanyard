@@ -37,7 +37,9 @@ public class AutomationLogService(IDbContextFactory<ApplicationDbContext> factor
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
             AutomationRuleExecution? execution = await ctx.AutomationRuleExecutions
-                .Where(e => e.AutomationRuleId == ruleId)
+                // A skip isn't a run: the widget's "last run" should still show the last time the
+                // rule's actions actually ran and whether they worked.
+                .Where(e => e.AutomationRuleId == ruleId && e.SkipReason == null)
                 .OrderByDescending(e => e.ExecutedAt)
                 .AsNoTracking()
                 .TagWithCallSite()

@@ -1,0 +1,28 @@
+@* The "Help" button on an area's pages. Topic picks the tab the help page opens on; an unknown or
+   null topic opens the first one. Compact drops the label for tight headers (the chat inbox, the
+   dashboard editor toolbar), keeping the tooltip. *@
+
+@if (Compact)
+{
+    <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.QuestionCircle())" IconOnly="true"
+                  Title="@Label" Tooltip="@Label" OnClick="@Open" />
+}
+else
+{
+    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.QuestionCircle())"
+                  Title="@Label" OnClick="@Open">
+        Help
+    </FluentButton>
+}
+
+@code {
+    [Parameter, EditorRequired] public string AreaKey { get; set; } = string.Empty;
+
+    [Parameter] public string? Topic { get; set; }
+
+    [Parameter] public bool Compact { get; set; }
+
+    private string Label => $"Help with {HelpRegistry.Get(AreaKey).Title}";
+
+    private void Open() => _navigationManager.NavigateTo(HelpRegistry.Get(AreaKey).UrlFor(Topic));
+}

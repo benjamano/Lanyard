@@ -44,6 +44,21 @@ public class RouteAuthorizationIntegrationTests
         StringAssert.StartsWith(response.Headers.Location!.AbsolutePath, "/HandleLogin");
     }
 
+    // The Timesheets page hosts the payroll export, which streams staff names and hours through
+    // the page's own circuit rather than a separate download URL - so this page's gate is the
+    // export's gate.
+    [TestMethod]
+    public async Task AnonymousUser_AccessingTimesheetsPage_RedirectsToLogin()
+    {
+        HttpClient client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        HttpResponseMessage response = await client.GetAsync("/manage/rota/timesheets");
+
+        Assert.IsTrue((int)response.StatusCode is >= 300 and < 400, $"Expected a redirect, got {(int)response.StatusCode}.");
+        Assert.IsNotNull(response.Headers.Location);
+        StringAssert.StartsWith(response.Headers.Location!.AbsolutePath, "/HandleLogin");
+    }
+
     [TestMethod]
     public async Task AnonymousUser_AccessingAllowAnonymousPage_ReturnsOk()
     {

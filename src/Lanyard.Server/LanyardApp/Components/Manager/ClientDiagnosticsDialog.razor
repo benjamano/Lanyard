@@ -105,10 +105,10 @@
     // The newest lines are what matter, so the log opens scrolled to the bottom.
     private bool _scrollToNewest;
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
         // Reopening within the retention window shows the last capture instead of a blank dialog.
-        Result<ClientLogTailCapture?> latest = _clientDiagnosticsService.GetLatestLogTail(ClientId);
+        Result<ClientLogTailCapture?> latest = await _clientDiagnosticsService.GetLatestLogTailAsync(ClientId);
 
         if (latest.IsSuccess)
         {

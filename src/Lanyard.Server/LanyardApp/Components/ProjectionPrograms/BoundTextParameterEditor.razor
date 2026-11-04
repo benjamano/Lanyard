@@ -1,0 +1,156 @@
+@using Lanyard.Application.Services.Projection.Bindings
+@using Lanyard.Infrastructure.Models
+
+@inject IProjectionBindingResolver _bindingResolver
+@inject ILogger<BoundTextParameterEditor> _logger
+
+@* A text parameter that can either be typed in, or bound to live venue data the kiosk resolves
+   each time the step plays. Bound, the text box holds the fallback shown when there's no data or
+   the kiosk is offline. *@
+@* A plain div rather than a FluentStack: scoped CSS can't reach a Fluent component's root, and
+   this needs to fill the step card and undo the card's centred text. *@
+<div class="bound-text-editor">
+    <FluentSelect Class="w-100"
+                  TOption="string"
+                  TValue="string"
+                  Label="Text source"
+                  Value="@(ParameterValue.BindingKey ?? string.Empty)"
+                  ValueChanged="@OnSourceChangedAsync">
+        <FluentOption Value="@string.Empty">Fixed text</FluentOption>
+        @foreach (ProjectionBindingDescriptor binding in ProjectionBindingCatalogue.All)
+        {
+            <FluentOption Value="@binding.Key">@binding.DisplayName</FluentOption>
+        }
+    </FluentSelect>
+
+    @if (_selected is null)
+    {
+        <FluentTextInput @bind-Value="@ParameterValue.Value"
+                         Label="@Parameter.Name"
+                         Appearance="TextInputAppearance.Outline"
+                         Required="@Parameter.IsRequired"
+                         Class="w-100" />
+    }
+    else
+    {
+        <FluentText Size="TextSize.Size200" Class="bound-text-description">@_selected.Description</FluentText>
+
+        <div class="bound-text-preview" aria-live="polite">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Live())" Class="bound-text-preview-icon" />
+            <div>
+                <div class="bound-text-preview-label">@PreviewLabel</div>
+                <div class="bound-text-preview-value">@PreviewText</div>
+            </div>
+        </div>
+
+        <FluentTextInput @bind-Value="@ParameterValue.Value"
+                         Label="Fallback text"
+                         Placeholder="@_selected.DefaultFallback"
+                         Appearance="TextInputAppearance.Outline"
+                         Class="w-100" />
+        <FluentText Size="TextSize.Size200" Class="bound-text-description">
+            Shown when there's no data yet, or the kiosk is offline. Leave it blank to use the placeholder.
+        </FluentText>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public ProjectionProgramParameterValue ParameterValue { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public ProjectionProgramStepTemplateParameter Parameter { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private ProjectionBindingDescriptor? _selected;
+    private string? _previewKey;
+    private string? _preview;
+    private bool _previewLoading;
+    private bool _previewFailed;
+    private string? _locationName;
+
+    private string PreviewLabel => _locationName is null ? "Right now, across all locations" : $"Right now at {_locationName}";
+
+    private string PreviewText
+    {
+        get
+        {
+            if (_previewLoading)
+            {
+                return "Checking…";
+            }
+
+            if (_previewFailed)
+            {
+                return "Couldn't check right now.";
+            }
+
+            return _preview ?? $"No data yet, so the screen shows: {ProjectionBindingCatalogue.FallbackFor(ParameterValue.BindingKey, ParameterValue.Value)}";
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _selected = ProjectionBindingCatalogue.Find(ParameterValue.BindingKey);
+
+        if (_selected is not null && _previewKey != _selected.Key)
+        {
+            await LoadPreviewAsync();
+        }
+    }
+
+    private async Task OnSourceChangedAsync(string? key)
+    {
+        ParameterValue.BindingKey = string.IsNullOrEmpty(key) ? null : key;
+        _selected = ProjectionBindingCatalogue.Find(ParameterValue.BindingKey);
+
+        if (_selected is not null)
+        {
+            await LoadPreviewAsync();
+        }
+
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task LoadPreviewAsync()
+    {
+        if (_selected is null)
+        {
+            return;
+        }
+
+        _previewKey = _selected.Key;
+        _previewLoading = true;
+        _previewFailed = false;
+
+        try
+        {
+            Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+            if (!scopeResult.IsSuccess || scopeResult.Data?.CompanyId is not int companyId)
+            {
+                _previewFailed = true;
+                return;
+            }
+
+            _locationName = scopeResult.Data.LocationId is null ? null : scopeResult.Data.LocationDisplayName;
+
+            Result<string?> preview = await _bindingResolver.PreviewAsync(_selected.Key, companyId, scopeResult.Data.LocationId);
+
+            if (!preview.IsSuccess)
+            {
+                _logger.LogWarning("Couldn't preview projection binding {BindingKey}: {Error}", _selected.Key, preview.Error);
+                _previewFailed = true;
+                return;
+            }
+
+            _preview = preview.Data;
+        }
+        finally
+        {
+            _previewLoading = false;
+        }
+    }
+}

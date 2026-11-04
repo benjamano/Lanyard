@@ -268,7 +268,9 @@ async function signIn(page, baseUrl) {
   // server; wait for whichever step shows up rather than a fixed sleep.
   await page.goto(`${baseUrl}/login`);
   const picker = page.locator('.company-picker-button').first();
-  const username = page.getByRole('textbox', { name: /Username/ });
+  // Not getByRole: the inner <input>'s label lives outside fluent-text-input's shadow root, so it
+  // has no accessible name and a role+name lookup never matches.
+  const username = page.locator('fluent-text-input').first();
   await picker.or(username).first().waitFor({ timeout: 60000 });
   // A click on the prerendered picker before the circuit is interactive is
   // silently dropped, so keep clicking until the credentials form appears.
@@ -279,8 +281,12 @@ async function signIn(page, baseUrl) {
     await username.waitFor({ timeout: 5000 }).catch(() => {});
   }
   await page.waitForTimeout(500);
-  await username.fill(LOGIN_USER);
-  await page.getByRole('textbox', { name: /Password/ }).fill(LOGIN_PASSWORD);
+  // Typing into the focused custom element reaches its form value; filling the inner <input>
+  // directly submits empty (see the verify skill).
+  await username.click();
+  await page.keyboard.type(LOGIN_USER);
+  await page.locator('fluent-text-input').nth(1).click();
+  await page.keyboard.type(LOGIN_PASSWORD);
   const location = page.locator('fluent-dropdown#locationId');
   if (await location.count()) {
     await location.click();

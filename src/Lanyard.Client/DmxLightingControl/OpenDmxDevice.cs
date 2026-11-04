@@ -25,6 +25,33 @@ public class OpenDmxDevice : IDisposable
     private Timer? _refreshTimer;
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromMilliseconds(25); // ~40Hz, matches DMX512's expected continuous refresh
 
+    // Read by the self-test to prove frames are really going out, and to keep its flash from
+    // cutting into a scene. Written under _ioLock.
+    private long _framesWritten;
+    private string? _lastWriteError;
+    private bool _flashing;
+    private readonly Dictionary<int, byte> _pendingDuringFlash = [];
+    private DateTime? _lastNonZeroFrameUtc;
+
+    public long FramesWritten => Interlocked.Read(ref _framesWritten);
+
+    /// <summary>The failure from the most recent frame, or null when it went out whole.</summary>
+    public string? LastWriteError => _lastWriteError;
+
+    /// <summary>When a frame with any channel above zero last went out; null if none has since the port opened.</summary>
+    public DateTime? LastNonZeroFrameUtc
+    {
+        get
+        {
+            lock (_ioLock)
+            {
+                return _lastNonZeroFrameUtc;
+            }
+        }
+    }
+
+    public bool IsOpen => _isOpen;
+
     public OpenDmxDevice(ILogger<OpenDmxDevice> logger)
     {
         _logger = logger;
@@ -88,6 +115,7 @@ public class OpenDmxDevice : IDisposable
         ftdi.Purge((uint)(FTDI.FT_PURGE.FT_PURGE_RX | FTDI.FT_PURGE.FT_PURGE_TX));
 
         _dmxData[0] = 0x00; // DMX null start code
+        _lastWriteError = null;
         _isOpen = true;
 
         // DMX512 (E1.11) receivers time out (~1s) if the line goes quiet and fall back
@@ -106,6 +134,12 @@ public class OpenDmxDevice : IDisposable
 
         lock (_ioLock)
         {
+            if (_flashing)
+            {
+                _pendingDuringFlash[channel] = value;
+                return;
+            }
+
             _dmxData[channel] = value;
         }
     }
@@ -115,6 +149,16 @@ public class OpenDmxDevice : IDisposable
     {
         lock (_ioLock)
         {
+            if (_flashing)
+            {
+                for (int channel = 1; channel <= 512; channel++)
+                {
+                    _pendingDuringFlash[channel] = 0;
+                }
+
+                return;
+            }
+
             Array.Clear(_dmxData, 1, 512);
         }
     }
@@ -136,8 +180,116 @@ public class OpenDmxDevice : IDisposable
             Thread.Sleep(1);
 
             uint written = 0;
-            _ftdi.Write(_dmxData, _dmxData.Length, ref written);
+            FTDI.FT_STATUS status = _ftdi.Write(_dmxData, _dmxData.Length, ref written);
+
+            _lastWriteError = status != FTDI.FT_STATUS.FT_OK
+                ? $"status {status}"
+                : written != _dmxData.Length ? $"only {written} of {_dmxData.Length} bytes written" : null;
+
+            if (_lastWriteError == null)
+            {
+                Interlocked.Increment(ref _framesWritten);
+            }
+
+            if (HasNonZeroChannel())
+            {
+                _lastNonZeroFrameUtc = DateTime.UtcNow;
+            }
         }
+    }
+
+    private bool HasNonZeroChannel()
+    {
+        for (int i = 1; i < _dmxData.Length; i++)
+        {
+            if (_dmxData[i] != 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Turns every channel to full for <paramref name="duration"/>, then puts the frame back as it
+    /// was. Values the server sends meanwhile are kept and win once the flash ends.
+    /// </summary>
+    public async Task FlashAsync(TimeSpan duration)
+    {
+        byte[] before;
+
+        lock (_ioLock)
+        {
+            if (!_isOpen)
+            {
+                throw new InvalidOperationException("The DMX device isn't open.");
+            }
+
+            before = (byte[])_dmxData.Clone();
+            _flashing = true;
+            Array.Fill<byte>(_dmxData, 255, 1, 512);
+        }
+
+        try
+        {
+            await Task.Delay(duration);
+        }
+        finally
+        {
+            lock (_ioLock)
+            {
+                _flashing = false;
+
+                // Channels the server changed during the flash were parked in _pendingDuringFlash.
+                Array.Copy(before, _dmxData, _dmxData.Length);
+
+                foreach ((int channel, byte value) in _pendingDuringFlash)
+                {
+                    _dmxData[channel] = value;
+                }
+
+                _pendingDuringFlash.Clear();
+            }
+
+            SendFrame();
+        }
+    }
+
+    /// <summary>
+    /// The FTDI devices plugged in, without opening any, so it is safe while the port is in use.
+    /// False when the driver itself can't be loaded.
+    /// </summary>
+    public bool TryListDevices(out List<(int Index, string? Description, string? SerialNumber)> devices)
+    {
+        devices = [];
+
+        if (!TryGetFtdi(out FTDI ftdi))
+        {
+            return false;
+        }
+
+        uint count = 0;
+
+        if (ftdi.GetNumberOfDevices(ref count) != FTDI.FT_STATUS.FT_OK || count == 0)
+        {
+            return true;
+        }
+
+        FTDI.FT_DEVICE_INFO_NODE[] nodes = new FTDI.FT_DEVICE_INFO_NODE[count];
+
+        if (ftdi.GetDeviceList(nodes) != FTDI.FT_STATUS.FT_OK)
+        {
+            return true;
+        }
+
+        for (int i = 0; i < nodes.Length; i++)
+        {
+            // A device this process already has open reports blank strings; it is still there.
+            devices.Add((i, nodes[i]?.Description, nodes[i]?.SerialNumber));
+        }
+
+        return true;
     }
 
     public void Close()

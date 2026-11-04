@@ -124,6 +124,13 @@ public static class KioskHealthEvaluator
             reasons.Add("Zone scoreboard capture stopped");
         }
 
+        if (snapshot.OfflineFallbackReady == false)
+        {
+            reasons.Add(snapshot.OfflineVideosNotCached is int missing and > 0
+                ? $"Offline fallback not ready ({missing} {(missing == 1 ? "video doesn't" : "videos don't")} fit the cache)"
+                : "Offline fallback not ready");
+        }
+
         if (snapshot.CpuPercent >= options.HighCpuPercent)
         {
             reasons.Add($"High CPU ({snapshot.CpuPercent:0}%)");

@@ -1,0 +1,17 @@
+@page "/help/kiosks"
+@attribute [Authorize(Roles = "Admin")]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.Kiosks
+
+<HelpPage AreaKey="@HelpRegistry.Kiosks">
+    <FluentTab Id="help-overview" Header="Kiosks &amp; Health" IconStart="@(new Icons.Regular.Size16.Laptop())">
+        <KiosksOverviewHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-settings" Header="Kiosk Settings" IconStart="@(new Icons.Regular.Size16.Settings())" DeferredLoading="true">
+        <KioskSettingsHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-updates" Header="Updates &amp; Releases" IconStart="@(new Icons.Regular.Size16.ArrowSync())" DeferredLoading="true">
+        <KioskUpdatesHelpTab />
+    </FluentTab>
+</HelpPage>

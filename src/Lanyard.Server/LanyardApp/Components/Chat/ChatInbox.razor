@@ -4,7 +4,10 @@
 <div class="inbox">
     <div class="inbox-header">
         <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Chat</FluentText>
-        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ChatAdd())" OnClick="() => OnNew.InvokeAsync()">New</FluentButton>
+        <div class="inbox-header-actions">
+            <HelpButton AreaKey="@HelpRegistry.Chat" Compact="true" />
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ChatAdd())" OnClick="() => OnNew.InvokeAsync()">New</FluentButton>
+        </div>
     </div>
 
     @if (Items is null)

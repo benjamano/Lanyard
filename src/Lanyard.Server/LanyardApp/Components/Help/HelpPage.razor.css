@@ -1,0 +1,11 @@
+/* Topic labels are long ("Multi-Location Rules", "Results & Certificates"), so on a phone the tab
+   list would clip; let it scroll sideways instead. fluent-tablist is rendered inside FluentTabs, so
+   it needs ::deep from a plain element this component owns. */
+.help-tabs-host ::deep fluent-tablist {
+    overflow-x: auto;
+}
+
+.help-summary {
+    margin-top: 4px;
+    margin-bottom: 8px;
+}

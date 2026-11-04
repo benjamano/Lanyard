@@ -1,0 +1,18 @@
+@page "/help/chat"
+@attribute [Authorize]
+@attribute [RequiresFeature(CompanyFeature.Chat)]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.Chat
+
+<HelpPage AreaKey="@HelpRegistry.Chat">
+    <FluentTab Id="help-conversations" Header="Conversations" IconStart="@(new Icons.Regular.Size16.Chat())">
+        <ChatConversationsHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-messages" Header="Messages" IconStart="@(new Icons.Regular.Size16.TextEditStyle())" DeferredLoading="true">
+        <ChatMessagesHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-safety" Header="Reporting &amp; Blocking" IconStart="@(new Icons.Regular.Size16.ShieldError())" DeferredLoading="true">
+        <ChatSafetyHelpTab />
+    </FluentTab>
+</HelpPage>

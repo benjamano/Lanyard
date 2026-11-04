@@ -32,13 +32,39 @@ internal static class ShiftClaimRules
 
     // What decides whether someone can work a shift, loaded once for a window so many shifts can be
     // checked in memory (My Shifts' Up for grabs checks every open shift and every swap pairing).
-    public sealed record WorkerCalendar(HashSet<int> Locations, HashSet<Guid> Positions, List<(Guid Id, DateTime StartUtc, DateTime EndUtc)> Shifts, HashSet<DateOnly> DaysOff)
+    // Requirements is the training each of their positions needs (shared by every calendar loaded
+    // together); Training is their record on those courses.
+    public sealed record WorkerCalendar(
+        HashSet<int> Locations,
+        HashSet<Guid> Positions,
+        List<(Guid Id, DateTime StartUtc, DateTime EndUtc)> Shifts,
+        HashSet<DateOnly> DaysOff,
+        ILookup<Guid, RequiredCourse> Requirements,
+        Dictionary<Guid, TrainingRecord> Training)
     {
-        public static readonly WorkerCalendar Empty = new([], [], [], []);
+        public static readonly ILookup<Guid, RequiredCourse> NoRequirements = Array.Empty<RequiredCourse>().ToLookup(x => x.PositionId);
+
+        public static readonly WorkerCalendar Empty = new([], [], [], [], NoRequirements, []);
     }
 
-    // Calendars for several people across [fromUtc, toUtc): memberships, positions, active shifts
-    // and approved time off - four queries whatever the number of people.
+    // A course a position needs, with what deciding "current" and "applies here" takes.
+    public sealed record RequiredCourse(Guid PositionId, Guid CourseId, string Name, int? RecurrenceMonths, int? LocationId, bool IsShared);
+
+    // Someone's record on one course: when they last passed it, and the assignment they still have
+    // to complete (if any), which is where a "take the course" link goes.
+    public sealed record TrainingRecord(DateTime? LatestCompletedUtc, Guid? OpenAssignmentId);
+
+    // The required training for some positions and some people's records on it, for checking many
+    // shifts in memory.
+    public sealed record TrainingSnapshot(ILookup<Guid, RequiredCourse> Requirements, Dictionary<string, Dictionary<Guid, TrainingRecord>> ByUser)
+    {
+        public List<TrainingGap> GapsFor(string userId, Shift shift) =>
+            TrainingGaps(Requirements, ByUser.GetValueOrDefault(userId) ?? [], shift);
+    }
+
+    // Calendars for several people across [fromUtc, toUtc): memberships, positions, active shifts,
+    // approved time off and required training - five queries whatever the number of people, six
+    // when any of their positions needs training.
     public static async Task<Dictionary<string, WorkerCalendar>> LoadCalendarsAsync(ApplicationDbContext ctx, IReadOnlyCollection<string> userIds, DateTime fromUtc, DateTime toUtc)
     {
         List<string> ids = userIds.Distinct().ToList();
@@ -71,19 +97,164 @@ internal static class ShiftClaimRules
             .Where(x => x.Status == TimeOffStatus.Approved)
             .ToListAsync();
 
+        TrainingSnapshot training = await LoadTrainingAsync(ctx, ids, positions.Select(x => x.StaffPositionId).ToList());
+
         return ids.ToDictionary(id => id, id => new WorkerCalendar(
             memberships.Where(x => x.UserId == id).Select(x => x.LocationId).ToHashSet(),
             positions.Where(x => x.UserId == id).Select(x => x.StaffPositionId).ToHashSet(),
             shifts.Where(x => x.UserId == id).Select(x => (x.Id, x.StartUtc, x.EndUtc)).ToList(),
             timeOff.Where(x => x.UserId == id)
                 .SelectMany(x => Enumerable.Range(0, x.EndDate.DayNumber - x.StartDate.DayNumber + 1).Select(d => x.StartDate.AddDays(d)))
-                .ToHashSet()));
+                .ToHashSet(),
+            training.Requirements,
+            training.ByUser.GetValueOrDefault(id) ?? []));
     }
 
+    // The training these positions need, and these people's records on it. Only active courses,
+    // at companies with Training switched on, count - a course nobody can take can't be required.
+    // The second query is skipped when no position needs anything, which is every company that
+    // hasn't set requirements up.
+    public static async Task<TrainingSnapshot> LoadTrainingAsync(ApplicationDbContext ctx, IReadOnlyCollection<string> userIds, IReadOnlyCollection<Guid> positionIds)
+    {
+        List<Guid> positionList = positionIds.Distinct().ToList();
+
+        if (positionList.Count == 0)
+        {
+            return new TrainingSnapshot(WorkerCalendar.NoRequirements, []);
+        }
+
+        List<RequiredCourse> required = await ctx.StaffPositionRequiredCourses
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => positionList.Contains(x.StaffPositionId) && x.Course!.IsActive
+                && !ctx.CompanyFeatureSettings.Any(f => f.CompanyId == x.Course.CompanyId && f.Feature == CompanyFeature.Training && !f.IsEnabled))
+            .Select(x => new RequiredCourse(x.StaffPositionId, x.CourseId, x.Course!.Name, x.Course.RecurrenceMonths, x.Course.LocationId, x.Course.IsShared))
+            .ToListAsync();
+
+        ILookup<Guid, RequiredCourse> requirements = required.ToLookup(x => x.PositionId);
+        List<string> userList = userIds.Distinct().ToList();
+
+        if (required.Count == 0 || userList.Count == 0)
+        {
+            return new TrainingSnapshot(requirements, []);
+        }
+
+        Dictionary<string, Dictionary<Guid, TrainingRecord>> byUser =
+            await LoadTrainingRecordsAsync(ctx, userList, required.Select(x => x.CourseId).ToList());
+
+        return new TrainingSnapshot(requirements, byUser);
+    }
+
+    // People's records on some courses, by person then course.
+    public static async Task<Dictionary<string, Dictionary<Guid, TrainingRecord>>> LoadTrainingRecordsAsync(ApplicationDbContext ctx, IReadOnlyCollection<string> userIds, IReadOnlyCollection<Guid> courseIds)
+    {
+        List<string> userList = userIds.Distinct().ToList();
+        List<Guid> courseList = courseIds.Distinct().ToList();
+
+        if (userList.Count == 0 || courseList.Count == 0)
+        {
+            return [];
+        }
+
+        // Every live assignment, not just the latest: a recurring course leaves each completed
+        // cycle in place, so the newest completion and the open retake are separate rows.
+        var assignments = await ctx.CourseAssignments
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => x.IsActive && userList.Contains(x.UserId) && courseList.Contains(x.CourseId))
+            .Select(x => new { x.UserId, x.CourseId, x.Id, x.AssignedDate, x.CompletedDate })
+            .ToListAsync();
+
+        return assignments
+            .GroupBy(x => x.UserId)
+            .ToDictionary(user => user.Key, user => user
+                .GroupBy(x => x.CourseId)
+                .ToDictionary(course => course.Key, course => new TrainingRecord(
+                    course.Max(x => x.CompletedDate),
+                    course.Where(x => x.CompletedDate == null).OrderByDescending(x => x.AssignedDate).Select(x => (Guid?)x.Id).FirstOrDefault())));
+    }
+
+    // The required training for this shift's position that this person isn't current on when the
+    // shift starts.
+    public static List<TrainingGap> TrainingGaps(WorkerCalendar calendar, Shift shift) =>
+        TrainingGaps(calendar.Requirements, calendar.Training, shift);
+
+    private static List<TrainingGap> TrainingGaps(ILookup<Guid, RequiredCourse> requirements, Dictionary<Guid, TrainingRecord> training, Shift shift) =>
+        shift.StaffPositionId is Guid positionId
+            ? CourseGaps(requirements[positionId], training, shift.LocationId, shift.StartUtc)
+            : [];
+
+    // Which of these courses someone isn't current on at atUtc. locationId limits it to courses
+    // that apply at that location; null counts every course.
+    public static List<TrainingGap> CourseGaps(IEnumerable<RequiredCourse> courses, Dictionary<Guid, TrainingRecord> training, int? locationId, DateTime atUtc)
+    {
+        List<TrainingGap> gaps = [];
+
+        foreach (RequiredCourse course in courses)
+        {
+            if (locationId is int at && !AppliesAt(course, at))
+            {
+                continue;
+            }
+
+            TrainingGap? gap = GapFor(course, training.GetValueOrDefault(course.CourseId), atUtc);
+
+            if (gap is not null)
+            {
+                gaps.Add(gap);
+            }
+        }
+
+        return gaps;
+    }
+
+    // Positions are company-wide but a course can belong to one location. A course that can't be
+    // taken at the shift's location (another site's, not shared) doesn't gate shifts there.
+    private static bool AppliesAt(RequiredCourse course, int locationId) =>
+        course.IsShared || course.LocationId is null || course.LocationId == locationId;
+
+    // Current means passed, and - for a recurring course - not run out by the time the shift
+    // starts. Worked out from the completion date rather than the assignment status, because a
+    // lapsed cycle still reads "Completed" until the recurrence sweep starts the next one.
+    private static TrainingGap? GapFor(RequiredCourse course, TrainingRecord? record, DateTime atUtc)
+    {
+        if (record?.LatestCompletedUtc is not DateTime completed)
+        {
+            return new TrainingGap(course.CourseId, course.Name, null, record?.OpenAssignmentId);
+        }
+
+        if (course.RecurrenceMonths is not int months)
+        {
+            return null;
+        }
+
+        DateTime runsOut = completed.AddMonths(months);
+
+        return runsOut > atUtc ? null : new TrainingGap(course.CourseId, course.Name, runsOut, record.OpenAssignmentId);
+    }
+
+    // "You need Fire Safety and First Aid training to work as Marshal." / "Your Fire Safety
+    // training runs out before this shift."
+    public static string TrainingReason(IReadOnlyList<TrainingGap> gaps, string? positionName, bool aboutViewer)
+    {
+        string names = JoinNames(gaps.Select(x => x.CourseName).ToList());
+
+        if (gaps.All(x => x.Lapsed))
+        {
+            return $"{(aboutViewer ? "Your" : "Their")} {names} training runs out before this shift.";
+        }
+
+        return $"{(aboutViewer ? "You need" : "They need")} {names} training to work as {positionName ?? "this position"}.";
+    }
+
+    private static string JoinNames(List<string> names) =>
+        names.Count == 1 ? names[0] : $"{string.Join(", ", names.Take(names.Count - 1))} and {names[^1]}";
+
     // Why this person can't work this shift, or null if they can. The same rules as the rota
-    // builder: at the location, holding the shift's position (if it has one), not already working
-    // then, and not on approved time off that day. givingUpShiftId is a shift they hand over in
-    // the same move (a swap), which doesn't count as a clash. The calendar must cover the shift.
+    // builder: at the location, holding the shift's position (if it has one) and current on its
+    // required training, not already working then, and not on approved time off that day.
+    // givingUpShiftId is a shift they hand over in the same move (a swap), which doesn't count as
+    // a clash. The calendar must cover the shift.
     public static string? WhyCantWork(WorkerCalendar calendar, Shift shift, Guid? givingUpShiftId, bool aboutViewer)
     {
         string you = aboutViewer ? "You" : "They";
@@ -97,6 +268,13 @@ internal static class ShiftClaimRules
         if (shift.StaffPositionId is Guid positionId && !calendar.Positions.Contains(positionId))
         {
             return $"{you} don't work as {shift.StaffPosition?.Name ?? "this position"}.";
+        }
+
+        List<TrainingGap> gaps = TrainingGaps(calendar, shift);
+
+        if (gaps.Count > 0)
+        {
+            return TrainingReason(gaps, shift.StaffPosition?.Name, aboutViewer);
         }
 
         bool clash = calendar.Shifts.Any(x => x.Id != shift.Id && x.Id != givingUpShiftId
@@ -155,6 +333,9 @@ internal static class ShiftClaimRules
         return (await PositionHoldersAtAsync(ctx, shift)).Where(x => x != requesterId).ToList();
     }
 
+    // Members of the shift's location who hold its position and are current on the training it
+    // needs - the same rules WhyCantWork applies, so nobody is told about a shift they'd then be
+    // refused.
     private static async Task<List<string>> PositionHoldersAtAsync(ApplicationDbContext ctx, Shift shift)
     {
         IQueryable<string> members = ctx.UserLocationMemberships
@@ -163,12 +344,23 @@ internal static class ShiftClaimRules
             .Where(x => x.LocationId == shift.LocationId && x.UserId != ApplicationDbContext.SystemDeletedUserPlaceholderId)
             .Select(x => x.UserId);
 
-        if (shift.StaffPositionId is Guid positionId)
+        if (shift.StaffPositionId is not Guid positionId)
         {
-            members = members.Where(userId => ctx.UserPositions.Any(p => p.UserId == userId && p.StaffPositionId == positionId));
+            return await members.Distinct().ToListAsync();
         }
 
-        return await members.Distinct().ToListAsync();
+        members = members.Where(userId => ctx.UserPositions.Any(p => p.UserId == userId && p.StaffPositionId == positionId));
+
+        List<string> holders = await members.Distinct().ToListAsync();
+
+        if (holders.Count == 0)
+        {
+            return holders;
+        }
+
+        TrainingSnapshot training = await LoadTrainingAsync(ctx, holders, [positionId]);
+
+        return holders.Where(x => training.GapsFor(x, shift).Count == 0).ToList();
     }
 
     // Puts a shift in someone's name (or nobody's, for an open shift) without making it an
@@ -185,9 +377,7 @@ internal static class ShiftClaimRules
 
         if (wasPublished)
         {
-            shift.PublishedDateUtc = nowUtc;
-            shift.PublishedByUserId = actingUserId;
-            shift.PublishedStartUtc = shift.StartUtc;
+            shift.MarkPublished(nowUtc, actingUserId);
         }
     }
 

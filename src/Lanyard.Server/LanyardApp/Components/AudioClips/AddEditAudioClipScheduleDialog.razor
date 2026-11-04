@@ -1,0 +1,257 @@
+@using Lanyard.Application.Services.AudioClips
+@using Lanyard.Application.Services.MusicScheduling
+
+@inject IAudioClipScheduleService _scheduleService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.CalendarClock())" />
+            <FluentText As="@TextTag.H3">@(Schedule is null ? "Schedule a clip" : "Edit schedule")</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="schedule-dialog">
+            <FluentTextInput @bind-Value="name" Label="Name" Required="true" Width="100%" Maxlength="@AudioClipSchedule.NameMaxLength"
+                             Placeholder="e.g. Closing call" />
+
+            <FluentSelect TOption="string" TValue="string" @bind-Value="clipValue" Label="Clip" Width="100%">
+                @foreach (AudioClip clip in Clips)
+                {
+                    <FluentOption Value="@clip.Id.ToString()">@clip.Name</FluentOption>
+                }
+            </FluentSelect>
+
+            <FluentSelect TOption="string" TValue="string" Value="@locationValue" ValueChanged="@OnLocationChangedAsync" Label="Plays on the kiosks at" Width="100%">
+                @foreach (Location location in Locations)
+                {
+                    <FluentOption Value="@location.Id.ToString()">@location.Name</FluentOption>
+                }
+            </FluentSelect>
+
+            <FluentSelect TOption="string" TValue="string" @bind-Value="anchorValue" Label="When" Width="100%">
+                <FluentOption Value="@AudioClipScheduleAnchor.BeforeClosing.ToString()">Before closing</FluentOption>
+                <FluentOption Value="@AudioClipScheduleAnchor.AfterOpening.ToString()">After opening</FluentOption>
+                <FluentOption Value="@AudioClipScheduleAnchor.AtTime.ToString()">At a set time</FluentOption>
+            </FluentSelect>
+
+            @if (Anchor == AudioClipScheduleAnchor.AtTime)
+            {
+                <AnyTimePicker TValue="TimeOnly?" @bind-Value="timeOfDay" Label="Time (UK time)" />
+            }
+            else
+            {
+                <div class="schedule-field">
+                    <FluentText Class="schedule-hint">@OffsetLabel</FluentText>
+                    <div class="schedule-slider">
+                        <FluentSlider TValue="int" Min="0" Max="120" Step="5" @bind-Value="offsetMinutes" Class="schedule-slider-input" />
+                        <FluentText Weight="TextWeight.Semibold" Class="schedule-slider-value">@offsetMinutes min</FluentText>
+                    </div>
+                </div>
+
+                @if (locationHasHours == false)
+                {
+                    <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                        This location has no opening hours yet, so this won't play. Set them on Manage &gt; Companies &amp; Locations.
+                    </FluentMessageBar>
+                }
+            }
+
+            <div class="schedule-field">
+                <FluentText Weight="TextWeight.Semibold">Days</FluentText>
+                <div class="schedule-days">
+                    @foreach (DayOfWeek day in MusicDaypartRules.WeekOrder)
+                    {
+                        DayOfWeek capturedDay = day;
+                        <FluentCheckbox Value="@days.Contains(capturedDay)"
+                                        ValueChanged="@((bool ticked) => ToggleDay(capturedDay, ticked))"
+                                        Label="@(capturedDay.ToString()[..3])" />
+                    }
+                </div>
+                @if (Anchor != AudioClipScheduleAnchor.AtTime)
+                {
+                    <FluentText Class="schedule-hint">The days the location opens. A late close after midnight counts as the day before.</FluentText>
+                }
+            </div>
+
+            @if (errorMessage is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
+            }
+
+            <div class="schedule-actions">
+                <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@SaveAsync" Disabled="@isSaving">
+                    @(isSaving ? "Saving..." : (Schedule is null ? "Add" : "Save"))
+                </FluentButton>
+                <FluentButton Appearance="ButtonAppearance.Default" OnClick="@CancelAsync" Disabled="@isSaving">
+                    Cancel
+                </FluentButton>
+                @if (Schedule is not null)
+                {
+                    <span class="schedule-actions-spacer"></span>
+                    <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.Delete())"
+                                  OnClick="@RequestDeleteAsync" Disabled="@isSaving">
+                        Delete
+                    </FluentButton>
+                }
+            </div>
+        </div>
+    </ChildContent>
+</FluentDialogBody>
+
+@code {
+    // What the dialog closes with when Delete is pressed; the page asks to confirm and deletes.
+    public const string DeleteRequested = "delete";
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required LocationScope Scope { get; set; }
+
+    // Null = add. When editing, the fields are copied out so cancelling never changes the page's copy.
+    [Parameter]
+    public AudioClipSchedule? Schedule { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<AudioClip> Clips { get; set; } = [];
+
+    // The locations the caller manages: all of them for an Admin, their own for a Manager.
+    [Parameter]
+    public IReadOnlyList<Location> Locations { get; set; } = [];
+
+    private string name = string.Empty;
+    private string? clipValue;
+    private string? locationValue;
+    private string anchorValue = AudioClipScheduleAnchor.BeforeClosing.ToString();
+    private TimeOnly? timeOfDay = new TimeOnly(12, 0);
+    private int offsetMinutes = 15;
+    private HashSet<DayOfWeek> days = [];
+    private bool? locationHasHours;
+    private string? errorMessage;
+    private bool isSaving;
+
+    private AudioClipScheduleAnchor Anchor =>
+        Enum.TryParse(anchorValue, out AudioClipScheduleAnchor anchor) ? anchor : AudioClipScheduleAnchor.BeforeClosing;
+
+    private string OffsetLabel => Anchor == AudioClipScheduleAnchor.BeforeClosing
+        ? "Minutes before closing"
+        : "Minutes after opening";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Schedule is null)
+        {
+            days = [.. MusicDaypartRules.WeekOrder];
+            clipValue = Clips.FirstOrDefault()?.Id.ToString();
+            locationValue = (Locations.FirstOrDefault(x => x.Id == Scope.LocationId) ?? Locations.FirstOrDefault())?.Id.ToString();
+        }
+        else
+        {
+            name = Schedule.Name;
+            clipValue = Schedule.AudioClipId.ToString();
+            locationValue = Schedule.LocationId.ToString();
+            anchorValue = Schedule.Anchor.ToString();
+            timeOfDay = Schedule.TimeOfDay ?? new TimeOnly(12, 0);
+            offsetMinutes = Schedule.OffsetMinutes;
+            days = AutomationScheduleDays.TryParse(Schedule.DaysOfWeek, out List<DayOfWeek> parsed) ? [.. parsed] : [];
+        }
+
+        await CheckHoursAsync();
+    }
+
+    private async Task OnLocationChangedAsync(string? value)
+    {
+        locationValue = value;
+        await CheckHoursAsync();
+    }
+
+    private async Task CheckHoursAsync()
+    {
+        locationHasHours = null;
+
+        if (int.TryParse(locationValue, out int locationId))
+        {
+            Result<bool> result = await _scheduleService.LocationHasHoursAsync(locationId);
+            locationHasHours = result.IsSuccess ? result.Data : null;
+        }
+    }
+
+    private void ToggleDay(DayOfWeek day, bool ticked)
+    {
+        if (ticked)
+        {
+            days.Add(day);
+        }
+        else
+        {
+            days.Remove(day);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        errorMessage = null;
+
+        if (!Guid.TryParse(clipValue, out Guid clipId))
+        {
+            errorMessage = "Pick a clip.";
+            return;
+        }
+
+        if (!int.TryParse(locationValue, out int locationId))
+        {
+            errorMessage = "Pick a location.";
+            return;
+        }
+
+        AudioClipSchedule toSave = new()
+        {
+            Id = Schedule?.Id ?? Guid.Empty,
+            Name = name,
+            AudioClipId = clipId,
+            LocationId = locationId,
+            Anchor = Anchor,
+            TimeOfDay = timeOfDay,
+            OffsetMinutes = offsetMinutes,
+            DaysOfWeek = days.Count == 0 ? string.Empty : AutomationScheduleDays.Serialize(days)
+        };
+
+        // Checked here too so a mistake shows straight away rather than after a round trip.
+        errorMessage = AudioClipScheduleRules.Validate(toSave);
+        if (errorMessage is not null)
+        {
+            return;
+        }
+
+        Result<string> userResult = await _securityService.GetCurrentUserIdAsync();
+        if (!userResult.IsSuccess || userResult.Data is null)
+        {
+            errorMessage = "Couldn't work out who you are. Refresh the page and sign in again.";
+            return;
+        }
+
+        isSaving = true;
+        Result<AudioClipSchedule> result = await _scheduleService.SaveAsync(Scope, toSave, userResult.Data);
+        isSaving = false;
+
+        if (!result.IsSuccess)
+        {
+            errorMessage = result.Error;
+            return;
+        }
+
+        _toastService.ShowSuccess(Schedule is null ? "Clip scheduled." : "Schedule saved.");
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task RequestDeleteAsync()
+    {
+        await Dialog.CloseAsync(DeleteRequested);
+    }
+
+    private async Task CancelAsync()
+    {
+        await Dialog.CancelAsync();
+    }
+}

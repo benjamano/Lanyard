@@ -31,7 +31,15 @@ public interface IProjectionProgramRunnerService
     event Action<Guid, int, Guid>? OnProgramCompletedNaturally;
 
     /// <summary>
-    /// Starts (or restarts) a program on a client's display. Returns the run id, which
+    /// clientId, displayIndex, stepIndex - raised when a held step's data-bound parameters were
+    /// re-resolved and at least one changed. Read the new values from
+    /// <see cref="ProjectionRunState.BoundValues"/>.
+    /// </summary>
+    event Action<Guid, int, int>? OnProgramStepValuesChanged;
+
+    /// <summary>
+    /// Starts (or restarts) a program on a client's display. Fails if the program and the client
+    /// belong to different companies. Returns the run id, which
     /// <see cref="Stop"/> accepts so a departing kiosk circuit can only ever stop
     /// its own run and never one started by a page that replaced it.
     /// </summary>

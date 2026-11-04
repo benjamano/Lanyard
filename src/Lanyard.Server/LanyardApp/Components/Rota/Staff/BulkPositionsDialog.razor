@@ -181,7 +181,16 @@
         // Sent in rota order so "the first position becomes primary" means the first on the list.
         BulkPositionChange change = new(mode, OrderedChosen.ToList(), primaryId);
 
-        Result<int> result = await _staffBulkUpdateService.ApplyPositionsAsync(scope.Data, CompanyId, LocationId, People.Select(x => x.UserId).ToList(), change);
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            isSaving = false;
+            _toastService.ShowError($"Failed to identify you: {actingUser.Error}");
+            return;
+        }
+
+        Result<BulkPositionsApplied> result = await _staffBulkUpdateService.ApplyPositionsAsync(scope.Data, CompanyId, LocationId, People.Select(x => x.UserId).ToList(), change, actingUser.Data);
 
         isSaving = false;
 
@@ -191,7 +200,8 @@
             return;
         }
 
-        _toastService.ShowSuccess(BulkMessages.Changed(result.Data, People.Count, "positions"));
+        string message = BulkMessages.Changed(result.Data!.Changed, People.Count, "positions");
+        _toastService.ShowSuccess(result.Data.Training.Summary() is string training ? $"{message} {training}" : message);
         await Dialog.CloseAsync(true);
     }
 }

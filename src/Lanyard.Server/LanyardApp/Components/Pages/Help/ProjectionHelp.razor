@@ -1,0 +1,17 @@
+@page "/help/projection"
+@attribute [Authorize(Roles = "Admin,Manager")]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.Projection
+
+<HelpPage AreaKey="@HelpRegistry.Projection">
+    <FluentTab Id="help-programs" Header="Programs" IconStart="@(new Icons.Regular.Size16.ProjectionScreenText())">
+        <ProjectionProgramsHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-control" Header="Projection Control" IconStart="@(new Icons.Regular.Size16.Play())" DeferredLoading="true">
+        <ProjectionControlHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-templates" Header="Templates" IconStart="@(new Icons.Regular.Size16.Board())" DeferredLoading="true">
+        <ProjectionTemplatesHelpTab />
+    </FluentTab>
+</HelpPage>

@@ -1,0 +1,24 @@
+@page "/help/my-shifts"
+@attribute [Authorize]
+@attribute [RequiresFeature(CompanyFeature.StaffScheduling)]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.MyShifts
+
+<HelpPage AreaKey="@HelpRegistry.MyShifts">
+    <FluentTab Id="help-overview" Header="Overview" IconStart="@(new Icons.Regular.Size16.Info())">
+        <MyShiftsOverviewHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-changes" Header="Swaps &amp; Open Shifts" IconStart="@(new Icons.Regular.Size16.PeopleSwap())" DeferredLoading="true">
+        <ShiftChangesHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-time-off" Header="Time Off" IconStart="@(new Icons.Regular.Size16.CalendarPerson())" DeferredLoading="true">
+        <MyTimeOffHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-availability" Header="Availability" IconStart="@(new Icons.Regular.Size16.CalendarClock())" DeferredLoading="true">
+        <AvailabilityHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-clocking" Header="Clocking In" IconStart="@(new Icons.Regular.Size16.Clock())" DeferredLoading="true">
+        <ClockingInHelpTab />
+    </FluentTab>
+</HelpPage>

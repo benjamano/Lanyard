@@ -31,3 +31,18 @@
 .shift-dialog-actions ::deep .shift-dialog-delete {
     margin-right: auto;
 }
+
+.shift-dialog-suggest {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.shift-dialog-suggest > ::deep * {
+    align-self: stretch;
+}
+
+.shift-dialog-suggest > ::deep fluent-button {
+    align-self: flex-start;
+}

@@ -10,7 +10,9 @@ public class VerifyEnvironmentVariables
             ("LANYARD_SERVER_URL", "https://localhost:7175"),
             ("LANYARD_CLIENT_ALLOW_INSECURE_SSL", "false"),
             ("LANYARD_CLIENT_SKIP_ADDING_WATCHDOG_STARTUP_TASK", "false"),
-            ("LANYARD_CLIENT_SHARED_SECRET", "changeme"),
+            // Only for a kiosk that hasn't got its own credential yet: it swaps this for one once,
+            // then it's removed (RemoveLegacySecret). New kiosks pair with a code instead.
+            ("LANYARD_CLIENT_SHARED_SECRET", ""),
             ("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
             ("OTEL_EXPORTER_OTLP_PROTOCOL", "")
         };
@@ -80,17 +82,53 @@ public class VerifyEnvironmentVariables
             new JsonSerializerOptions { WriteIndented = true }));
     }
 
+    // The shared secret has done its job once the kiosk has its own credential: keep it out of
+    // config.json (and this process) from then on.
+    public static void RemoveLegacySecret()
+    {
+        const string variable = "LANYARD_CLIENT_SHARED_SECRET";
+
+        Environment.SetEnvironmentVariable(variable, null);
+
+        string configPath = ConfigPath;
+
+        if (!File.Exists(configPath))
+        {
+            return;
+        }
+
+        try
+        {
+            Dictionary<string, string>? config = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(configPath));
+
+            if (config is not null && config.Remove(variable))
+            {
+                File.WriteAllText(configPath, JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true }));
+                Console.WriteLine("Removed the old shared secret from config.json: this kiosk has its own credential now.");
+            }
+        }
+        catch (Exception ex) when (ex is JsonException or IOException)
+        {
+            Console.WriteLine($"Couldn't remove the old shared secret from config.json: {ex.Message}");
+        }
+    }
+
+    private static string ConfigPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "LanyardClient",
+        "config.json");
+
     public static void ResetClientId()
     {
-        string path = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "LanyardClient",
-            "client_id.txt"
-        );
+        // The file ClientIdentity actually reads. A new id is a new kiosk to the server, so the
+        // old credential goes too and the kiosk pairs again.
+        string path = ClientIdentity.ClientIdPath;
 
         Guid newClientId = Guid.NewGuid();
 
+        Directory.CreateDirectory(ClientIdentity.DataDirectory);
         File.WriteAllText(path, newClientId.ToString());
+        Lanyard.Client.Security.KioskCredentials.Forget();
         Environment.SetEnvironmentVariable("LANYARD_CLIENT_ID", newClientId.ToString());
 
         Console.WriteLine($"Client ID reset to {newClientId}. Please restart the application for changes to take effect.");

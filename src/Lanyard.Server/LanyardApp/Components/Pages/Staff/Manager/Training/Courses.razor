@@ -35,10 +35,7 @@
             New Course
         </FluentButton>
 
-        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.QuestionCircle())"
-                      OnClick="@(() => _navigationManager.NavigateTo("/manage/training/help?topic=courses"))">
-            Help
-        </FluentButton>
+        <HelpButton AreaKey="@HelpRegistry.ManageTraining" Topic="courses" />
     </FluentStack>
 
     @if (scopeFailed)

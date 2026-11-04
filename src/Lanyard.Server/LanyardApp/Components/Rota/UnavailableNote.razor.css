@@ -1,0 +1,26 @@
+.unavailable-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    width: 100%;
+    min-width: 0;
+    font-size: 0.72rem;
+    color: var(--colorNeutralForeground2);
+    cursor: help;
+}
+
+.unavailable-note ::deep svg {
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+/* The month view is too narrow to wrap, so it just says "Can't" (times in the tooltip). */
+.unavailable-note.is-compact span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.unavailable-note.is-compact {
+    justify-content: center;
+}

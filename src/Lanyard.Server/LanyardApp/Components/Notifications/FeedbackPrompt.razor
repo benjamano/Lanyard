@@ -1,0 +1,232 @@
+@using Lanyard.Application.Services.Feedback
+@using Lanyard.Infrastructure.DTO.Feedback
+@using Lanyard.Infrastructure.Enum
+@using Microsoft.Extensions.Logging
+
+@implements IDisposable
+
+@inject IFeedbackService Feedback
+@inject CornerPromptCoordinator Corner
+@inject IJSRuntime JS
+@inject ILogger<FeedbackPrompt> Logger
+
+@* Every month or so, "How would you rate Lanyard?" in the bottom corner: 1-5 stars and a reason,
+   for Lanyard's platform admins. When it appears is decided by FeedbackPromptRules. *@
+@if (_visible)
+{
+    <div class="feedback-prompt" role="dialog" aria-labelledby="feedback-prompt-title" @onkeydown="OnKeyDown">
+        <div class="feedback-prompt-head">
+            <div class="feedback-prompt-heading">
+                <div id="feedback-prompt-title" class="feedback-prompt-title">How would you rate Lanyard?</div>
+                <div class="feedback-prompt-subtitle">A quick score helps the Lanyard team know what to improve.</div>
+            </div>
+            <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.Dismiss())"
+                          Title="Close" aria-label="Close" OnClick="NotNowAsync" />
+        </div>
+
+        <div class="feedback-prompt-stars" role="radiogroup" aria-label="Your rating" @onmouseleave="() => _hover = 0">
+            @for (int i = 1; i <= 5; i++)
+            {
+                int star = i;
+                bool lit = star <= (_hover > 0 ? _hover : _stars);
+
+                <button type="button" role="radio" class="feedback-prompt-star @(lit ? "lit" : null)"
+                        aria-checked="@(_stars == star ? "true" : "false")"
+                        aria-label="@(star == 1 ? "1 star" : $"{star} stars")" title="@StarLabel(star)"
+                        @onclick="() => _stars = star" @onmouseenter="() => _hover = star"
+                        @onfocus="() => _hover = 0">★</button>
+            }
+            @if (_stars > 0 || _hover > 0)
+            {
+                <span class="feedback-prompt-star-label">@StarLabel(_hover > 0 ? _hover : _stars)</span>
+            }
+        </div>
+
+        @if (_stars > 0)
+        {
+            <FluentTextArea @bind-Value="_comment" Rows="3" MaxLength="@FeedbackService.MaxCommentLength" Style="width: 100%;"
+                            Label="What's the main reason for your score?"
+                            Placeholder="@(_stars <= 3 ? "What would make it better?" : "What do you like most?")" />
+        }
+
+        <div class="feedback-prompt-actions">
+            <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@(_stars == 0 || _sending)" Loading="_sending" OnClick="SendAsync">Send</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="NotNowAsync">Not now</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="NeverAskAsync">Don't ask again</FluentButton>
+        </div>
+    </div>
+}
+
+@code {
+    private const string CornerOwner = "feedback";
+
+    // Long enough that it never interrupts someone who opened Lanyard to do one quick thing.
+    private static readonly TimeSpan Delay = TimeSpan.FromSeconds(20);
+
+    // Pages where a popup would get in the way. (Kiosks and the clock-in terminal use EmptyLayout,
+    // so this component isn't on them at all.)
+    private static readonly string[] ExcludedPrefixes = ["/login", "/logout", "/handlelogout", "/rota/scan", "/account", "/manage/feedback"];
+
+    private readonly CancellationTokenSource _cts = new();
+    private string? _userId;
+    private bool _visible;
+    private int _stars;
+    private int _hover;
+    private string? _comment;
+    private bool _sending;
+
+    private static string StarLabel(int stars) => stars switch
+    {
+        1 => "Poor",
+        2 => "Not great",
+        3 => "OK",
+        4 => "Good",
+        5 => "Excellent",
+        _ => string.Empty
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            await Task.Delay(Delay, _cts.Token);
+            await EvaluateAsync();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    // Asked once per visit; if the answer is "not now" it stays that way until the next visit.
+    private async Task EvaluateAsync()
+    {
+        try
+        {
+            string path = new Uri(_navigationManager.Uri).AbsolutePath;
+
+            if (ExcludedPrefixes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+            {
+                return;
+            }
+
+            Result<string> user = await _securityService.GetCurrentUserIdAsync();
+
+            if (!user.IsSuccess || string.IsNullOrWhiteSpace(user.Data))
+            {
+                return;
+            }
+
+            Result<bool> should = await Feedback.ShouldPromptAsync(user.Data);
+
+            if (!should.IsSuccess || !should.Data || !Corner.TryTake(CornerOwner))
+            {
+                return;
+            }
+
+            // A closed or reloaded tab leaves its circuit running for a few minutes, timer and all.
+            // Only count it as asked if the browser is still there to see it.
+            try
+            {
+                using CancellationTokenSource probe = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+                probe.CancelAfter(TimeSpan.FromSeconds(5));
+                await JS.InvokeVoidAsync("console.debug", probe.Token, "Lanyard: asking for a rating");
+            }
+            catch (Exception ex) when (ex is JSDisconnectedException or OperationCanceledException or JSException)
+            {
+                Corner.Release(CornerOwner);
+                return;
+            }
+
+            _userId = user.Data;
+            _visible = true;
+            await Feedback.RecordPromptAsync(_userId, FeedbackPromptOutcome.Shown);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Feedback prompt check failed");
+        }
+    }
+
+    private async Task SendAsync()
+    {
+        if (_userId is null || _stars == 0 || _sending)
+        {
+            return;
+        }
+
+        _sending = true;
+
+        try
+        {
+            Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+            Result<UserFeedback> result = await Feedback.SubmitAsync(new FeedbackSubmission(
+                _userId,
+                scope.IsSuccess ? scope.Data!.CompanyId : null,
+                scope.IsSuccess ? scope.Data!.LocationId : null,
+                FeedbackKind.StarRating,
+                _stars,
+                _comment,
+                _navigationManager.ToBaseRelativePath(_navigationManager.Uri)));
+
+            if (!result.IsSuccess)
+            {
+                _toastService.ShowError(result.Error ?? "Couldn't send your rating.");
+                return;
+            }
+
+            _toastService.ShowSuccess("Thanks for rating Lanyard!");
+            Hide();
+        }
+        finally
+        {
+            _sending = false;
+        }
+    }
+
+    private Task NotNowAsync() => SetAsideAsync(FeedbackPromptOutcome.Dismissed);
+
+    private Task NeverAskAsync() => SetAsideAsync(FeedbackPromptOutcome.OptOut);
+
+    private async Task SetAsideAsync(FeedbackPromptOutcome outcome)
+    {
+        Hide();
+
+        if (_userId is not null)
+        {
+            Result<bool> recorded = await Feedback.RecordPromptAsync(_userId, outcome);
+
+            if (!recorded.IsSuccess)
+            {
+                Logger.LogWarning("Failed to record feedback prompt {Outcome} for {UserId}: {Error}", outcome, _userId, recorded.Error);
+            }
+        }
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            await NotNowAsync();
+        }
+    }
+
+    private void Hide()
+    {
+        _visible = false;
+        Corner.Release(CornerOwner);
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+        Corner.Release(CornerOwner);
+    }
+}

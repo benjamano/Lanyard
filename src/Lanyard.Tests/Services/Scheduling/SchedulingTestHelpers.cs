@@ -1,5 +1,8 @@
 using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Notifications;
+using Lanyard.Application.Services.Scheduling;
+using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO.Scheduling;
 using Lanyard.Infrastructure.DTO.Notifications;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.DataAccess;
@@ -31,6 +34,17 @@ internal static class SchedulingTestHelpers
             .ReturnsAsync(() => new ApplicationDbContext(options));
 
         return factoryMock.Object;
+    }
+
+    // A required-training assigner with nothing to do, for tests that aren't about it.
+    public static IRequiredTrainingService NoRequiredTraining()
+    {
+        Mock<IRequiredTrainingService> mock = new();
+        mock.Setup(x => x.AssignMissingAsync(It.IsAny<LocationScope>(), It.IsAny<string>(),
+                It.IsAny<IReadOnlyCollection<(string UserId, Guid PositionId)>>(), It.IsAny<IReadOnlyCollection<Guid>?>()))
+            .ReturnsAsync(Result<RequiredTrainingAssignResult>.Ok(RequiredTrainingAssignResult.Empty));
+
+        return mock.Object;
     }
 
     public static LocationScope ManagerScopeFor(Location location) =>

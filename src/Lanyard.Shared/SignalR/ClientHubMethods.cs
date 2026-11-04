@@ -9,4 +9,49 @@ public static class ClientHubMethods
 {
     /// <summary>Server to kiosk, client result: returns a <c>ClientLogTailDTO</c>.</summary>
     public const string RequestLogTail = "RequestLogTail";
+
+    /// <summary>Kiosk to server: sends a <c>LaserGameStatusDTO</c> with the live laser game state.</summary>
+    public const string UpdateLaserGameStatus = "UpdateLaserGameStatus";
+
+    /// <summary>
+    /// Server to kiosk: sends a <c>ZoneScoreboardSettingsDTO</c>, on every connect and whenever an
+    /// Admin saves the kiosk's zone scoreboard settings.
+    /// </summary>
+    public const string ReceiveZoneScoreboardSettings = "ReceiveZoneScoreboardSettings";
+
+    /// <summary>Server to kiosk: play an <c>AudioClipPlayCommand</c> over the music, ducking it.</summary>
+    public const string PlayAudioClip = "PlayAudioClip";
+
+    /// <summary>Server to kiosk: stop the clip with this play id (Guid.Empty stops whatever is playing).</summary>
+    public const string StopAudioClip = "StopAudioClip";
+
+    /// <summary>
+    /// Server to kiosk: the <c>AudioClipPlayCommand</c>s (PlayId empty) of the clips scheduled at the
+    /// kiosk's location, to download ahead so they start on time.
+    /// </summary>
+    public const string PrefetchAudioClips = "PrefetchAudioClips";
+
+    /// <summary>Kiosk to server: an <c>AudioClipPlaybackReport</c> each time a clip's playback moves on.</summary>
+    public const string AudioClipPlaybackChanged = "AudioClipPlaybackChanged";
+    /// <summary>Server to kiosk, client result: returns a list of <c>ClientProjectionWindowDTO</c>.</summary>
+    public const string ListProjectionWindows = "ListProjectionWindows";
+
+    /// <summary>
+    /// Server to kiosk, client result: takes a <c>ClientScreenshotRequestDTO</c> and returns a
+    /// <c>ClientScreenshotDTO</c>. One call per screen, so each reply stays under the hub's size limit.
+    /// </summary>
+    public const string CaptureProjectionWindow = "CaptureProjectionWindow";
+
+    /// <summary>
+    /// Kiosk to server, returns a <c>KioskMediaTokenDTO</c>: a short-lived token for the song and
+    /// audio-clip URLs the kiosk streams from, which can't carry its credential in a header.
+    /// Empty for a kiosk still on the old shared secret.
+    /// </summary>
+    public const string IssueMediaToken = "IssueMediaToken";
+
+    /// <summary>
+    /// Server to kiosk, client result: takes a <c>KioskSelfTestRequestDTO</c>, checks the kiosk's
+    /// audio, DMX, packet capture and WebView2, and returns a <c>KioskSelfTestResultDTO</c>.
+    /// </summary>
+    public const string RunSelfTest = "RunSelfTest";
 }

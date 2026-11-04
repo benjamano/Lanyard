@@ -1,0 +1,9 @@
+@* Body wrapper for one help topic, so every tab has the same padding and gap between sections. *@
+
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="16px" Class="my-2">
+    @ChildContent
+</FluentStack>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

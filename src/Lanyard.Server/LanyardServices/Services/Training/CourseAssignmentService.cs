@@ -183,6 +183,60 @@ public class CourseAssignmentService(
         }
     }
 
+    public async Task<Result<bool>> ShouldShowCourseWalkthroughAsync(string userId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            var user = await ctx.Users
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.Id == userId)
+                .Select(x => new { x.CourseWalkthroughCompletedDate })
+                .FirstOrDefaultAsync();
+
+            if (user is null)
+            {
+                return Result<bool>.Fail("User not found.");
+            }
+
+            return Result<bool>.Ok(user.CourseWalkthroughCompletedDate is null);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to check the course walkthrough: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> MarkCourseWalkthroughCompletedAsync(string userId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            UserProfile? user = await ctx.Users.FirstOrDefaultAsync(x => x.Id == userId);
+
+            if (user is null)
+            {
+                return Result<bool>.Fail("User not found.");
+            }
+
+            if (user.CourseWalkthroughCompletedDate is null)
+            {
+                user.CourseWalkthroughCompletedDate = DateTime.UtcNow;
+                await ctx.SaveChangesAsync();
+                _logger.LogInformation("User {UserId} finished the course walkthrough", userId);
+            }
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to save the course walkthrough: {ex.Message}");
+        }
+    }
+
     public async Task<Result<CourseAssignment>> StartAssignmentAsync(Guid assignmentId, string requestingUserId)
     {
         try

@@ -1,0 +1,17 @@
+@page "/help/dmx"
+@attribute [Authorize(Roles = "Admin,CanManageDmxSystems")]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.Dmx
+
+<HelpPage AreaKey="@HelpRegistry.Dmx">
+    <FluentTab Id="help-desk" Header="The Desk" IconStart="@(new Icons.Regular.Size16.Options())">
+        <DmxDeskHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-fixtures" Header="Fixtures" IconStart="@(new Icons.Regular.Size16.Lightbulb())" DeferredLoading="true">
+        <DmxFixturesHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-scenes" Header="Scenes" IconStart="@(new Icons.Regular.Size16.LayerDiagonal())" DeferredLoading="true">
+        <DmxScenesHelpTab />
+    </FluentTab>
+</HelpPage>

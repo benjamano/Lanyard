@@ -1,0 +1,83 @@
+/* Phone first: one screen per row, full width. */
+.screens-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    width: 100%;
+}
+
+@media (min-width: 700px) {
+    .screens-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .screens-grid-expanded {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.screen-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground2);
+    min-width: 0;
+}
+
+.screen-card-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 4px;
+}
+
+::deep .screen-program {
+    color: var(--colorNeutralForeground3);
+    overflow-wrap: anywhere;
+}
+
+.screen-image-button {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: zoom-in;
+}
+
+.screens-grid-expanded .screen-image-button {
+    cursor: zoom-out;
+}
+
+.screen-image-button:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+    outline-offset: 2px;
+}
+
+/* Projection screens are usually black at the edges, so a frame keeps the image's bounds visible. */
+.screen-image {
+    display: block;
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: 4px;
+    background: #000;
+}
+
+.screen-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 160px;
+    padding: 16px;
+    text-align: center;
+    border: 1px dashed var(--colorNeutralStroke1);
+    border-radius: 4px;
+    background: var(--colorNeutralBackground3);
+}

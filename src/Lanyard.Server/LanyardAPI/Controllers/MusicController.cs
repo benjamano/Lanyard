@@ -11,18 +11,17 @@ namespace Lanyard.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    public class MusicController(IDbContextFactory<ApplicationDbContext> factory, IFileService fileService, IClientSecretValidator clientSecretValidator) : ControllerBase
+    public class MusicController(IDbContextFactory<ApplicationDbContext> factory, IFileService fileService) : ControllerBase
     {
         private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
         private readonly IFileService _fileService = fileService;
-        private readonly IClientSecretValidator _clientSecretValidator = clientSecretValidator;
 
         [HttpGet("audio/{id}")]
         public async Task<IActionResult> GetAudioFile(Guid id, CancellationToken cancellationToken)
         {
-            if (!ClientRequestAuthorization.IsAuthorized(HttpContext, _clientSecretValidator))
+            if (await KioskRequestAuthorization.AuthorizeAsync(HttpContext) == KioskRequestAccess.Denied)
             {
-                return Unauthorized();
+                return Challenge(KioskAuthenticationDefaults.Scheme);
             }
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync(cancellationToken);

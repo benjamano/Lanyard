@@ -30,4 +30,10 @@ public class ProjectionRunState
     public required bool IsPaused { get; init; }
 
     public required bool IsTemporaryTrigger { get; init; }
+
+    /// <summary>
+    /// What the current step's data-bound parameters show right now, keyed by
+    /// ProjectionProgramParameterValue.Id. Fixed values aren't in it - read those from the step.
+    /// </summary>
+    public IReadOnlyDictionary<Guid, string> BoundValues { get; init; } = new Dictionary<Guid, string>();
 }

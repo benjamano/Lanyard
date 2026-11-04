@@ -17,4 +17,9 @@ public static class ChartPalette
     public static readonly string Danger = BrandConstants.ChartCategoricalLight[7];
 
     public static readonly string[] Categorical = BrandConstants.ChartCategoricalLight;
+
+    // Insights' staff-hours chart: clocked and rota hours take the first two categorical slots,
+    // in that fixed order, so they're always told apart the same way.
+    public static readonly string Clocked = BrandConstants.ChartCategoricalLight[0];
+    public static readonly string Rota = BrandConstants.ChartCategoricalLight[1];
 }

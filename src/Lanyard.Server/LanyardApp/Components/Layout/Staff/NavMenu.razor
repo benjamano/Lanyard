@@ -7,6 +7,7 @@
 @inject ISecurityService SecurityService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IReleaseNotesService ReleaseNotesService
+@inject Lanyard.Application.Services.Feedback.IFeedbackService Feedback
 @inject ITimeOffService TimeOffService
 @inject ITimeOffEventBus TimeOffEventBus
 @inject IShiftClaimService ShiftClaimService
@@ -80,6 +81,14 @@
                 </FluentNavItem>
             }
 
+            @if (_canPlayAudioClips)
+            {
+                <FluentNavItem Href="/manage/audio-clips" IconRest="@(new Icons.Regular.Size20.Speaker2())"
+                               IconActive="@(new Icons.Filled.Size20.Speaker2())">
+                    Audio Clips
+                </FluentNavItem>
+            }
+
             @if (_isManager)
             {
                 <FluentNavSectionHeader Title="Management" />
@@ -99,6 +108,19 @@
                         Compliance
                     </FluentNavItem>
                 }
+
+                @if (Has(CompanyFeature.Insights))
+                {
+                    <FluentNavItem Href="/manage/insights" IconRest="@(new Icons.Regular.Size20.DataArea())"
+                                   IconActive="@(new Icons.Filled.Size20.DataArea())">
+                        Insights
+                    </FluentNavItem>
+                }
+
+                <FluentNavItem Href="/manage/music-schedule" IconRest="@(new Icons.Regular.Size20.CalendarClock())"
+                               IconActive="@(new Icons.Filled.Size20.CalendarClock())">
+                    Music Schedule
+                </FluentNavItem>
 
                 <FluentNavCategory Title="Manage" IconRest="@(new Icons.Regular.Size20.Settings())"
                                    IconActive="@(new Icons.Filled.Size20.Settings())">
@@ -123,6 +145,18 @@
                                 @if (_openChatReports > 0)
                                 {
                                     <FluentCounterBadge Count="@_openChatReports" OverflowCount="99" aria-label="@($"{_openChatReports} reported messages to review")" />
+                                }
+                            </span>
+                        </FluentNavItem>
+                    }
+                    @if (_isPlatformAdmin)
+                    {
+                        <FluentNavItem Href="/manage/feedback" Match="NavLinkMatch.All">
+                            <span class="nav-item-with-count">
+                                Lanyard Feedback
+                                @if (_unreviewedFeedback > 0)
+                                {
+                                    <FluentCounterBadge Count="@_unreviewedFeedback" OverflowCount="99" aria-label="@($"{_unreviewedFeedback} feedback to review")" />
                                 }
                             </span>
                         </FluentNavItem>
@@ -167,6 +201,17 @@
                         <FluentNavItem Href="/manage/rota/staff">Staff</FluentNavItem>
                         <FluentNavItem Href="/manage/rota/positions">Positions</FluentNavItem>
                         <FluentNavItem Href="/manage/rota/settings">Rota Settings</FluentNavItem>
+                    </FluentNavCategory>
+                }
+
+                @if (Has(CompanyFeature.Parties))
+                {
+                    <FluentNavCategory Title="Parties" IconRest="@(new Icons.Regular.Size20.Balloon())"
+                                       IconActive="@(new Icons.Filled.Size20.Balloon())">
+                        <FluentNavItem Href="/manage/parties" Match="NavLinkMatch.All">Parties</FluentNavItem>
+                        <FluentNavItem Href="/manage/parties/new">Book a Party</FluentNavItem>
+                        <FluentNavItem Href="/manage/parties/settings">Party Settings</FluentNavItem>
+                        <FluentNavItem Href="/manage/parties/printouts">Printouts</FluentNavItem>
                     </FluentNavCategory>
                 }
             }
@@ -238,6 +283,10 @@
         <FluentNav Margin="Margin.Top2" Density="NavDensity.Medium" Padding="@Padding.All3">
             @if (_isAuthenticated)
             {
+                <FluentNavItem Href="/help" IconRest="@(new Icons.Regular.Size20.QuestionCircle())"
+                               IconActive="@(new Icons.Filled.Size20.QuestionCircle())">
+                    Help
+                </FluentNavItem>
                 <FluentNavItem Href="/account/manage" IconRest="@(new Icons.Regular.Size20.Person())"
                                IconActive="@(new Icons.Filled.Size20.Person())">
                     @_displayName
@@ -269,6 +318,7 @@
     private bool _canManageDmx;
     private bool _canManageFiles;
     private bool _canPostAnnouncements;
+    private bool _canPlayAudioClips;
     private string? _displayName;
     private ReleaseNote? _latestRelease;
     private IEnumerable<ReleaseNote> _releaseNotes = [];
@@ -276,6 +326,7 @@
     private int _pendingShiftRequests;
     private int? _shiftRequestsLocationId;
     private int _openChatReports;
+    private int _unreviewedFeedback;
 
     // Modules this user's company doesn't have (CompanyFeatureService). Read once per circuit, like
     // the roles above, so a switch flipped mid-session shows here after a reload; the route gate
@@ -324,6 +375,7 @@
         _canManageDmx = _isAdmin || user.IsInRole("CanManageDmxSystems");
         _canManageFiles = _isAdmin || user.IsInRole("CanManageFiles");
         _canPostAnnouncements = _isAdmin || user.IsInRole("CanPostAnnouncements");
+        _canPlayAudioClips = _isManager || user.IsInRole("CanPlayAudioClips");
 
         if (_isAuthenticated)
         {
@@ -357,6 +409,12 @@
                     Result<string> reportViewer = await SecurityService.GetCurrentUserIdAsync();
                     _openChatReports = reportScope.Data is null ? 0 : (await ChatModeration.CountOpenForNavAsync(reportScope.Data, reportViewer.Data)).Data;
                 }
+            }
+
+            if (_isPlatformAdmin)
+            {
+                Result<int> unreviewed = await Feedback.CountUnreviewedAsync();
+                _unreviewedFeedback = unreviewed.IsSuccess ? unreviewed.Data : 0;
             }
 
             Result<IEnumerable<ReleaseNote>> releaseNotesResult = await ReleaseNotesService.GetReleaseNotesAsync();

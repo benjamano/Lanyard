@@ -1,0 +1,96 @@
+@using Lanyard.Application.Services.AudioClips
+
+@implements IDisposable
+
+@inject IAudioClipPlaybackService _audioClipPlayback
+@inject IAudioClipService _audioClipService
+
+@* The audio clip a kiosk is playing over its music, with a Stop button for those allowed to
+   play clips. Renders nothing while no clip is playing. *@
+@if (nowPlaying is not null)
+{
+    <div class="clip-status" role="status">
+        <span class="clip-status-text">
+            <FluentIcon Value="@(new Icons.Regular.Size16.Speaker2())" Class="clip-status-icon" />
+            @(nowPlaying.Status == AudioClipPlayStatus.Playing ? "Playing clip" : "Starting clip"): @nowPlaying.ClipName
+        </span>
+        @if (canStop)
+        {
+            <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" IconStart="@(new Icons.Regular.Size16.Stop())"
+                          OnClick="@StopAsync" Disabled="@isStopping">
+                Stop
+            </FluentButton>
+        }
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Guid? ClientId { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    private AudioClipNowPlaying? nowPlaying;
+    private bool canStop;
+    private bool isStopping;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _audioClipPlayback.OnClipPlaybackChanged += HandleChanged;
+
+        if (AuthenticationState is not null)
+        {
+            ClaimsPrincipal user = (await AuthenticationState).User;
+            canStop = AudioClipRoles.Play.Split(',').Any(user.IsInRole);
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        nowPlaying = ClientId is Guid clientId ? _audioClipPlayback.GetNowPlaying(clientId) : null;
+    }
+
+    private void HandleChanged(Guid clientId)
+    {
+        if (clientId != ClientId)
+        {
+            return;
+        }
+
+        InvokeAsync(() =>
+        {
+            nowPlaying = _audioClipPlayback.GetNowPlaying(clientId);
+            StateHasChanged();
+        });
+    }
+
+    private async Task StopAsync()
+    {
+        if (ClientId is not Guid clientId)
+        {
+            return;
+        }
+
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+        if (!scope.IsSuccess || scope.Data is null)
+        {
+            _toastService.ShowError("Couldn't work out your location. Refresh the page and sign in again.");
+            return;
+        }
+
+        isStopping = true;
+        Result<bool> result = await _audioClipService.StopAsync(scope.Data, clientId);
+        isStopping = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Couldn't stop the clip: {result.Error}");
+        }
+    }
+
+    public void Dispose()
+    {
+        _audioClipPlayback.OnClipPlaybackChanged -= HandleChanged;
+    }
+}

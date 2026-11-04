@@ -1,0 +1,172 @@
+@using Lanyard.Application.Services.MusicScheduling
+@using System.Globalization
+
+@implements IDisposable
+
+@inject IMusicScheduleEngine _musicScheduleEngine
+
+@* Where a kiosk is in its location's music schedule. Renders nothing for a kiosk that doesn't
+   follow a schedule that's switched on. *@
+@if (status is not null)
+{
+    <div class="schedule-status @(status.IsOverridden ? "is-overridden" : null)" role="status">
+        <span class="schedule-status-text">
+            @if (status.IsOverridden)
+            {
+                <FluentIcon Value="@(new Icons.Regular.Size16.HandRight())" Class="schedule-status-icon" />
+            }
+            else
+            {
+                <FluentIcon Value="@(new Icons.Regular.Size16.CalendarClock())" Class="schedule-status-icon" />
+            }
+            @Describe(status)
+        </span>
+        @if (status.IsOverridden && AllowResume)
+        {
+            <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" OnClick="@ResumeAsync" Disabled="@isResuming">
+                Resume schedule
+            </FluentButton>
+        }
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Guid? ClientId { get; set; }
+
+    // Off for dashboards shown on kiosk screens, where nobody should be pressing it.
+    [Parameter]
+    public bool AllowResume { get; set; } = true;
+
+    private MusicScheduleKioskStatus? status;
+    private Guid? loadedClientId;
+    private bool isResuming;
+    private Timer? refreshAtNextChange;
+
+    protected override void OnInitialized()
+    {
+        _musicScheduleEngine.OnStatusChanged += HandleStatusChanged;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (loadedClientId != ClientId)
+        {
+            loadedClientId = ClientId;
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        if (ClientId is not Guid clientId)
+        {
+            status = null;
+            return;
+        }
+
+        Result<MusicScheduleKioskStatus?> result = await _musicScheduleEngine.GetStatusAsync(clientId);
+        status = result.IsSuccess ? result.Data : null;
+
+        ScheduleRefresh();
+    }
+
+    // The engine only reports changes on kiosks it's talking to, so also look again when the
+    // schedule next changes.
+    private void ScheduleRefresh()
+    {
+        refreshAtNextChange?.Dispose();
+        refreshAtNextChange = null;
+
+        DateTime? at = status?.OverrideUntilUtc ?? status?.NextChangeUtc;
+        if (at is not DateTime when)
+        {
+            return;
+        }
+
+        TimeSpan due = when - DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        if (due < TimeSpan.Zero || due > TimeSpan.FromDays(1))
+        {
+            return;
+        }
+
+        refreshAtNextChange = new Timer(_ => InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            StateHasChanged();
+        }), null, due, Timeout.InfiniteTimeSpan);
+    }
+
+    private void HandleStatusChanged(Guid clientId)
+    {
+        if (clientId != ClientId)
+        {
+            return;
+        }
+
+        InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            StateHasChanged();
+        });
+    }
+
+    private async Task ResumeAsync()
+    {
+        if (ClientId is not Guid clientId)
+        {
+            return;
+        }
+
+        isResuming = true;
+        Result<bool> result = await _musicScheduleEngine.ResumeScheduleAsync(clientId);
+        isResuming = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Couldn't resume the schedule: {result.Error}");
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private static string Describe(MusicScheduleKioskStatus s)
+    {
+        if (s.OverrideUntilUtc is DateTime resumes)
+        {
+            return $"Changed by hand · schedule takes over again {When(resumes, "at")}";
+        }
+
+        string until = s.NextChangeUtc is DateTime next ? $" until {When(next, null)}" : "";
+
+        return s switch
+        {
+            { DaypartName: null } => $"Schedule: nothing planned{until}",
+            { IsMusicOff: true } => $"Schedule: {s.DaypartName} (music off){until}",
+            _ => $"Schedule: {s.DaypartName}{until}"
+        };
+    }
+
+    // UK time: "17:00" (or "at 17:00") today, "Fri 22:00" (or "on Fri at 22:00") on another day.
+    private static string When(DateTime utc, string? preposition)
+    {
+        DateTime local = RotaTime.ToVenueLocal(utc);
+        string time = local.ToString("HH:mm", CultureInfo.InvariantCulture);
+
+        if (DateOnly.FromDateTime(local) == RotaTime.Today(DateTime.UtcNow))
+        {
+            return preposition is null ? time : $"{preposition} {time}";
+        }
+
+        string day = local.ToString("ddd", CultureInfo.GetCultureInfo("en-GB"));
+
+        return preposition is null ? $"{day} {time}" : $"on {day} at {time}";
+    }
+
+    public void Dispose()
+    {
+        _musicScheduleEngine.OnStatusChanged -= HandleStatusChanged;
+        refreshAtNextChange?.Dispose();
+    }
+}

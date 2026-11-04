@@ -1,0 +1,147 @@
+@using Lanyard.Application.Services.Dmx.Ofl
+
+@inject IOflCatalogueService _oflCatalogue
+
+@* Search the bundled Open Fixture Library and pick a fixture + mode. Nothing is saved here: the
+   parent imports the chosen fixture into the company when the fixture is actually added. *@
+<div class="ofl-picker">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="12px">
+        <FluentTextInput Label="Search by manufacturer or model"
+                         Placeholder="e.g. Cameo Flat Pro"
+                         Value="@query"
+                         ValueChanged="@OnQueryChanged"
+                         Immediate="true"
+                         Class="ofl-search-input">
+            <StartTemplate>
+                <FluentIcon Value="@(new Icons.Regular.Size16.Search())" />
+            </StartTemplate>
+        </FluentTextInput>
+
+        @if (selected == null)
+        {
+            @if (!string.IsNullOrWhiteSpace(query))
+            {
+                @if (results.Count == 0)
+                {
+                    <FluentText Size="TextSize.Size200" Class="ofl-muted">No fixtures match "@query". Try just the model name, or import a file below.</FluentText>
+                }
+                else
+                {
+                    <ul class="ofl-results" aria-label="Matching fixtures">
+                        @foreach (OflCatalogueEntry entry in results)
+                        {
+                            int usable = entry.Modes.Count(m => m.IsSupported);
+
+                            <li @key="entry.Key">
+                                <button type="button" class="ofl-result" disabled="@(usable == 0)" @onclick="() => SelectAsync(entry)">
+                                    <span class="ofl-result-name">@entry.Manufacturer @entry.Model</span>
+                                    <span class="ofl-result-meta">
+                                        @(usable == 0 ? "Only pixel modes, not supported yet" : $"{usable} mode{(usable == 1 ? "" : "s")}")
+                                    </span>
+                                </button>
+                            </li>
+                        }
+                    </ul>
+                }
+            }
+        }
+        else
+        {
+            <div class="ofl-selected">
+                <div class="ofl-selected-header">
+                    <span class="ofl-result-name">@selected.Manufacturer @selected.Model</span>
+                    <FluentButton Appearance="ButtonAppearance.Transparent"
+                                  IconStart="@(new Icons.Regular.Size16.Dismiss())"
+                                  Title="Choose a different fixture"
+                                  Tooltip="Choose a different fixture"
+                                  OnClick="ClearSelectionAsync" />
+                </div>
+
+                <FluentSelect TOption="string" TValue="string" Label="Mode" Value="@selectedModeName" ValueChanged="@OnModeChangedAsync" Class="ofl-mode-select">
+                    @foreach (OflCatalogueModeSummary mode in selected.Modes)
+                    {
+                        <FluentOption Value="@mode.Name" Disabled="@(!mode.IsSupported)">
+                            @(mode.IsSupported ? $"{mode.Name} ({mode.ChannelCount} ch)" : $"{mode.Name} (pixel mode, not supported yet)")
+                        </FluentOption>
+                    }
+                </FluentSelect>
+            </div>
+        }
+
+        <FluentText Size="TextSize.Size100" Class="ofl-muted">
+            Fixture data from the <a href="https://open-fixture-library.org" target="_blank" rel="noopener noreferrer">Open Fixture Library</a>,
+            © its contributors, used under the <a href="https://github.com/OpenLightingProject/open-fixture-library/blob/master/LICENSE" target="_blank" rel="noopener noreferrer">MIT licence</a>.
+        </FluentText>
+    </FluentStack>
+</div>
+
+@code {
+    [Parameter]
+    public EventCallback<OflPickerSelection?> SelectionChanged { get; set; }
+
+    private const int MaxResults = 20;
+
+    private string query = string.Empty;
+    private List<OflCatalogueEntry> results = [];
+    private OflCatalogueEntry? selected;
+    private string? selectedModeName;
+
+    private async Task OnQueryChanged(string? value)
+    {
+        query = value ?? string.Empty;
+
+        // Searching again means choosing again.
+        if (selected != null)
+        {
+            selected = null;
+            selectedModeName = null;
+            await NotifyAsync();
+        }
+
+        Result<IReadOnlyList<OflCatalogueEntry>> result = _oflCatalogue.Search(query, MaxResults);
+
+        if (result.IsSuccess && result.Data != null)
+        {
+            results = result.Data.ToList();
+        }
+        else
+        {
+            results = [];
+            _toastService.ShowError(result.Error ?? "The fixture library isn't available.");
+        }
+    }
+
+    private async Task SelectAsync(OflCatalogueEntry entry)
+    {
+        selected = entry;
+        selectedModeName = entry.Modes.FirstOrDefault(m => m.IsSupported)?.Name;
+
+        await NotifyAsync();
+    }
+
+    private async Task OnModeChangedAsync(string? modeName)
+    {
+        selectedModeName = modeName;
+
+        await NotifyAsync();
+    }
+
+    private async Task ClearSelectionAsync()
+    {
+        selected = null;
+        selectedModeName = null;
+
+        await NotifyAsync();
+    }
+
+    private Task NotifyAsync()
+    {
+        OflCatalogueModeSummary? mode = selected?.Modes.FirstOrDefault(m => m.Name == selectedModeName && m.IsSupported);
+
+        OflPickerSelection? selection = selected != null && mode != null
+            ? new OflPickerSelection(selected.Key, selected.Manufacturer, selected.Model, mode.Name, mode.ChannelCount)
+            : null;
+
+        return SelectionChanged.InvokeAsync(selection);
+    }
+}

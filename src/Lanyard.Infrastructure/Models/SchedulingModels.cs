@@ -26,6 +26,28 @@ namespace Lanyard.Infrastructure.Models
         public int SortOrder { get; set; }
 
         public bool IsActive { get; set; } = true;
+
+        public List<StaffPositionRequiredCourse> RequiredCourses { get; set; } = [];
+    }
+
+    // Training someone must have done, and kept in date, before they can pick up a shift as this
+    // position (ShiftClaimRules.TrainingGaps). Company-scoped through the position; the course is
+    // checked to be the same company's when the link is made, since child rows get no write-time
+    // tenant check. A link row is configuration, not history, so unticking a course removes it -
+    // the same as UserPosition.
+    public class StaffPositionRequiredCourse
+    {
+        public Guid Id { get; set; }
+
+        public required Guid StaffPositionId { get; set; }
+        public StaffPosition? StaffPosition { get; set; }
+
+        public required Guid CourseId { get; set; }
+        public Course? Course { get; set; }
+
+        public string? CreatedByUserId { get; set; }
+
+        public DateTime CreateDate { get; set; }
     }
 
     // A user may hold several positions (a supervisor who also covers the front desk); exactly
@@ -86,6 +108,49 @@ namespace Lanyard.Infrastructure.Models
             || MinHoursPerWeek is not null || MaxHoursPerWeek is not null;
     }
 
+    // When someone can't work, or would rather work, as a weekly pattern: "can't do Tuesdays after
+    // 17:00", "prefer Saturday mornings". Rota suggestions rule out an Unavailable time and favour a
+    // Preferred one; putting someone on an Unavailable time by hand only warns. No rows means they
+    // haven't said - never "unavailable".
+    //
+    // Times are venue-local wall-clock (RotaTime). An EndTime at or before StartTime runs past
+    // midnight into the next day, the same convention as LocationOpeningHours; equal times mean the
+    // whole day. EffectiveFrom/EffectiveTo bound it to some dates ("from January I can't do
+    // Mondays"), judged on the day the window starts. Company-owned because staff move between a
+    // company's locations but their availability doesn't change with the site; it's the person's
+    // own record, so GDPR erasure deletes it.
+    public class StaffAvailability : ICompanyOwned
+    {
+        public Guid Id { get; set; }
+
+        public required int CompanyId { get; set; }
+        public Company? Company { get; set; }
+
+        public required string UserId { get; set; }
+        public UserProfile? User { get; set; }
+
+        public DayOfWeek DayOfWeek { get; set; }
+        public TimeOnly StartTime { get; set; }
+        public TimeOnly EndTime { get; set; }
+
+        public AvailabilityKind Kind { get; set; }
+
+        public string? Notes { get; set; }
+
+        public DateOnly? EffectiveFrom { get; set; }
+        public DateOnly? EffectiveTo { get; set; }
+
+        public bool IsActive { get; set; } = true;
+
+        public DateTime UpdateDate { get; set; }
+
+        // Null when the person set it themselves (or whoever did has since been erased); otherwise
+        // the manager who did.
+        public string? UpdatedByUserId { get; set; }
+
+        public bool IsAllDay => StartTime == EndTime;
+    }
+
     // The PIN a staff member types on the clock-in terminal. The terminal identifies the person
     // by name first (they tap themselves on today's roster), so the PIN only has to verify that
     // one user - it never has to be unique or looked up, which is why a salted Identity
@@ -138,6 +203,20 @@ namespace Lanyard.Infrastructure.Models
         // added by a manager on the Timesheets page instead.
         public int ClockInWindowMinutes { get; set; } = 60;
 
+        // The company's pay period, used by the timesheet export's "last pay period" preset.
+        // Monthly runs from PayPeriodStartDay to the day before it the next month (1 = calendar
+        // month, capped at 28 so every month has the day). The weekly-based frequencies count
+        // whole periods from PayPeriodAnchorDate, the first day of any one period.
+        public PayPeriodFrequency PayPeriod { get; set; } = PayPeriodFrequency.Monthly;
+        public int PayPeriodStartDay { get; set; } = 1;
+        public DateOnly? PayPeriodAnchorDate { get; set; }
+
+        // How the payroll export turns clocked time into paid time. Clocked hours on the
+        // timesheet are never changed by this - only the export's paid columns.
+        public BreakDeductionRule BreakDeduction { get; set; } = BreakDeductionRule.None;
+        public int BreakDeductionMinutes { get; set; } = 20;
+        public decimal BreakDeductionAfterHours { get; set; } = 6;
+
         public DateTime UpdateDate { get; set; }
     }
 
@@ -186,6 +265,14 @@ namespace Lanyard.Infrastructure.Models
         // match on this as well as on StartUtc.
         public DateTime? PublishedStartUtc { get; set; }
 
+        // The rest of the shift as it was last published. Editing a published shift changes the
+        // row in place, so without these anything shown to staff outside the rota builder (the
+        // calendar feed) would leak a manager's unpublished draft before the person is told.
+        // Written alongside PublishedStartUtc by MarkPublished and ShiftClaimService.ReassignAsync.
+        public DateTime? PublishedEndUtc { get; set; }
+        public Guid? PublishedStaffPositionId { get; set; }
+        public int? PublishedBreakMinutes { get; set; }
+
         public bool RemovalPending { get; set; }
 
         // The StartUtc this shift's reminder email was sent for. Compared against StartUtc, so
@@ -223,6 +310,17 @@ namespace Lanyard.Infrastructure.Models
         }
 
         public bool NeedsPublishing => GetState() is ShiftState.Draft or ShiftState.Changed or ShiftState.RemovedPendingNotice;
+
+        // Records the shift as published as it now stands.
+        public void MarkPublished(DateTime nowUtc, string actingUserId)
+        {
+            PublishedDateUtc = nowUtc;
+            PublishedByUserId = actingUserId;
+            PublishedStartUtc = StartUtc;
+            PublishedEndUtc = EndUtc;
+            PublishedStaffPositionId = StaffPositionId;
+            PublishedBreakMinutes = BreakMinutes;
+        }
     }
 
     // A tablet at a venue that staff clock in and out on. The device proves it's this terminal with

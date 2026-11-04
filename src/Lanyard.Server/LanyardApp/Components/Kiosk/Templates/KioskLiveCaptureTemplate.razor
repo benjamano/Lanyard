@@ -250,10 +250,7 @@
 
     private string? GetStepParameterValue(string parameterName)
     {
-        return Step.ParameterValues
-            .Where(x => x.Parameter?.Name == parameterName)
-            .Select(x => x.Value)
-            .FirstOrDefault();
+        return ProjectionStepValues.Get(Step, parameterName);
     }
 
     private void SetErrorMessage(string? error)

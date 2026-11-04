@@ -102,6 +102,50 @@ public class FileServiceTests
         Assert.IsFalse(File.Exists(fileMeta.FilePath));
     }
 
+    private async Task<(Guid FileId, string FilePath, Guid ClipId)> SeedClipFileAsync(bool clipDeleted)
+    {
+        Guid fileId = Guid.NewGuid();
+        string filePath = Path.GetTempFileName();
+        File.WriteAllText(filePath, "audio");
+
+        await _dbContext.FileMetadata.AddAsync(new FileMetadata { Id = fileId, FileName = "closing.mp3", FilePath = filePath, FileSize = 5, UploadedAt = DateTime.UtcNow, UploadedBy = "user1", IsActive = true });
+
+        AudioClip clip = new() { Id = Guid.NewGuid(), Name = "Closing time", FileMetadataId = fileId, CreateDate = DateTime.UtcNow, DeleteDate = clipDeleted ? DateTime.UtcNow : null };
+        await _dbContext.AudioClips.AddAsync(clip);
+        await _dbContext.SaveChangesAsync();
+
+        return (fileId, filePath, clip.Id);
+    }
+
+    [TestMethod]
+    public async Task DeleteFileAsync_WhenFileIsALiveAudioClip_FailsWithoutDeletingStorage()
+    {
+        (Guid fileId, string filePath, _) = await SeedClipFileAsync(clipDeleted: false);
+
+        Result<bool> result = await _fileService.DeleteFileAsync(fileId, CancellationToken.None);
+
+        Assert.IsFalse(result.Success);
+        StringAssert.Contains(result.Error, "audio clip");
+        Assert.IsNotNull(await FindFileFreshAsync(fileId));
+        Assert.IsTrue(File.Exists(filePath));
+    }
+
+    [TestMethod]
+    public async Task DeleteFileAsync_WhenOnlyADeletedClipUsesTheFile_DeletesItAndDetachesTheClip()
+    {
+        (Guid fileId, string filePath, Guid clipId) = await SeedClipFileAsync(clipDeleted: true);
+
+        Result<bool> result = await _fileService.DeleteFileAsync(fileId, CancellationToken.None);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.IsNull(await FindFileFreshAsync(fileId));
+        Assert.IsFalse(File.Exists(filePath));
+
+        await using ApplicationDbContext ctx = new(_options);
+        AudioClip clip = await ctx.AudioClips.AsNoTracking().SingleAsync(x => x.Id == clipId);
+        Assert.IsNull(clip.FileMetadataId);
+    }
+
     // A shared FileMetadata row (StaffDocuments, CompanyOnboardingStandingAttachments, and
     // ordinary File Manager entries all point at the same table) must not be deletable while
     // another feature still references it - the physical bytes are deleted before SaveChangesAsync

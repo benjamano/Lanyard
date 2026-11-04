@@ -1,0 +1,88 @@
+@using Lanyard.Infrastructure.Models
+@using Lanyard.Infrastructure.DTO.Insights
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+            <FluentIcon Value="@(new Icons.Regular.Size24.DataArea())" />
+            <FluentText Weight="TextWeight.Semibold" Color="Color.Default" Size="@TextSize.Size700">
+                Configure Demand and Staffing
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="18px">
+            @if (Locations.Count > 0)
+            {
+                <FluentSelect TOption="LocationOption" TValue="string" Items="@Options" OptionText="@(x => x.Name)" OptionValue="@(x => x.Value)"
+                              @bind-Value="selectedValue" Label="Location" Width="100%" />
+            }
+            <p class="cfg-note">
+                Managers always see the location they signed in to. The location set here only applies when an Admin is viewing.
+                Staff and signed-out screens see nothing.
+            </p>
+            <FluentNumberInput TValue="int" @bind-Value="Widget.RangeDays"
+                               Min="DemandStaffingWidget.MinRangeDays" Max="InsightsQuery.MaxRangeDays"
+                               Label="Look back over (days, ending yesterday)" />
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@SaveAsync">Save</FluentButton>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    private const string OwnLocationValue = "own";
+
+    private record LocationOption(string Value, string Name);
+
+    [Parameter]
+    public required DemandStaffingWidget Widget { get; set; }
+
+    // Every location in the company for an Admin; empty for anyone else, who can't pick one.
+    [Parameter]
+    public List<Location> Locations { get; set; } = [];
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private string? selectedValue;
+    private int? _originalLocationId;
+    private int _originalRangeDays;
+
+    private List<LocationOption> Options =>
+    [
+        new(OwnLocationValue, "The location I signed in to"),
+        .. Locations.Select(x => new LocationOption(x.Id.ToString(), x.GetDisplayName())),
+        // Keep an already-saved location selectable even if it's no longer in the list.
+        .. Widget.LocationId is int saved && Locations.All(x => x.Id != saved)
+            ? [new LocationOption(saved.ToString(), "The location already set")]
+            : Array.Empty<LocationOption>()
+    ];
+
+    protected override void OnInitialized()
+    {
+        _originalLocationId = Widget.LocationId;
+        _originalRangeDays = Widget.RangeDays;
+        selectedValue = Widget.LocationId?.ToString() ?? OwnLocationValue;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (Locations.Count > 0)
+        {
+            Widget.LocationId = int.TryParse(selectedValue, out int id) ? id : null;
+        }
+
+        Widget.RangeDays = Math.Clamp(Widget.RangeDays, DemandStaffingWidget.MinRangeDays, InsightsQuery.MaxRangeDays);
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task CancelAsync()
+    {
+        Widget.LocationId = _originalLocationId;
+        Widget.RangeDays = _originalRangeDays;
+        await Dialog.CancelAsync();
+    }
+}

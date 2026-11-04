@@ -7,9 +7,17 @@ using Microsoft.AspNetCore.Http;
 
 namespace Lanyard.Application.Services;
 
+public sealed record FileUploadOptions(bool AddAudioToMusicLibrary = true);
+
 public interface IFileService
 {
     Task<Result<FileMetadata>> UploadFileAsync(IFormFile file, Guid? folderId, string uploadedBy, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// As above, but lets the caller turn off the music-library side effect: an audio file is
+    /// normally also added as a Song, which an audio clip mustn't be.
+    /// </summary>
+    Task<Result<FileMetadata>> UploadFileAsync(IFormFile file, Guid? folderId, string uploadedBy, FileUploadOptions options, CancellationToken cancellationToken);
     Task<Result<FileMetadata>> UploadFileAsync(IFormFile file, Guid? folderId, CancellationToken cancellationToken);
     Task<Result<FileMetadata>> RenameFileAsync(Guid fileId, string newName, CancellationToken cancellationToken);
     Task<Result<bool>> DeleteFileAsync(Guid fileId, CancellationToken cancellationToken);

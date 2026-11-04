@@ -16,6 +16,7 @@ public static class TenancyServiceCollectionExtensions
     // as "system").
     public static IServiceCollection AddCompanyTenancy(this IServiceCollection services)
     {
+        services.AddScoped<HubCallerUser>();
         services.AddScoped<TenantContext>();
         services.AddScoped<ITenantContext>(sp => sp.GetRequiredService<TenantContext>());
         services.AddScoped<ITenantProvider>(sp => sp.GetRequiredService<TenantContext>());

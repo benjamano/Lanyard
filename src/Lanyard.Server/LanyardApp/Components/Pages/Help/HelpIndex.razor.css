@@ -1,0 +1,62 @@
+/* One column on a phone, as many ~280px cards as fit on wider screens. */
+.help-grid {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+}
+
+.help-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px 16px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusLarge);
+    background: var(--colorNeutralBackground1);
+    color: var(--colorNeutralForeground1);
+}
+
+.help-card:hover,
+.help-card:focus-within {
+    border-color: var(--colorBrandStroke1);
+}
+
+.help-card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: var(--fontWeightSemibold);
+    font-size: var(--fontSizeBase400);
+    color: var(--colorBrandForeground1);
+    text-decoration: none;
+}
+
+.help-card-title:hover,
+.help-card-title:focus-visible {
+    text-decoration: underline;
+}
+
+.help-card-summary {
+    margin: 0;
+    color: var(--colorNeutralForeground2);
+}
+
+.help-card-topics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    margin: 4px 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--fontSizeBase200);
+}
+
+.help-card-topics a {
+    color: var(--colorNeutralForeground2);
+}
+
+.help-card-topics a:hover,
+.help-card-topics a:focus-visible {
+    color: var(--colorBrandForeground1);
+}

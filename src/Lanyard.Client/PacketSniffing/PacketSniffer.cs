@@ -1,21 +1,19 @@
-﻿using Microsoft.Build.Framework;
+﻿using Lanyard.Infrastructure.DTO.ZoneScoreboard;
+using Lanyard.Shared.LaserGame;
 using Microsoft.Extensions.Logging;
 using PacketDotNet;
 using SharpPcap;
-using System;
-using System.Collections.Generic;
+using System.Net;
 using System.Net.NetworkInformation;
-using System.Text;
-using Lanyard.Client.PacketSniffing;
-using System.Threading.Tasks;
-using Lanyard.Infrastructure.DTO.ZoneScoreboard;
 
 namespace Lanyard.Client.PacketSniffing;
 
 public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actions) : IPacketSniffer
 {
-    private List<string> SourceIPs = ["192.168.0.10", "192.168.0.11", "192.168.2.42"];
-    private string? DestinationIP = "192.168.0.255";
+    // Parsed once when settings arrive, so each packet is matched without building strings.
+    // Replaced whole rather than mutated, because the capture thread reads them.
+    private volatile IPAddress[] _sourceIps = [IPAddress.Parse("192.168.0.10"), IPAddress.Parse("192.168.0.11"), IPAddress.Parse("192.168.2.42")];
+    private volatile IPAddress? _destinationIp = IPAddress.Parse("192.168.0.255");
 
     private readonly ILogger<PacketSniffer> _logger = logger;
     private readonly IActionFunctions _actions = actions;
@@ -28,12 +26,48 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
     private volatile ILiveDevice? _activeDevice;
     private volatile bool _isConfigured;
 
+    private readonly object _startLock = new();
+    private bool _promiscuous;
+
     public bool IsConfigured => _isConfigured;
     public bool IsCapturing => _activeDevice != null;
 
-    public async Task StartSniffingAsync(ZoneScoreboardSettingsDTO settings)
+    // Ticks rather than DateTime? so the capture thread can write them without a lock.
+    private long _captureStartedTicks;
+    private long _lastPacketTicks;
+    private long _lastGamePacketTicks;
+
+    public string? PreferredMacAddress { get; private set; }
+
+    /// <summary>The BPF filter Npcap is applying, or null when every packet is captured.</summary>
+    public string? CaptureFilter { get; private set; }
+    public string? ActiveDeviceName => _activeDevice?.Name;
+    public DateTime? CaptureStartedUtc => FromTicks(ref _captureStartedTicks);
+    public DateTime? LastPacketUtc => FromTicks(ref _lastPacketTicks);
+    public DateTime? LastGamePacketUtc => FromTicks(ref _lastGamePacketTicks);
+
+    private static DateTime? FromTicks(ref long ticks)
+    {
+        long value = Interlocked.Read(ref ticks);
+
+        return value == 0 ? null : new DateTime(value, DateTimeKind.Utc);
+    }
+
+    public Task StartSniffingAsync(ZoneScoreboardSettingsDTO settings)
+    {
+        // Settings arrive on every connect and whenever an Admin saves them, possibly at once.
+        lock (_startLock)
+        {
+            StartSniffing(settings);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void StartSniffing(ZoneScoreboardSettingsDTO settings)
     {
         _isConfigured = true;
+        PreferredMacAddress = settings.PreferredDeviceMacAddress;
 
         CaptureDeviceList devices = CaptureDeviceList.Instance;
 
@@ -44,13 +78,25 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
             return;
         }
 
-        DestinationIP = settings.DestinationIp;
+        ApplyAddressFilter(settings);
 
-        SourceIPs = [settings.SourceIp];
+        string? captureFilter = null;
 
-        PhysicalAddress preferedInterfaceMacAddress = PhysicalAddress.Parse(settings.PreferredDeviceMacAddress);
+        if (settings.UseCaptureFilter)
+        {
+            captureFilter = CaptureFilterBuilder.Build([settings.SourceIp], settings.DestinationIp);
 
-        ILiveDevice? device = devices.FirstOrDefault(x => x.MacAddress?.ToString() == preferedInterfaceMacAddress.ToString());
+            if (captureFilter == null)
+            {
+                _logger.LogWarning("The capture filter is on but the source/destination IPs ({SourceIp} / {DestinationIp}) can't make one; capturing everything instead.", settings.SourceIp, settings.DestinationIp);
+            }
+        }
+
+        PhysicalAddress.TryParse(settings.PreferredDeviceMacAddress, out PhysicalAddress? preferedInterfaceMacAddress);
+
+        ILiveDevice? device = preferedInterfaceMacAddress == null
+            ? null
+            : devices.FirstOrDefault(x => preferedInterfaceMacAddress.Equals(x.MacAddress));
 
         if (device == null && devices.Any())
         {
@@ -64,8 +110,11 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
             return;
         }
 
-        if (ReferenceEquals(_activeDevice, device))
+        // The filter can change on a running capture; promiscuous mode only when the card is opened.
+        if (ReferenceEquals(_activeDevice, device) && _promiscuous == settings.PromiscuousCapture)
         {
+            ApplyCaptureFilter(device, captureFilter);
+
             _logger.LogInformation("Packet sniffer already running on {DeviceName}; re-applied filter settings without reopening.", device.Name);
             return;
         }
@@ -83,109 +132,177 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
             {
                 _logger.LogWarning(ex, "Error closing previous packet sniffing device {DeviceName}.", _activeDevice.Name);
             }
+
+            _activeDevice = null;
         }
 
         device.OnPacketArrival += OnPacketArrival;
 
         device.Open(new DeviceConfiguration
         {
-            Mode = DeviceModes.Promiscuous,
+            Mode = settings.PromiscuousCapture ? DeviceModes.Promiscuous : DeviceModes.None,
             ReadTimeout = 1000
         });
 
-        _logger.LogInformation("Started Packet Sniffer on device: {DeviceName} with MAC Address: {MacAddress}", device.Name, device.MacAddress);
+        _promiscuous = settings.PromiscuousCapture;
+
+        ApplyCaptureFilter(device, captureFilter);
+
+        _logger.LogInformation("Started Packet Sniffer on device: {DeviceName} with MAC Address: {MacAddress}, promiscuous: {Promiscuous}", device.Name, device.MacAddress, settings.PromiscuousCapture);
 
         device.StartCapture();
 
+        Interlocked.Exchange(ref _captureStartedTicks, DateTime.UtcNow.Ticks);
         _activeDevice = device;
     }
 
-    private void OnPacketArrival(object sender, PacketCapture e)
+    private void ApplyCaptureFilter(ILiveDevice device, string? captureFilter)
     {
         try
         {
-            Packet packet = Packet.ParsePacket(e.GetPacket().LinkLayerType, e.GetPacket().Data);
-            IPPacket ipPacket = packet.Extract<IPPacket>();
+            // An empty filter captures everything, which is how the kiosk always worked.
+            device.Filter = captureFilter ?? string.Empty;
+            CaptureFilter = captureFilter;
 
-            if (ipPacket == null)
+            if (captureFilter != null)
             {
-                return;
-            }
-
-            if (SourceIPs.Contains(ipPacket.SourceAddress.ToString()) && ipPacket.DestinationAddress.ToString() == DestinationIP)
-            {
-                _logger.LogInformation("Recieved a packet that aligns with the filters!, Source: {source}, Destination {dest}", ipPacket.SourceAddress.ToString(), ipPacket.DestinationAddress.ToString());
-
-                UdpPacket udpPacket = packet.Extract<UdpPacket>();
-                if (udpPacket == null)
-                {
-                    return;
-                }
-
-                byte[] rawBytes = udpPacket.PayloadData;
-
-                if (rawBytes == null || rawBytes.Length == 0)
-                {
-                    return;
-                }
-
-                string hex = BitConverter.ToString(rawBytes).Replace("-", "");
-
-                string[] decodedData = HexToAscii(hex).Split(",");
-
-                Task.Run(() => HandlePacketAsync(decodedData));
+                _logger.LogInformation("Capture filter applied on {DeviceName}: {CaptureFilter}", device.Name, captureFilter);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError("Error occured handling a packet: {ex}", ex.Message);
-            _logger.LogTrace(ex.StackTrace);
+            // Never let a filter Npcap won't take blind the kiosk: fall back to capturing everything.
+            _logger.LogWarning(ex, "Npcap rejected the capture filter {CaptureFilter}; capturing everything instead.", captureFilter);
+
+            try
+            {
+                device.Filter = string.Empty;
+            }
+            catch (Exception clearEx)
+            {
+                _logger.LogWarning(clearEx, "Couldn't clear the capture filter on {DeviceName}.", device.Name);
+            }
+
+            CaptureFilter = null;
         }
     }
 
-    public async Task HandlePacketAsync(string[] decodedData)
+    private void ApplyAddressFilter(ZoneScoreboardSettingsDTO settings)
     {
-        if (int.TryParse(decodedData[0].ToString(), out int packetType))
+        if (IPAddress.TryParse(settings.SourceIp, out IPAddress? sourceIp))
         {
-            switch (packetType)
-            {
-                case 1:
-                    // Timing Packet
-                    await _actions.HandleTimingPacketAsync(decodedData);
-                    break;
-                case 2:
-                    // Team Score Packet
-                    // DON'T CARE ABOUT THIS AS THE TEAM SCORE CAN ALREADY BE WORKED OUT WITH PLAYER SCORES
-                    break;
-                case 3:
-                    // Player Score Packet
-                    await _actions.HandlePlayerScorePacketAsync(decodedData);
-                    break;
-                case 4:
-                    // Game Status Packet
-                    await _actions.HandleGameStatusPacketAsync(decodedData);
-                    break;
-                case 5:
-                    // Shot Confirmed Packet
-                    await _actions.HandleShotConfirmedPacketAsync(decodedData);
-                    break;
-            }
+            _sourceIps = [sourceIp];
         }
         else
         {
-            _logger.LogWarning("Invalid number for packet type recieved: {value}", decodedData[0]);
+            _logger.LogWarning("The zone scoreboard source IP {SourceIp} isn't a valid address; no game packets will match.", settings.SourceIp);
+            _sourceIps = [];
+        }
+
+        // A missing destination never matched before either, so keep it that way rather than
+        // suddenly accepting the source's traffic to anywhere.
+        _destinationIp = IPAddress.TryParse(settings.DestinationIp, out IPAddress? destinationIp) ? destinationIp : null;
+
+        if (_destinationIp == null)
+        {
+            _logger.LogWarning("The zone scoreboard destination IP {DestinationIp} isn't a valid address; no game packets will match.", settings.DestinationIp);
         }
     }
 
-    private static string HexToAscii(string hex)
+    // Runs on SharpPcap's capture thread, one packet at a time. Packets are handled here rather
+    // than on the thread pool so they reach the game state in the order the control box sent them:
+    // a game start or end handled out of order would publish the wrong status edge.
+    private void OnPacketArrival(object sender, PacketCapture e)
     {
-        StringBuilder sb = new();
+        Interlocked.Exchange(ref _lastPacketTicks, DateTime.UtcNow.Ticks);
 
-        for (int i = 0; i < hex.Length; i += 2)
+        try
         {
-            sb.Append(Convert.ToChar(Convert.ToByte(hex.Substring(i, 2), 16)));
+            RawCapture raw = e.GetPacket();
+            Packet packet = Packet.ParsePacket(raw.LinkLayerType, raw.Data);
+
+            UdpPacket? udpPacket = packet.Extract<UdpPacket>();
+
+            if (udpPacket?.ParentPacket is not IPPacket ipPacket || !IsGamePacket(ipPacket))
+            {
+                return;
+            }
+
+            Interlocked.Exchange(ref _lastGamePacketTicks, DateTime.UtcNow.Ticks);
+
+            byte[] rawBytes = udpPacket.PayloadData;
+
+            if (rawBytes == null || rawBytes.Length == 0)
+            {
+                return;
+            }
+
+            string[] decodedData = LaserPacketDecoder.Decode(rawBytes);
+
+            if (_logger.IsEnabled(LogLevel.Trace))
+            {
+                _logger.LogTrace("Game packet from {Source} to {Destination}: {Payload}", ipPacket.SourceAddress, ipPacket.DestinationAddress, string.Join(',', decodedData));
+            }
+
+            HandlePacket(decodedData);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occured handling a packet.");
+        }
+    }
+
+    private bool IsGamePacket(IPPacket ipPacket)
+    {
+        IPAddress? destinationIp = _destinationIp;
+
+        if (destinationIp == null || !destinationIp.Equals(ipPacket.DestinationAddress))
+        {
+            return false;
         }
 
-        return sb.ToString();
+        foreach (IPAddress sourceIp in _sourceIps)
+        {
+            if (sourceIp.Equals(ipPacket.SourceAddress))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public void HandlePacket(string[] decodedData)
+    {
+        if (decodedData.Length == 0 || !int.TryParse(decodedData[0], out int packetType))
+        {
+            _logger.LogDebug("Invalid number for packet type recieved: {value}", decodedData.FirstOrDefault());
+            return;
+        }
+
+        if (decodedData.Length < LaserPacketDecoder.MinimumFieldCount(packetType))
+        {
+            _logger.LogDebug("Dropped a type {PacketType} packet with only {FieldCount} fields.", packetType, decodedData.Length);
+            return;
+        }
+
+        switch (packetType)
+        {
+            case LaserPacketDecoder.TimingPacket:
+                _actions.HandleTimingPacket(decodedData);
+                break;
+            case LaserPacketDecoder.TeamScorePacket:
+                // DON'T CARE ABOUT THIS AS THE TEAM SCORE CAN ALREADY BE WORKED OUT WITH PLAYER SCORES
+                break;
+            case LaserPacketDecoder.PlayerScorePacket:
+                _actions.HandlePlayerScorePacket(decodedData);
+                break;
+            case LaserPacketDecoder.GameStatusPacket:
+                _actions.HandleGameStatusPacket(decodedData);
+                break;
+            case LaserPacketDecoder.ShotConfirmedPacket:
+                _actions.HandleShotConfirmedPacket(decodedData);
+                break;
+        }
     }
 }

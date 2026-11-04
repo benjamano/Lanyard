@@ -1,0 +1,237 @@
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.Enum
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@inject ICalendarFeedService _calendarFeedService
+@inject IJSRuntime JS
+
+@* Create, copy, regenerate and turn off the person's private calendar feed. Shown in the "Add to
+   calendar" dialog on My Shifts and on Account Management. Confirmations are inline rather than a
+   second dialog, since the panel itself usually sits in one. *@
+
+<div class="calendar-feed-panel">
+    @if (status is null)
+    {
+        <FluentStack HorizontalGap="8px" VerticalAlignment="VerticalAlignment.Center">
+            <FluentSpinner Size="SpinnerSize.Tiny" />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="16px">
+            @if (feedUrl is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                    This link is shown once. Anyone who has it can see your shifts, so keep it to yourself.
+                    You can turn it off or get a new one here at any time.
+                </FluentMessageBar>
+
+                <div class="calendar-feed-url" data-testid="calendar-feed-url">@feedUrl</div>
+
+                <div class="calendar-feed-actions">
+                    <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Copy())" OnClick="CopyLink">
+                        Copy link
+                    </FluentButton>
+                    <FluentAnchorButton Href="@GoogleUrl" Target="LinkTarget.Blank" Appearance="ButtonAppearance.Outline">
+                        Add to Google Calendar
+                    </FluentAnchorButton>
+                    <FluentAnchorButton Href="@WebcalUrl" Target="LinkTarget.Self" Appearance="ButtonAppearance.Outline">
+                        Open in Apple or Outlook
+                    </FluentAnchorButton>
+                </div>
+
+                <FluentText Size="TextSize.Size200" Class="calendar-feed-hint">
+                    Or paste the link into your calendar app's "Subscribe" or "Add calendar from URL" option.
+                    Changes to the rota show up when your calendar next checks: usually within an hour,
+                    though Google Calendar can take up to a day.
+                </FluentText>
+            }
+            else if (!status.HasFeed)
+            {
+                <FluentText>
+                    See your published shifts in Google, Apple or Outlook calendar. Your calendar stays up to date
+                    when the rota changes. Only shifts your manager has published are included.
+                </FluentText>
+
+                <div>
+                    <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.CalendarAdd())"
+                                  Loading="busy" Disabled="busy" OnClick="CreateAsync">
+                        Create calendar link
+                    </FluentButton>
+                </div>
+            }
+            else
+            {
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="4px">
+                    <FluentText Weight="TextWeight.Semibold">Your calendar link is on</FluentText>
+                    <FluentText Size="TextSize.Size200" Class="calendar-feed-hint">
+                        Link ending …@status.TokenHint · created @FormatDate(status.CreateDate)
+                        · @(status.LastAccessUtc is DateTime used ? $"last checked by your calendar {FormatDate(used)}" : "not used by a calendar yet")
+                    </FluentText>
+                </FluentStack>
+
+                @if (confirming == PendingAction.Regenerate)
+                {
+                    <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                        Get a new link? The old one stops working, so you'll need to add the new one to your calendar.
+                    </FluentMessageBar>
+                    <div class="calendar-feed-actions">
+                        <FluentButton Appearance="ButtonAppearance.Primary" Loading="busy" Disabled="busy" OnClick="CreateAsync">Get new link</FluentButton>
+                        <FluentButton Appearance="ButtonAppearance.Outline" Disabled="busy" OnClick="CancelConfirm">Cancel</FluentButton>
+                    </div>
+                }
+                else if (confirming == PendingAction.Revoke)
+                {
+                    <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                        Turn off your calendar link? Your shifts will stop updating in any calendar that uses it.
+                    </FluentMessageBar>
+                    <div class="calendar-feed-actions">
+                        <FluentButton Appearance="ButtonAppearance.Primary" Loading="busy" Disabled="busy" OnClick="RevokeAsync">Turn off</FluentButton>
+                        <FluentButton Appearance="ButtonAppearance.Outline" Disabled="busy" OnClick="CancelConfirm">Cancel</FluentButton>
+                    </div>
+                }
+                else
+                {
+                    <FluentText Size="TextSize.Size200" Class="calendar-feed-hint">
+                        The link itself was only shown when you created it. Lost it, or think someone else has it?
+                        Get a new one.
+                    </FluentText>
+                    <div class="calendar-feed-actions">
+                        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowClockwise())"
+                                      OnClick="@(() => confirming = PendingAction.Regenerate)">
+                            Get a new link
+                        </FluentButton>
+                        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.CalendarCancel())"
+                                      OnClick="@(() => confirming = PendingAction.Revoke)">
+                            Turn off
+                        </FluentButton>
+                    </div>
+                }
+            }
+        </FluentStack>
+    }
+</div>
+
+@code {
+    private enum PendingAction { None, Regenerate, Revoke }
+
+    private CalendarFeedStatus? status;
+    private string? loadError;
+    private string? userId;
+    private int companyId;
+
+    // Only set straight after creating the feed: it can't be shown again.
+    private string? feedUrl;
+
+    private PendingAction confirming;
+    private bool busy;
+
+    private string WebcalUrl => feedUrl is null ? string.Empty
+        : "webcal://" + feedUrl[(feedUrl.IndexOf("://", StringComparison.Ordinal) + 3)..];
+
+    private string GoogleUrl => $"https://calendar.google.com/calendar/render?cid={Uri.EscapeDataString(WebcalUrl)}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<string> user = await _securityService.GetCurrentUserIdAsync();
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (!user.IsSuccess || string.IsNullOrEmpty(user.Data) || !scope.IsSuccess || scope.Data?.CompanyId is not int company)
+        {
+            loadError = "Couldn't work out who you are. Try reloading the page.";
+            status = new CalendarFeedStatus(false, null, null, null);
+            return;
+        }
+
+        userId = user.Data;
+        companyId = company;
+
+        await LoadStatusAsync();
+    }
+
+    private async Task LoadStatusAsync()
+    {
+        Result<CalendarFeedStatus> result = await _calendarFeedService.GetStatusAsync(userId!, companyId);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            loadError = result.Error ?? "Couldn't load your calendar link.";
+            status = new CalendarFeedStatus(false, null, null, null);
+            return;
+        }
+
+        loadError = null;
+        status = result.Data;
+    }
+
+    private async Task CreateAsync()
+    {
+        busy = true;
+
+        try
+        {
+            Result<CreatedCalendarFeed> result = await _calendarFeedService.CreateAsync(userId!, companyId);
+
+            if (!result.IsSuccess || result.Data is null)
+            {
+                _toastService.ShowError(result.Error ?? "Couldn't create your calendar link.");
+                return;
+            }
+
+            status = result.Data.Status;
+            feedUrl = $"{_navigationManager.BaseUri.TrimEnd('/')}/api/calendar/{result.Data.RawToken}.ics";
+            confirming = PendingAction.None;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task RevokeAsync()
+    {
+        busy = true;
+
+        try
+        {
+            Result<bool> result = await _calendarFeedService.RevokeAsync(userId!, companyId);
+
+            if (!result.IsSuccess)
+            {
+                _toastService.ShowError(result.Error ?? "Couldn't turn off your calendar link.");
+                return;
+            }
+
+            _toastService.ShowSuccess("Calendar link turned off.");
+            feedUrl = null;
+            confirming = PendingAction.None;
+            await LoadStatusAsync();
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private void CancelConfirm() => confirming = PendingAction.None;
+
+    private async Task CopyLink()
+    {
+        if (feedUrl is not null && await JS.TryCopyToClipboardAsync(feedUrl))
+        {
+            _toastService.ShowSuccess("Calendar link copied.");
+        }
+        else
+        {
+            _toastService.ShowError("Couldn't copy the link. Your browser may be blocking clipboard access - select it and copy it instead.");
+        }
+    }
+
+    private static string FormatDate(DateTime? utc) =>
+        utc is DateTime value ? RotaTime.ToVenueLocal(value).ToString("d MMM yyyy", RotaFormat.Uk) : string.Empty;
+}

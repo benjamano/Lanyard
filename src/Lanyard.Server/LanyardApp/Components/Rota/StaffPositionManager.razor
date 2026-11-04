@@ -2,6 +2,7 @@
 @using Lanyard.App.Components.Rota.TimeOff
 
 @inject IStaffPositionService _staffPositionService
+@inject ICompanyFeatureService _companyFeatureService
 
 <div class="position-manager">
     <FluentCard Height="auto" Class="mt-2">
@@ -9,7 +10,8 @@
             <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Positions</FluentText>
             <FluentText Style="color: var(--colorNeutralForeground3);">
                 The jobs staff work on shift, such as Customer Service Advisor or Supervisor. Each position can carry its own
-                contract requirements and time-off allowances, which apply to everyone whose primary position it is.
+                contract requirements and time-off allowances, which apply to everyone whose primary position it is, and
+                the training someone needs before they can pick up its shifts.
             </FluentText>
 
             @if (positions is null)
@@ -39,10 +41,17 @@
                                     {
                                         <div class="position-list-description">@position.Description</div>
                                     }
+                                    @if (trainingEnabled && requiredCourseNames.TryGetValue(position.Id, out List<string>? needs))
+                                    {
+                                        <div class="position-list-training">
+                                            <FluentIcon Value="@(new Icons.Regular.Size16.HatGraduation())" />
+                                            <span>Needs @string.Join(", ", needs)</span>
+                                        </div>
+                                    }
                                 </div>
                                 <div class="position-list-actions">
                                     <FluentButton IconStart="@(new Icons.Regular.Size16.DocumentBulletList())"
-                                                  Title="@(expandedPositionId == position.Id ? "Hide contract and allowances" : "Contract and time-off allowances")"
+                                                  Title="@(expandedPositionId == position.Id ? "Hide contract, allowances and training" : "Contract, time-off allowances and training")"
                                                   Appearance="@(expandedPositionId == position.Id ? ButtonAppearance.Primary : ButtonAppearance.Default)"
                                                   OnClick="@(() => ToggleContract(position.Id))" />
                                     <FluentButton IconStart="@(new Icons.Regular.Size16.Edit())" Title="Edit"
@@ -60,6 +69,13 @@
                                     <FluentDivider Style="width: 100%;" />
                                     <TimeOffAllowanceEditor CompanyId="@CompanyId" PositionId="@position.Id"
                                                             Title="@($"Time-off allowances for {position.Name}")" />
+                                    @if (trainingEnabled)
+                                    {
+                                        <FluentDivider Class="my-3" />
+                                        <RequiredTrainingEditor CompanyId="@CompanyId" PositionId="@position.Id" PositionName="@position.Name"
+                                                                Title="@($"Training needed to work as {position.Name}")"
+                                                                OnSaved="@LoadAsync" />
+                                    }
                                 </div>
                             }
                         </div>
@@ -80,10 +96,17 @@
     public required int CompanyId { get; set; }
 
     private List<StaffPosition>? positions;
+    private Dictionary<Guid, List<string>> requiredCourseNames = [];
     private Guid? expandedPositionId;
+
+    // Required training needs the Training module - staff couldn't take the courses otherwise.
+    private bool trainingEnabled;
 
     protected override async Task OnParametersSetAsync()
     {
+        Result<List<CompanyFeatureState>> features = await _companyFeatureService.GetFeaturesAsync(CompanyId);
+        trainingEnabled = features.IsSuccess && features.Data!.Any(x => x.Info.Feature == CompanyFeature.Training && x.IsEnabled);
+
         await LoadAsync();
     }
 
@@ -97,6 +120,17 @@
         }
 
         positions = result.IsSuccess ? result.Data : [];
+
+        if (trainingEnabled)
+        {
+            Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+            if (scopeResult.IsSuccess && scopeResult.Data is not null)
+            {
+                Result<Dictionary<Guid, List<string>>> namesResult = await _staffPositionService.GetRequiredCourseNamesAsync(scopeResult.Data, CompanyId);
+                requiredCourseNames = namesResult.Data ?? [];
+            }
+        }
     }
 
     private void ToggleContract(Guid positionId)

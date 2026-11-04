@@ -1,0 +1,293 @@
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+
+@inject ITimesheetExportService _timesheetExportService
+@inject IJSRuntime JS
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.ArrowDownload())" />
+            <FluentText As="@TextTag.H3">Export for payroll</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="export-dialog">
+            <FluentText Class="export-hint">
+                Approved hours at @LocationName as a CSV file: one row per person per day, and a total for each person.
+                @(presets?.Breaks.Describe() ?? BreakDeductionPolicy.None.Describe())
+            </FluentText>
+
+            @if (presets is not null && !presets.IsConfigured)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                    Set your pay period in Rota settings to pick it here in one click.
+                </FluentMessageBar>
+            }
+
+            @if (presets is { IsConfigured: true } configured)
+            {
+                <div class="export-presets">
+                    <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@isBusy" OnClick="@(() => UsePeriodAsync(configured.Previous))">
+                        Last pay period
+                    </FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@isBusy" OnClick="@(() => UsePeriodAsync(configured.Current))">
+                        This pay period
+                    </FluentButton>
+                </div>
+                <FluentText Class="export-hint">@configured.Description · last period @RotaDisplayExtensions.RangeLabel(configured.Previous.From, configured.Previous.To)</FluentText>
+            }
+
+            <div class="export-presets">
+                <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@isBusy" OnClick="@(() => UsePresetAsync(Preset.ThisWeek))">This week</FluentButton>
+                <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@isBusy" OnClick="@(() => UsePresetAsync(Preset.LastWeek))">Last week</FluentButton>
+            </div>
+
+            <div class="export-dates">
+                <FluentDatePicker TValue="DateTime?" @bind-Value="fromDate" @bind-Value:after="RefreshPreviewAsync" Label="From" Culture="@RotaFormat.Uk" Width="100%" />
+                <FluentDatePicker TValue="DateTime?" @bind-Value="toDate" @bind-Value:after="RefreshPreviewAsync" Label="To" Culture="@RotaFormat.Uk" Width="100%" />
+            </div>
+
+            @if (errorMessage is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
+            }
+            else if (isChecking)
+            {
+                <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8px">
+                    <FluentSpinner Size="SpinnerSize.Tiny" />
+                    <FluentText>Checking the timesheet...</FluentText>
+                </FluentStack>
+            }
+            else if (summary is not null)
+            {
+                <div class="export-summary">
+                    @if (summary.DayRows == 0)
+                    {
+                        <FluentText>Nothing has been approved in this range yet.</FluentText>
+                    }
+                    else
+                    {
+                        <FluentText Weight="TextWeight.Semibold">
+                            @RotaFormat.Hours(TimesheetExportBuilder.HoursFromMinutes(summary.PaidMinutes)) paid
+                            for @summary.People @(summary.People == 1 ? "person" : "people")
+                        </FluentText>
+                        @if (summary.BreakDeductedMinutes > 0)
+                        {
+                            <FluentText Class="export-hint">
+                                @RotaFormat.Hours(TimesheetExportBuilder.HoursFromMinutes(summary.ApprovedMinutes)) clocked,
+                                less @RotaFormat.Hours(TimesheetExportBuilder.HoursFromMinutes(summary.BreakDeductedMinutes)) of breaks
+                            </FluentText>
+                        }
+                    }
+                </div>
+
+                @if (summary.ExcludedCount > 0)
+                {
+                    <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false" Title="Some time is left out">
+                        @ExclusionText(summary) aren't counted in the hours. They're listed in the file as Excluded rows so
+                        payroll can see them. Approve or fix them on the timesheet first if they should be paid this time.
+                    </FluentMessageBar>
+                }
+            }
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <div class="export-actions">
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ArrowDownload())"
+                          Disabled="@(isBusy || isChecking || summary is null)" OnClick="@DownloadAsync">
+                @(isBusy ? "Preparing..." : "Download CSV")
+            </FluentButton>
+            <FluentButton Disabled="@isBusy" OnClick="@(() => Dialog.CancelAsync())">Cancel</FluentButton>
+        </div>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required int LocationId { get; set; }
+
+    [Parameter, EditorRequired]
+    public required string LocationName { get; set; }
+
+    [Parameter, EditorRequired]
+    public required int CompanyId { get; set; }
+
+    [Parameter]
+    public DateOnly DefaultFrom { get; set; }
+
+    [Parameter]
+    public DateOnly DefaultTo { get; set; }
+
+    private enum Preset { ThisWeek, LastWeek }
+
+    private PayPeriodPresets? presets;
+
+    private LocationScope? scope;
+    private DateTime? fromDate;
+    private DateTime? toDate;
+    private TimesheetExportSummary? summary;
+    private string? errorMessage;
+    private bool isChecking;
+    private bool isBusy;
+
+    // Bumped on every preview request, so a slow answer for an old range can't overwrite a newer one.
+    private int previewVersion;
+
+    protected override async Task OnInitializedAsync()
+    {
+        fromDate = DefaultFrom.ToDateTime(TimeOnly.MinValue);
+        toDate = DefaultTo.ToDateTime(TimeOnly.MinValue);
+
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            errorMessage = "Couldn't confirm who you are - try reloading the page.";
+            return;
+        }
+
+        scope = scopeResult.Data;
+
+        // Payroll runs after a period ends, so the last complete pay period is the useful default.
+        // Without the setting (or if it can't load) the week on screen is kept.
+        Result<PayPeriodPresets> presetResult = await _timesheetExportService.GetPayPeriodPresetsAsync(CompanyId, RotaTime.Today(DateTime.UtcNow));
+        presets = presetResult.IsSuccess ? presetResult.Data : null;
+
+        if (presets is { IsConfigured: true })
+        {
+            fromDate = presets.Previous.From.ToDateTime(TimeOnly.MinValue);
+            toDate = presets.Previous.To.ToDateTime(TimeOnly.MinValue);
+        }
+
+        await RefreshPreviewAsync();
+    }
+
+    private async Task UsePresetAsync(Preset preset)
+    {
+        DateOnly today = RotaTime.Today(DateTime.UtcNow);
+        DateOnly thisWeek = RotaTime.GetWeekStart(today);
+        DateOnly from = preset == Preset.ThisWeek ? thisWeek : thisWeek.AddDays(-7);
+
+        await UsePeriodAsync(new PayPeriod(from, from.AddDays(6)));
+    }
+
+    private async Task UsePeriodAsync(PayPeriod period)
+    {
+        fromDate = period.From.ToDateTime(TimeOnly.MinValue);
+        toDate = period.To.ToDateTime(TimeOnly.MinValue);
+        await RefreshPreviewAsync();
+    }
+
+    private async Task RefreshPreviewAsync()
+    {
+        summary = null;
+        errorMessage = null;
+
+        if (scope is null)
+        {
+            return;
+        }
+
+        if (fromDate is null || toDate is null)
+        {
+            errorMessage = "Choose both dates.";
+            return;
+        }
+
+        int version = ++previewVersion;
+        isChecking = true;
+
+        Result<TimesheetExportSummary> result = await _timesheetExportService.PreviewAsync(
+            scope, LocationId, DateOnly.FromDateTime(fromDate.Value), DateOnly.FromDateTime(toDate.Value));
+
+        if (version != previewVersion)
+        {
+            return;
+        }
+
+        isChecking = false;
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            errorMessage = result.Error ?? "Couldn't check the timesheet.";
+            return;
+        }
+
+        summary = result.Data;
+    }
+
+    private async Task DownloadAsync()
+    {
+        if (scope is null || fromDate is null || toDate is null)
+        {
+            return;
+        }
+
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            errorMessage = "Couldn't confirm who you are - try reloading the page.";
+            return;
+        }
+
+        isBusy = true;
+
+        Result<TimesheetExportFile> result = await _timesheetExportService.ExportCsvAsync(
+            scope, LocationId, DateOnly.FromDateTime(fromDate.Value), DateOnly.FromDateTime(toDate.Value), actingUser.Data);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            isBusy = false;
+            errorMessage = result.Error ?? "Couldn't export the timesheet.";
+            return;
+        }
+
+        try
+        {
+            using MemoryStream stream = new(result.Data.Content);
+            using DotNetStreamReference streamRef = new(stream);
+            await JS.InvokeVoidAsync("lanyardDownload.fromStream", result.Data.FileName, result.Data.ContentType, streamRef);
+        }
+        catch (JSException)
+        {
+            isBusy = false;
+            errorMessage = "Your browser couldn't save the file. Try again, or use a different browser.";
+            return;
+        }
+
+        isBusy = false;
+        _toastService.ShowSuccess($"Downloaded {result.Data.FileName}.");
+        await Dialog.CloseAsync(true);
+    }
+
+    // "3 entries awaiting approval, 1 entry needing review and 1 entry still clocked in"
+    private static string ExclusionText(TimesheetExportSummary s)
+    {
+        List<string> parts = [];
+
+        if (s.AwaitingApproval > 0)
+        {
+            parts.Add($"{Entries(s.AwaitingApproval)} awaiting approval");
+        }
+
+        if (s.NeedsReview > 0)
+        {
+            parts.Add($"{Entries(s.NeedsReview)} needing review");
+        }
+
+        if (s.StillClockedIn > 0)
+        {
+            parts.Add($"{Entries(s.StillClockedIn)} still clocked in");
+        }
+
+        return parts.Count == 1 ? parts[0] : $"{string.Join(", ", parts[..^1])} and {parts[^1]}";
+    }
+
+    private static string Entries(int count) => count == 1 ? "1 entry" : $"{count} entries";
+}

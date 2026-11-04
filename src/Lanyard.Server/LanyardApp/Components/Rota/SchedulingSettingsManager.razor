@@ -1,5 +1,6 @@
 @using System.Globalization
 @using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
 
 @inject ISchedulingSettingsService _schedulingSettingsService
 
@@ -43,6 +44,59 @@
                     </div>
                 </div>
 
+                <FluentDivider Class="my-3" />
+
+                <div class="settings-section">
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">Payroll export</FluentText>
+                    <div class="settings-hint">Used by Export on the Timesheets page: the one-click pay period dates, and whether breaks are taken off paid time.</div>
+                </div>
+
+                <div class="settings-fields">
+                    <div class="settings-field">
+                        <FluentSelect TOption="ChoiceOption<PayPeriodFrequency>" TValue="string" Items="@payPeriodOptions" OptionText="@(x => x.Name)"
+                                      OptionValue="@(x => ((int)x.Value).ToString())" @bind-Value="payPeriod"
+                                      Label="Pay period" Width="100%" />
+                    </div>
+
+                    @if (SelectedPayPeriod == PayPeriodFrequency.Monthly)
+                    {
+                        <div class="settings-field">
+                            <FluentNumberInput TValue="int" Label="Period starts on day" @bind-Value="payPeriodStartDay" Width="100%" />
+                            <div class="settings-hint">1 is a calendar month. 26 runs from the 26th to the 25th. Up to 28, so every month has it.</div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="settings-field">
+                            <FluentDatePicker TValue="DateTime?" @bind-Value="payPeriodAnchor" Label="First day of any pay period" Culture="@RotaFormat.Uk" Width="100%" />
+                            <div class="settings-hint">Any past or future period works - Lanyard counts the periods from it.</div>
+                        </div>
+                    }
+
+                    <div class="settings-field">
+                        <FluentSelect TOption="ChoiceOption<BreakDeductionRule>" TValue="string" Items="@breakRuleOptions" OptionText="@(x => x.Name)"
+                                      OptionValue="@(x => ((int)x.Value).ToString())" @bind-Value="breakRule"
+                                      Label="Breaks in the payroll export" Width="100%" />
+                        <div class="settings-hint">Clocked hours on the timesheet never change. The export shows clocked and paid time side by side.</div>
+                    </div>
+
+                    @if (SelectedBreakRule == BreakDeductionRule.FixedOverThreshold)
+                    {
+                        <div class="settings-field">
+                            <FluentNumberInput TValue="int" Label="Minutes to take off" @bind-Value="breakMinutes" Width="100%" />
+                        </div>
+                        <div class="settings-field">
+                            <FluentNumberInput TValue="double" Label="On any day over (hours)" @bind-Value="breakAfterHours" Width="100%" />
+                            <div class="settings-hint">The UK legal minimum is a 20 minute break when working more than 6 hours.</div>
+                        </div>
+                    }
+                </div>
+
+                @if (PeriodExample is string example)
+                {
+                    <FluentText Class="settings-example">@example</FluentText>
+                }
+
                 <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
                               Disabled="@isSaving" OnClick="@SaveAsync">
                     @(isSaving ? "Saving..." : "Save Settings")
@@ -62,6 +116,23 @@
 
     private record MonthOption(int Number, string Name);
 
+    private record ChoiceOption<T>(T Value, string Name);
+
+    private static readonly List<ChoiceOption<PayPeriodFrequency>> payPeriodOptions =
+    [
+        new(PayPeriodFrequency.Monthly, "Monthly"),
+        new(PayPeriodFrequency.Weekly, "Weekly"),
+        new(PayPeriodFrequency.Fortnightly, "Fortnightly"),
+        new(PayPeriodFrequency.FourWeekly, "Every four weeks")
+    ];
+
+    private static readonly List<ChoiceOption<BreakDeductionRule>> breakRuleOptions =
+    [
+        new(BreakDeductionRule.None, "Don't take breaks off"),
+        new(BreakDeductionRule.RotaBreak, "Take off the rota break of each shift"),
+        new(BreakDeductionRule.FixedOverThreshold, "Take off a set break on long days")
+    ];
+
     private static readonly List<MonthOption> months = Enumerable.Range(1, 12)
         .Select(m => new MonthOption(m, CultureInfo.GetCultureInfo("en-GB").DateTimeFormat.GetMonthName(m)))
         .ToList();
@@ -73,6 +144,41 @@
     private int shiftReminderLeadHours = 24;
     private bool sendShiftReminders = true;
     private int clockInWindowMinutes = 60;
+    private string payPeriod = "0";
+    private int payPeriodStartDay = 1;
+    private DateTime? payPeriodAnchor;
+    private string breakRule = "0";
+    private int breakMinutes = 20;
+    private double breakAfterHours = 6;
+
+    private PayPeriodFrequency SelectedPayPeriod =>
+        int.TryParse(payPeriod, out int value) && System.Enum.IsDefined((PayPeriodFrequency)value) ? (PayPeriodFrequency)value : PayPeriodFrequency.Monthly;
+
+    private BreakDeductionRule SelectedBreakRule =>
+        int.TryParse(breakRule, out int value) && System.Enum.IsDefined((BreakDeductionRule)value) ? (BreakDeductionRule)value : BreakDeductionRule.None;
+
+    // "Current pay period: 26 Sept – 25 Oct 2026", from what's on screen, before saving.
+    private string? PeriodExample
+    {
+        get
+        {
+            CompanySchedulingSettings draft = new()
+            {
+                CompanyId = CompanyId,
+                PayPeriod = SelectedPayPeriod,
+                PayPeriodStartDay = payPeriodStartDay,
+                PayPeriodAnchorDate = payPeriodAnchor is DateTime anchor ? DateOnly.FromDateTime(anchor) : null
+            };
+
+            if (!PayPeriodCalculator.IsConfigured(draft) || (draft.PayPeriod == PayPeriodFrequency.Monthly && payPeriodStartDay is < 1 or > 28))
+            {
+                return null;
+            }
+
+            PayPeriod current = PayPeriodCalculator.Containing(draft, RotaTime.Today(DateTime.UtcNow));
+            return $"Current pay period: {RotaDisplayExtensions.RangeLabel(current.From, current.To)}";
+        }
+    }
     private bool isSaving;
 
     protected override async Task OnParametersSetAsync()
@@ -102,6 +208,12 @@
         shiftReminderLeadHours = settings.ShiftReminderLeadHours;
         sendShiftReminders = settings.SendShiftReminders;
         clockInWindowMinutes = settings.ClockInWindowMinutes;
+        payPeriod = ((int)settings.PayPeriod).ToString();
+        payPeriodStartDay = settings.PayPeriodStartDay;
+        payPeriodAnchor = settings.PayPeriodAnchorDate?.ToDateTime(TimeOnly.MinValue);
+        breakRule = ((int)settings.BreakDeduction).ToString();
+        breakMinutes = settings.BreakDeductionMinutes;
+        breakAfterHours = (double)settings.BreakDeductionAfterHours;
     }
 
     private async Task SaveAsync()
@@ -125,7 +237,13 @@
             HoursPerDay = (decimal)hoursPerDay,
             ShiftReminderLeadHours = shiftReminderLeadHours,
             SendShiftReminders = sendShiftReminders,
-            ClockInWindowMinutes = clockInWindowMinutes
+            ClockInWindowMinutes = clockInWindowMinutes,
+            PayPeriod = SelectedPayPeriod,
+            PayPeriodStartDay = payPeriodStartDay,
+            PayPeriodAnchorDate = payPeriodAnchor is DateTime anchor ? DateOnly.FromDateTime(anchor) : null,
+            BreakDeduction = SelectedBreakRule,
+            BreakDeductionMinutes = breakMinutes,
+            BreakDeductionAfterHours = (decimal)breakAfterHours
         };
 
         Result<CompanySchedulingSettings> result = await _schedulingSettingsService.SaveSettingsAsync(scopeResult.Data, toSave);

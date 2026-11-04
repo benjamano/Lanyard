@@ -1,0 +1,126 @@
+@using Lanyard.Application.Services.Feedback
+@using Lanyard.Infrastructure.DTO.Feedback
+@using Lanyard.Infrastructure.Enum
+
+@inject IFeedbackService Feedback
+
+@* Always in the header for signed-in staff: a quick thumbs up/down about Lanyard, with an
+   optional comment, emailed to Lanyard's platform admins. *@
+<FluentButton Id="@ButtonId" Appearance="ButtonAppearance.Transparent" IconOnly="true" Class="fluent-header-hover"
+              BackgroundColor="transparent" Title="Send feedback" aria-label="Send feedback"
+              aria-haspopup="dialog" aria-expanded="@(_open ? "true" : "false")" OnClick="Toggle">
+    <FluentIcon Class="hidden-if-light" Color="@Color.Default" Value="@(new Icons.Regular.Size20.PersonFeedback())" />
+    <FluentIcon Class="hidden-if-dark" Color="@Color.Lightweight" Value="@(new Icons.Regular.Size20.PersonFeedback())" />
+</FluentButton>
+
+@if (_open)
+{
+    @* Fixed under the header's right-hand end rather than a FluentPopover, which aligns to the
+       button's left edge and so ran off the screen from the header's far right. The backdrop is
+       invisible; clicking it closes the panel. *@
+    <div class="feedback-backdrop" @onclick="Close"></div>
+    <div class="feedback-panel" role="dialog" aria-modal="false" aria-labelledby="feedback-heading" @onkeydown="OnKeyDown">
+        <div class="feedback-heading-row">
+            <FluentText id="feedback-heading" Weight="TextWeight.Semibold" Size="TextSize.Size400">How's Lanyard working for you?</FluentText>
+            <FluentButton Appearance="ButtonAppearance.Transparent" IconOnly="true" Title="Close" aria-label="Close"
+                          IconStart="@(new Icons.Regular.Size16.Dismiss())" OnClick="Close" />
+        </div>
+
+        <div class="feedback-thumbs" role="group" aria-label="Your verdict">
+            <FluentButton Appearance="@(_score == 1 ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                          aria-pressed="@(_score == 1 ? "true" : "false")" Class="feedback-thumb"
+                          IconStart="@(new Icons.Regular.Size20.ThumbLike())" OnClick="() => _score = 1">
+                Good
+            </FluentButton>
+            <FluentButton Appearance="@(_score == -1 ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                          aria-pressed="@(_score == -1 ? "true" : "false")" Class="feedback-thumb"
+                          IconStart="@(new Icons.Regular.Size20.ThumbDislike())" OnClick="() => _score = -1">
+                Not great
+            </FluentButton>
+        </div>
+
+        <FluentTextArea @bind-Value="_comment" Rows="3" MaxLength="@FeedbackService.MaxCommentLength" Style="width: 100%;"
+                        Label="@(_score == -1 ? "What went wrong? (optional)" : "Tell us more (optional)")"
+                        Placeholder="What's working, what isn't, what you'd change..." />
+
+        <FluentText Size="TextSize.Size200" Class="feedback-hint">
+            Goes to the Lanyard team, along with your name and the page you're on.
+        </FluentText>
+
+        <div class="feedback-actions">
+            <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@(_score is null || _sending)" Loading="_sending" OnClick="SendAsync">
+                Send feedback
+            </FluentButton>
+        </div>
+    </div>
+}
+
+@code {
+    private const string ButtonId = "header-feedback-button";
+
+    private bool _open;
+    private int? _score;
+    private string? _comment;
+    private bool _sending;
+
+    private void Toggle() => _open = !_open;
+
+    private void Close() => _open = false;
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            _open = false;
+        }
+    }
+
+    private async Task SendAsync()
+    {
+        if (_score is not int score || _sending)
+        {
+            return;
+        }
+
+        _sending = true;
+
+        try
+        {
+            Result<string> userId = await _securityService.GetCurrentUserIdAsync();
+
+            if (!userId.IsSuccess || string.IsNullOrWhiteSpace(userId.Data))
+            {
+                _toastService.ShowError("Sign in again to send feedback.");
+                return;
+            }
+
+            Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+            FeedbackSubmission submission = new(
+                userId.Data,
+                scope.IsSuccess ? scope.Data!.CompanyId : null,
+                scope.IsSuccess ? scope.Data!.LocationId : null,
+                FeedbackKind.Thumbs,
+                score,
+                _comment,
+                _navigationManager.ToBaseRelativePath(_navigationManager.Uri));
+
+            Result<UserFeedback> result = await Feedback.SubmitAsync(submission);
+
+            if (!result.IsSuccess)
+            {
+                _toastService.ShowError(result.Error ?? "Couldn't send your feedback.");
+                return;
+            }
+
+            _toastService.ShowSuccess("Thanks for the feedback!");
+            _open = false;
+            _score = null;
+            _comment = null;
+        }
+        finally
+        {
+            _sending = false;
+        }
+    }
+}

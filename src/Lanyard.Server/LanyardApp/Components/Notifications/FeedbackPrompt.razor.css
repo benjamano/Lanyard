@@ -1,0 +1,117 @@
+/* Same place and shape as InstallAppPrompt: a bottom sheet above the phone's bottom nav bar, a
+   card in the bottom corner on anything wider. The two never show together (CornerPromptCoordinator). */
+.feedback-prompt {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px;
+    border-radius: 16px;
+    background: var(--colorNeutralBackground1);
+    color: var(--colorNeutralForeground1);
+    border: 1px solid var(--colorNeutralStroke2);
+    box-shadow: var(--shadow28);
+    animation: feedback-prompt-in 220ms ease-out;
+}
+
+@media (min-width: 768px) {
+    .feedback-prompt {
+        left: auto;
+        right: 24px;
+        bottom: 24px;
+        width: 400px;
+    }
+}
+
+@keyframes feedback-prompt-in {
+    from {
+        transform: translateY(24px);
+        opacity: 0;
+    }
+
+    to {
+        transform: none;
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .feedback-prompt {
+        animation: none;
+    }
+}
+
+.feedback-prompt-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.feedback-prompt-heading {
+    flex: 1;
+    min-width: 0;
+}
+
+.feedback-prompt-title {
+    font-weight: 600;
+    font-size: 16px;
+    line-height: 1.3;
+}
+
+.feedback-prompt-subtitle {
+    color: var(--colorNeutralForeground3);
+    font-size: 14px;
+    line-height: 1.35;
+    margin-top: 2px;
+}
+
+.feedback-prompt-stars {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+/* Native buttons: big tap targets, and the star glyph scales with them. */
+.feedback-prompt-star {
+    font-size: 34px;
+    line-height: 1;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--colorNeutralStroke1);
+    cursor: pointer;
+    transition: color 80ms ease-out, transform 80ms ease-out;
+}
+
+    .feedback-prompt-star.lit {
+        color: #f5a623;
+    }
+
+    .feedback-prompt-star:hover {
+        transform: scale(1.1);
+    }
+
+    .feedback-prompt-star:focus-visible {
+        outline: 2px solid var(--colorStrokeFocus2);
+        outline-offset: 1px;
+    }
+
+.feedback-prompt-star-label {
+    margin-left: 8px;
+    font-weight: 600;
+    color: var(--colorNeutralForeground2);
+}
+
+.feedback-prompt-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+}

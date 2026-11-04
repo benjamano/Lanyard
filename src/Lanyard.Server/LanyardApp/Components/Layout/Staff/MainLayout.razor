@@ -69,6 +69,16 @@
                     </AuthorizeView>
                 }
 
+                @* Not for demo visitors: they share accounts, and the feedback goes to Lanyard's own team. *@
+                @if (!_isDemoSession)
+                {
+                    <AuthorizeView>
+                        <Authorized>
+                            <FeedbackButton />
+                        </Authorized>
+                    </AuthorizeView>
+                }
+
                 <ThemeSelector />
             </FluentStack>
         </FluentStack>
@@ -88,6 +98,10 @@
             <Authorized>
                 <DeviceSync />
                 <InstallAppPrompt AppName="@_installLinks.AppName" IconHref="@_installLinks.AppleTouchIconHref" />
+                @if (!_isDemoSession)
+                {
+                    <FeedbackPrompt />
+                }
             </Authorized>
         </AuthorizeView>
         @if (_isDemoSession)

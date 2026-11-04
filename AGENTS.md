@@ -224,7 +224,8 @@ When you do need one, reuse `src/Lanyard.Tests/Integration/CustomWebApplicationF
 5. Add/update SignalR contracts if the feature is real-time.
 6. Add migrations if schema changed.
 7. Add or update tests.
-8. Build and run tests before completion.
+8. Add or update the area's help page and `HelpRegistry` entry if users will notice the change (enforced by `HelpCoverageTests`; see the `help-pages` skill).
+9. Build and run tests before completion.
 
 ## Deep-Dive Skills
 

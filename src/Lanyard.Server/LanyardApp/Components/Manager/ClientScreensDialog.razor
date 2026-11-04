@@ -1,0 +1,199 @@
+@using System.Globalization
+
+@inject IClientDiagnosticsService _clientDiagnosticsService
+
+<FluentDialogBody>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="18px" Class="w-100">
+            <FluentText>
+                See what each projection screen on <strong>@ClientName</strong> is showing right now.
+                Screenshots are kept for 10 minutes and are only visible to Admins.
+            </FluentText>
+
+            <FluentStack HorizontalGap="8px" VerticalAlignment="VerticalAlignment.Center" Wrap="true">
+                <FluentButton Appearance="ButtonAppearance.Primary" Loading="@_capturing"
+                              IconStart="@(new Icons.Regular.Size20.Camera())"
+                              OnClick="CaptureAsync">
+                    @(_capture == null ? "Capture screens" : "Capture again")
+                </FluentButton>
+                @if (_expanded != null)
+                {
+                    <FluentButton Appearance="ButtonAppearance.Outline"
+                                  IconStart="@(new Icons.Regular.Size20.Grid())"
+                                  OnClick="() => _expanded = null">
+                        Show all screens
+                    </FluentButton>
+                }
+            </FluentStack>
+
+            @if (_error != null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">
+                    @_error
+                </FluentMessageBar>
+            }
+
+            @if (_capture != null)
+            {
+                <FluentText Size="TextSize.Size200">
+                    Captured @FormatTime(_capture.ReceivedAtUtc, "d MMM HH:mm:ss") by @_capture.RequestedBy
+                    · @ScreenCountLabel(_capture.Screens.Count)
+                    @if (!string.IsNullOrEmpty(_capture.ClientVersion))
+                    {
+                        <span> · Lanyard Client @_capture.ClientVersion</span>
+                    }
+                </FluentText>
+
+                @if (_capture.Screens.Count == 0)
+                {
+                    <FluentText>Nothing is projected on this kiosk right now.</FluentText>
+                }
+                else
+                {
+                    <div class="screens-grid @(_expanded != null ? "screens-grid-expanded" : null)">
+                        @for (int i = 0; i < _capture.Screens.Count; i++)
+                        {
+                            int index = i;
+                            ClientScreenSnapshot screen = _capture.Screens[index];
+
+                            @if (_expanded != null && _expanded != index)
+                            {
+                                continue;
+                            }
+
+                            <div class="screen-card">
+                                <div class="screen-card-header">
+                                    <FluentText Weight="TextWeight.Semibold">@DisplayLabel(screen)</FluentText>
+                                    @if (!string.IsNullOrEmpty(screen.ProgramName))
+                                    {
+                                        <FluentText Size="TextSize.Size200" Class="screen-program">@screen.ProgramName</FluentText>
+                                    }
+                                    @if (screen.IsOffline)
+                                    {
+                                        <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Warning">Offline copy</FluentBadge>
+                                    }
+                                </div>
+
+                                @if (screen.ImageJpeg != null)
+                                {
+                                    <button type="button" class="screen-image-button"
+                                            title="@(_expanded == index ? "Show all screens" : "Show this screen larger")"
+                                            @onclick="() => ToggleExpanded(index)">
+                                        <img class="screen-image" src="@_imageUrls[index]"
+                                             alt="@($"What {DisplayLabel(screen)} was showing")"
+                                             width="@screen.Width" height="@screen.Height" />
+                                    </button>
+                                }
+                                else
+                                {
+                                    <div class="screen-error">
+                                        <FluentIcon Value="@(new Icons.Regular.Size24.ImageOff())" Color="Color.Error" />
+                                        <FluentText>@screen.Error</FluentText>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentStack HorizontalGap="8px" HorizontalAlignment="HorizontalAlignment.End">
+            <FluentButton OnClick="@CloseAsync">Close</FluentButton>
+        </FluentStack>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public Guid ClientId { get; set; }
+
+    [Parameter]
+    public string ClientName { get; set; } = "this kiosk";
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private static readonly CultureInfo UkCulture = new("en-GB");
+
+    private ClientScreenshotCapture? _capture;
+    private string?[] _imageUrls = [];
+    private string? _error;
+    private bool _capturing;
+    private int? _expanded;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Reopening within the retention window shows the last capture instead of a blank dialog.
+        Result<ClientScreenshotCapture?> latest = await _clientDiagnosticsService.GetLatestScreenshotsAsync(ClientId);
+
+        if (latest.IsSuccess)
+        {
+            SetCapture(latest.Data);
+        }
+    }
+
+    private async Task CaptureAsync()
+    {
+        _capturing = true;
+        _error = null;
+
+        try
+        {
+            string requestedBy = await _securityService.GetCurrentUserName() ?? "An Admin";
+
+            Result<ClientScreenshotCapture> result = await _clientDiagnosticsService.RequestScreenshotsAsync(ClientId, requestedBy);
+
+            if (result.IsSuccess)
+            {
+                SetCapture(result.Data);
+            }
+            else
+            {
+                _error = result.Error;
+            }
+        }
+        finally
+        {
+            _capturing = false;
+        }
+    }
+
+    // Built once per capture rather than on every render: each is a few hundred KB of base64.
+    private void SetCapture(ClientScreenshotCapture? capture)
+    {
+        _capture = capture;
+        _expanded = null;
+        _imageUrls = capture?.Screens
+            .Select(x => x.ImageJpeg != null ? $"data:image/jpeg;base64,{Convert.ToBase64String(x.ImageJpeg)}" : null)
+            .ToArray() ?? [];
+    }
+
+    private void ToggleExpanded(int index)
+    {
+        _expanded = _expanded == index ? null : index;
+    }
+
+    private async Task CloseAsync()
+    {
+        await Dialog.CloseAsync();
+    }
+
+    // Numbered from 1 to match how Windows names displays; the kiosk sends -1 when it can't tell.
+    private static string DisplayLabel(ClientScreenSnapshot screen)
+    {
+        return screen.DisplayIndex >= 0 ? $"Display {screen.DisplayIndex + 1}" : "Display";
+    }
+
+    private static string ScreenCountLabel(int count)
+    {
+        return count == 1 ? "1 screen" : $"{count} screens";
+    }
+
+    // Kiosks and the venue are in the UK, but the server runs in UTC, so ToLocalTime() is wrong.
+    private static string FormatTime(DateTime utc, string format)
+    {
+        return RotaTime.ToVenueLocal(utc).ToString(format, UkCulture);
+    }
+}

@@ -169,4 +169,20 @@ public class KioskHealthEvaluatorTests
     {
         Assert.AreEqual("1.0.10", KioskHealthEvaluator.Newest(["1.0.9", "1.0.10", null, "dev"]));
     }
+
+    [TestMethod]
+    public void OfflineFallbackNotReady_IsDegraded_WithTheCountOfMissingVideos()
+    {
+        KioskHealthView view = Evaluate(Snapshot(TimeSpan.FromSeconds(20), s => { s.OfflineFallbackReady = false; s.OfflineVideosNotCached = 3; }));
+
+        Assert.AreEqual(KioskHealthStatus.Degraded, view.Status);
+        CollectionAssert.Contains(view.Reasons.ToList(), "Offline fallback not ready (3 videos don't fit the cache)");
+    }
+
+    [TestMethod]
+    public void OfflineFallbackReadyOrOff_IsHealthy()
+    {
+        Assert.AreEqual(KioskHealthStatus.Healthy, Evaluate(Snapshot(TimeSpan.FromSeconds(20), s => s.OfflineFallbackReady = true)).Status);
+        Assert.AreEqual(KioskHealthStatus.Healthy, Evaluate(Snapshot(TimeSpan.FromSeconds(20), s => s.OfflineFallbackReady = null)).Status);
+    }
 }

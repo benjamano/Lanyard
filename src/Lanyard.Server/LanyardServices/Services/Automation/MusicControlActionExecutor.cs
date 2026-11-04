@@ -3,6 +3,7 @@
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
+using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -11,11 +12,11 @@ using System.Text.Json;
 namespace Lanyard.Application.Services;
 
 public class MusicControlActionExecutor(
-    MusicPlayerService musicPlayerService,
+    IMusicPlayerService musicPlayerService,
     ISystemDbContextFactory contextFactory,
     ILogger<MusicControlActionExecutor> logger) : IActionExecutor
 {
-    private readonly MusicPlayerService _musicPlayerService = musicPlayerService;
+    private readonly IMusicPlayerService _musicPlayerService = musicPlayerService;
     private readonly ISystemDbContextFactory _contextFactory = contextFactory;
     private readonly ILogger<MusicControlActionExecutor> _logger = logger;
 
@@ -65,7 +66,11 @@ public class MusicControlActionExecutor(
                     }
                     else
                     {
-                        await _musicPlayerService.Play(parameters.TargetClientId, playlistId: parameters.PlaylistId ?? Guid.Empty);
+                        Result<bool> playResult = await _musicPlayerService.Play(parameters.TargetClientId, playlistId: parameters.PlaylistId.Value);
+                        if (!playResult.IsSuccess)
+                        {
+                            return (false, $"Music operation failed: {playResult.Error}");
+                        }
                     }
                     break;
                 case "Pause":

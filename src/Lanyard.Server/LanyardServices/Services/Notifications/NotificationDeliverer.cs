@@ -130,6 +130,8 @@ public class NotificationDeliverer(
 
                 AnnouncementPayload announcement => await SendNoticeAsync(user, AnnouncementNotices.For(announcement), logoUrl, accent),
 
+                _ when KioskNotices.Handles(job.Payload) => await SendNoticeAsync(user, KioskNotices.For(job.Payload), logoUrl, accent),
+
                 _ => Result<bool>.Fail($"No delivery for {job.Payload.GetType().Name}.")
             };
 

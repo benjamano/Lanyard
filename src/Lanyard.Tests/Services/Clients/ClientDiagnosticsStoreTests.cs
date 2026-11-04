@@ -99,4 +99,54 @@ public class ClientDiagnosticsStoreTests
         Assert.IsTrue(store.TryBeginLogTail(Guid.NewGuid(), out _));
         Assert.IsTrue(store.TryBeginLogTail(Guid.NewGuid(), out _));
     }
+
+    [TestMethod]
+    public void GetLatestScreenshots_ForgetsCapturesAfterTheRetentionPeriod()
+    {
+        TestClock clock = new(Now);
+        ClientDiagnosticsStore store = new(clock);
+        Guid clientId = Guid.NewGuid();
+        store.SaveScreenshots(clientId, [new ClientScreenSnapshot { DisplayIndex = 0 }], "1.0.43", "Ben");
+
+        clock.Advance(ClientDiagnosticsStore.Retention - TimeSpan.FromSeconds(1));
+        Assert.AreEqual("Ben", store.GetLatestScreenshots(clientId)?.RequestedBy);
+
+        clock.Advance(TimeSpan.FromSeconds(1));
+        Assert.IsNull(store.GetLatestScreenshots(clientId));
+    }
+
+    [TestMethod]
+    public void Screenshots_AreKeptApartFromTheLogTail()
+    {
+        // Fetching the log mustn't block or replace a screenshot, and the other way round.
+        ClientDiagnosticsStore store = new(new TestClock(Now));
+        Guid clientId = Guid.NewGuid();
+
+        Assert.IsTrue(store.TryBeginLogTail(clientId, out _));
+        Assert.IsTrue(store.TryBeginScreenshots(clientId, out _));
+
+        store.SaveLogTail(clientId, Tail("log"), "Ben");
+
+        Assert.IsNull(store.GetLatestScreenshots(clientId));
+        Assert.IsNotNull(store.GetLatestLogTail(clientId));
+    }
+
+    [TestMethod]
+    public void TryBeginScreenshots_AppliesItsOwnCooldown()
+    {
+        TestClock clock = new(Now);
+        ClientDiagnosticsStore store = new(clock);
+        Guid clientId = Guid.NewGuid();
+
+        Assert.IsTrue(store.TryBeginScreenshots(clientId, out _));
+        Assert.IsFalse(store.TryBeginScreenshots(clientId, out string? busy));
+        StringAssert.Contains(busy, "already being captured");
+
+        store.EndScreenshots(clientId);
+        clock.Advance(ClientDiagnosticsStore.ScreenshotCooldown - TimeSpan.FromSeconds(1));
+        Assert.IsFalse(store.TryBeginScreenshots(clientId, out _));
+
+        clock.Advance(TimeSpan.FromSeconds(1));
+        Assert.IsTrue(store.TryBeginScreenshots(clientId, out _));
+    }
 }

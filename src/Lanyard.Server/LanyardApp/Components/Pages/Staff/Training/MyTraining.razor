@@ -12,7 +12,11 @@
 <PageTitle>My Training</PageTitle>
 
 <FluentCard Height="auto">
-    <FluentText As="TextTag.H4" Size="TextSize.Size500">My Training</FluentText>
+    <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center"
+                 Wrap="true">
+        <FluentText As="TextTag.H4" Size="TextSize.Size500">My Training</FluentText>
+        <HelpButton AreaKey="@HelpRegistry.MyTraining" />
+    </FluentStack>
 
     @if (isLoading)
     {

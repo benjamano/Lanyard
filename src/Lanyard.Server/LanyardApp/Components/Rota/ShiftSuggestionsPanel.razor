@@ -1,0 +1,113 @@
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@* Who could fill an open shift, best first (IShiftSuggestionService). Display only: "Use" hands the
+   person back to the shift dialog, which saves through the normal path as a draft. *@
+<section class="suggestions" aria-label="Suggested staff">
+    @if (Suggestions.Ranked.Count == 0 && Suggestions.NotSuggested.Count == 0)
+    {
+        <FluentText Class="suggestions-empty">Nobody is a member of this location yet.</FluentText>
+    }
+    else if (Suggestions.Ranked.Count == 0)
+    {
+        <FluentText Class="suggestions-empty">Nobody here can work this shift. See why below.</FluentText>
+    }
+    else
+    {
+        <FluentText Class="suggestions-intro">
+            Best first: who needs the hours for their contract, who'd rather work then, who asked for it, who usually does this job, then who has the fewest hours this week.
+            Nothing changes until you press Save.
+        </FluentText>
+
+        <ol class="suggestions-list">
+            @foreach (ShiftSuggestion person in Visible)
+            {
+                bool chosen = person.UserId == SelectedUserId;
+
+                <li class="suggestion @(chosen ? "is-chosen" : null)">
+                    <div class="suggestion-head">
+                        <span class="suggestion-rank" aria-hidden="true">@person.Rank</span>
+                        <div class="suggestion-who">
+                            <span class="suggestion-name">@person.DisplayName</span>
+                            @if (person.PositionName is not null)
+                            {
+                                <span class="suggestion-hours">@person.PositionName</span>
+                            }
+                            <span class="suggestion-hours">@HoursText(person)</span>
+                        </div>
+                        <FluentButton Appearance="@(chosen ? ButtonAppearance.Primary : ButtonAppearance.Outline)" Size="ButtonSize.Small"
+                                      Disabled="@chosen" OnClick="@(() => OnUse.InvokeAsync(person))"
+                                      Title="@($"Put {person.DisplayName} on this shift")">
+                            @(chosen ? "Chosen" : "Use")
+                        </FluentButton>
+                    </div>
+
+                    @if (person.Reasons.Count > 0)
+                    {
+                        <ul class="suggestion-reasons">
+                            @foreach (SuggestionReason reason in person.Positives)
+                            {
+                                <li class="suggestion-reason is-positive">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.CheckmarkCircle())" Color="Color.Success" />
+                                    <span>@reason.Text</span>
+                                </li>
+                            }
+                            @foreach (SuggestionReason reason in person.Cautions)
+                            {
+                                <li class="suggestion-reason is-caution">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Color="Color.Warning" />
+                                    <span>@reason.Text</span>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </li>
+            }
+        </ol>
+
+        @if (Suggestions.Ranked.Count > ShownByDefault)
+        {
+            <FluentButton Appearance="ButtonAppearance.Transparent" Size="ButtonSize.Small" OnClick="@(() => showAll = !showAll)">
+                @(showAll ? "Show fewer" : $"Show all {Suggestions.Ranked.Count}")
+            </FluentButton>
+        }
+    }
+
+    @if (Suggestions.NotSuggested.Count > 0)
+    {
+        <details class="suggestions-excluded">
+            <summary>Not suggested (@Suggestions.NotSuggested.Count)</summary>
+            <ul>
+                @foreach (ShiftSuggestion person in Suggestions.NotSuggested)
+                {
+                    <li><span class="suggestion-name">@person.DisplayName</span>: @person.ExcludedReason</li>
+                }
+            </ul>
+        </details>
+    }
+</section>
+
+@code {
+    private const int ShownByDefault = 5;
+
+    [Parameter, EditorRequired]
+    public required ShiftSuggestions Suggestions { get; set; }
+
+    // The person currently picked in the dialog, marked "Chosen".
+    [Parameter]
+    public string? SelectedUserId { get; set; }
+
+    [Parameter]
+    public EventCallback<ShiftSuggestion> OnUse { get; set; }
+
+    private bool showAll;
+
+    private IEnumerable<ShiftSuggestion> Visible => showAll ? Suggestions.Ranked : Suggestions.Ranked.Take(ShownByDefault);
+
+    // "12 h → 18 h this week (max 20 h)"
+    private static string HoursText(ShiftSuggestion person)
+    {
+        string max = person.MaxHours is decimal hours ? $" (max {RotaDisplayExtensions.FormatHours(hours)})" : string.Empty;
+
+        return $"{RotaDisplayExtensions.FormatHours(person.WeekHoursBefore)} → {RotaDisplayExtensions.FormatHours(person.WeekHoursAfter)} this week{max}";
+    }
+}

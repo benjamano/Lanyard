@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.AudioClips;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Clients;
@@ -42,7 +43,7 @@ public class SignalRControlHubKioskHealthTests
             NullLogger<MusicPlayerService>.Instance);
 
         AutomationEngineService automationEngineService = new(
-            factoryMock.Object, [], NullLogger<AutomationEngineService>.Instance);
+            factoryMock.Object, [], new LaserGameStatusStore(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
 
         Mock<HubCallerContext> hubCallerContextMock = new();
         hubCallerContextMock.Setup(x => x.Items).Returns(new Dictionary<object, object?>());
@@ -59,8 +60,10 @@ public class SignalRControlHubKioskHealthTests
             Mock.Of<IClientZoneScoreboardService>(),
             Mock.Of<IVideoStreamTokenService>(),
             Mock.Of<IGameResultService>(),
-            Mock.Of<IClientSecretValidator>(),
-            kioskHealthService.Object)
+            Mock.Of<IKioskMediaTokenService>(),
+            new KioskConnectionRegistry(),
+            kioskHealthService.Object,
+            Mock.Of<IAudioClipPlaybackService>())
         {
             Context = hubCallerContextMock.Object
         };

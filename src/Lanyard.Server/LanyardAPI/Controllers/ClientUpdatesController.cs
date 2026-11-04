@@ -8,20 +8,22 @@ using Microsoft.AspNetCore.Mvc;
 namespace Lanyard.API.Controllers;
 
 // Kiosk-facing: the client calls this on startup (and when an admin presses "Update now") to find
-// out which version it should be on. Authenticated with the kiosk shared secret like the other
-// kiosk endpoints. Read-only - nothing a kiosk sends here can change its own update setting.
+// out which version it should be on. A kiosk may only read its own feed. Read-only - nothing a
+// kiosk sends here can change its own update setting.
 [ApiController]
-public class ClientUpdatesController(IClientUpdatePolicyService updatePolicyService, IClientSecretValidator clientSecretValidator) : ControllerBase
+public class ClientUpdatesController(IClientUpdatePolicyService updatePolicyService) : ControllerBase
 {
     private readonly IClientUpdatePolicyService _updatePolicyService = updatePolicyService;
-    private readonly IClientSecretValidator _clientSecretValidator = clientSecretValidator;
 
     [HttpGet(ClientUpdateRoutes.FeedTemplate)]
     public async Task<IActionResult> GetFeed(Guid clientId, CancellationToken cancellationToken)
     {
-        if (!ClientRequestAuthorization.IsAuthorized(HttpContext, _clientSecretValidator))
+        switch (await KioskRequestAuthorization.AuthorizeAsync(HttpContext, clientId))
         {
-            return Unauthorized();
+            case KioskRequestAccess.Denied:
+                return Challenge(KioskAuthenticationDefaults.Scheme);
+            case KioskRequestAccess.NotThisKiosk:
+                return NotFound();
         }
 
         Result<ClientUpdateFeedResponse> result = await _updatePolicyService.GetFeedForClientAsync(clientId, cancellationToken);

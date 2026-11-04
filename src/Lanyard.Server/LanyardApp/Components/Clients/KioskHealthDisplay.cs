@@ -83,6 +83,11 @@ public static class KioskHealthDisplay
             yield return reason;
         }
 
+        if (ShouldBePlayingOffline(health))
+        {
+            yield return "Its screens should be playing their offline copy (it was ready at its last report)";
+        }
+
         if (health.NewerVersionSeen != null)
         {
             yield return $"Runs v{health.Snapshot?.ClientVersion}; another kiosk runs v{health.NewerVersionSeen}";
@@ -98,6 +103,43 @@ public static class KioskHealthDisplay
 
         return $"{elapsed.Humanize(precision: 1, minUnit: TimeUnit.Second)} ago";
     }
+
+    /// <summary>Whether the kiosk's screens can play their offline copy, as of its last heartbeat.</summary>
+    public static string OfflineFallback(Lanyard.Infrastructure.Models.ClientHealthSnapshot snapshot) => snapshot.OfflineFallbackReady switch
+    {
+        true => $"Ready ({Megabytes(snapshot.OfflineCacheBytes)} of video cached)",
+        false when snapshot.OfflineVideosNotCached is int missing and > 0 => $"Not ready: {missing} {(missing == 1 ? "video doesn't" : "videos don't")} fit the cache",
+        false => "Not ready",
+        null => "Off, or nothing to play offline",
+    };
+
+    /// <summary>The kiosk's most recent stretch of playing offline, or null if it hasn't had one.</summary>
+    public static string? LastOutage(Lanyard.Infrastructure.Models.ClientHealthSnapshot snapshot, DateTime nowUtc)
+    {
+        if (snapshot.LastOfflineStartedUtc is not DateTime started)
+        {
+            return null;
+        }
+
+        if (snapshot.LastOfflineEndedUtc is DateTime ended && ended >= started)
+        {
+            return $"{Ago(nowUtc - started)}, for {(ended - started).Humanize(precision: 1, minUnit: TimeUnit.Minute)}";
+        }
+
+        return $"{Ago(nowUtc - started)}, still going at its last report";
+    }
+
+    /// <summary>
+    /// For a kiosk the server can't hear from: whether its screens should still be showing
+    /// something. The heartbeat is old, so it's what the kiosk could do, not a live report.
+    /// </summary>
+    public static bool ShouldBePlayingOffline(KioskHealthView? health) =>
+        health?.Status is KioskHealthStatus.Unresponsive or KioskHealthStatus.Offline
+        && health.Snapshot?.OfflineFallbackReady == true;
+
+    private static string Megabytes(long? bytes) => bytes is long value
+        ? value >= 1024L * 1024 * 1024 ? $"{value / (1024d * 1024 * 1024):0.#} GB" : $"{value / (1024d * 1024):0} MB"
+        : "unknown";
 
     public static string Bytes(long? bytes)
     {

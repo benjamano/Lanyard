@@ -1,0 +1,22 @@
+@* Times someone has said they can't work, beside their shifts on the rota. Advice for the manager:
+   a shift can still go there (the save warns). Nothing when they haven't said. *@
+@if (Windows.Count > 0)
+{
+    <div class="unavailable-note @(Compact ? "is-compact" : string.Empty)" title="@Tooltip">
+        <FluentIcon Value="@(new Icons.Regular.Size16.CalendarCancel())" Color="Color.Warning" />
+        <span>@(Compact ? "Can't" : $"Can't work {Times}")</span>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public required List<StaffAvailability> Windows { get; set; }
+
+    [Parameter]
+    public bool Compact { get; set; }
+
+    private string Times => string.Join(", ", Windows.Select(x => x.IsAllDay ? "all day" : $"{x.StartTime.ToString("HH:mm")}–{x.EndTime.ToString("HH:mm")}"));
+
+    private string Tooltip => "Has said they can't work " + string.Join("; ", Windows.Select(x =>
+        StaffAvailabilityRules.Describe(x) + (string.IsNullOrWhiteSpace(x.Notes) ? string.Empty : $" ({x.Notes})")));
+}

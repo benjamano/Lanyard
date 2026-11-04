@@ -1,0 +1,24 @@
+.availability-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+}
+
+.availability-dialog-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.availability-dialog-dates ::deep fluent-datepicker,
+.availability-dialog-dates ::deep .fluent-datepicker {
+    width: 100%;
+}
+
+.availability-dialog-hint {
+    margin-top: -6px;
+    font-size: 0.8rem;
+    color: var(--colorNeutralForeground3);
+}

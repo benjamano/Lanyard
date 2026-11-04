@@ -39,7 +39,7 @@ public record TimesheetPerson(
     int NeedsReviewCount,
     int AwaitingApprovalCount);
 
-public record TimesheetView(int LocationId, string LocationName, DateOnly From, DateOnly To, List<TimesheetPerson> People)
+public record TimesheetView(int LocationId, string LocationName, DateOnly From, DateOnly To, List<TimesheetPerson> People, int CompanyId = 0)
 {
     public int AwaitingApprovalCount => People.Sum(x => x.AwaitingApprovalCount);
 }

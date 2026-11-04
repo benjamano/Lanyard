@@ -39,8 +39,10 @@
     <script src="@Assets["js/lanyardInstall.js"]"></script>
     <script src="@Assets["js/lanyardPasskeys.js"]"></script>
     <script src="@Assets["js/trainingScrollGate.js"]"></script>
+    <script src="@Assets["js/courseWalkthrough.js"]"></script>
     <script src="@Assets["js/courseImageEditor.js"]"></script>
     <script src="@Assets["js/kioskWidgetEditor.js"]"></script>
+    <script src="@Assets["js/fileDownload.js"]"></script>
     <link rel="stylesheet" href="@Assets["Lanyard.App.styles.css"]" />
     <link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet" />
     <HeadOutlet @rendermode="PageRenderMode" />
@@ -171,6 +173,13 @@
         tint, etc.); .theme-colour-swatch also paints it as the background. */
         .theme-colour-swatch {
         background: var(--theme-colour);
+        }
+
+        /* Native audio player controls (the Audio Clips preview) only follow a dark theme when told
+        to; otherwise they stay a bright white bar. Global because scoped CSS can't anchor on
+        the data-theme attribute. */
+        [data-theme="dark"] audio {
+        color-scheme: dark;
         }
 
         /* Nav category badges. FluentNavCategory only takes a plain-text Title, so a count on a

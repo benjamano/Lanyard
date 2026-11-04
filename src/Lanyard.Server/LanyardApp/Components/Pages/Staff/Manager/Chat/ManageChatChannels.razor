@@ -15,6 +15,10 @@
 @* The channels a manager looks after: their location's (Managers), or every location's and the
    company's (Admins). Pinned posts, whether staff can post, and what's been removed lately. *@
 <div class="channels-page">
+    <div class="d-flex justify-content-end mb-2">
+        <HelpButton AreaKey="@HelpRegistry.ChatModeration" Topic="channels" />
+    </div>
+
     @if (loadError is not null)
     {
         <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@loadError</FluentMessageBar>

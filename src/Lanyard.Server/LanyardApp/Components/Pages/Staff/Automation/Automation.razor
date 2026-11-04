@@ -28,11 +28,14 @@
                 Engine: @(_engineEnabled ? "Enabled" : "Disabled")
             </FluentSwitch>
         </FluentStack>
-        <FluentButton Appearance="ButtonAppearance.Outline"
-                      IconEnd="new Icons.Regular.Size20.Add()"
-                      OnClick="OpenAddRuleDialogAsync">
-            New Rule
-        </FluentButton>
+        <div class="d-flex gap-2 flex-shrink-0">
+            <FluentButton Appearance="ButtonAppearance.Outline"
+                          IconEnd="new Icons.Regular.Size20.Add()"
+                          OnClick="OpenAddRuleDialogAsync">
+                New Rule
+            </FluentButton>
+            <HelpButton AreaKey="@HelpRegistry.Automation" />
+        </div>
     </FluentStack>
 
     <FluentDataGrid Items="@_rules.AsQueryable()" GridTemplateColumns="1fr 1fr 1fr auto auto" Style="width: 100%;">
@@ -91,8 +94,12 @@
                 @GetClientName(context.TriggerClientId)
             </TemplateColumn>
             <PropertyColumn Title="Executed At" Property="@(e => e.ExecutedAt)" />
-            <TemplateColumn Title="Success">
-                @if (context.OverallSuccess)
+            <TemplateColumn Title="Result">
+                @if (context.SkipReason != null)
+                {
+                    <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative" title="@context.SkipReason">Skipped</FluentBadge>
+                }
+                else if (context.OverallSuccess)
                 {
                     <FluentIcon Icon="Icons.Regular.Size20.CheckmarkCircle" Color="Color.Success" />
                 }
@@ -116,7 +123,8 @@
 
     private IEnumerable<AutomationRuleExecution> FilteredExecutions =>
         _showFailuresOnly
-            ? _executions.Where(e => !e.OverallSuccess)
+            // A skipped rule did what it was told (not run), so it isn't a failure.
+            ? _executions.Where(e => !e.OverallSuccess && e.SkipReason == null)
             : _executions;
 
     protected override async Task OnInitializedAsync()
@@ -174,6 +182,18 @@
 
     private static string DescribeTrigger(AutomationRule rule)
     {
+        int conditionCount = rule.Conditions.Count(c => c.IsActive);
+
+        return conditionCount switch
+        {
+            0 => DescribeTriggerOnly(rule),
+            1 => $"{DescribeTriggerOnly(rule)}, only if 1 condition",
+            _ => $"{DescribeTriggerOnly(rule)}, only if {conditionCount} conditions"
+        };
+    }
+
+    private static string DescribeTriggerOnly(AutomationRule rule)
+    {
         switch (rule.TriggerType)
         {
             case AutomationTriggerType.ClientIdle:
@@ -188,6 +208,22 @@
 
                 string dayList = string.Join(", ", days.OrderBy(d => (int)d).Select(d => d.ToString()[..3]));
                 return $"{dayList} at {time}";
+
+            case AutomationTriggerType.TimeRemainingBelow:
+                return $"Time left drops below {rule.TriggerThreshold}s";
+
+            case AutomationTriggerType.ScoreThreshold:
+                string who = (rule.TriggerScoreScope, rule.TriggerTeam) switch
+                {
+                    (AutomationScoreScope.Team, null) => "A team",
+                    (AutomationScoreScope.Team, Team team) => $"{team} team",
+                    (_, null) => "A player",
+                    (_, Team team) => $"A {team.ToString().ToLowerInvariant()} player"
+                };
+                return $"{who} reaches {rule.TriggerThreshold}";
+
+            case AutomationTriggerType.GameEnded:
+                return rule.TriggerTeam is Team winningTeam ? $"Game ends, {winningTeam} wins" : "Game ends with a winner";
 
             default:
                 return $"Game status: {rule.TriggerEvent}";

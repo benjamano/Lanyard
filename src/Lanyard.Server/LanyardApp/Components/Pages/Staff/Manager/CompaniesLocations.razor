@@ -6,6 +6,10 @@
 <PageTitle>Companies & Locations</PageTitle>
 
 <div class="p-2">
+    <div class="d-flex justify-content-end mb-2">
+        <HelpButton AreaKey="@HelpRegistry.Users" Topic="locations" />
+    </div>
+
     <AuthorizeView Roles="@LanyardRoles.PlatformAdmin">
         <DemoResetCard />
     </AuthorizeView>

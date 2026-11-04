@@ -4,8 +4,10 @@ using Lanyard.Client.Diagnostics;
 using Lanyard.Client.Health;
 using Lanyard.Client.PacketSniffing;
 using Lanyard.Client.ProjectionPrograms;
+using Lanyard.Client.ProjectionPrograms.Offline;
 using Lanyard.Client.RemoteRestart;
 using Lanyard.Client.RestartScheduler;
+using Lanyard.Client.SelfTest;
 using Lanyard.Client.SignalR;
 using Lanyard.Client.VideoPublisher;
 using Lanyard.Shared.Diagnostics;
@@ -24,7 +26,9 @@ public static class ClientServiceBootstrapper
         // Created up front because the logging provider below and the diagnostics controller
         // must share the same instance.
         LogLineBuffer logLineBuffer = new LogLineBuffer();
-        string?[] knownSecrets = [Environment.GetEnvironmentVariable("LANYARD_CLIENT_SHARED_SECRET")];
+        // LogRedactor also strips any kiosk credential and media token by its shape, so a rotated
+        // credential is covered too.
+        string?[] knownSecrets = [Environment.GetEnvironmentVariable("LANYARD_CLIENT_SHARED_SECRET"), Lanyard.Client.Security.KioskCredentials.Current];
 
         services.AddLogging(config =>
         {
@@ -63,12 +67,21 @@ public static class ClientServiceBootstrapper
         services.AddSingleton<IGameStateService, GameStateService>();
         services.AddSingleton<ILaserGameStatePublisher, LaserGameStatePublisher>();
         services.AddSingleton<IProjectionProgramsService, ProjectionProgramsService>();
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<IKioskOfflineCache, KioskOfflineCache>();
+        services.AddSingleton<IOfflineMusicService, OfflineMusicService>();
+        services.AddSingleton<KioskConnectivityMonitor>();
         services.AddSingleton<DmxController, DmxController>();
         services.AddSingleton<OpenDmxDevice, OpenDmxDevice>();
         services.AddSingleton<ISignalRClient, SignalRClient>();
         services.AddSingleton<DmxSignalRController, DmxSignalRController>();
         services.AddSingleton<ISongCacheService, SongCacheService>();
+        services.AddSingleton<MusicGain>();
+        services.AddSingleton<IMusicDucker>(sp => sp.GetRequiredService<MusicGain>());
         services.AddSingleton<IMusicPlayer, MusicPlayer>();
+        services.AddSingleton<IAudioClipCacheService, AudioClipCacheService>();
+        services.AddSingleton<IAudioClipPlayer, AudioClipPlayer>();
+        services.AddSingleton<AudioClipController>();
         services.AddSingleton<MusicControlHandler>();
         services.AddSingleton<ProjectionProgramController>();
         services.AddSingleton<ZoneScoreboardSignalRController>();
@@ -79,11 +92,18 @@ public static class ClientServiceBootstrapper
         services.AddSingleton<IRemoteRestartService, RemoteRestartService>();
         services.AddSingleton<RemoteRestartController>();
         services.AddSingleton<UpdateController>();
+        services.AddSingleton<CredentialController>();
         services.AddSingleton<IAudioDeviceService, AudioDeviceService>();
         services.AddSingleton<AudioSettingsController>();
         services.AddSingleton(logLineBuffer);
         services.AddSingleton<ClientDiagnosticsController>();
         services.AddSingleton<KioskHealthReporter>();
+        services.AddSingleton<IAudioEndpointProvider, AudioEndpointProvider>();
+        services.AddSingleton<ITonePlayer, TonePlayer>();
+        services.AddSingleton<ICaptureDeviceCatalog, CaptureDeviceCatalog>();
+        services.AddSingleton<IWebView2RuntimeProbe, WebView2RuntimeProbe>();
+        services.AddSingleton<KioskSelfTestRunner>();
+        services.AddSingleton<KioskSelfTestController>();
 
         return services.BuildServiceProvider();
     }
@@ -93,6 +113,7 @@ public static class ClientServiceBootstrapper
         return
         [
             provider.GetRequiredService<MusicControlHandler>().Register,
+            provider.GetRequiredService<AudioClipController>().Register,
             provider.GetRequiredService<ProjectionProgramController>().Register,
             provider.GetRequiredService<DmxSignalRController>().Register,
             provider.GetRequiredService<ZoneScoreboardSignalRController>().Register,
@@ -100,8 +121,10 @@ public static class ClientServiceBootstrapper
             provider.GetRequiredService<RestartScheduleController>().Register,
             provider.GetRequiredService<RemoteRestartController>().Register,
             provider.GetRequiredService<UpdateController>().Register,
+            provider.GetRequiredService<CredentialController>().Register,
             provider.GetRequiredService<AudioSettingsController>().Register,
-            provider.GetRequiredService<ClientDiagnosticsController>().Register
+            provider.GetRequiredService<ClientDiagnosticsController>().Register,
+            provider.GetRequiredService<KioskSelfTestController>().Register
         ];
     }
 }

@@ -138,10 +138,9 @@ internal static class AutoUpdate
             return null;
         }
 
-        string? sharedSecret = Environment.GetEnvironmentVariable("LANYARD_CLIENT_SHARED_SECRET");
         bool allowInsecureSsl = bool.TryParse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ALLOW_INSECURE_SSL"), out bool allow) && allow;
 
-        source = new LanyardServerUpdateSource(serverBaseUrl, clientId, sharedSecret, allowInsecureSsl);
+        source = new LanyardServerUpdateSource(serverBaseUrl, clientId, allowInsecureSsl);
 
         UpdateManager manager = new(source, Options);
 

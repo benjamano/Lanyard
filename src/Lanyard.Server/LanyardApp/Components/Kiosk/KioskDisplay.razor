@@ -7,7 +7,7 @@
 
 @if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.TemplateNames.ShowText)
 {
-    <KioskShowTextTemplate Step="CurrentProjectionStep" />
+    <KioskShowTextTemplate Step="CurrentProjectionStep" BoundValues="_boundValues" />
 }
 else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.TemplateNames.PlayVideo)
 {
@@ -58,10 +58,15 @@ else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.Templat
     private Guid? _runId;
     private IReadOnlyList<ProjectionProgramStep> _steps = [];
 
+    // Live values for the on-screen step's data-bound parameters. Only replaced when a step that
+    // renders is applied, so a Delay step keeps the previous step's text and values together.
+    private IReadOnlyDictionary<Guid, string> _boundValues = new Dictionary<Guid, string>();
+
     protected override void OnInitialized()
     {
         _programRunner.OnProgramStepAdvanced += HandleStepAdvanced;
         _programRunner.OnProgramPauseChanged += HandlePauseChanged;
+        _programRunner.OnProgramStepValuesChanged += HandleStepValuesChanged;
     }
 
     public async Task StartProcessingAsync()
@@ -103,6 +108,24 @@ else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.Templat
         _ = ApplyStepAsync(stepIndex);
     }
 
+    private void HandleStepValuesChanged(Guid clientId, int displayIndex, int stepIndex)
+    {
+        if (clientId != ClientId || displayIndex != DisplayIndex)
+        {
+            return;
+        }
+
+        // Only repaint if it's the step on screen that refreshed.
+        if (stepIndex < 0 || stepIndex >= _steps.Count || !ReferenceEquals(_steps[stepIndex], CurrentProjectionStep))
+        {
+            return;
+        }
+
+        _boundValues = _programRunner.GetRunningState(ClientId, DisplayIndex)?.BoundValues ?? _boundValues;
+
+        _ = InvokeAsync(StateHasChanged);
+    }
+
     private void HandlePauseChanged(Guid clientId, int displayIndex, bool isPaused)
     {
         if (clientId != ClientId || displayIndex != DisplayIndex)
@@ -139,6 +162,7 @@ else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.Templat
         }
 
         CurrentProjectionStep = step;
+        _boundValues = _programRunner.GetRunningState(ClientId, DisplayIndex)?.BoundValues ?? new Dictionary<Guid, string>();
 
         await InvokeAsync(async () =>
         {
@@ -152,6 +176,7 @@ else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.Templat
     {
         _programRunner.OnProgramStepAdvanced -= HandleStepAdvanced;
         _programRunner.OnProgramPauseChanged -= HandlePauseChanged;
+        _programRunner.OnProgramStepValuesChanged -= HandleStepValuesChanged;
 
         // Passing the run id makes this a no-op if a newer kiosk circuit has already taken over
         // this display - on a page reload the replacing circuit can start before this one disposes.

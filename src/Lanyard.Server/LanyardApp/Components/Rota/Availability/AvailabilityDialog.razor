@@ -1,0 +1,158 @@
+@inject IStaffAvailabilityService _availabilityService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.CalendarClock())" />
+            <FluentText As="@TextTag.H3">@(Existing is null ? "Add a time" : "Change a time")</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="availability-dialog">
+            @if (errorMessage is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
+            }
+
+            <FluentSelect TOption="KindOption" TValue="string" Items="@kindOptions" OptionText="@(x => x.Label)" OptionValue="@(x => x.Value)"
+                          @bind-Value="kind" Label="This is a time" Width="100%" />
+
+            <FluentSelect TOption="DayOption" TValue="string" Items="@dayOptions" OptionText="@(x => x.Label)" OptionValue="@(x => x.Value)"
+                          @bind-Value="day" Label="Every" Width="100%" />
+
+            <FluentCheckbox @bind-Value="allDay" Label="All day" />
+
+            @if (!allDay)
+            {
+                <div class="availability-dialog-pair">
+                    <AnyTimePicker @bind-Value="startTime" Label="From" />
+                    <AnyTimePicker @bind-Value="endTime" Label="To" />
+                </div>
+                @if (endTime <= startTime)
+                {
+                    <div class="availability-dialog-hint">Runs past midnight into the next day.</div>
+                }
+            }
+
+            <div class="availability-dialog-pair availability-dialog-dates">
+                <FluentDatePicker TValue="DateTime?" @bind-Value="effectiveFrom" Label="Starting (optional)" Culture="@RotaFormat.Uk" />
+                <FluentDatePicker TValue="DateTime?" @bind-Value="effectiveTo" Label="Until (optional)" Culture="@RotaFormat.Uk" />
+            </div>
+
+            <FluentTextInput @bind-Value="notes" Label="Note (optional)" Placeholder="e.g. College on Tuesday evenings" Width="100%" Maxlength="200" />
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentStack HorizontalAlignment="HorizontalAlignment.End" HorizontalGap="8px">
+            <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" OnClick="@SaveAsync">@(isBusy ? "Saving..." : "Save")</FluentButton>
+            <FluentButton Disabled="@isBusy" OnClick="@(() => Dialog.CancelAsync())">Cancel</FluentButton>
+        </FluentStack>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required string UserId { get; set; }
+
+    [Parameter]
+    public StaffAvailability? Existing { get; set; }
+
+    [Parameter]
+    public bool ForManager { get; set; }
+
+    private record KindOption(string Value, string Label);
+    private record DayOption(string Value, string Label);
+
+    private List<KindOption> kindOptions = [];
+
+    // Monday first, as the rota reads.
+    private readonly List<DayOption> dayOptions = Enumerable.Range(0, 7)
+        .Select(i => (DayOfWeek)((i + 1) % 7))
+        .Select(d => new DayOption(d.ToString(), $"{RotaFormat.Uk.DateTimeFormat.GetDayName(d)}"))
+        .ToList();
+
+    private string kind = nameof(AvailabilityKind.Unavailable);
+    private string day = nameof(DayOfWeek.Monday);
+    private bool allDay;
+    private TimeOnly startTime = new(17, 0);
+    private TimeOnly endTime = new(23, 0);
+    private DateTime? effectiveFrom;
+    private DateTime? effectiveTo;
+    private string? notes;
+
+    private string? errorMessage;
+    private bool isBusy;
+
+    protected override void OnInitialized()
+    {
+        kindOptions =
+        [
+            new(nameof(AvailabilityKind.Unavailable), ForManager ? "They can't work" : "I can't work"),
+            new(nameof(AvailabilityKind.Preferred), ForManager ? "They'd rather work" : "I'd rather work")
+        ];
+
+        if (Existing is StaffAvailability row)
+        {
+            kind = row.Kind.ToString();
+            day = row.DayOfWeek.ToString();
+            allDay = row.IsAllDay;
+            startTime = row.IsAllDay ? new TimeOnly(9, 0) : row.StartTime;
+            endTime = row.IsAllDay ? new TimeOnly(17, 0) : row.EndTime;
+            effectiveFrom = row.EffectiveFrom?.ToDateTime(TimeOnly.MinValue);
+            effectiveTo = row.EffectiveTo?.ToDateTime(TimeOnly.MinValue);
+            notes = row.Notes;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        errorMessage = null;
+
+        if (!allDay && startTime == endTime)
+        {
+            errorMessage = "Choose different start and end times, or tick All day.";
+            return;
+        }
+
+        isBusy = true;
+
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null || !actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            isBusy = false;
+            errorMessage = "Couldn't confirm who you are - try reloading the page.";
+            return;
+        }
+
+        StaffAvailability row = new()
+        {
+            Id = Existing?.Id ?? Guid.Empty,
+            CompanyId = 0,
+            UserId = UserId,
+            DayOfWeek = Enum.Parse<DayOfWeek>(day),
+            StartTime = allDay ? TimeOnly.MinValue : startTime,
+            EndTime = allDay ? TimeOnly.MinValue : endTime,
+            Kind = Enum.Parse<AvailabilityKind>(kind),
+            EffectiveFrom = effectiveFrom is DateTime from ? DateOnly.FromDateTime(from) : null,
+            EffectiveTo = effectiveTo is DateTime to ? DateOnly.FromDateTime(to) : null,
+            Notes = notes
+        };
+
+        Result<StaffAvailability> result = await _availabilityService.SaveAsync(scopeResult.Data, row, actingUser.Data);
+
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            errorMessage = result.Error;
+            return;
+        }
+
+        await Dialog.CloseAsync(true);
+    }
+}

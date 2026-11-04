@@ -49,8 +49,7 @@ public class MusicControlActionExecutorTests
         return factoryMock;
     }
 
-    // MusicPlayerService is concrete and its Play/Pause aren't virtual, so Moq can't stand in for
-    // it or verify the calls. Both bottom out in
+    // A real MusicPlayerService rather than a mocked IMusicPlayerService: Play and Pause both bottom out in
     // _hubContext.Clients.Client(connectionId).SendCoreAsync(methodName, args), so the hub proxy is
     // the seam: a real MusicPlayerService over a mocked IHubContext lets the assertions name the
     // method actually dispatched ("Play" vs "Pause") instead of just that something happened.
@@ -367,5 +366,38 @@ public class MusicControlActionExecutorTests
         Assert.IsFalse(success);
         Assert.IsNotNull(error);
         Assert.StartsWith("Music operation failed:", error);
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_ShouldFailWithoutPlaying_WhenThePlaylistHasNoSongs()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Mock<ISystemDbContextFactory> factory = GetFactoryMock(options);
+        Guid clientId = Guid.NewGuid();
+        Guid playlistId = Guid.NewGuid();
+
+        string connectionId = NewConnectionId();
+        await SeedClientAsync(options, clientId, connectionId);
+        MarkConnected(connectionId);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Playlists.Add(new Playlist { Id = playlistId, Name = "Empty", CreateDate = DateTime.UtcNow });
+            await ctx.SaveChangesAsync();
+        }
+
+        (MusicPlayerService player, Mock<ISingleClientProxy> proxy) = GetMusicPlayer(factory.Object);
+        MusicControlActionExecutor executor = GetExecutor(factory.Object, player);
+
+        AutomationRuleAction action = BuildAction(
+            $$"""{"TargetClientId":"{{clientId}}","Operation":"Play","PlaylistId":"{{playlistId}}"}""");
+
+        (bool success, string? error) = await executor.ExecuteAsync(action, clientId);
+
+        Assert.IsFalse(success, "An empty playlist should be logged as a failed action, not a silent success.");
+        Assert.IsNotNull(error);
+        proxy.Verify(
+            p => p.SendCoreAsync(It.IsAny<string>(), It.IsAny<object?[]>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 }

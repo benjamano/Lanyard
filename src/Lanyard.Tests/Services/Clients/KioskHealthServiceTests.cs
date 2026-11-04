@@ -197,4 +197,46 @@ public class KioskHealthServiceTests
 
         Assert.AreEqual(KioskHealthStatus.Unresponsive, health.Data![clientId].Status);
     }
+
+    [TestMethod]
+    public async Task RecordReport_StoresTheOfflineFallbackFields()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = await SeedClientAsync(options);
+        DateTime started = Start.AddHours(-3);
+
+        await GetService(options, new TestClock(Start)).RecordReportAsync(clientId, Report(r =>
+        {
+            r.OfflineFallbackReady = false;
+            r.OfflineVideosNotCached = 2;
+            r.OfflineCacheBytes = 123_456;
+            r.OfflineCacheSyncedUtc = Start.AddMinutes(-5);
+            r.LastOfflineStartedUtc = started;
+            r.LastOfflineEndedUtc = started.AddMinutes(12);
+        }));
+
+        await using ApplicationDbContext ctx = new(options);
+        ClientHealthSnapshot snapshot = await ctx.ClientHealthSnapshots.SingleAsync();
+        Assert.IsFalse(snapshot.OfflineFallbackReady);
+        Assert.AreEqual(2, snapshot.OfflineVideosNotCached);
+        Assert.AreEqual(123_456, snapshot.OfflineCacheBytes);
+        Assert.AreEqual(Start.AddMinutes(-5), snapshot.OfflineCacheSyncedUtc);
+        Assert.AreEqual(started, snapshot.LastOfflineStartedUtc);
+        Assert.AreEqual(started.AddMinutes(12), snapshot.LastOfflineEndedUtc);
+    }
+
+    [TestMethod]
+    public async Task RecordReport_FromAnOlderClient_LeavesTheOfflineFieldsEmpty()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = await SeedClientAsync(options);
+
+        await GetService(options, new TestClock(Start)).RecordReportAsync(clientId, Report(r => r.OfflineVideosNotCached = -4));
+
+        await using ApplicationDbContext ctx = new(options);
+        ClientHealthSnapshot snapshot = await ctx.ClientHealthSnapshots.SingleAsync();
+        Assert.IsNull(snapshot.OfflineFallbackReady);
+        Assert.IsNull(snapshot.OfflineVideosNotCached, "A negative count is nonsense and isn't stored.");
+        Assert.IsNull(snapshot.LastOfflineStartedUtc);
+    }
 }

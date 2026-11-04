@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using System.ComponentModel.DataAnnotations;
 using System.Data;
 
 namespace Lanyard.Infrastructure.Models
@@ -73,6 +74,13 @@ namespace Lanyard.Infrastructure.Models
         public Guid ParameterId { get; set; }
         public ProjectionProgramStepTemplateParameter? Parameter { get; set; }
 
+        // With a BindingKey this is the fallback text: shown when the data source has nothing yet,
+        // and the only thing an offline kiosk ever shows, since the manifest just copies Value.
         public string? Value { get; set; }
+
+        // Null for a fixed value. Otherwise a key from ProjectionBindingKeys, and the server swaps
+        // in live venue data (last winner, top score, opening hours) each time the step runs.
+        [MaxLength(64)]
+        public string? BindingKey { get; set; }
     }
 }

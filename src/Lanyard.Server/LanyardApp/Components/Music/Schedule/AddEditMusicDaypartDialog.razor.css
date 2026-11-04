@@ -1,0 +1,55 @@
+.daypart-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    width: 100%;
+}
+
+.daypart-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Wraps to a second row on a phone rather than squeezing seven checkboxes onto one line. */
+.daypart-days {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+}
+
+.daypart-times {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.daypart-volume {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Fluent components render their own root, so scoped classes on them need ::deep from a plain div. */
+.daypart-volume ::deep .daypart-volume-slider {
+    flex: 1;
+}
+
+.daypart-volume ::deep .daypart-volume-value {
+    min-width: 3.5em;
+    text-align: right;
+}
+
+.daypart-dialog ::deep .daypart-hint {
+    color: var(--colorNeutralForeground3);
+}
+
+.daypart-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.daypart-actions-spacer {
+    flex: 1;
+}

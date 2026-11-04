@@ -1,0 +1,26 @@
+@page "/help/training"
+@* The old address, kept so bookmarks and links in emails still work. *@
+@page "/manage/training/help"
+@attribute [Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.Training)]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Manager.Training.Help
+
+<HelpPage AreaKey="@HelpRegistry.ManageTraining">
+    <FluentTab Id="help-overview" Header="Overview" IconStart="@(new Icons.Regular.Size16.Info())">
+        <OverviewHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-courses" Header="Creating Courses" IconStart="@(new Icons.Regular.Size16.Board())" DeferredLoading="true">
+        <CreatingCoursesHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-assigning" Header="Assigning Training" IconStart="@(new Icons.Regular.Size16.PersonAdd())" DeferredLoading="true">
+        <AssigningTrainingHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-reports" Header="Tracking Completion" IconStart="@(new Icons.Regular.Size16.ChartMultiple())" DeferredLoading="true">
+        <TrackingCompletionHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-locations" Header="Multi-Location Rules" IconStart="@(new Icons.Regular.Size16.Location())" DeferredLoading="true">
+        <MultiLocationHelpTab />
+    </FluentTab>
+</HelpPage>

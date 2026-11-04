@@ -27,6 +27,10 @@
             <FluentButton Appearance="@(openOnly ? ButtonAppearance.Primary : ButtonAppearance.Outline)" OnClick="() => SetFilterAsync(true)">Open</FluentButton>
             <FluentButton Appearance="@(!openOnly ? ButtonAppearance.Primary : ButtonAppearance.Outline)" OnClick="() => SetFilterAsync(false)">Last 90 days</FluentButton>
         </div>
+
+        <div class="ms-auto">
+            <HelpButton AreaKey="@HelpRegistry.ChatModeration" Topic="reports" />
+        </div>
     </div>
 
     @if (loadError is not null)

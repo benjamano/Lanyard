@@ -1,0 +1,54 @@
+/* The faders scroll sideways; on a phone that's the only way 512 of them can fit. */
+.dmx-desk-scroll {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 12px;
+    overflow-x: auto;
+    padding: 0 16px 16px 0;
+    scrollbar-width: auto;
+}
+
+.dmx-desk-row {
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
+}
+
+.dmx-desk-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 0 0 auto;
+    padding: 6px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusLarge);
+}
+
+.dmx-desk-group-header {
+    display: flex;
+    flex-direction: column;
+    /* Sized by the sliders below, never by its own text. */
+    width: 0;
+    min-width: 100%;
+    box-sizing: border-box;
+    padding: 0 2px;
+}
+
+/* A one-channel group is only ~50px wide, so the header text truncates rather than widening it. */
+.dmx-desk-group-name,
+.dmx-desk-group-meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+
+.dmx-desk-group-name {
+    font-weight: 600;
+}
+
+.dmx-desk-group-meta {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}

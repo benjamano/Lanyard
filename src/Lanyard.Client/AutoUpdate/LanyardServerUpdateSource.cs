@@ -1,3 +1,4 @@
+using Lanyard.Client.Security;
 using Lanyard.Shared.Contracts;
 using System.Net.Http;
 using System.Net.Http.Json;
@@ -12,7 +13,7 @@ namespace Lanyard.Client.AutoUpdate;
 // release. The server answers with a Velopack feed holding exactly that one release (or nothing),
 // so pins, canaries and withdrawn releases are all decided server-side. The package itself still
 // downloads straight from GitHub, using the URL the server sends alongside the feed.
-internal sealed class LanyardServerUpdateSource(Uri serverBaseUrl, Guid clientId, string? sharedSecret, bool allowInsecureSsl) : IUpdateSource
+internal sealed class LanyardServerUpdateSource(Uri serverBaseUrl, Guid clientId, bool allowInsecureSsl) : IUpdateSource
 {
     // Velopack's downloader takes its timeout in minutes. A full package is ~100 MB, so this
     // allows for a slow venue connection.
@@ -39,10 +40,7 @@ internal sealed class LanyardServerUpdateSource(Uri serverBaseUrl, Guid clientId
 
         using HttpRequestMessage request = new(HttpMethod.Get, ClientUpdateRoutes.Feed(clientId));
 
-        if (!string.IsNullOrWhiteSpace(sharedSecret))
-        {
-            request.Headers.Add(ClientConnectionQuery.SecretHeader, sharedSecret);
-        }
+        KioskCredentials.ApplyTo(request);
 
         using HttpResponseMessage response = await httpClient.SendAsync(request).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();

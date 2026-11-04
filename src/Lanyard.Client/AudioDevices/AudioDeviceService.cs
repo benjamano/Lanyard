@@ -1,4 +1,5 @@
 ﻿using Lanyard.Infrastructure.DTO;
+using Lanyard.Shared.Kiosk;
 using Microsoft.Extensions.Logging;
 using NAudio.CoreAudioApi;
 using System.Runtime.InteropServices;
@@ -20,7 +21,7 @@ public class AudioDeviceService(ILogger<AudioDeviceService> logger) : IAudioDevi
     private readonly ILogger<AudioDeviceService> _logger = logger;
     private readonly object _lock = new();
 
-    private ClientAudioSettingsDTO? _settings;
+    private volatile ClientAudioSettingsDTO? _settings;
     private System.Threading.Timer? _timer;
 
     // Last problem logged, so a missing device warns once rather than every minute.
@@ -30,6 +31,10 @@ public class AudioDeviceService(ILogger<AudioDeviceService> logger) : IAudioDevi
     private volatile object? _preferredDevicePresent;
 
     public bool? PreferredDevicePresent => (bool?)_preferredDevicePresent;
+
+    public string? PreferredDeviceId => _settings?.PreferredDeviceId;
+
+    public string? PreferredDeviceName => _settings?.PreferredDeviceName;
 
     public void Apply(ClientAudioSettingsDTO settings)
     {
@@ -87,20 +92,11 @@ public class AudioDeviceService(ILogger<AudioDeviceService> logger) : IAudioDevi
 
             try
             {
-                // Match on endpoint ID first; fall back to the name in case the device was plugged
-                // into a different port and Windows gave it a fresh endpoint ID. The fallback only
-                // applies when the name is unambiguous: two identical TVs share a friendly name, and
-                // while the preferred one sleeps its twin must not be forced to default instead.
-                MMDevice? target = devices.FirstOrDefault(d => string.Equals(d.ID, settings.PreferredDeviceId, StringComparison.OrdinalIgnoreCase));
-
-                if (target == null && !string.IsNullOrWhiteSpace(settings.PreferredDeviceName))
-                {
-                    List<MMDevice> nameMatches = devices
-                        .Where(d => string.Equals(d.FriendlyName, settings.PreferredDeviceName, StringComparison.OrdinalIgnoreCase))
-                        .ToList();
-
-                    target = nameMatches.Count == 1 ? nameMatches[0] : null;
-                }
+                // The same rule the self-test uses: ID first, then an unambiguous name, so a device
+                // moved to another port is still found but a sleeping TV's identical twin is not.
+                List<SelfTestRules.AudioEndpoint> endpoints = devices.Select(d => new SelfTestRules.AudioEndpoint(d.ID, d.FriendlyName)).ToList();
+                SelfTestRules.AudioEndpoint? match = SelfTestRules.MatchPreferredAudio(endpoints, settings.PreferredDeviceId, settings.PreferredDeviceName);
+                MMDevice? target = match == null ? null : devices.First(d => d.ID == match.Id);
 
                 _preferredDevicePresent = target != null;
 

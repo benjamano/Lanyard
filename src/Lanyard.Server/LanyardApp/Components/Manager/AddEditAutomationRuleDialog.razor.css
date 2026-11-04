@@ -1,0 +1,69 @@
+/* Conditions step. Mobile first: every field stacks in one column, and pairs sit side by side only
+   once there's room for both. */
+.conditions-step {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    width: 100%;
+    min-width: 0;
+}
+
+.conditions-empty,
+.condition-hint {
+    font-size: 0.85rem;
+    color: var(--colorNeutralForeground3);
+}
+
+.condition-row {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+}
+
+.condition-row-header {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.condition-type {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* The select's fluent-field reserves a message line under the dropdown; lift the button by the
+   same amount so it lines up with the dropdown rather than the empty message line. */
+.condition-remove {
+    flex: 0 0 auto;
+    margin-bottom: 17px;
+}
+
+.condition-fields {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    /* Also used on the Rule Details step, whose FluentStack aligns children to the start, which
+       would otherwise shrink this div to its content. */
+    width: 100%;
+}
+
+.condition-fields ::deep fluent-field,
+.condition-fields ::deep fluent-text-input {
+    width: 100%;
+    max-width: none;
+}
+
+.condition-days {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+}
+
+@media (min-width: 600px) {
+    .condition-fields {
+        grid-template-columns: 1fr 1fr;
+    }
+}

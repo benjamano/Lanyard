@@ -1,0 +1,65 @@
+.play-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    width: 100%;
+}
+
+.play-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.play-group-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.play-kiosk {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding-left: 4px;
+}
+
+/* Fluent components render their own root, so scoped classes on them need ::deep from a plain div. */
+.play-dialog ::deep .play-hint,
+.play-dialog ::deep .play-kiosk-note {
+    color: var(--colorNeutralForeground3);
+}
+
+.play-dialog ::deep .play-kiosk-note {
+    padding-left: 28px;
+    font-size: var(--fontSizeBase200);
+}
+
+.play-results {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.play-result {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.play-result-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.play-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+}

@@ -70,6 +70,27 @@
     background: #d13438;
 }
 
+/* Missing required training: a warning-coloured hat in the bottom-right corner (top-right is the
+   "changed" dot), plus the course names on the phone day list. */
+.shift-chip-training-icon {
+    position: absolute;
+    right: 3px;
+    bottom: 2px;
+    display: inline-flex;
+    line-height: 0;
+}
+
+.shift-chip-training {
+    padding-right: 20px;
+}
+
+.shift-chip-training-text {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--colorPaletteDarkOrangeForeground1);
+    overflow-wrap: anywhere;
+}
+
 .shift-chip-removed {
     opacity: 0.55;
     cursor: default;

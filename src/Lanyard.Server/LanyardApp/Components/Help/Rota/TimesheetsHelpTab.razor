@@ -1,0 +1,46 @@
+<HelpTab>
+    <HelpSection Title="How time is recorded">
+        <FluentText>
+            Staff clock in and out on a clock-in terminal, with their PIN or by scanning its QR code. They can
+            clock in from the clock-in window before a published shift at that location. You can also add
+            time by hand.
+        </FluentText>
+    </HelpSection>
+
+    <HelpSection Title="Checking and approving">
+        <ol>
+            <li>Open <a href="/manage/rota/timesheets">Timesheets</a> and choose the week.</li>
+            <li>Each person's days show the rota shift next to the clocked time, with any difference.</li>
+            <li>Select <strong>Approve</strong> on an entry, or <strong>Approve N ready</strong> to approve every
+                finished entry that isn't flagged.</li>
+        </ol>
+        <FluentText>Entries are flagged for review when, for example:</FluentText>
+        <ul>
+            <li>nobody clocked out, so the entry was closed automatically after 16 hours;</li>
+            <li>someone clocked in at one location and out at another.</li>
+        </ul>
+        <FluentText>Check flagged entries and fix them before approving.</FluentText>
+    </HelpSection>
+
+    <HelpSection Title="Adding or correcting time">
+        <FluentText>
+            Use <strong>Add time</strong> for cover shifts and forgotten clock-ins, or the edit button on an entry
+            to correct it. Saving counts as your approval, except for your own time, which another manager or
+            an admin approves. Entries can't overlap, be in the future or be longer than 24 hours.
+        </FluentText>
+    </HelpSection>
+
+    <HelpSection Title="Exporting for payroll">
+        <ol>
+            <li>Select <strong>Export</strong>.</li>
+            <li>Choose <strong>Last pay period</strong> or <strong>This pay period</strong> (once your pay period
+                is set in Rota Settings), <strong>This week</strong>, <strong>Last week</strong>, or your own dates.</li>
+            <li>Select <strong>Download CSV</strong>.</li>
+        </ol>
+        <FluentText>
+            The file has one row per person per day of approved hours, plus a total for each person. Time that
+            isn't approved yet is listed as Excluded rows and not counted, so approve or fix it first if it
+            should be paid this time.
+        </FluentText>
+    </HelpSection>
+</HelpTab>

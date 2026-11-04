@@ -1,0 +1,68 @@
+.clip-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    width: 100%;
+}
+
+.clip-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.clip-slider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Fluent components render their own root, so scoped classes on them need ::deep from a plain div. */
+.clip-slider ::deep .clip-slider-input {
+    flex: 1;
+}
+
+.clip-slider ::deep .clip-slider-value {
+    min-width: 4.5em;
+    text-align: right;
+}
+
+.clip-dialog ::deep .clip-hint {
+    color: var(--colorNeutralForeground3);
+}
+
+/* The drop-zone label is centred out of flow: its hidden progress bar still takes up height
+   (see the fluentui-v5-blazor skill), so flex-centring the pair would sit the label high. */
+.clip-upload ::deep .inputfile-content {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.clip-upload ::deep .inputfile-content label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    text-align: center;
+}
+
+.clip-upload-chosen {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.clip-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.clip-actions-spacer {
+    flex: 1;
+}

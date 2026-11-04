@@ -6,7 +6,10 @@
 
 <FluentCard Height="auto" Class="mt-2">
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Staff Document Types</FluentText>
+        <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center" Wrap="true">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Staff Document Types</FluentText>
+            <HelpButton AreaKey="@HelpRegistry.Onboarding" Topic="documents" />
+        </FluentStack>
 
         @if (documentTypes is null)
         {

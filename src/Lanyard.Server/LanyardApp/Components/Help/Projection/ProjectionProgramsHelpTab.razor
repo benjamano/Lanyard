@@ -1,0 +1,38 @@
+<HelpTab>
+    <FluentText>
+        A projection program is a sequence of screens shown on a kiosk's projector or display, such as a welcome
+        message, a video, the scoreboard or a dashboard. Build them on
+        <a href="/manage/projectionprograms">Projection</a>.
+    </FluentText>
+
+    <HelpSection Title="Building a program">
+        <ol>
+            <li>Select <strong>New</strong>, and give the program a <strong>Program Name</strong> and optional description.</li>
+            <li>Select the program in the list on the left.</li>
+            <li>Drag steps from the toolbox on the right into the flow in the middle, after <strong>START</strong>.
+                The built-in steps are <strong>Show Text</strong>, <strong>Play a Video</strong>, <strong>Dashboard</strong>,
+                <strong>Live Capture</strong> (a camera or capture device) and <strong>Delay</strong>, which keeps the
+                previous screen up.</li>
+            <li>Fill in each step's settings, such as the text, the video file (pick one from the File Manager or
+                upload it), or the dashboard.</li>
+            <li>Right-click a step for more options, such as deleting it, then save.</li>
+        </ol>
+    </HelpSection>
+
+    <HelpSection Title="Live venue data in text">
+        <FluentText>
+            Text steps can show live data instead of fixed words. Change <strong>Text source</strong> from
+            <strong>Fixed text</strong> to Last game winner, Today's top score or Opening hours today. The screen
+            keeps it up to date while it's showing. Set <strong>Fallback text</strong> for when there's no data yet or
+            the kiosk is offline.
+        </FluentText>
+    </HelpSection>
+
+    <HelpSection Title="Starting a program on a kiosk">
+        <FluentText>Programs are started by:</FluentText>
+        <ul>
+            <li>an <a href="/help/automation">automation rule</a>, for example when a game ends;</li>
+            <li>a dashboard <strong>Button</strong> widget set to Trigger Projection Program.</li>
+        </ul>
+    </HelpSection>
+</HelpTab>

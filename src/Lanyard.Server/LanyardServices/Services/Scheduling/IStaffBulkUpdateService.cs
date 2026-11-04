@@ -14,7 +14,9 @@ public interface IStaffBulkUpdateService
 {
     Task<Result<List<StaffRotaSummary>>> GetStaffAsync(LocationScope scope, int companyId, int locationId);
 
-    Task<Result<int>> ApplyPositionsAsync(LocationScope scope, int companyId, int locationId, List<string> userIds, BulkPositionChange change);
+    // The people changed, and the required training assigned for the positions they were given
+    // (IRequiredTrainingService) - which never fails the change itself.
+    Task<Result<BulkPositionsApplied>> ApplyPositionsAsync(LocationScope scope, int companyId, int locationId, List<string> userIds, BulkPositionChange change, string actingUserId);
 
     Task<Result<int>> ApplyContractAsync(LocationScope scope, int companyId, int locationId, List<string> userIds, BulkContractChange change, string? updatedByUserId);
 

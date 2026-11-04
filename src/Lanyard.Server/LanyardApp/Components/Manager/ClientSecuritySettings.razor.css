@@ -1,0 +1,51 @@
+.kiosk-security {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    max-width: 640px;
+}
+
+.kiosk-security-status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 32px;
+}
+
+.kiosk-security-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.kiosk-security-label {
+    color: var(--colorNeutralForeground3);
+    font-size: var(--fontSizeBase200);
+}
+
+.kiosk-security-value {
+    font-size: var(--fontSizeBase500);
+    font-weight: var(--fontWeightSemibold);
+}
+
+.kiosk-security-hint {
+    color: var(--colorNeutralForeground3);
+    font-size: var(--fontSizeBase200);
+    overflow-wrap: anywhere;
+}
+
+.kiosk-security-history {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.kiosk-security-history li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+}

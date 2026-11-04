@@ -1,0 +1,207 @@
+@using Lanyard.Application.Services.Authentication
+@using Lanyard.Application.Services.Tenancy
+@using System.Globalization
+
+@inject IKioskEnrolmentService _enrolmentService
+@inject ITenantContext _tenant
+
+@* Pairing a kiosk: type the code the kiosk shows, check it's the right PC, name it and pick its
+   location. Two steps, so the Admin sees which PC a code belongs to before approving it. *@
+<FluentDialogBody>
+    <ChildContent>
+        @switch (_step)
+        {
+            case Step.EnterCode:
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="18px">
+                    <FluentText>
+                        Start Lanyard Client on the new PC. It shows an 8-character pairing code on its screen. Type that code here.
+                    </FluentText>
+                    <FluentTextInput @bind-Value="_code" Label="Pairing code" Placeholder="XXXX-XXXX"
+                                     Class="w-100 pair-kiosk-code" Maxlength="12"
+                                     @onkeydown="OnCodeKeyDownAsync" />
+                    @if (_error is not null)
+                    {
+                        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@_error</FluentMessageBar>
+                    }
+                </FluentStack>
+                break;
+
+            case Step.Confirm:
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="18px">
+                    <dl class="pair-kiosk-facts">
+                        <dt>Pairing code</dt>
+                        <dd>@_code?.ToUpperInvariant()</dd>
+                        <dt>Computer name</dt>
+                        <dd>@(_pending!.MachineName ?? "Not sent")</dd>
+                        <dt>IP address</dt>
+                        <dd>@(_pending.RequestIp ?? "Unknown")</dd>
+                        <dt>Kiosk software</dt>
+                        <dd>@(_pending.ReportedVersion is null ? "Unknown" : $"v{_pending.ReportedVersion}")</dd>
+                        <dt>Code shown</dt>
+                        <dd>@FormatUkTime(_pending.CreatedUtc)</dd>
+                    </dl>
+
+                    @if (_pending.ExistingName is not null)
+                    {
+                        <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                            This PC is already one of your kiosks, <strong>@_pending.ExistingName</strong>. Pairing it again keeps all its settings.
+                        </FluentMessageBar>
+                    }
+
+                    <FluentTextInput @bind-Value="_name" Label="Kiosk name" Placeholder="For example, Arena scoreboard"
+                                     Class="w-100" Maxlength="100" Required="true" />
+
+                    <FluentSelect TOption="string" TValue="string" @bind-Value="_locationValue" Label="Location" Class="w-100">
+                        <FluentOption Value="@NoLocationValue">Not set</FluentOption>
+                        @foreach (Location location in _locations)
+                        {
+                            <FluentOption Value="@location.Id.ToString()">@location.Name</FluentOption>
+                        }
+                    </FluentSelect>
+
+                    <FluentText Size="TextSize.Size200" Color="Color.Info">
+                        Only approve a code you can see on the kiosk's own screen. The kiosk connects by itself a few seconds after you approve it.
+                    </FluentText>
+
+                    @if (_error is not null)
+                    {
+                        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@_error</FluentMessageBar>
+                    }
+                </FluentStack>
+                break;
+        }
+    </ChildContent>
+    <ActionTemplate>
+        <FluentStack HorizontalGap="8px" HorizontalAlignment="HorizontalAlignment.End" Wrap="true">
+            @if (_step == Step.EnterCode)
+            {
+                <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Search())"
+                              Loading="@_busy" OnClick="@FindAsync">Find kiosk</FluentButton>
+            }
+            else
+            {
+                <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Checkmark())"
+                              Loading="@_busy" OnClick="@ApproveAsync">Approve</FluentButton>
+                <FluentButton IconStart="@(new Icons.Regular.Size20.Dismiss())" Disabled="@_busy" OnClick="@RejectAsync">Reject</FluentButton>
+            }
+            <FluentButton Disabled="@_busy" OnClick="@CancelAsync">Cancel</FluentButton>
+        </FluentStack>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private enum Step { EnterCode, Confirm }
+
+    private const string NoLocationValue = "none";
+
+    private Step _step = Step.EnterCode;
+    private string? _code;
+    private string? _name;
+    private string _locationValue = NoLocationValue;
+    private string? _error;
+    private bool _busy;
+    private PendingKioskEnrolment? _pending;
+    private List<Location> _locations = [];
+
+    private async Task OnCodeKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await FindAsync();
+        }
+    }
+
+    private async Task FindAsync()
+    {
+        _error = null;
+        _busy = true;
+
+        try
+        {
+            Result<PendingKioskEnrolment> found = await _enrolmentService.FindPendingAsync(_code ?? string.Empty);
+
+            if (!found.IsSuccess || found.Data is null)
+            {
+                _error = found.Error;
+                return;
+            }
+
+            _pending = found.Data;
+            _name = _pending.ExistingName ?? _pending.MachineName;
+            _locationValue = _pending.ExistingLocationId?.ToString() ?? NoLocationValue;
+
+            // The signed-in company's locations: that's the company the kiosk joins. Named
+            // explicitly, since a platform admin would otherwise get every company's.
+            Result<List<Location>> locations = _tenant.CompanyId is int companyId
+                ? await _companyLocationService.GetLocationsAsync(companyId)
+                : Result<List<Location>>.Ok([]);
+            _locations = locations.IsSuccess ? (locations.Data ?? []).Where(x => x.IsActive).OrderBy(x => x.Name).ToList() : [];
+
+            _step = Step.Confirm;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ApproveAsync()
+    {
+        _error = null;
+        _busy = true;
+
+        try
+        {
+            int? locationId = int.TryParse(_locationValue, out int parsed) ? parsed : null;
+
+            Result<Guid> approved = await _enrolmentService.ApproveAsync(_code ?? string.Empty, _name ?? string.Empty, locationId);
+
+            if (!approved.IsSuccess)
+            {
+                _error = approved.Error;
+                return;
+            }
+
+            _toastService.ShowSuccess($"{_name?.Trim()} is paired. It connects in a few seconds.");
+
+            await Dialog.CloseAsync(approved.Data);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RejectAsync()
+    {
+        _error = null;
+        _busy = true;
+
+        try
+        {
+            Result<bool> rejected = await _enrolmentService.RejectAsync(_code ?? string.Empty);
+
+            if (!rejected.IsSuccess)
+            {
+                _error = rejected.Error;
+                return;
+            }
+
+            _toastService.ShowInfo("Pairing rejected. The kiosk shows that it was turned down.");
+
+            await Dialog.CancelAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CancelAsync() => await Dialog.CancelAsync();
+
+    private static string FormatUkTime(DateTime utc) =>
+        utc.ToLocalTime().ToString("HH:mm", CultureInfo.GetCultureInfo("en-GB"));
+}

@@ -16,3 +16,14 @@
     color: var(--colorNeutralForeground3);
     font-size: 0.8rem;
 }
+
+.settings-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.scheduling-settings ::deep .settings-example {
+    color: var(--colorNeutralForeground2);
+    font-weight: 600;
+}

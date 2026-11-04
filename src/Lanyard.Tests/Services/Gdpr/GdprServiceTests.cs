@@ -267,6 +267,41 @@ public class GdprServiceTests
     }
 
     [TestMethod]
+    public async Task EraseUserDataAsync_ClearsWhoRanAKioskSelfTest_KeepsTheResult()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        UserManager<UserProfile> userManager = BuildUserManager(options);
+
+        UserProfile admin = await SeedUserAsync(userManager, "Ada", "Min", "admin@example.com");
+        UserProfile target = await SeedUserAsync(userManager);
+
+        Guid runId = Guid.NewGuid();
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.ClientSelfTestRuns.Add(new ClientSelfTestRun
+            {
+                Id = runId,
+                ClientId = Guid.NewGuid(),
+                RequestedByUserId = target.Id,
+                RequestedAtUtc = DateTime.UtcNow,
+                Status = Lanyard.Shared.Enum.ClientSelfTestStatus.Completed
+            });
+
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<bool> result = await BuildService(options, userManager, BuildSecurityServiceMock(isAdmin: true, admin)).EraseUserDataAsync(target.Id);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using ApplicationDbContext verifyCtx = new(options);
+        ClientSelfTestRun? run = await verifyCtx.ClientSelfTestRuns.FindAsync(runId);
+        Assert.IsNotNull(run);
+        Assert.IsNull(run.RequestedByUserId);
+    }
+
+    [TestMethod]
     public async Task EraseUserDataAsync_RepointsNonNullableAttributionFKs_ToPlaceholder_KeepsParentRows()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
@@ -540,5 +575,39 @@ public class GdprServiceTests
         Assert.IsNull((await verifyCtx.TimeOffRequests.SingleAsync(x => x.Id == decidedByTargetId)).DecidedByUserId);
         Assert.IsFalse(await verifyCtx.TimeOffAllowances.AnyAsync(x => x.UserId == target.Id));
         Assert.IsNull((await verifyCtx.TimeOffAllowances.SingleAsync()).UpdatedByUserId);
+    }
+
+    [TestMethod]
+    public async Task EraseUserDataAsync_RemovesOwnAvailabilityAndClearsTheirNameFromOthers()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        UserManager<UserProfile> userManager = BuildUserManager(options);
+
+        UserProfile admin = await SeedUserAsync(userManager, "Ada", "Min", "admin@example.com");
+        UserProfile target = await SeedUserAsync(userManager);
+
+        Guid setForAdmin = Guid.NewGuid();
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Users.Add(new UserProfile { Id = ApplicationDbContext.SystemDeletedUserPlaceholderId, UserName = "deleted-user" });
+            ctx.StaffAvailabilities.Add(new StaffAvailability { Id = Guid.NewGuid(), CompanyId = 1, UserId = target.Id, DayOfWeek = DayOfWeek.Tuesday, StartTime = new TimeOnly(17, 0), EndTime = new TimeOnly(23, 0) });
+            ctx.StaffAvailabilities.Add(new StaffAvailability { Id = Guid.NewGuid(), CompanyId = 2, UserId = target.Id, DayOfWeek = DayOfWeek.Sunday, IsActive = false });
+            ctx.StaffAvailabilities.Add(new StaffAvailability { Id = setForAdmin, CompanyId = 1, UserId = admin.Id, DayOfWeek = DayOfWeek.Monday, UpdatedByUserId = target.Id });
+
+            await ctx.SaveChangesAsync();
+        }
+
+        Mock<ISecurityService> securityServiceMock = BuildSecurityServiceMock(isAdmin: true, admin);
+        GdprService service = BuildService(options, userManager, securityServiceMock);
+
+        Result<bool> result = await service.EraseUserDataAsync(target.Id);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using ApplicationDbContext verifyCtx = new(options);
+
+        Assert.IsFalse(await verifyCtx.StaffAvailabilities.IgnoreQueryFilters().AnyAsync(x => x.UserId == target.Id));
+        Assert.IsNull((await verifyCtx.StaffAvailabilities.SingleAsync(x => x.Id == setForAdmin)).UpdatedByUserId);
     }
 }

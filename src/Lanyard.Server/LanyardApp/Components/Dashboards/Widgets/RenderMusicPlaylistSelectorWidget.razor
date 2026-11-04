@@ -2,8 +2,10 @@
 
 @implements IDisposable
 
+@using Lanyard.App.Components.Music.Schedule
+
 @inject IPlaylistService PlaylistService
-@inject MusicPlayerService _player
+@inject IMusicPlayerService _player
 
 <FluentCard Height="100%">
     @if (Widget.ClientId == null || Widget.ClientId == Guid.Empty)
@@ -46,6 +48,8 @@
                     }
                 </FluentStack>
             </div>
+
+            <MusicScheduleStatusChip ClientId="Widget.ClientId" AllowResume="AllowTrigger" />
 
             <FluentButton Appearance="@ButtonAppearance.Primary"
                           Style="width: 100%;"
@@ -146,7 +150,11 @@
 
         try
         {
-            await _player.Play(clientId, playlistId);
+            Result<bool> playResult = await _player.Play(clientId, playlistId);
+            if (!playResult.IsSuccess)
+            {
+                _toastService.ShowWarning(playResult.Error ?? "Couldn't play that playlist.");
+            }
         }
         finally
         {

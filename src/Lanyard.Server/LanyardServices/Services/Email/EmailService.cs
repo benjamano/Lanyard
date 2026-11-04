@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO.Feedback;
 using Lanyard.Infrastructure.DTO.Notifications;
 using Lanyard.Infrastructure.DTO.Scheduling;
 using Lanyard.Infrastructure.Enum;
@@ -218,6 +219,24 @@ public class EmailService : IEmailService
 
         return await SendResendEmailAsync(null, toEmail, subject, BuildContactEnquiryHtml(enquiry), replyTo: enquiry.Email);
     }
+
+    public async Task<Result<bool>> SendFeedbackReceivedEmailAsync(UserProfile admin, FeedbackEmail feedback)
+    {
+        if (string.IsNullOrWhiteSpace(admin.Email))
+        {
+            return Result<bool>.Fail("Admin has no email address.");
+        }
+
+        string from = feedback.CompanyName is null ? feedback.SenderName : $"{feedback.SenderName} ({feedback.CompanyName})";
+        string subject = $"Lanyard feedback: {FeedbackScoreText(feedback.Kind, feedback.Score)} from {from}";
+
+        return await SendResendEmailAsync(admin.Id, admin.Email, subject, BuildFeedbackReceivedHtml(feedback), replyTo: feedback.SenderEmail);
+    }
+
+    // "Thumbs up", "Thumbs down" or "4/5 stars" - for subject lines, where an emoji may not render.
+    public static string FeedbackScoreText(FeedbackKind kind, int score) => kind == FeedbackKind.Thumbs
+        ? score > 0 ? "Thumbs up" : "Thumbs down"
+        : $"{score}/5 stars";
 
     // Single decision point for the Resend HTTP call - the config check, request shape,
     // auth header, and error handling used to be copy-pasted into each Send*Async method above.
@@ -574,6 +593,43 @@ public class EmailService : IEmailService
           <p><strong>From:</strong> {WebUtility.HtmlEncode(enquiry.Name)} &lt;{WebUtility.HtmlEncode(enquiry.Email)}&gt;</p>
           {venue}
           <p style="border-left: 4px solid {Lanyard.Infrastructure.Branding.BrandConstants.PrimaryColorHex}; padding-left: 12px; color: #242424;">{message}</p>
+          <p style="color: #666; font-size: 13px;">Reply to this email to answer them.</p>
+        </div>
+        """;
+    }
+
+    // The comment was typed by the sender, so it and every name are encoded.
+    private static string BuildFeedbackReceivedHtml(FeedbackEmail feedback)
+    {
+        string accent = Lanyard.Infrastructure.Branding.BrandConstants.PrimaryColorHex;
+
+        string score = feedback.Kind == FeedbackKind.Thumbs
+            ? feedback.Score > 0 ? "&#128077; Thumbs up" : "&#128078; Thumbs down"
+            : $"""<span style="color: #f5a623; letter-spacing: 2px;">{new string('★', feedback.Score)}</span><span style="color: #c8c8c8; letter-spacing: 2px;">{new string('★', 5 - feedback.Score)}</span> {feedback.Score}/5""";
+
+        string comment = string.IsNullOrWhiteSpace(feedback.Comment)
+            ? """<p style="color: #666;"><em>No comment left.</em></p>"""
+            : $"""<p style="border-left: 4px solid {accent}; padding-left: 12px; color: #242424;">{string.Join("<br>", feedback.Comment.Split('\n').Select(line => WebUtility.HtmlEncode(line.TrimEnd('\r'))))}</p>""";
+
+        string sender = feedback.SenderEmail is null
+            ? WebUtility.HtmlEncode(feedback.SenderName)
+            : $"{WebUtility.HtmlEncode(feedback.SenderName)} &lt;{WebUtility.HtmlEncode(feedback.SenderEmail)}&gt;";
+
+        string where = string.Join(" · ", new[] { feedback.CompanyName, feedback.LocationName }
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => WebUtility.HtmlEncode(x!)));
+
+        string whereHtml = where.Length == 0 ? string.Empty : $"<p><strong>Where:</strong> {where}</p>";
+
+        return $"""
+        <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto;">
+          <h2>New Lanyard feedback</h2>
+          <p style="font-size: 20px; margin: 8px 0 16px;">{score}</p>
+          {comment}
+          <p><strong>From:</strong> {sender}</p>
+          {whereHtml}
+          <p><strong>Page:</strong> <a href="{WebUtility.HtmlEncode(feedback.PageUrl)}">{WebUtility.HtmlEncode(feedback.PageUrl)}</a></p>
+          {ButtonHtml(feedback.InboxUrl, "Open the feedback inbox", accent)}
           <p style="color: #666; font-size: 13px;">Reply to this email to answer them.</p>
         </div>
         """;

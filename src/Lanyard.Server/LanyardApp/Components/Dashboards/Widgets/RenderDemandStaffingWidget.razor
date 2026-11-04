@@ -1,0 +1,155 @@
+@using Lanyard.App.Components.Insights
+@using Lanyard.Application.Services.Insights
+@using Lanyard.Infrastructure.DTO.Insights
+
+@inject IDemandInsightsService _insightsService
+
+@* Labour hours per game and the hours most out of line with staffing, for the viewing Admin or
+   Manager. Anyone else - including a signed-out kiosk screen - gets a short note, and the data is
+   never requested for them. Hours only; no names and no pay. *@
+
+<FluentCard Height="100%">
+    <div class="sw-body">
+        <div class="sw-header">
+            <span class="sw-title">@(Widget.Title ?? "Demand and staffing")</span>
+            @if (_state == State.Ready && _summary is not null)
+            {
+                <span class="sw-count">Last @RangeDays days</span>
+            }
+        </div>
+
+        @switch (_state)
+        {
+            case State.Loading:
+                <div class="sw-empty"><FluentSpinner /></div>
+                break;
+            case State.Failed:
+                <div class="sw-empty" title="@_error">
+                    <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Danger">Couldn't load insights</FluentBadge>
+                </div>
+                break;
+            case State.NotManager:
+                <div class="sw-empty">
+                    <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">Shown to managers</FluentBadge>
+                </div>
+                break;
+            default:
+                InsightsFigures figures = _summary!.Figures;
+
+                <div class="ds-kpis">
+                    <div class="ds-kpi">
+                        <span class="ds-kpi-value">@InsightsDisplay.Format(figures.Totals.LabourHoursPerGame)</span>
+                        <span class="ds-kpi-label">labour hours per game</span>
+                    </div>
+                    <div class="ds-kpi">
+                        <span class="ds-kpi-value">@InsightsDisplay.Format(figures.Totals.GamesPerStaffHour)</span>
+                        <span class="ds-kpi-label">games per staff hour</span>
+                    </div>
+                    <div class="ds-kpi">
+                        <span class="ds-kpi-value">@figures.Totals.Games.ToString("#,0")</span>
+                        <span class="ds-kpi-label">games at @_summary.LocationName</span>
+                    </div>
+                </div>
+
+                <div class="sw-list">
+                    @if (!figures.FlagsAvailable)
+                    {
+                        <span class="ds-note">@figures.FlagsUnavailableReason</span>
+                    }
+                    else if (figures.FlaggedCells().Take(MaxFlags).ToList() is { Count: > 0 } flagged)
+                    {
+                        @foreach (InsightsCell cell in flagged)
+                        {
+                            <button type="button" class="sw-row" disabled="@(!AllowTrigger)" @onclick="@OpenPage"
+                                    title="@InsightsDisplay.Describe(cell)">
+                                <span class="sw-text">
+                                    <span class="sw-primary">@InsightsDisplay.FlagGlyph(cell.Flag) @InsightsDisplay.CellName(cell)</span>
+                                    <span class="sw-secondary">
+                                        @InsightsDisplay.FlagLabel(cell.Flag) · @InsightsDisplay.Format(cell.AverageGames) games, @InsightsDisplay.Format(cell.AverageStaff) staff
+                                    </span>
+                                </span>
+                            </button>
+                        }
+                    }
+                    else
+                    {
+                        <div class="sw-empty">
+                            <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Success">Staffing matched demand</FluentBadge>
+                        </div>
+                    }
+                </div>
+
+                @if (AllowTrigger)
+                {
+                    <FluentButton Appearance="ButtonAppearance.Transparent" IconEnd="@(new Icons.Regular.Size16.ArrowRight())" OnClick="@OpenPage">
+                        View insights
+                    </FluentButton>
+                }
+                break;
+        }
+    </div>
+</FluentCard>
+
+@code {
+    private const int MaxFlags = 3;
+
+    [Parameter]
+    public required DemandStaffingWidget Widget { get; set; }
+
+    [Parameter]
+    public bool AllowTrigger { get; set; } = true;
+
+    private enum State { Loading, Failed, NotManager, Ready }
+
+    private State _state = State.Loading;
+    private string? _error;
+    private InsightsSummary? _summary;
+
+    private int RangeDays => Math.Clamp(Widget.RangeDays, DemandStaffingWidget.MinRangeDays, InsightsQuery.MaxRangeDays);
+
+    // The grid (and the kiosk host) re-render widgets often; only reload when the settings change.
+    private (int? LocationId, int Days)? _loadedSettings;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        (int? LocationId, int Days) settings = (Widget.LocationId, RangeDays);
+
+        if (_loadedSettings == settings)
+        {
+            return;
+        }
+
+        _loadedSettings = settings;
+
+        // Gate first: a failed scope (signed out, e.g. a kiosk) or a non-manager never reaches the
+        // service, which refuses system callers itself as well.
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (!scope.IsSuccess || scope.Data is null || !(scope.Data.IsAdmin || scope.Data.IsManager))
+        {
+            _state = State.NotManager;
+            return;
+        }
+
+        DateOnly to = RotaTime.Today(DateTime.UtcNow).AddDays(-1);
+        Result<InsightsSummary> result = await _insightsService.GetSummaryAsync(scope.Data, new InsightsQuery(Widget.LocationId, to.AddDays(1 - RangeDays), to));
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _error = result.Error;
+            _state = State.Failed;
+            return;
+        }
+
+        _summary = result.Data;
+        _state = State.Ready;
+    }
+
+    private void OpenPage()
+    {
+        if (AllowTrigger && _summary is not null)
+        {
+            _navigationManager.NavigateTo(InsightsDisplay.PageUrl(_summary.LocationId, _summary.From, _summary.To));
+        }
+    }
+}

@@ -16,6 +16,12 @@
     min-height: 56px;
 }
 
+.inbox-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
 .inbox-empty {
     display: flex;
     flex-direction: column;

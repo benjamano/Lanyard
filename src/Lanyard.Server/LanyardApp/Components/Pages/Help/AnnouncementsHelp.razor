@@ -1,0 +1,12 @@
+@page "/help/announcements"
+@attribute [Authorize(Roles = "Admin,CanPostAnnouncements")]
+@attribute [RequiresFeature(CompanyFeature.Announcements)]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.Announcements
+
+<HelpPage AreaKey="@HelpRegistry.Announcements">
+    <FluentTab Id="help-overview" Header="Announcements" IconStart="@(new Icons.Regular.Size16.Megaphone())">
+        <AnnouncementsHelpTab />
+    </FluentTab>
+</HelpPage>
