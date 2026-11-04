@@ -214,7 +214,7 @@ public static class HelpRegistry
                 new("clips", "Audio Clips")
             ],
             ["/music", "/manage/music-schedule", "/manage/audio-clips"],
-            Roles: "Admin,Manager,CanControlMusic,CanPlayAudioClips"),
+            Roles: "Admin,Manager,CanControlMusic,CanManagePlaylists,CanPlayAudioClips"),
 
         new(Projection,
             "Projection",

@@ -1,5 +1,5 @@
 ﻿@page "/music"
-@attribute [Authorize]
+@attribute [Authorize(Roles = MusicRoles.Use)]
 
 @using Lanyard.App.Components.Music
 @using Lanyard.App.Components.Dialogs
@@ -174,7 +174,7 @@
         if (AuthState is not null)
         {
             ClaimsPrincipal user = (await AuthState).User;
-            _canEdit = user.IsInRole("Admin") || user.IsInRole("CanManagePlaylists");
+            _canEdit = MusicRoles.ManagePlaylists.Split(',').Any(user.IsInRole);
         }
 
         _player.OnNowPlayingChanged += HandleNowPlayingChanged;

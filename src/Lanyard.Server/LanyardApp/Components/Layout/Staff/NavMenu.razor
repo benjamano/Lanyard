@@ -81,6 +81,14 @@
                 </FluentNavItem>
             }
 
+            @if (_canControlMusic)
+            {
+                <FluentNavItem Href="/music" IconRest="@(new Icons.Regular.Size20.MusicNote2())"
+                               IconActive="@(new Icons.Filled.Size20.MusicNote2())">
+                    Music
+                </FluentNavItem>
+            }
+
             @if (_canPlayAudioClips)
             {
                 <FluentNavItem Href="/manage/audio-clips" IconRest="@(new Icons.Regular.Size20.Speaker2())"
@@ -226,9 +234,6 @@
                                    IconActive="@(new Icons.Filled.Size20.LaptopSettings())">
                         Clients
                     </FluentNavItem>
-                    <FluentNavItem Href="/music">
-                        Music
-                    </FluentNavItem>
                     <FluentNavItem Href="/manage/projectionprograms"
                                    IconRest="@(new Icons.Regular.Size20.ProjectionScreenTextSparkle())"
                                    IconActive="@(new Icons.Filled.Size20.ProjectionScreenTextSparkle())">Projection</FluentNavItem>
@@ -371,7 +376,8 @@
         _isAdmin = user.IsInRole("Admin");
         _isPlatformAdmin = user.IsInRole(LanyardRoles.PlatformAdmin);
         _isManager = _isAdmin || user.IsInRole("Manager");
-        _canControlMusic = _isAdmin || user.IsInRole("CanControlMusic");
+        // Everyone /music lets in (MusicRoles.Use).
+        _canControlMusic = _isManager || user.IsInRole(MusicRoles.CanControlMusic) || user.IsInRole(MusicRoles.CanManagePlaylists);
         _canManageDmx = _isAdmin || user.IsInRole("CanManageDmxSystems");
         _canManageFiles = _isAdmin || user.IsInRole("CanManageFiles");
         _canPostAnnouncements = _isAdmin || user.IsInRole("CanPostAnnouncements");

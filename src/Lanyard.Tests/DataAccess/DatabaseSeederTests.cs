@@ -21,7 +21,7 @@ namespace Lanyard.Tests.DataAccess
     {
         // Kept as a named constant rather than a literal so that adding a capability role to
         // DatabaseSeeder.StandardRoles is a one-line update here, not a hunt through assertions.
-        private const int DatabaseSeederStandardRoleCount = 9;
+        private const int DatabaseSeederStandardRoleCount = 10;
 
         private static DbContextOptions<ApplicationDbContext> GetInMemoryOptions()
         {
@@ -265,6 +265,41 @@ namespace Lanyard.Tests.DataAccess
 
             Assert.IsTrue(adminRecreated, "The seed admin should be recreated on the next startup.");
             Assert.AreEqual(DatabaseSeederStandardRoleCount, roleCount, "Roles must not be duplicated when the admin is recreated.");
+        }
+
+        [TestMethod]
+        public async Task SeedAsync_SkipsAStandardRoleThatAlreadyExistsUnderAnotherId()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+            using (ServiceProvider firstRunProvider = BuildServiceProvider(options, "Configured-Admin-Pw1!", "Production"))
+            {
+                await DatabaseSeeder.SeedAsync(firstRunProvider);
+            }
+
+            // A deployment that made "CanManagePlaylists" by hand before it became a standard role.
+            await using (ApplicationDbContext context = new(options))
+            {
+                ApplicationRole seeded = await context.Roles.SingleAsync(r => r.Id == ApplicationDbContext.SeedCanManagePlaylistsRoleId);
+                context.Roles.Remove(seeded);
+                context.Roles.Add(new ApplicationRole
+                {
+                    Id = "hand-made-playlists-role",
+                    Name = "CanManagePlaylists",
+                    NormalizedName = "CANMANAGEPLAYLISTS",
+                    CreatedByUserId = ApplicationDbContext.SeedAdminUserId,
+                    CreateDate = DateTime.UtcNow,
+                    IsActive = true
+                });
+                await context.SaveChangesAsync();
+            }
+
+            using ServiceProvider secondRunProvider = BuildServiceProvider(options, "Configured-Admin-Pw1!", "Production");
+            await DatabaseSeeder.SeedAsync(secondRunProvider);
+
+            await using ApplicationDbContext verifyContext = new(options);
+            Assert.AreEqual(1, await verifyContext.Roles.CountAsync(r => r.NormalizedName == "CANMANAGEPLAYLISTS"),
+                "The hand-made role stands; a second one with the same name would break the unique index.");
         }
     }
 }

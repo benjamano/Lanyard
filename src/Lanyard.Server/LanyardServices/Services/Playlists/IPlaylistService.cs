@@ -3,6 +3,19 @@ using Lanyard.Infrastructure.Models;
 
 namespace Lanyard.Application.Services;
 
+/// <summary>Who may use the Music page, and who may change playlists on it.</summary>
+public static class MusicRoles
+{
+    public const string CanControlMusic = "CanControlMusic";
+    public const string CanManagePlaylists = "CanManagePlaylists";
+
+    // Opening /music and controlling kiosk music.
+    public const string Use = "Admin,Manager," + CanControlMusic + "," + CanManagePlaylists;
+
+    // Creating, renaming and deleting playlists, and adding, removing and moving their songs.
+    public const string ManagePlaylists = "Admin," + CanManagePlaylists;
+}
+
 public interface IPlaylistService
 {
     /// <summary>
