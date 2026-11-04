@@ -3,7 +3,7 @@
 @using Humanizer;
 @implements IDisposable
 
-@inject IClientService _clientService
+@inject IKioskClientListService _kioskClientList
 @inject IKioskHealthService _kioskHealthService
 
 @* Known limitation: Client has no LocationId, so this roster is company-wide (the tenant filter
@@ -124,14 +124,16 @@
 
         try
         {
-            Result<IEnumerable<ClientConnectedWithCapabilitiesDTO>> result = await _clientService.GetClientsWithCapabilitiesAsync();
+            // Shared with the Clients page and other open dashboards, so a poll is usually no read.
+            Result<IReadOnlyList<ClientConnectedWithCapabilitiesDTO>> result = await _kioskClientList.GetClientsAsync();
 
             if (!result.IsSuccess || result.Data == null)
             {
                 return;
             }
 
-            Result<Dictionary<Guid, KioskHealthView>> healthResult = await _kioskHealthService.GetHealthAsync();
+            Result<Dictionary<Guid, KioskHealthView>> healthResult = await _kioskHealthService.GetHealthAsync(
+                result.Data.Select(x => new KioskHealthClient(x.Id, x.IsCurrentlyConnected, x.LastDisconnectDate)).ToList());
 
             // Without health the roster still shows hub connectivity, as it did before heartbeats.
             _health = healthResult.IsSuccess && healthResult.Data != null ? healthResult.Data : new();

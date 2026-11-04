@@ -9,11 +9,16 @@
 @using Lanyard.Shared.Contracts
 @using Lanyard.Shared.Enum
 @using Lanyard.Infrastructure.Enum
+@using Lanyard.Application.Services.Tenancy
 @using System.Globalization
 
-@implements IDisposable
+@implements IAsyncDisposable
 
 @inject IClientService _clientService
+@inject IKioskClientListService _kioskClientList
+@inject IKioskFleetEventBus _fleetEvents
+@inject ITenantContext _tenantContext
+@inject IJSRuntime _js
 @inject IClientUpdatePolicyService _updatePolicyService
 @inject IKioskHealthService _kioskHealthService
 @inject INotificationService _toastService
@@ -21,18 +26,15 @@
 <PageTitle>Clients</PageTitle>
 
 <FluentCard Height="auto">
-    <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center" Wrap="true">
-        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">
-            Clients
-        </FluentText>
-        <HelpButton AreaKey="@HelpRegistry.Kiosks" />
-    </FluentStack>
     <div class="clients-header">
         <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">
             Clients
         </FluentText>
-        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Add())"
-                      OnClick="OpenPairKioskDialogAsync">Add kiosk</FluentButton>
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px" VerticalAlignment="VerticalAlignment.Center" Width="auto">
+            <HelpButton AreaKey="@HelpRegistry.Kiosks" />
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Add())"
+                          OnClick="OpenPairKioskDialogAsync">Add kiosk</FluentButton>
+        </FluentStack>
     </div>
     @if (_versionCounts.Count > 0)
     {
@@ -69,8 +71,8 @@
             </FluentStack>
         </div>
     }
-    <div class="clients-grid-wrapper">
-        <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="minmax(0, 0.6fr) minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(125px, 1.1fr) minmax(0, 1.1fr) 224px" Class="clients-grid">
+    <div class="clients-grid-wrapper" @ref="_gridWrapper">
+        <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="minmax(0, 0.6fr) minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(125px, 1.1fr) minmax(112px, 1.1fr) 224px" Class="clients-grid">
             <ChildContent>
                 <PropertyColumn Property="x => x.Id" Title="Client ID" Class="clients-col-id"/>
                 <TemplateColumn Title="Name" Sortable="true" SortBy="@_sortByName">
@@ -111,16 +113,7 @@
                     <KioskHealthBadge Health="@_health.GetValueOrDefault(context.Id)" IsConnected="@context.IsCurrentlyConnected" />
                 </TemplateColumn>
                 <TemplateColumn Title="Session Length" Class="clients-col-session">
-                    @if (context.IsCurrentlyConnected && context.LastLogin is DateTime lastLogin)
-                    {
-                        <span>
-                            @((now - lastLogin).ToString(@"hh\:mm\:ss"))s
-                        </span>
-                    }
-                    else
-                    {
-                        <span>--:--:--</span>
-                    }
+                    <KioskSessionClock ConnectedSinceUtc="@(context.IsCurrentlyConnected ? context.LastLogin : null)" />
                 </TemplateColumn>
                 <TemplateColumn Title="Actions">
                     <FluentStack HorizontalGap="8px" VerticalAlignment="VerticalAlignment.Center">
@@ -226,8 +219,8 @@
 @code {
     private IEnumerable<ClientConnectedWithCapabilitiesDTO> clients = Array.Empty<ClientConnectedWithCapabilitiesDTO>();
 
-    // Sorted once per load, not per render: the 1 s "last seen" tick re-renders the page, and
-    // a fresh OrderBy().AsQueryable() in the markup made the grid refetch its rows every second.
+    // Sorted once per load and only replaced when the kiosks themselves changed (not just their
+    // health or targets): the grid treats a new Items instance as new rows and sends them all again.
     private IQueryable<ClientConnectedWithCapabilitiesDTO> _sortedClients = Enumerable.Empty<ClientConnectedWithCapabilitiesDTO>().AsQueryable();
 
     private Dictionary<Guid, KioskHealthView> _health = new();
@@ -251,91 +244,247 @@
     // must not stop the rest of the page working.
     private IReadOnlyDictionary<Guid, ClientUpdateTargetDTO> _targets = new Dictionary<Guid, ClientUpdateTargetDTO>();
 
-    private PeriodicTimer? timer;
-    private CancellationTokenSource? timerCancellation;
-    private DateTime now;
+    // What's on screen, for telling whether a refresh changed anything. Null until the first load.
+    private IReadOnlyList<ClientRowSignature>? _rows;
 
-    // The clock column needs a 1s tick, but connectivity comes from an in-memory set on the
-    // hub with no change event, so the grid itself is refetched on a slower cadence.
-    private const int RefreshEverySeconds = 10;
-    private int ticksSinceRefresh;
+    // Targets cost a release catalogue read, so they're only asked for again when what decides
+    // them changed, after this page's own dialogs, or at least this often for newly promoted
+    // releases.
+    private static readonly TimeSpan TargetsMaxAge = TimeSpan.FromMinutes(5);
+    private IReadOnlyList<(Guid Id, string? ReportedVersion, ClientUpdateRing Ring, string? PinnedVersion)> _targetInputs = [];
+    private DateTime? _targetsLoadedUtc;
+
+    // Connects, disconnects and setting changes arrive on IKioskFleetEventBus straight away.
+    // Health that only changes with time (a kiosk going quiet, then offline) has no event, so a
+    // slow poll picks it up: heartbeats come every 30 s and the first threshold is 90 s.
+    private static readonly TimeSpan FallbackRefreshInterval = TimeSpan.FromSeconds(30);
+
+    // A burst of events (the whole fleet reconnecting after a server restart) becomes one reload.
+    private const int EventCoalesceMs = 750;
+
+    private int? _companyId;
+    private PeriodicTimer? _fallbackTimer;
+    private CancellationTokenSource? _fallbackCancellation;
+    private RenderCoalescer? _eventRefresh;
+    private bool _subscribed;
+    private bool _disposed;
+
+    // One refresh at a time; anything asked for meanwhile runs once when it finishes.
+    private bool _refreshing;
+    private bool _refreshPending;
+    private bool _forcePending;
+
+    private ElementReference _gridWrapper;
+    private IJSObjectReference? _clockModule;
 
     protected override async Task OnInitializedAsync()
     {
-        await GetClientsAsync();
+        _companyId = _tenantContext.CompanyId;
 
-        now = DateTime.UtcNow;
+        // Not forced: the shared list is at most a few seconds old and dropped on every change, and
+        // this runs twice (prerender, then the live circuit), so the second load is a cache hit.
+        await RefreshAsync(showErrors: true);
+    }
 
-        timerCancellation = new CancellationTokenSource();
-        timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
 
-        CancellationToken token = timerCancellation.Token;
+        // Here rather than in OnInitializedAsync, so a prerender never starts any of it.
+        _eventRefresh = new RenderCoalescer(() => RefreshInBackgroundAsync(), EventCoalesceMs);
+        _fleetEvents.OnChanged += OnFleetChanged;
+        _subscribed = true;
 
-        _ = Task.Run(async () =>
+        _fallbackCancellation = new CancellationTokenSource();
+        _fallbackTimer = new PeriodicTimer(FallbackRefreshInterval);
+        _ = RunFallbackRefreshAsync(_fallbackTimer, _fallbackCancellation.Token);
+
+        try
+        {
+            _clockModule = await _js.InvokeAsync<IJSObjectReference>("import", "./js/kioskSessionClock.js");
+            await _clockModule.InvokeVoidAsync("start", _gridWrapper);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The tab closed while the module loaded.
+        }
+    }
+
+    private void OnFleetChanged(int companyId)
+    {
+        if (companyId == _companyId)
+        {
+            _eventRefresh?.Request();
+        }
+    }
+
+    private async Task RunFallbackRefreshAsync(PeriodicTimer timer, CancellationToken token)
+    {
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                await RefreshInBackgroundAsync();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when the page is disposed.
+        }
+    }
+
+    // From the timer and the event bus: on the page's own thread, and quiet, since a failing
+    // database would otherwise raise a toast every 30 s.
+    private async Task RefreshInBackgroundAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        try
+        {
+            await InvokeAsync(() => RefreshAsync());
+        }
+        catch (ObjectDisposedException)
+        {
+            // The circuit went away between the check and the call.
+        }
+    }
+
+    // Always on the page's own thread (an event handler, a lifecycle method or InvokeAsync), so the
+    // flags and fields below are never touched by two threads at once.
+    private async Task RefreshAsync(bool showErrors = false, bool force = false)
+    {
+        if (_refreshing)
+        {
+            _refreshPending = true;
+            _forcePending |= force;
+            return;
+        }
+
+        _refreshing = true;
+
+        try
+        {
+            bool changed = await LoadAsync(showErrors, force);
+
+            while (_refreshPending && !_disposed)
+            {
+                bool forceAgain = _forcePending;
+                _refreshPending = false;
+                _forcePending = false;
+
+                changed |= await LoadAsync(showErrors: false, forceAgain);
+            }
+
+            if (changed && !_disposed)
+            {
+                StateHasChanged();
+            }
+        }
+        finally
+        {
+            _refreshing = false;
+        }
+    }
+
+    // One kiosk list read (shared with other open pages), then health and, when due, targets
+    // worked out from it. True when something on screen changed.
+    private async Task<bool> LoadAsync(bool showErrors, bool force)
+    {
+        Result<IReadOnlyList<ClientConnectedWithCapabilitiesDTO>> result = await _kioskClientList.GetClientsAsync(forceRefresh: force);
+
+        if (!result.IsSuccess)
+        {
+            if (showErrors)
+            {
+                _toastService.ShowError($"Failed to load connected clients, {result.Error}");
+            }
+
+            return false;
+        }
+
+        IReadOnlyList<ClientConnectedWithCapabilitiesDTO> loaded = result.Data!;
+
+        Result<Dictionary<Guid, KioskHealthView>> healthResult = await _kioskHealthService.GetHealthAsync(
+            loaded.Select(x => new KioskHealthClient(x.Id, x.IsCurrentlyConnected, x.LastDisconnectDate)).ToList());
+
+        // A failed health read keeps the last one rather than blanking every badge.
+        Dictionary<Guid, KioskHealthView> health = healthResult.IsSuccess && healthResult.Data != null ? healthResult.Data : _health;
+
+        IReadOnlyDictionary<Guid, ClientUpdateTargetDTO> targets = _targets;
+        IReadOnlyList<(Guid Id, string? ReportedVersion, ClientUpdateRing Ring, string? PinnedVersion)> targetInputs = ClientsPageRows.TargetInputs(loaded);
+        DateTime now = DateTime.UtcNow;
+
+        if (force
+            || _targetsLoadedUtc is not DateTime targetsLoadedUtc
+            || now - targetsLoadedUtc >= TargetsMaxAge
+            || !targetInputs.SequenceEqual(_targetInputs))
+        {
+            Result<IReadOnlyDictionary<Guid, ClientUpdateTargetDTO>> targetsResult = await _updatePolicyService.GetTargetsAsync(loaded);
+
+            if (targetsResult.IsSuccess)
+            {
+                targets = targetsResult.Data!;
+                _targetInputs = targetInputs;
+                _targetsLoadedUtc = now;
+            }
+        }
+
+        IReadOnlyList<ClientRowSignature> rows = ClientsPageRows.Build(loaded, health, targets);
+
+        if (_rows is not null && rows.SequenceEqual(_rows))
+        {
+            return false;
+        }
+
+        bool sameKiosks = _rows is not null && ClientsPageRows.SameKiosks(rows, _rows);
+
+        _rows = rows;
+        _health = health;
+        _targets = targets;
+
+        if (!sameKiosks)
+        {
+            clients = loaded;
+            _sortedClients = loaded.OrderBy(x => x.Name).ToList().AsQueryable();
+            _versionCounts = BuildVersionCounts(loaded);
+            _credentialCount = loaded.Count(x => x.LastAuthMethod == ClientAuthMethod.Credential);
+            _legacySecretCount = loaded.Count(x => x.LastAuthMethod == ClientAuthMethod.LegacySecret);
+        }
+
+        return true;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+
+        if (_subscribed)
+        {
+            _fleetEvents.OnChanged -= OnFleetChanged;
+        }
+
+        _eventRefresh?.Dispose();
+        _fallbackCancellation?.Cancel();
+        _fallbackTimer?.Dispose();
+        _fallbackCancellation?.Dispose();
+
+        if (_clockModule is not null)
         {
             try
             {
-                while (await timer.WaitForNextTickAsync(token))
-                {
-                    now = DateTime.UtcNow;
-
-                    ticksSinceRefresh++;
-
-                    if (ticksSinceRefresh >= RefreshEverySeconds)
-                    {
-                        ticksSinceRefresh = 0;
-
-                        // Silent on the timer path: a persistent failure would otherwise
-                        // raise a toast every refresh.
-                        await GetClientsAsync(showErrors: false);
-                    }
-
-                    await InvokeAsync(StateHasChanged);
-                }
+                await _clockModule.InvokeVoidAsync("stop");
+                await _clockModule.DisposeAsync();
             }
-            catch (OperationCanceledException)
+            catch (JSDisconnectedException)
             {
-                // Expected when the component is disposed.
+                // The tab is already gone, and the clock with it.
             }
-        });
-    }
-
-    public void Dispose()
-    {
-        timerCancellation?.Cancel();
-        timer?.Dispose();
-        timerCancellation?.Dispose();
-    }
-
-    private async Task GetClientsAsync(bool showErrors = true)
-    {
-        Result<IEnumerable<ClientConnectedWithCapabilitiesDTO>> result = await _clientService.GetClientsWithCapabilitiesAsync();
-
-        Result<Dictionary<Guid, KioskHealthView>> healthResult = await _kioskHealthService.GetHealthAsync();
-
-        if (healthResult.IsSuccess && healthResult.Data != null)
-        {
-            _health = healthResult.Data;
-        }
-
-        if (result.IsSuccess)
-        {
-            clients = result.Data!;
-            _sortedClients = clients.OrderBy(x => x.Name).ToList().AsQueryable();
-            _versionCounts = BuildVersionCounts(clients);
-            _credentialCount = clients.Count(x => x.LastAuthMethod == ClientAuthMethod.Credential);
-            _legacySecretCount = clients.Count(x => x.LastAuthMethod == ClientAuthMethod.LegacySecret);
-
-            Result<IReadOnlyDictionary<Guid, ClientUpdateTargetDTO>> targets = await _updatePolicyService.GetTargetsAsync();
-
-            if (targets.IsSuccess)
-            {
-                _targets = targets.Data!;
-            }
-        }
-        else if (showErrors)
-        {
-            _toastService.ShowError($"Failed to load connected clients, {result.Error}");
         }
     }
 
@@ -405,7 +554,7 @@
             _toastService.ShowError($"Failed to restart {client.Name}, {restartResult.Error}");
         }
 
-        await GetClientsAsync();
+        await RefreshAsync(showErrors: true, force: true);
     }
 
     private async Task OpenDiagnosticsDialogAsync(ClientConnectedWithCapabilitiesDTO client)
@@ -443,7 +592,7 @@
 
         if (!result.Cancelled)
         {
-            await GetClientsAsync();
+            await RefreshAsync(showErrors: true, force: true);
         }
     }
     
@@ -471,6 +620,6 @@
             options.Parameters.Add(nameof(ClientSettingsDialog.ClientId), clientId);
         });
 
-        await GetClientsAsync();
+        await RefreshAsync(showErrors: true, force: true);
     }
 }
