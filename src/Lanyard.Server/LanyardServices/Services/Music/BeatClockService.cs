@@ -9,12 +9,12 @@ using NAudio.Wave;
 namespace Lanyard.Application.Services;
 
 public class BeatClockService(
-    MusicPlayerService musicPlayerService,
+    IMusicPlayerService musicPlayerService,
     ISystemDbContextFactory factory,
     IMemoryCache cache,
     ILogger<BeatClockService> logger) : IBeatClockService
 {
-    private readonly MusicPlayerService _musicPlayerService = musicPlayerService;
+    private readonly IMusicPlayerService _musicPlayerService = musicPlayerService;
     private readonly ISystemDbContextFactory _factory = factory;
     private readonly IMemoryCache _cache = cache;
     private readonly ILogger<BeatClockService> _logger = logger;

@@ -5,7 +5,7 @@
 
 @using Lanyard.App.Components.Music.Schedule
 
-@inject MusicPlayerService _player
+@inject IMusicPlayerService _player
 
 <FluentCard Height="100%">
     @if (Widget.ClientId == null || Widget.ClientId == Guid.Empty)
@@ -30,8 +30,8 @@
 
             <FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.Center"
                          VerticalAlignment="@VerticalAlignment.Center" HorizontalGap="8" Width="auto" Margin="@Margin.Top2">
-                <FluentButton Appearance="ButtonAppearance.Outline" Title="Previous (Double-click) / Restart (Single-click)"
-                              OnClick="RestartSongAsync" @ondblclick="PreviousSongAsync" Disabled="@(!AllowTrigger)"
+                <FluentButton Appearance="ButtonAppearance.Outline" Title="Previous (restarts the song if it's more than 3 seconds in)"
+                              OnClick="RestartSongAsync" Disabled="@(!AllowTrigger)"
                               Style="border-radius: 50%;" IconStart="@(new Icons.Regular.Size32.Previous())">
                 </FluentButton>
 

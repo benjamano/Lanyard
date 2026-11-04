@@ -8,7 +8,7 @@
 @using Microsoft.EntityFrameworkCore
 
 @inject INotificationService _toastService
-@inject MusicPlayerService _player
+@inject IMusicPlayerService _player
 @inject IPlaylistService _playlistService
 
 @implements IDisposable
@@ -203,7 +203,11 @@
             return;
         }
 
-        await _player.Play(SelectedClientId.Value, song, playlist);
+        Result<bool> result = await _player.PlaySong(SelectedClientId.Value, song.Id, playlist?.Id);
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowWarning(result.Error ?? "Couldn't play that song.");
+        }
     }
 
     private async Task OpenAddSongToPlaylistDialog(Song song)

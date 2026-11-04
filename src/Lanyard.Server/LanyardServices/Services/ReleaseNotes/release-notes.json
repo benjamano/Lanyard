@@ -818,5 +818,19 @@
       "A5 printouts print at their real size on A4. Print everything puts the voucher and feedback form side by side on one sheet.",
       "New Parties help page, with a Help button on every Parties page: booking, payments, printing, menus and printouts."
     ]
+  },
+  {
+    "version": "1.4.20",
+    "releaseDate": "2026-11-04",
+    "summary": "Music overhaul: shuffle, skipping and the kiosk player are more reliable.",
+    "details": [
+      "Shuffle now plays every song in a playlist once before any repeat, and Previous goes back to the song that actually played before.",
+      "Turning shuffle off carries on in playlist order from the song that's playing.",
+      "Playing a song from a playlist now carries on with the songs after it, instead of moving that song to the front.",
+      "Previous restarts the song if it's more than 3 seconds in, otherwise goes back one.",
+      "A kiosk reconnecting no longer briefly shows the wrong song or loses its place in the queue.",
+      "Music commands that fail (for example when a kiosk has just dropped off) now say so instead of failing silently.",
+      "The music schedule retries a playlist that failed to start, and no longer jumps the volume up from silence on a kiosk that hasn't reported its volume yet."
+    ]
   }
 ]

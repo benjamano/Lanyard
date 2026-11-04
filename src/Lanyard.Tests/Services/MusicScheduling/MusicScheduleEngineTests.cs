@@ -83,6 +83,9 @@ public class MusicScheduleEngineTests
         player.Setup(x => x.GetCurrentPlaylist(kioskId)).Returns(kioskPlaylistId is Guid id ? new Playlist { Id = id, Name = "Current" } : null);
         player.Setup(x => x.GetCurrentVolume(kioskId)).Returns(kioskVolume);
         player.Setup(x => x.Play(kioskId, It.IsAny<Guid>(), It.IsAny<MusicCommandSource>())).ReturnsAsync(Result<bool>.Ok(true));
+        player.Setup(x => x.Pause(kioskId, It.IsAny<MusicCommandSource>())).ReturnsAsync(Result<bool>.Ok(true));
+        player.Setup(x => x.SetVolume(kioskId, It.IsAny<int>(), It.IsAny<MusicCommandSource>())).ReturnsAsync(Result<bool>.Ok(true));
+        player.Setup(x => x.IsVolumeKnown(kioskId)).Returns(true);
 
         TestClock clock = new(MondayMorning);
         TestEngine engine = new(SchedulingTestHelpers.GetFactory(options), player.Object, clock) { RampStepDelay = TimeSpan.Zero };
@@ -128,7 +131,7 @@ public class MusicScheduleEngineTests
     {
         Setup s = await SeedAsync(kioskVolume: 50);
         List<int> volumes = [];
-        s.Player.Setup(x => x.SetVolume(s.KioskId, It.IsAny<int>(), MusicCommandSource.Schedule)).Callback<Guid, int, MusicCommandSource>((_, v, _) => volumes.Add(v)).Returns(Task.CompletedTask);
+        s.Player.Setup(x => x.SetVolume(s.KioskId, It.IsAny<int>(), MusicCommandSource.Schedule)).Callback<Guid, int, MusicCommandSource>((_, v, _) => volumes.Add(v)).ReturnsAsync(Result<bool>.Ok(true));
 
         await s.Engine.TickAsync(MondayMorning, CancellationToken.None);
 
@@ -508,5 +511,90 @@ public class MusicScheduleEngineTests
 
         Assert.AreEqual("Morning", status?.DaypartName);
         Assert.AreEqual(new DateTime(2026, 7, 6, 9, 0, 0, DateTimeKind.Utc), status?.NextChangeUtc);
+    }
+
+    [TestMethod]
+    public async Task ManualChanges_WriteTheHoldOnceWhileItLasts()
+    {
+        Setup s = await SeedAsync();
+        s.Clock.UtcNow = MondayMorning.AddMinutes(10);
+
+        await s.Engine.RecordManualChangeAsync(s.KioskId);
+
+        // Something else moves the stored hold; a second change by hand in the same part of the day
+        // has nothing new to say, so it must not write again.
+        DateTime marker = new(2026, 1, 5, 9, 45, 0, DateTimeKind.Utc);
+        await using (ApplicationDbContext ctx = new(s.Options))
+        {
+            (await ctx.Clients.SingleAsync(x => x.Id == s.KioskId)).MusicScheduleOverrideUntilUtc = marker;
+            await ctx.SaveChangesAsync();
+        }
+
+        s.Clock.UtcNow = MondayMorning.AddMinutes(20);
+        Result<bool> result = await s.Engine.RecordManualChangeAsync(s.KioskId);
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.AreEqual(marker, await OverrideUntilAsync(s));
+    }
+
+    [TestMethod]
+    public async Task ManualChange_AfterResuming_WritesTheHoldAgain()
+    {
+        Setup s = await SeedAsync();
+        s.Clock.UtcNow = MondayMorning.AddMinutes(10);
+
+        await s.Engine.RecordManualChangeAsync(s.KioskId);
+        await s.Engine.ResumeScheduleAsync(s.KioskId);
+        Assert.IsNull(await OverrideUntilAsync(s));
+
+        await s.Engine.RecordManualChangeAsync(s.KioskId);
+
+        Assert.IsNotNull(await OverrideUntilAsync(s));
+    }
+
+    [TestMethod]
+    public async Task Tick_RetriesAPlayThatFailed()
+    {
+        Setup s = await SeedAsync();
+        s.Player.SetupSequence(x => x.Play(s.KioskId, s.MorningPlaylistId, MusicCommandSource.Schedule))
+            .ReturnsAsync(Result<bool>.Fail("kiosk dropped"))
+            .ReturnsAsync(Result<bool>.Ok(true));
+
+        await s.Engine.TickAsync(MondayMorning, CancellationToken.None);
+        await s.Engine.TickAsync(MondayMorning.AddSeconds(30), CancellationToken.None);
+        await s.Engine.TickAsync(MondayMorning.AddSeconds(60), CancellationToken.None);
+
+        s.Player.Verify(x => x.Play(s.KioskId, s.MorningPlaylistId, MusicCommandSource.Schedule), Times.Exactly(2),
+            "Retried once after failing, then left alone once it worked.");
+    }
+
+    [TestMethod]
+    public async Task Tick_GivesUpRetryingAfterAFewFailures()
+    {
+        Setup s = await SeedAsync();
+        s.Player.Setup(x => x.Play(s.KioskId, s.MorningPlaylistId, MusicCommandSource.Schedule))
+            .ReturnsAsync(Result<bool>.Fail("This playlist has no songs to play."));
+
+        for (int i = 0; i < 10; i++)
+        {
+            await s.Engine.TickAsync(MondayMorning.AddSeconds(30 * i), CancellationToken.None);
+        }
+
+        s.Player.Verify(x => x.Play(s.KioskId, s.MorningPlaylistId, MusicCommandSource.Schedule), Times.Exactly(5));
+    }
+
+    [TestMethod]
+    public async Task Tick_SetsTheVolumeOutrightWhenTheKiosksVolumeIsNotKnownYet()
+    {
+        Setup s = await SeedAsync(kioskVolume: 0);
+        s.Player.Setup(x => x.IsVolumeKnown(s.KioskId)).Returns(false);
+        List<int> volumes = [];
+        s.Player.Setup(x => x.SetVolume(s.KioskId, It.IsAny<int>(), MusicCommandSource.Schedule))
+            .Callback<Guid, int, MusicCommandSource>((_, v, _) => volumes.Add(v))
+            .ReturnsAsync(Result<bool>.Ok(true));
+
+        await s.Engine.TickAsync(MondayMorning, CancellationToken.None);
+
+        CollectionAssert.AreEqual(new[] { 30 }, volumes, "No ramp up from a silence that was never really there.");
     }
 }

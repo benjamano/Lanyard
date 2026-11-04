@@ -14,7 +14,7 @@
 @using NAudio.Wave;
 @using Lanyard.App.Components.AudioClips
 
-@inject MusicPlayerService _player
+@inject IMusicPlayerService _player
 @inject IClientService _clientService
 @inject INotificationService _toastService
 @inject IPlaylistService _playlistService
@@ -115,8 +115,8 @@
                     </FluentButton>
 
                     <FluentButton Appearance="ButtonAppearance.Outline"
-                                  Title="Previous (Double-click) / Restart (Single-click)" OnClick="RestartSong"
-                                  @ondblclick="PreviousSong" Disabled="@(selectedClientId == null)" Style="border-radius: 50%;"
+                                  Title="Previous (restarts the song if it's more than 3 seconds in)" OnClick="RestartSong"
+                                  Disabled="@(selectedClientId == null)" Style="border-radius: 50%;"
                                   IconStart="@(new Icons.Regular.Size32.Previous())">
                     </FluentButton>
 
