@@ -822,8 +822,11 @@
   {
     "version": "1.4.20",
     "releaseDate": "2026-11-04",
-    "summary": "Fixed the party Print and Preview buttons showing a Not Found page.",
+    "summary": "Audio clips can now be switched on or off for each company.",
     "details": [
+      "Admins can switch Audio clips on or off for each company under Manage > Companies & Locations. It stays on for every company until someone turns it off.",
+      "With Audio clips off, the Audio Clips page and its menu link are hidden, the Play Audio Clip action is no longer offered in automation rules, and the Audio Clips tab disappears from Music help.",
+      "Clips no longer play for a company with Audio clips off, whether from a schedule, an automation rule or the Play button. Nothing is deleted, so switching it back on brings every clip and schedule back.",
       "The Print buttons on a party (Print everything, reserved table card, food sheet, voucher and feedback form) and Preview saved version on the Printouts page now open the PDF in a new tab again, instead of showing Not Found."
     ]
   }
