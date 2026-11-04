@@ -204,6 +204,7 @@
     private bool scrollGateAttached;
     private readonly HashSet<int> readSections = [];
     private DotNetObjectReference<CourseWizardRunner>? _scrollGateRef;
+    private IJSObjectReference? _scrollGateModule;
     private int lastTrackedStepIndexForTiming = -1;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -241,15 +242,16 @@
         {
             scrollGateAttached = true;
             _scrollGateRef = DotNetObjectReference.Create(this);
-            await JS.InvokeVoidAsync("trainingScrollGate.attach", wizardHostRef, _scrollGateRef, currentWizardStepIndex);
+            _scrollGateModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/trainingScrollGate.js");
+            await _scrollGateModule.InvokeVoidAsync("trainingScrollGate.attach", wizardHostRef, _scrollGateRef, currentWizardStepIndex);
             lastCheckedStepIndex = currentWizardStepIndex;
             return;
         }
 
-        if (scrollGateAttached && currentWizardStepIndex != lastCheckedStepIndex)
+        if (scrollGateAttached && _scrollGateModule is not null && currentWizardStepIndex != lastCheckedStepIndex)
         {
             lastCheckedStepIndex = currentWizardStepIndex;
-            await JS.InvokeVoidAsync("trainingScrollGate.resetForStep", currentWizardStepIndex);
+            await _scrollGateModule.InvokeVoidAsync("trainingScrollGate.resetForStep", currentWizardStepIndex);
         }
     }
 
@@ -290,11 +292,12 @@
         catch (Microsoft.JSInterop.JSDisconnectedException) { }
         catch (InvalidOperationException) { }
 
-        if (EnableScrollGate)
+        if (_scrollGateModule is not null)
         {
             try
             {
-                await JS.InvokeVoidAsync("trainingScrollGate.dispose");
+                await _scrollGateModule.InvokeVoidAsync("trainingScrollGate.dispose");
+                await _scrollGateModule.DisposeAsync();
             }
             catch (Microsoft.JSInterop.JSDisconnectedException) { }
             catch (InvalidOperationException) { }

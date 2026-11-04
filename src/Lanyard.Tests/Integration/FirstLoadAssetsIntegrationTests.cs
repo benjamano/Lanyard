@@ -18,6 +18,7 @@ public class FirstLoadAssetsIntegrationTests
 
     private static readonly Regex ScriptTag = new("<script\\b[^>]*>", RegexOptions.IgnoreCase);
     private static readonly Regex SrcAttribute = new("\\bsrc=\"([^\"]+)\"", RegexOptions.IgnoreCase);
+    private static readonly Regex StylesheetHref = new("<link\\b[^>]*\\bhref=\"([^\"]+\\.css)\"", RegexOptions.IgnoreCase);
 
     private CustomWebApplicationFactory _factory = null!;
 
@@ -92,12 +93,41 @@ public class FirstLoadAssetsIntegrationTests
 
         // Deferred scripts run in document order, so anything a component calls must sit above
         // blazorStart.js or Blazor could call it before it exists. Only scripts nothing calls into may follow.
-        string[] mayFollow = ["registerServiceWorker", "aspnetcore-browser-refresh", "ReconnectModal",
-            // The rich-text editor, deliberately after Blazor (see App.razor).
-            "lib/quill/", "Blazored.TextEditor/"];
+        string[] mayFollow = ["registerServiceWorker", "aspnetcore-browser-refresh", "ReconnectModal"];
         List<string> late = sources.Skip(blazorStart + 1).Where(s => !mayFollow.Any(m => s.Contains(m, StringComparison.Ordinal))).ToList();
 
         Assert.AreEqual(0, late.Count, $"These load after Blazor starts: {string.Join(", ", late)}");
+    }
+
+    // Each of these is used by one area only, so the component that needs it imports it (or, for the
+    // editor, QuillGate loads it) - none of it should be on a page that doesn't edit rich text or
+    // stream video. Only <script>/<link> tags count: the import map lists every module (so imports
+    // resolve to fingerprinted files), but listing one doesn't download it.
+    [TestMethod]
+    [DataRow("quill.js")]
+    [DataRow("quill.snow")]
+    [DataRow("Blazored.TextEditor/")]
+    [DataRow("courseImageEditor")]
+    [DataRow("kioskWidgetEditor")]
+    [DataRow("trainingScrollGate")]
+    [DataRow("courseWalkthrough")]
+    [DataRow("dmxKeybinds")]
+    [DataRow("video-stream")]
+    [DataRow("liveCapture")]
+    public async Task LoginPage_DoesNotLoadSingleAreaScripts(string asset)
+    {
+        string html = await Client().GetStringAsync("/login");
+        List<string> loaded = [.. (await ExternalScriptsOnLoginAsync()).Select(x => x.Src), .. StylesheetHref.Matches(html).Select(m => m.Groups[1].Value)];
+
+        Assert.IsFalse(loaded.Any(src => src.Contains(asset, StringComparison.Ordinal)), $"{asset} should load on demand, not on every page.");
+    }
+
+    [TestMethod]
+    public async Task LoginPage_KeepsQuillContentStylesForReadOnlyRichText()
+    {
+        string html = await Client().GetStringAsync("/login");
+
+        Assert.IsTrue(StylesheetHref.Matches(html).Any(m => m.Groups[1].Value.Contains("lib/quill/2.0.3/quill.core.", StringComparison.Ordinal)));
     }
 
     [TestMethod]
@@ -111,11 +141,16 @@ public class FirstLoadAssetsIntegrationTests
         Assert.IsFalse(csp.Contains("jsdelivr"), csp);
     }
 
+    // The vendored libraries and the modules pages import on demand.
     [TestMethod]
     [DataRow("/lib/quill/2.0.3/quill.js")]
     [DataRow("/lib/quill/2.0.3/quill.core.css")]
     [DataRow("/lib/quill/2.0.3/quill.snow.css")]
     [DataRow("/lib/imask/7.6.1/imask.min.js")]
+    [DataRow("/js/quillLoader.js")]
+    [DataRow("/js/liveCapture.js")]
+    [DataRow("/_content/Blazored.TextEditor/Blazored-BlazorQuill.js")]
+    [DataRow("/_content/Blazored.TextEditor/quill-blot-formatter.min.js")]
     public async Task VendoredLibraries_AreServed(string path)
     {
         HttpResponseMessage response = await Client().GetAsync(path);
