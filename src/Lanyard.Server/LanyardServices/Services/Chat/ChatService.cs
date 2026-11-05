@@ -9,6 +9,7 @@ using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System.Linq.Expressions;
 
 namespace Lanyard.Application.Services.Chat;
 
@@ -425,7 +426,7 @@ public class ChatService(
         }
     }
 
-    public async Task<Result<ChatThread>> GetThreadAsync(string userId, Guid conversationId, DateTime? before = null, int take = 50, LocationScope? scope = null)
+    public async Task<Result<ChatThread>> GetThreadAsync(string userId, Guid conversationId, DateTime? before = null, int take = 50, LocationScope? scope = null, Guid? beforeId = null)
     {
         try
         {
@@ -450,18 +451,22 @@ public class ChatService(
             IQueryable<ChatMessage> query = ctx.ChatMessages
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Include(x => x.Author)
-                .Include(x => x.ReplyTo).ThenInclude(x => x!.Author)
                 .Where(x => x.ConversationId == conversationId && x.CreateUtc >= joined);
 
-            if (before is DateTime cutoff)
+            if (before is DateTime cutoff && beforeId is Guid cutoffId)
             {
-                query = query.Where(x => x.CreateUtc < cutoff);
+                query = query.Where(x => x.CreateUtc < cutoff || (x.CreateUtc == cutoff && x.Id < cutoffId));
+            }
+            else if (before is DateTime cutoffOnly)
+            {
+                query = query.Where(x => x.CreateUtc < cutoffOnly);
             }
 
             List<ChatMessage> newestFirst = await query
                 .OrderByDescending(x => x.CreateUtc)
+                .ThenByDescending(x => x.Id)
                 .Take(take + 1)
+                .Select(ForThread)
                 .ToListAsync();
 
             bool hasOlder = newestFirst.Count > take;
@@ -482,20 +487,32 @@ public class ChatService(
                 pinned = (await ctx.ChatMessages
                     .AsNoTracking()
                     .TagWithCallSite()
-                    .Include(x => x.Author)
                     .Where(x => x.ConversationId == conversationId && x.IsPinned && x.DeletedUtc == null)
                     .OrderByDescending(x => x.PinnedUtc)
                     .Take(10)
+                    .Select(ForThread)
                     .ToListAsync())
                     .Select(x => ToView(x, userId, joined))
                     .ToList();
             }
 
+            // Names only, not whole profiles.
             List<ChatMember> members = await ctx.ChatMembers
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Include(x => x.User)
                 .Where(x => x.ConversationId == conversationId && x.LeftUtc == null)
+                .Select(x => new ChatMember
+                {
+                    UserId = x.UserId,
+                    IsGroupAdmin = x.IsGroupAdmin,
+                    User = x.User == null ? null : new UserProfile
+                    {
+                        Id = x.User.Id,
+                        UserName = x.User.UserName,
+                        FirstName = x.User.FirstName,
+                        LastName = x.User.LastName
+                    }
+                })
                 .ToListAsync();
 
             string? otherUserId = conversation.Kind == ChatConversationKind.Direct ? members.FirstOrDefault(x => x.UserId != userId)?.UserId : null;
@@ -529,6 +546,49 @@ public class ChatService(
         {
             _logger.LogError(ex, "Failed to load chat conversation {ConversationId} for {UserId}", conversationId, userId);
             return Result<ChatThread>.Fail($"Failed to load the conversation: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<ChatMessagesDelta>> GetMessagesSinceAsync(string userId, Guid conversationId, DateTime sinceUtc, int take = 50)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            (ChatConversation? conversation, ChatMember? me) = await MembershipAsync(ctx, userId, conversationId, tracked: false);
+
+            if (conversation is null || me is null)
+            {
+                return Result<ChatMessagesDelta>.Fail("That conversation isn't available.");
+            }
+
+            take = Math.Clamp(take, 1, 200);
+
+            // The same cut-off as GetThreadAsync: nothing from before the person (last) joined.
+            DateTime joined = ChatChannels.IsChannel(conversation) ? DateTime.MinValue : me.JoinedUtc;
+            DateTime from = sinceUtc > joined ? sinceUtc : joined;
+
+            List<ChatMessage> rows = await ctx.ChatMessages
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.ConversationId == conversationId && x.CreateUtc >= from)
+                .OrderBy(x => x.CreateUtc)
+                .ThenBy(x => x.Id)
+                .Take(take + 1)
+                .Select(ForThread)
+                .ToListAsync();
+
+            List<ChatMessageView> messages = await WithCardsAsync(ctx, rows
+                .Take(take)
+                .Select(x => ToView(x, userId, joined))
+                .ToList());
+
+            return Result<ChatMessagesDelta>.Ok(new ChatMessagesDelta(messages, rows.Count > take));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load new chat messages in {ConversationId} for {UserId}", conversationId, userId);
+            return Result<ChatMessagesDelta>.Fail($"Failed to load new messages: {ex.Message}");
         }
     }
 
@@ -601,7 +661,7 @@ public class ChatService(
 
             await ctx.SaveChangesAsync();
 
-            _eventBus.Publish(new ChatEvent(conversationId, members.Select(x => x.UserId).ToList(), ChatEventKind.MessagePosted));
+            _eventBus.Publish(new ChatEvent(conversationId, members.Select(x => x.UserId).ToList(), ChatEventKind.MessagePosted, message.Id, message.CreateUtc));
 
             try
             {
@@ -731,11 +791,26 @@ public class ChatService(
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            ChatMember? me = await ctx.ChatMembers.FirstOrDefaultAsync(x => x.ConversationId == conversationId && x.UserId == userId && x.LeftUtc == null);
+            ChatMember? me = await ctx.ChatMembers
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(x => x.ConversationId == conversationId && x.UserId == userId && x.LeftUtc == null);
 
             if (me is null)
             {
                 return Result<bool>.Fail("That conversation isn't available.");
+            }
+
+            // Open conversations ask often; only write (and tell the unread badges) when someone
+            // else has posted since this was last read.
+            DateTime? newest = await ctx.ChatMessages
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.ConversationId == conversationId && x.AuthorUserId != userId && x.DeletedUtc == null)
+                .MaxAsync(x => (DateTime?)x.CreateUtc);
+
+            if (newest is null || newest <= (me.LastReadUtc ?? me.JoinedUtc))
+            {
+                return Result<bool>.Ok(false);
             }
 
             me.LastReadUtc = Now;
@@ -1030,13 +1105,61 @@ public class ChatService(
         return null;
     }
 
+    // What a message in a thread needs: its own columns, its author's name and, for a reply, the
+    // start of what it replied to. Not the whole profile of everyone involved.
+    private static readonly Expression<Func<ChatMessage, ChatMessage>> ForThread = x => new ChatMessage
+    {
+        Id = x.Id,
+        ConversationId = x.ConversationId,
+        AuthorUserId = x.AuthorUserId,
+        BodyHtml = x.BodyHtml,
+        BodyText = x.BodyText,
+        CreateUtc = x.CreateUtc,
+        EditedUtc = x.EditedUtc,
+        DeletedUtc = x.DeletedUtc,
+        DeletedByUserId = x.DeletedByUserId,
+        ReplyToMessageId = x.ReplyToMessageId,
+        Kind = x.Kind,
+        LinkedEntityId = x.LinkedEntityId,
+        IsPinned = x.IsPinned,
+        PinnedByUserId = x.PinnedByUserId,
+        PinnedUtc = x.PinnedUtc,
+        Author = x.Author == null ? null : new UserProfile
+        {
+            Id = x.Author.Id,
+            UserName = x.Author.UserName,
+            FirstName = x.Author.FirstName,
+            LastName = x.Author.LastName
+        },
+        ReplyTo = x.ReplyTo == null ? null : new ChatMessage
+        {
+            Id = x.ReplyTo.Id,
+            ConversationId = x.ReplyTo.ConversationId,
+            AuthorUserId = x.ReplyTo.AuthorUserId,
+            BodyHtml = string.Empty,
+            // The preview is ReplyPreviewLength characters; a little over is enough to tell it needs a "…".
+            BodyText = x.ReplyTo.BodyText.Length > ReplyPreviewLength * 2 ? x.ReplyTo.BodyText.Substring(0, ReplyPreviewLength * 2) : x.ReplyTo.BodyText,
+            CreateUtc = x.ReplyTo.CreateUtc,
+            DeletedUtc = x.ReplyTo.DeletedUtc,
+            Author = x.ReplyTo.Author == null ? null : new UserProfile
+            {
+                Id = x.ReplyTo.Author.Id,
+                UserName = x.ReplyTo.Author.UserName,
+                FirstName = x.ReplyTo.Author.FirstName,
+                LastName = x.ReplyTo.Author.LastName
+            }
+        }
+    };
+
+    private const int ReplyPreviewLength = 100;
+
     private static ChatMessageView ToView(ChatMessage x, string userId, DateTime joined) => new(
         x,
         RotaNames.For(x.Author),
         x.AuthorUserId == userId,
         x.ReplyTo is null ? null
             : x.ReplyTo.CreateUtc < joined ? new ChatReplyPreview(x.ReplyTo.Id, "Earlier message", "From before you joined", true)
-            : new ChatReplyPreview(x.ReplyTo.Id, RotaNames.For(x.ReplyTo.Author), ChatHtml.Preview(x.ReplyTo.BodyText, 100), x.ReplyTo.IsDeleted));
+            : new ChatReplyPreview(x.ReplyTo.Id, RotaNames.For(x.ReplyTo.Author), ChatHtml.Preview(x.ReplyTo.BodyText, ReplyPreviewLength), x.ReplyTo.IsDeleted));
 
     // Open-shift and swap cards show what they link to as it is now, not as it was when posted.
     private async Task<List<ChatMessageView>> WithCardsAsync(ApplicationDbContext ctx, List<ChatMessageView> views)

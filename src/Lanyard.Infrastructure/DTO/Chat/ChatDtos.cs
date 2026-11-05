@@ -55,6 +55,10 @@ public record ChatThread(
     public List<ChatMessageView> Pinned { get; init; } = [];
 }
 
+// Messages posted since a point in time, oldest first. Truncated: there were more than were asked
+// for, so the caller should reload the conversation instead of adding these.
+public record ChatMessagesDelta(List<ChatMessageView> Messages, bool Truncated);
+
 // A report as a manager reviews it: the snapshot, never the conversation around it.
 public record ChatReportView(ChatReport Report, string ReporterName, string ReportedName, bool WasDirectMessage, bool MessageStillVisible)
 {

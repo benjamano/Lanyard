@@ -135,6 +135,7 @@ builder.Services.AddScoped<IClientReleaseAdminService, ClientReleaseAdminService
 builder.Services.AddScoped<IClientDiagnosticsService, ClientDiagnosticsService>();
 builder.Services.AddScoped<IKioskSelfTestService, KioskSelfTestService>();
 builder.Services.AddScoped<IKioskHealthService, KioskHealthService>();
+builder.Services.AddScoped<IKioskClientListService, KioskClientListService>();
 builder.Services.AddScoped<IKioskOfflineManifestService, KioskOfflineManifestService>();
 builder.Services.Configure<KioskHealthOptions>(builder.Configuration.GetSection(KioskHealthOptions.SectionName));
 builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>();
@@ -173,6 +174,8 @@ builder.Services.AddSingleton<ITerminalEphemeralTokenService, TerminalEphemeralT
 builder.Services.AddSingleton<ITerminalEventBus, TerminalEventBus>();
 builder.Services.AddSingleton<ITimeOffEventBus, TimeOffEventBus>();
 builder.Services.AddSingleton<IShiftClaimEventBus, ShiftClaimEventBus>();
+builder.Services.AddSingleton<IKioskFleetEventBus, KioskFleetEventBus>();
+builder.Services.AddSingleton<IKioskClientListCache, KioskClientListCache>();
 builder.Services.AddScoped<IShiftClaimService, ShiftClaimService>();
 builder.Services.AddSingleton<IChatEventBus, ChatEventBus>();
 builder.Services.AddSingleton<IChatPresence, ChatPresence>();
@@ -597,8 +600,10 @@ app.Use(async (context, next) =>
 
     context.Response.Headers["Content-Security-Policy"] =
         "default-src 'self'; " +
-        "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; " +
-        "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; " +
+        // Every script and stylesheet is served from Lanyard itself; third-party libraries are
+        // vendored under wwwroot/lib (see its README) rather than loaded from a CDN.
+        "script-src 'self' 'unsafe-inline'; " +
+        "style-src 'self' 'unsafe-inline'; " +
         "font-src 'self' data:; " +
         // blob: for the demo's "try your own branding" logo, which never leaves the visitor's browser.
         "img-src 'self' data: blob:; " +

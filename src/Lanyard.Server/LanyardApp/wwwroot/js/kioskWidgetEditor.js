@@ -1,12 +1,12 @@
 // kioskWidgetEditor.js
 
-window.kioskWidgetEditor = (() => {
+export const kioskWidgetEditor = (() => {
     let dividerRegistered = false;
 
     // Quill has no built-in "insert <hr>" control - registering a minimal BlockEmbed blot is
     // the standard way to teach it a new embeddable tag. Deferred until first use (rather than
-    // registered at script-load time) because Quill itself loads after this script - same
-    // lazy-call pattern as courseImageEditor.js relies on for the same reason.
+    // registered when this module loads) so it never depends on Quill having loaded first:
+    // QuillGate (Components/Editor) loads Quill on demand.
     function ensureDividerBlot() {
         if (dividerRegistered) {
             return;
