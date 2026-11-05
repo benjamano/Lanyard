@@ -242,7 +242,7 @@
             return;
         }
 
-        Result<bool> addResult = await _playlistService.AddSongToPlaylistAsync(song, selectedPlaylist.Id);
+        Result<bool> addResult = await _playlistService.AddSongToPlaylistAsync(song.Id, selectedPlaylist.Id);
 
         if (!addResult.IsSuccess)
         {

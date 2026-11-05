@@ -105,6 +105,10 @@ namespace Lanyard.Infrastructure.Models
         public Guid PlaylistId { get; set; }
         public Playlist? Playlist { get; set; }
 
+        // Where the song sits in its playlist, from 0. Gaps are fine (removing a song leaves one);
+        // reordering renumbers the whole playlist.
+        public int Position { get; set; }
+
         public UserProfile? CreateByUser { get; set; }
         public string? CreateByUserId { get; set; }
         public DateTime CreateDate { get; set; }

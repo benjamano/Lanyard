@@ -641,4 +641,64 @@ public class MusicPlayerServiceTests
         Assert.IsTrue(result.IsSuccess);
         proxy.Verify(p => p.SendCoreAsync("Play", It.IsAny<object?[]>(), It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    private static async Task SetPositionsAsync(DbContextOptions<ApplicationDbContext> options, Guid playlistId, IReadOnlyList<Guid> order)
+    {
+        await using ApplicationDbContext ctx = new(options);
+        foreach (PlaylistSongMember member in await ctx.PlaylistSongMembers.Where(x => x.PlaylistId == playlistId).ToListAsync())
+        {
+            member.Position = order.ToList().IndexOf(member.SongId);
+        }
+
+        await ctx.SaveChangesAsync();
+    }
+
+    [TestMethod]
+    public async Task ReorderingThePlayingPlaylist_ChangesWhatComesNext_WithoutInterruptingTheSong()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = Guid.NewGuid();
+        Guid playlistId = Guid.NewGuid();
+        List<Guid> songs = await SeedOrderedPlaylistAsync(options, playlistId, 4);
+        await SetPositionsAsync(options, playlistId, songs);
+
+        (MusicPlayerService player, Mock<ISingleClientProxy> proxy) = GetConnectedPlayer(options, clientId);
+        await player.PlaySong(clientId, songs[0], playlistId);
+        proxy.Invocations.Clear();
+
+        // Song 3 moved up to play next.
+        await SetPositionsAsync(options, playlistId, [songs[0], songs[3], songs[1], songs[2]]);
+        await player.RefreshPlaylistQueuesAsync(playlistId);
+
+        Assert.AreEqual(songs[0], player.GetCurrentSong(clientId)!.Id);
+        Assert.AreEqual(songs[3], player.GetSnapshot(clientId).UpNext[0].Id);
+        proxy.Verify(p => p.SendCoreAsync(It.IsAny<string>(), It.IsAny<object?[]>(), It.IsAny<CancellationToken>()), Times.Never,
+            "The kiosk carries on with its song; only the server's idea of what's next changes.");
+    }
+
+    [TestMethod]
+    public async Task RemovingThePlayingSong_CarriesOnFromWhereItWas()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = Guid.NewGuid();
+        Guid playlistId = Guid.NewGuid();
+        List<Guid> songs = await SeedOrderedPlaylistAsync(options, playlistId, 4);
+        await SetPositionsAsync(options, playlistId, songs);
+
+        (MusicPlayerService player, _) = GetConnectedPlayer(options, clientId);
+        await player.PlaySong(clientId, songs[1], playlistId);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            (await ctx.PlaylistSongMembers.SingleAsync(x => x.SongId == songs[1])).DeleteDate = DateTime.UtcNow;
+            await ctx.SaveChangesAsync();
+        }
+
+        await player.RefreshPlaylistQueuesAsync(playlistId);
+        Assert.AreEqual(songs[1], player.GetCurrentSong(clientId)!.Id, "The song playing plays on.");
+
+        await player.HandleSongEndedAsync(clientId);
+        Assert.AreEqual(songs[2], player.GetCurrentSong(clientId)!.Id);
+    }
 }
+

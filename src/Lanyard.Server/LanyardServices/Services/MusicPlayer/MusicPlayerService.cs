@@ -57,13 +57,19 @@ public class MusicPlayerService : IMusicPlayerService
         ISystemDbContextFactory contextFactory,
         IServiceScopeFactory scopeFactory,
         ILogger<MusicPlayerService> logger,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        IMusicLibraryEvents? libraryEvents = null)
     {
         _hubContext = hubContext;
         _contextFactory = contextFactory;
         _scopeFactory = scopeFactory;
         _logger = logger;
         _timeProvider = timeProvider ?? TimeProvider.System;
+
+        if (libraryEvents is not null)
+        {
+            libraryEvents.Changed += HandleLibraryChanged;
+        }
     }
 
     public event Action<Guid, PlaybackState>? OnPlaybackStatusChanged;
@@ -758,8 +764,8 @@ public class MusicPlayerService : IMusicPlayerService
             .AsNoTracking()
             .TagWithCallSite()
             .Where(x => x.PlaylistId == playlistId && x.DeleteDate == null && x.Song!.IsActive)
-            .OrderByDescending(x => x.Song!.CreateDate)
-            .ThenBy(x => x.Song!.Name)
+            .OrderBy(x => x.Position)
+            .ThenByDescending(x => x.Song!.CreateDate)
             .Select(x => x.Song!)
             .ToListAsync();
     }
@@ -831,12 +837,16 @@ public class MusicPlayerService : IMusicPlayerService
 
         lock (_lock)
         {
-            if (!_stateByClientId.TryGetValue(clientId, out ClientMusicState? state) || state.CurrentQueueIndex is null)
+            if (!_stateByClientId.TryGetValue(clientId, out ClientMusicState? state) || state.PlayOrder.Count == 0)
             {
                 return Result<bool>.Fail("Nothing is queued on this kiosk.");
             }
 
-            if (!TryMoveNextLocked(state, isAutomaticAdvance))
+            // Repeat-one needs a song to repeat; if the playing song was taken out of the playlist
+            // there isn't one in the queue, so move on instead.
+            bool replay = isAutomaticAdvance && state.CurrentQueueIndex is not null;
+
+            if (!TryMoveNextLocked(state, replay))
             {
                 return Result<bool>.Fail("That was the end of the queue.");
             }
@@ -853,6 +863,84 @@ public class MusicPlayerService : IMusicPlayerService
         RaiseSongChanged(clientId, song.Id);
 
         return await SendToClientAsync(clientId, ("Load", [song.Id, playlistId]), ("Play", []));
+    }
+
+    #endregion
+
+    #region Playlist edits
+
+    private void HandleLibraryChanged(int companyId, Guid? playlistId)
+    {
+        if (playlistId is not Guid id)
+        {
+            return;
+        }
+
+        bool anyPlaying;
+        lock (_lock)
+        {
+            anyPlaying = _stateByClientId.Values.Any(x => x.CurrentPlaylist?.Id == id);
+        }
+
+        if (anyPlaying)
+        {
+            // Raised from inside the edit; the reload runs on its own and logs its own failures.
+            _ = RefreshPlaylistQueuesAsync(id);
+        }
+    }
+
+    /// <summary>
+    /// After a playlist's songs are added, removed or reordered, brings every kiosk playing it up
+    /// to date without interrupting the song playing. Only the server's queue changes - it decides
+    /// what plays next - so nothing is sent to the kiosk. A song that was taken out keeps playing
+    /// to its end and the queue carries on from where it was.
+    /// </summary>
+    public async Task RefreshPlaylistQueuesAsync(Guid playlistId)
+    {
+        try
+        {
+            List<Song> songs = await LoadPlaylistSongsAsync(playlistId);
+            List<Guid> refreshed = [];
+
+            lock (_lock)
+            {
+                foreach ((Guid clientId, ClientMusicState state) in _stateByClientId)
+                {
+                    if (state.CurrentPlaylist?.Id != playlistId)
+                    {
+                        continue;
+                    }
+
+                    int oldIndex = state.CurrentQueueIndex ?? 0;
+                    int currentIndex = state.CurrentSong is null ? -1 : songs.FindIndex(x => x.Id == state.CurrentSong.Id);
+
+                    state.Queue = songs;
+
+                    if (currentIndex >= 0)
+                    {
+                        BuildPlayOrderLocked(state, currentIndex);
+                    }
+                    else
+                    {
+                        // The playing song is gone: start the order at whatever now sits where it
+                        // was, and step back one so Next lands on it.
+                        BuildPlayOrderLocked(state, Math.Min(oldIndex, Math.Max(0, songs.Count - 1)));
+                        state.OrderPosition -= 1;
+                    }
+
+                    refreshed.Add(clientId);
+                }
+            }
+
+            foreach (Guid clientId in refreshed)
+            {
+                RaiseNowPlaying(clientId);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to refresh the queues playing playlist {PlaylistId}", playlistId);
+        }
     }
 
     #endregion
@@ -993,7 +1081,7 @@ public class MusicPlayerService : IMusicPlayerService
 
         lock (_lock)
         {
-            if (!_stateByClientId.TryGetValue(clientId, out ClientMusicState? state) || state.CurrentQueueIndex is null)
+            if (!_stateByClientId.TryGetValue(clientId, out ClientMusicState? state) || state.PlayOrder.Count == 0)
             {
                 return Result<bool>.Fail("Nothing is queued on this kiosk.");
             }

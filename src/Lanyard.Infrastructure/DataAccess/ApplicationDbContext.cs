@@ -1029,6 +1029,14 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<Song>()
                 .HasIndex(x => x.BpmAnalysisStatus);
 
+            // The Music page's library search lists a company's active songs by name, a page at a time.
+            modelBuilder.Entity<Song>()
+                .HasIndex(x => new { x.CompanyId, x.IsActive, x.Name });
+
+            // A playlist's songs are read in order.
+            modelBuilder.Entity<PlaylistSongMember>()
+                .HasIndex(x => new { x.PlaylistId, x.Position });
+
             ConfigureDmxFixtureDefinitions(modelBuilder);
 
             ConfigureCompanyTenancy(modelBuilder);

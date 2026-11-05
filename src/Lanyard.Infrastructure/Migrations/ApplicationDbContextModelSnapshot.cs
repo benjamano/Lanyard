@@ -3304,13 +3304,16 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<DateTime?>("DeleteDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
                     b.HasKey("SongId", "PlaylistId");
 
                     b.HasIndex("CreateByUserId");
 
                     b.HasIndex("DeleteByUserId");
 
-                    b.HasIndex("PlaylistId");
+                    b.HasIndex("PlaylistId", "Position");
 
                     b.ToTable("PlaylistSongMembers");
                 });
@@ -3637,9 +3640,9 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.HasIndex("BpmAnalysisStatus");
 
-                    b.HasIndex("CompanyId");
-
                     b.HasIndex("FileMetadataId");
+
+                    b.HasIndex("CompanyId", "IsActive", "Name");
 
                     b.ToTable("Songs");
                 });
