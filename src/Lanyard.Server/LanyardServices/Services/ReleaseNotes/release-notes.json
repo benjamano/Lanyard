@@ -826,13 +826,20 @@
   {
     "version": "1.4.20",
     "releaseDate": "2026-11-04",
-    "summary": "Audio clips can now be switched on or off for each company.",
+    "summary": "Audio clips can now be switched on or off for each company. Music shuffle, skipping and the kiosk player are more reliable.",
     "details": [
       "Admins can switch Audio clips on or off for each company under Manage > Companies & Locations. It stays on for every company until someone turns it off.",
       "With Audio clips off, the Audio Clips page and its menu link are hidden, the Play Audio Clip action is no longer offered in automation rules, and the Audio Clips tab disappears from Music help.",
       "Clips no longer play for a company with Audio clips off, whether from a schedule, an automation rule or the Play button. Nothing is deleted, so switching it back on brings every clip and schedule back.",
       "The Print buttons on a party (Print everything, reserved table card, food sheet, voucher and feedback form) and Preview saved version on the Printouts page now open the PDF in a new tab again, instead of showing Not Found.",
-      "Lanyard loads faster, especially on a phone: pages no longer wait for scripts they don't use, and the text editor's files now come from Lanyard itself instead of an outside server."
+      "Lanyard loads faster, especially on a phone: pages no longer wait for scripts they don't use, and the text editor's files now come from Lanyard itself instead of an outside server.",
+      "Shuffle now plays every song in a playlist once before any repeat, and Previous goes back to the song that actually played before.",
+      "Turning shuffle off carries on in playlist order from the song that's playing.",
+      "Playing a song from a playlist now carries on with the songs after it, instead of moving that song to the front.",
+      "Previous restarts the song if it's more than 3 seconds in, otherwise goes back one.",
+      "A kiosk reconnecting no longer briefly shows the wrong song or loses its place in the queue.",
+      "Music commands that fail (for example when a kiosk has just dropped off) now say so instead of failing silently.",
+      "The music schedule retries a playlist that failed to start, and no longer jumps the volume up from silence on a kiosk that hasn't reported its volume yet."
     ]
   }
 ]
