@@ -20,7 +20,8 @@ public interface IMusicPlayer
     Task<Result<bool>> PlayNext();
     Task<Result<bool>> PlayPrevious();
     Result<bool> Seek(double seconds);
-    Task<Result<bool>> LoadPlaylist(Dictionary<Guid, Guid> songList);
+    /// <summary>Replaces the queue and loads its first song. Cancelling abandons the download wait.</summary>
+    Task<Result<bool>> LoadPlaylist(Dictionary<Guid, Guid> songList, CancellationToken cancellationToken = default);
 
     Result<PlaybackState> GetPlaybackStatus();
     Result<Guid> GetCurrentSongId();
@@ -33,6 +34,9 @@ public interface IMusicPlayer
     Result<double> GetPositionSeconds();
 
     Task<Result<bool>> Load(Guid songId, Guid playlistId);
+
+    /// <summary>Load, abandoned (throwing OperationCanceledException) if a newer load replaces it.</summary>
+    Task<Result<bool>> Load(Guid songId, Guid playlistId, CancellationToken cancellationToken);
     void Stop(bool notify = true);
 
     Task<Result<bool>> SetVolumeAsync(int volume);

@@ -2,10 +2,13 @@ using Lanyard.Client.Security;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
+using Lanyard.Shared.Music;
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Net.Http;
 using System.Text.Json;
+using Timer = System.Threading.Timer;
 
 public class SongCacheService : ISongCacheService, IDisposable
 {
@@ -13,10 +16,24 @@ public class SongCacheService : ISongCacheService, IDisposable
     private readonly HttpClient _httpClient;
     private readonly string _cacheDir;
     private readonly string _metadataFile;
-    private Dictionary<Guid, DateTime> _lastAccessed = [];
+    private ConcurrentDictionary<Guid, DateTime> _lastAccessed = new();
     private long _cacheLimitBytes = 500L * 1024 * 1024;
-    private readonly SemaphoreSlim _downloadLock = new(1, 1);
     private Guid? _activeSongId;
+
+    // One download per song, shared by everyone who wants it (see SharedDownloads). Pre-caching
+    // the next song takes this single slot; a song someone actually asked for never waits for it.
+    private readonly SharedDownloads<string?> _downloads = new();
+    private readonly SemaphoreSlim _backgroundSlot = new(1, 1);
+
+    // Kept as a running total rather than re-listing the cache folder on every download and
+    // eviction step.
+    private long _cacheBytes;
+    private readonly object _sizeLock = new();
+
+    // Access times are written out every so often, not on every cache hit.
+    private static readonly TimeSpan MetadataSaveInterval = TimeSpan.FromSeconds(30);
+    private readonly Timer _metadataTimer;
+    private int _metadataDirty;
 
     public SongCacheService(ILogger<SongCacheService> logger, IHttpClientFactory httpClientFactory)
     {
@@ -30,6 +47,9 @@ public class SongCacheService : ISongCacheService, IDisposable
 
         Directory.CreateDirectory(_cacheDir);
         LoadMetadata();
+        _cacheBytes = MeasureCacheSize();
+
+        _metadataTimer = new Timer(_ => SaveMetadataIfDirty(), null, MetadataSaveInterval, MetadataSaveInterval);
     }
 
     // A limit at or near zero makes EnsureSpaceAvailable never succeed, silently disabling the
@@ -44,7 +64,7 @@ public class SongCacheService : ISongCacheService, IDisposable
         _logger.LogInformation("SongCache: Cache limit set to {Mb}MB", clampedMb);
     }
 
-    public async Task<string> GetAudioSourceAsync(Guid songId)
+    public async Task<string> GetAudioSourceAsync(Guid songId, CancellationToken cancellationToken = default)
     {
         string cachedPath = GetCachePath(songId);
 
@@ -57,7 +77,7 @@ public class SongCacheService : ISongCacheService, IDisposable
 
         _logger.LogInformation("SongCache: Cache miss for {SongId}, downloading", songId);
 
-        string? downloaded = await DownloadToCache(songId);
+        string? downloaded = await _downloads.GetOrStartAsync(songId, () => DownloadToCache(songId), cancellationToken);
 
         // Streamed by Media Foundation, which can't send headers: a media token goes in the URL.
         return downloaded ?? await KioskMediaTokens.AppendToAsync(BuildApiUrl(songId));
@@ -77,14 +97,27 @@ public class SongCacheService : ISongCacheService, IDisposable
 
         _ = Task.Run(async () =>
         {
-            _logger.LogInformation("SongCache: Pre-caching {SongId} in background", songId);
-            await DownloadToCache(songId);
+            // One pre-cache at a time, and never ahead of a song someone asked for: those don't
+            // take this slot, and join this download if it's the same song.
+            if (!await _backgroundSlot.WaitAsync(0))
+            {
+                return;
+            }
+
+            try
+            {
+                _logger.LogInformation("SongCache: Pre-caching {SongId} in background", songId);
+                await _downloads.GetOrStartAsync(songId, () => DownloadToCache(songId));
+            }
+            finally
+            {
+                _backgroundSlot.Release();
+            }
         });
     }
 
     private async Task<string?> DownloadToCache(Guid songId)
     {
-        await _downloadLock.WaitAsync();
         try
         {
             string cachedPath = GetCachePath(songId);
@@ -116,6 +149,7 @@ public class SongCacheService : ISongCacheService, IDisposable
             }
 
             File.Move(tempPath, cachedPath);
+            AddToCacheSize(new FileInfo(cachedPath).Length);
             UpdateAccessTime(songId);
 
             _logger.LogInformation("SongCache: Cached {SongId}", songId);
@@ -125,10 +159,6 @@ public class SongCacheService : ISongCacheService, IDisposable
         {
             _logger.LogError(ex, "SongCache: Failed to download {SongId}", songId);
             return null;
-        }
-        finally
-        {
-            _downloadLock.Release();
         }
     }
 
@@ -145,20 +175,20 @@ public class SongCacheService : ISongCacheService, IDisposable
             return false;
         }
 
-        if (GetCacheSize() < _cacheLimitBytes)
+        if (CacheSize < _cacheLimitBytes)
         {
             return true;
         }
 
         EvictLru();
-        return GetCacheSize() < _cacheLimitBytes;
+        return CacheSize < _cacheLimitBytes;
     }
 
     private void EvictLru()
     {
         _logger.LogInformation("SongCache: Cache full, evicting least recently accessed songs");
 
-        List<(Guid id, DateTime lastAccessed, string path)> entries = [];
+        List<(Guid id, DateTime lastAccessed, string path, long size)> entries = [];
 
         foreach (string file in Directory.GetFiles(_cacheDir, "*.mp3"))
         {
@@ -166,15 +196,15 @@ public class SongCacheService : ISongCacheService, IDisposable
             if (Guid.TryParse(name, out Guid id))
             {
                 DateTime accessed = _lastAccessed.TryGetValue(id, out DateTime t) ? t : DateTime.MinValue;
-                entries.Add((id, accessed, file));
+                entries.Add((id, accessed, file, new FileInfo(file).Length));
             }
         }
 
         long targetSize = _cacheLimitBytes * 3 / 4;
 
-        foreach ((Guid id, _, string path) in entries.OrderBy(x => x.lastAccessed))
+        foreach ((Guid id, _, string path, long size) in entries.OrderBy(x => x.lastAccessed))
         {
-            if (GetCacheSize() <= targetSize) break;
+            if (CacheSize <= targetSize) break;
 
             // Never evict the song that's currently loaded/playing - its file may still be
             // open for playback, and pulling it out from under the reader would stall playback.
@@ -183,7 +213,8 @@ public class SongCacheService : ISongCacheService, IDisposable
             try
             {
                 File.Delete(path);
-                _lastAccessed.Remove(id);
+                AddToCacheSize(-size);
+                _lastAccessed.TryRemove(id, out _);
                 _logger.LogInformation("SongCache: Evicted {SongId}", id);
             }
             catch (Exception ex)
@@ -192,10 +223,29 @@ public class SongCacheService : ISongCacheService, IDisposable
             }
         }
 
-        SaveMetadata();
+        MarkMetadataDirty();
     }
 
-    private long GetCacheSize() =>
+    private long CacheSize
+    {
+        get
+        {
+            lock (_sizeLock)
+            {
+                return _cacheBytes;
+            }
+        }
+    }
+
+    private void AddToCacheSize(long bytes)
+    {
+        lock (_sizeLock)
+        {
+            _cacheBytes = Math.Max(0, _cacheBytes + bytes);
+        }
+    }
+
+    private long MeasureCacheSize() =>
         Directory.GetFiles(_cacheDir, "*.mp3").Sum(f => new FileInfo(f).Length);
 
     private string GetCachePath(Guid songId) =>
@@ -213,7 +263,17 @@ public class SongCacheService : ISongCacheService, IDisposable
     private void UpdateAccessTime(Guid songId)
     {
         _lastAccessed[songId] = DateTime.UtcNow;
-        SaveMetadata();
+        MarkMetadataDirty();
+    }
+
+    private void MarkMetadataDirty() => Interlocked.Exchange(ref _metadataDirty, 1);
+
+    private void SaveMetadataIfDirty()
+    {
+        if (Interlocked.Exchange(ref _metadataDirty, 0) == 1)
+        {
+            SaveMetadata();
+        }
     }
 
     private void LoadMetadata()
@@ -223,12 +283,12 @@ public class SongCacheService : ISongCacheService, IDisposable
         try
         {
             string json = File.ReadAllText(_metadataFile);
-            _lastAccessed = JsonSerializer.Deserialize<Dictionary<Guid, DateTime>>(json) ?? [];
+            _lastAccessed = new ConcurrentDictionary<Guid, DateTime>(JsonSerializer.Deserialize<Dictionary<Guid, DateTime>>(json) ?? []);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "SongCache: Failed to load metadata, starting fresh");
-            _lastAccessed = [];
+            _lastAccessed = new();
         }
     }
 
@@ -236,7 +296,10 @@ public class SongCacheService : ISongCacheService, IDisposable
     {
         try
         {
-            File.WriteAllText(_metadataFile, JsonSerializer.Serialize(_lastAccessed));
+            // Written to a temp file and moved, so a crash mid-write can't leave half a file.
+            string tempFile = _metadataFile + ".tmp";
+            File.WriteAllText(tempFile, JsonSerializer.Serialize(new Dictionary<Guid, DateTime>(_lastAccessed)));
+            File.Move(tempFile, _metadataFile, overwrite: true);
         }
         catch (Exception ex)
         {
@@ -270,7 +333,9 @@ public class SongCacheService : ISongCacheService, IDisposable
 
     public void Dispose()
     {
-        _downloadLock.Dispose();
+        _metadataTimer.Dispose();
+        SaveMetadataIfDirty();
+        _backgroundSlot.Dispose();
         _httpClient.Dispose();
     }
 }
