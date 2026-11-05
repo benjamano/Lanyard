@@ -1,4 +1,5 @@
 ﻿@using Lanyard.App.Components.Kiosk
+@implements IAsyncDisposable
 
 @inject IJSRuntime JS
 
@@ -24,6 +25,7 @@ else
     private bool _currentVideoRepeat;
     private string _currentVolume = "1";
     private bool _applyVolumeAfterRender;
+    private IJSObjectReference? _captureModule;
 
     private Guid _lastStepId = Guid.Empty;
     private string? _lastVideoValue;
@@ -84,7 +86,8 @@ else
 
         _applyVolumeAfterRender = false;
 
-        await JS.InvokeVoidAsync("setVideoVolume", $"video_{_currentVideoFileId}", double.Parse(_currentVolume) / 100);
+        _captureModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/liveCapture.js");
+        await _captureModule.InvokeVoidAsync("setVideoVolume", $"video_{_currentVideoFileId}", double.Parse(_currentVolume) / 100);
     }
 
     private string? GetStepParameterValue(string parameterName)
@@ -97,5 +100,17 @@ else
         _currentVideoSource = null;
         _currentVideoFileId = null;
         _applyVolumeAfterRender = false;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_captureModule is not null)
+            {
+                await _captureModule.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException) { }
     }
 }

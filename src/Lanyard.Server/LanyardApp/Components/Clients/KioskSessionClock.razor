@@ -1,0 +1,20 @@
+@* How long a kiosk has been connected. The server renders the value once; the page's
+   kioskSessionClock.js keeps it ticking in the browser. role="timer" is never announced on its
+   own, so a screen reader isn't read the clock every second. *@
+@if (ConnectedSinceUtc is DateTime since)
+{
+    TimeSpan elapsed = DateTime.UtcNow - since;
+
+    <span class="kiosk-session-clock" role="timer"
+          data-elapsed-seconds="@((long)Math.Max(0, elapsed.TotalSeconds))">@KioskSessionFormat.Format(elapsed)</span>
+}
+else
+{
+    <span>--:--:--</span>
+}
+
+@code {
+    /// <summary>When the current session started (UTC), or null when the kiosk isn't connected.</summary>
+    [Parameter]
+    public DateTime? ConnectedSinceUtc { get; set; }
+}
