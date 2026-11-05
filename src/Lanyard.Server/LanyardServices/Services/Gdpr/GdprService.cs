@@ -340,6 +340,23 @@ public class GdprService : IGdprService
                 availability.UpdatedByUserId = null;
             }
 
+            List<ShiftTemplate> templatesTouchedByUser = await ctx.ShiftTemplates
+                .Where(x => x.CreateByUserId == userId || x.UpdateByUserId == userId)
+                .ToListAsync();
+
+            foreach (ShiftTemplate template in templatesTouchedByUser)
+            {
+                if (template.CreateByUserId == userId)
+                {
+                    template.CreateByUserId = null;
+                }
+
+                if (template.UpdateByUserId == userId)
+                {
+                    template.UpdateByUserId = null;
+                }
+            }
+
             // Decisions and records this person made on other people's time off keep their
             // outcome but lose the name. Their own requests are removed in RemoveOwnedRecordsAsync.
             List<TimeOffRequest> timeOffActedOn = await ctx.TimeOffRequests

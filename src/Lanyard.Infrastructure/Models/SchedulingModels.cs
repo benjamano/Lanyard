@@ -230,10 +230,9 @@ namespace Lanyard.Infrastructure.Models
     //   UpdateDate > PublishedDateUtc           -> edited since publish, re-notify on next publish
     //   !IsActive && RemovalPending             -> removed after publish, not yet told
     //
-    // Automated scheduling (future) plugs in by generating Shift rows through the same
-    // IRotaService.SaveShiftAsync validation; it would add StaffAvailability (user, weekday, time
-    // range) and LocationDemand (location, weekday, position, headcount) tables to read from,
-    // not change this one.
+    // Auto-build creates draft Shift rows from a location's ShiftTemplates (the weekly demand)
+    // and picks who works them from StaffAvailability and the suggestion ranking; it doesn't need
+    // anything extra on this table.
     public class Shift
     {
         public Guid Id { get; set; }

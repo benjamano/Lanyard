@@ -124,6 +124,8 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ContractRequirement> ContractRequirements { get; set; }
         public DbSet<UserClockInPin> UserClockInPins { get; set; }
         public DbSet<StaffAvailability> StaffAvailabilities { get; set; }
+        public DbSet<ShiftTemplate> ShiftTemplates { get; set; }
+        public DbSet<ShiftTemplateSlot> ShiftTemplateSlots { get; set; }
         public DbSet<CompanySchedulingSettings> CompanySchedulingSettings { get; set; }
         public DbSet<Shift> Shifts { get; set; }
         public DbSet<ClockInTerminal> ClockInTerminals { get; set; }
@@ -547,6 +549,34 @@ namespace Lanyard.Infrastructure.DataAccess
 
             modelBuilder.Entity<StaffAvailability>()
                 .HasIndex(x => new { x.UserId, x.DayOfWeek });
+
+            // A location's weekly shift templates, read for one location at a time. Slots are part
+            // of their template (replaced whenever it's saved); a position in use can only be
+            // deactivated, never deleted, so Restrict never actually blocks anything.
+            modelBuilder.Entity<ShiftTemplate>()
+                .HasIndex(x => new { x.LocationId, x.DayOfWeek });
+
+            modelBuilder.Entity<ShiftTemplate>()
+                .HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ShiftTemplate>()
+                .HasMany(x => x.Slots)
+                .WithOne(x => x.ShiftTemplate)
+                .HasForeignKey(x => x.ShiftTemplateId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ShiftTemplateSlot>()
+                .HasOne(x => x.StaffPosition)
+                .WithMany()
+                .HasForeignKey(x => x.StaffPositionId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ShiftTemplateSlot>()
+                .HasIndex(x => new { x.ShiftTemplateId, x.StaffPositionId })
+                .IsUnique();
 
             modelBuilder.Entity<CompanySchedulingSettings>()
                 .HasIndex(x => x.CompanyId)
@@ -1210,6 +1240,7 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<ShiftClaim>().HasQueryFilter(x => TenantFilterDisabled || Shifts.Any(sh => sh.Id == x.ShiftId && Locations.Any(l => l.Id == sh.LocationId && l.CompanyId == TenantCompanyId)));
             modelBuilder.Entity<UserPosition>().HasQueryFilter(x => TenantFilterDisabled || x.StaffPosition!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<StaffPositionRequiredCourse>().HasQueryFilter(x => TenantFilterDisabled || x.StaffPosition!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ShiftTemplateSlot>().HasQueryFilter(x => TenantFilterDisabled || x.ShiftTemplate!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ChatMember>().HasQueryFilter(x => TenantFilterDisabled || x.Conversation!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ChatMessage>().HasQueryFilter(x => TenantFilterDisabled || x.Conversation!.CompanyId == TenantCompanyId);
         }

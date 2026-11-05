@@ -3588,6 +3588,89 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("ShiftClaims");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ShiftTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("BreakMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CreateByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("EffectiveFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("EffectiveTo")
+                        .HasColumnType("date");
+
+                    b.Property<TimeOnly>("EndTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<string>("UpdateByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("LocationId", "DayOfWeek");
+
+                    b.ToTable("ShiftTemplates");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ShiftTemplateSlot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Headcount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ShiftTemplateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("StaffPositionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StaffPositionId");
+
+                    b.HasIndex("ShiftTemplateId", "StaffPositionId")
+                        .IsUnique();
+
+                    b.ToTable("ShiftTemplateSlots");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Song", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6096,6 +6179,44 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ShiftTemplate", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Location");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ShiftTemplateSlot", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.ShiftTemplate", "ShiftTemplate")
+                        .WithMany("Slots")
+                        .HasForeignKey("ShiftTemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.StaffPosition", "StaffPosition")
+                        .WithMany()
+                        .HasForeignKey("StaffPositionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ShiftTemplate");
+
+                    b.Navigation("StaffPosition");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Song", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.Company", null)
@@ -6603,6 +6724,11 @@ namespace Lanyard.Infrastructure.Migrations
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgramStepTemplate", b =>
                 {
                     b.Navigation("Parameters");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ShiftTemplate", b =>
+                {
+                    b.Navigation("Slots");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.StaffPosition", b =>

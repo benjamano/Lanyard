@@ -1,0 +1,47 @@
+.template-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+}
+
+.template-dialog-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.template-dialog-dates ::deep fluent-datepicker,
+.template-dialog-dates ::deep .fluent-datepicker {
+    width: 100%;
+}
+
+.template-dialog-hint {
+    margin-top: -6px;
+    font-size: 0.8rem;
+    color: var(--colorNeutralForeground3);
+}
+
+.template-dialog-slots {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    padding: 10px 12px 12px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+}
+
+.template-dialog-slots legend {
+    padding: 0 4px;
+    font-weight: 600;
+}
+
+/* Position takes the room, the count stays narrow, and the bin lines up with the inputs. */
+.template-slot-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 96px auto;
+    align-items: end;
+    gap: 8px;
+}

@@ -1,0 +1,213 @@
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@inject IShiftTemplateService _templateService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.CalendarClock())" />
+            <FluentText As="@TextTag.H3">@(Existing is null ? "New shift template" : "Edit shift template")</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="template-dialog">
+            @if (errorMessage is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
+            }
+
+            <FluentTextInput @bind-Value="name" Label="Name" Placeholder="e.g. Saturday AM" Required="true" Width="100%"
+                             Maxlength="@ShiftTemplateRules.MaxNameLength" />
+
+            <FluentSelect TOption="DayOption" TValue="string" Items="@dayOptions" OptionText="@(x => x.Label)" OptionValue="@(x => x.Value)"
+                          @bind-Value="day" Label="Every" Width="100%" />
+
+            <div class="template-dialog-pair">
+                <AnyTimePicker @bind-Value="startTime" Label="Starts" />
+                <AnyTimePicker @bind-Value="endTime" Label="Ends" />
+            </div>
+            @if (endTime <= startTime && endTime != startTime)
+            {
+                <div class="template-dialog-hint">Ends the next day.</div>
+            }
+
+            <FluentNumberInput TValue="int" @bind-Value="breakMinutes" Label="Unpaid break (minutes)" Width="100%" />
+
+            <fieldset class="template-dialog-slots">
+                <legend>Who it needs</legend>
+                @foreach (SlotModel slot in slots)
+                {
+                    SlotModel current = slot;
+                    <div class="template-slot-row">
+                        <FluentSelect TOption="StaffPosition" TValue="string" Items="@ChoosablePositions(current)" OptionText="@(x => x.Name)"
+                                      OptionValue="@(x => x.Id.ToString())" @bind-Value="current.PositionId" Label="Position" Width="100%"
+                                      Class="template-slot-position" />
+                        <FluentNumberInput TValue="int" @bind-Value="current.Headcount" Label="How many" Min="1" Max="@ShiftTemplateRules.MaxHeadcount"
+                                           Width="100%" Class="template-slot-count" />
+                        <FluentButton IconStart="@(new Icons.Regular.Size16.Delete())" Title="Remove this position"
+                                      Disabled="@(slots.Count == 1)" OnClick="@(() => slots.Remove(current))" Class="template-slot-remove" />
+                    </div>
+                }
+                <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size16.Add())"
+                              Disabled="@(slots.Count >= Positions.Count)" OnClick="@AddSlot">
+                    Add another position
+                </FluentButton>
+            </fieldset>
+
+            <div class="template-dialog-pair template-dialog-dates">
+                <FluentDatePicker TValue="DateTime?" @bind-Value="effectiveFrom" Label="Starting (optional)" Culture="@RotaFormat.Uk" />
+                <FluentDatePicker TValue="DateTime?" @bind-Value="effectiveTo" Label="Until (optional)" Culture="@RotaFormat.Uk" />
+            </div>
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentStack HorizontalAlignment="HorizontalAlignment.End" HorizontalGap="8px">
+            <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" OnClick="@SaveAsync">@(isBusy ? "Saving..." : "Save")</FluentButton>
+            <FluentButton Disabled="@isBusy" OnClick="@(() => Dialog.CancelAsync())">Cancel</FluentButton>
+        </FluentStack>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required int LocationId { get; set; }
+
+    // The company's active positions.
+    [Parameter, EditorRequired]
+    public required List<StaffPosition> Positions { get; set; }
+
+    [Parameter]
+    public ShiftTemplate? Existing { get; set; }
+
+    private record DayOption(string Value, string Label);
+
+    private sealed class SlotModel
+    {
+        public string? PositionId { get; set; }
+        public int Headcount { get; set; } = 1;
+    }
+
+    // Monday first, as the rota reads.
+    private readonly List<DayOption> dayOptions = Enumerable.Range(0, 7)
+        .Select(i => (DayOfWeek)((i + 1) % 7))
+        .Select(d => new DayOption(d.ToString(), RotaFormat.Uk.DateTimeFormat.GetDayName(d)))
+        .ToList();
+
+    private string name = string.Empty;
+    private string day = nameof(DayOfWeek.Saturday);
+    private TimeOnly startTime = new(9, 0);
+    private TimeOnly endTime = new(14, 0);
+    private int breakMinutes;
+    private DateTime? effectiveFrom;
+    private DateTime? effectiveTo;
+    private List<SlotModel> slots = [];
+
+    // Positions the template already uses stay choosable even if they've since been archived.
+    private List<StaffPosition> allPositions = [];
+
+    private string? errorMessage;
+    private bool isBusy;
+
+    protected override void OnInitialized()
+    {
+        allPositions = [.. Positions];
+
+        if (Existing is ShiftTemplate template)
+        {
+            name = template.Name;
+            day = template.DayOfWeek.ToString();
+            startTime = template.StartTime;
+            endTime = template.EndTime;
+            breakMinutes = template.BreakMinutes;
+            effectiveFrom = template.EffectiveFrom?.ToDateTime(TimeOnly.MinValue);
+            effectiveTo = template.EffectiveTo?.ToDateTime(TimeOnly.MinValue);
+
+            foreach (ShiftTemplateSlot slot in template.Slots)
+            {
+                if (slot.StaffPosition is StaffPosition position && allPositions.All(x => x.Id != position.Id))
+                {
+                    allPositions.Add(position);
+                }
+
+                slots.Add(new SlotModel { PositionId = slot.StaffPositionId.ToString(), Headcount = slot.Headcount });
+            }
+        }
+
+        if (slots.Count == 0)
+        {
+            slots.Add(new SlotModel { PositionId = allPositions.FirstOrDefault()?.Id.ToString() });
+        }
+    }
+
+    // Each position appears once per template, so a row only offers positions no other row has.
+    private List<StaffPosition> ChoosablePositions(SlotModel row) =>
+        allPositions.Where(p => p.Id.ToString() == row.PositionId || slots.All(s => s.PositionId != p.Id.ToString())).ToList();
+
+    private void AddSlot()
+    {
+        StaffPosition? next = allPositions.FirstOrDefault(p => slots.All(s => s.PositionId != p.Id.ToString()));
+
+        if (next is not null)
+        {
+            slots.Add(new SlotModel { PositionId = next.Id.ToString() });
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        errorMessage = null;
+
+        ShiftTemplate template = new()
+        {
+            Id = Existing?.Id ?? Guid.Empty,
+            CompanyId = 0,
+            LocationId = LocationId,
+            Name = name ?? string.Empty,
+            DayOfWeek = Enum.Parse<DayOfWeek>(day),
+            StartTime = startTime,
+            EndTime = endTime,
+            BreakMinutes = breakMinutes,
+            EffectiveFrom = effectiveFrom is DateTime from ? DateOnly.FromDateTime(from) : null,
+            EffectiveTo = effectiveTo is DateTime to ? DateOnly.FromDateTime(to) : null,
+            Slots = slots
+                .Where(s => Guid.TryParse(s.PositionId, out _))
+                .Select(s => new ShiftTemplateSlot { ShiftTemplateId = Guid.Empty, StaffPositionId = Guid.Parse(s.PositionId!), Headcount = s.Headcount })
+                .ToList()
+        };
+
+        if (ShiftTemplateRules.Validate(template) is string invalid)
+        {
+            errorMessage = invalid;
+            return;
+        }
+
+        isBusy = true;
+
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null || !actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            isBusy = false;
+            errorMessage = "Couldn't confirm who you are - try reloading the page.";
+            return;
+        }
+
+        Result<ShiftTemplate> result = await _templateService.SaveTemplateAsync(scopeResult.Data, template, actingUser.Data);
+
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            errorMessage = result.Error;
+            return;
+        }
+
+        _toastService.ShowSuccess(Existing is null ? $"{template.Name.Trim()} added." : $"{template.Name.Trim()} saved.");
+        await Dialog.CloseAsync(true);
+    }
+}

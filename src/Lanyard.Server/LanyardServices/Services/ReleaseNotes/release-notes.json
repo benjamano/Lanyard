@@ -854,5 +854,14 @@
       "The CanManagePlaylists role now exists, so it can be given to people who should look after playlists without being Admins.",
       "With kiosk version 1.0.45, a kiosk responds to pause, stop and other commands straight away even while it's still downloading a song, and skipping quickly through songs no longer queues up downloads."
     ]
+  },
+  {
+    "version": "1.4.21",
+    "releaseDate": "2026-11-05",
+    "summary": "Shift templates: set up the shifts each location needs every week, ready for building the rota automatically.",
+    "details": [
+      "New Rota > Shift Templates page: add the shifts a location needs every week, such as Saturday AM 09:00 to 14:00, and how many people of each position they need (for example 2 Duty Managers and 4 Hosts).",
+      "A template can be limited to some dates, such as the school holidays, and archived when it's no longer needed."
+    ]
   }
 ]
