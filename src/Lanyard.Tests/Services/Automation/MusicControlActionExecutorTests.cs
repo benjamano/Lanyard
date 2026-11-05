@@ -2,6 +2,7 @@
 
 using System.Reflection;
 using Lanyard.Application.Services;
+using Lanyard.Application.Services.Clients;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
@@ -87,6 +88,7 @@ public class MusicControlActionExecutorTests
         services.AddSingleton(hubContext);
         services.AddSingleton<ILogger<ClientService>>(NullLogger<ClientService>.Instance);
         services.AddMemoryCache();
+        services.AddSingleton<IKioskFleetEventBus, KioskFleetEventBus>();
         services.AddScoped<IClientService, ClientService>();
 
         return services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();

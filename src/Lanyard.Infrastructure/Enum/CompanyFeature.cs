@@ -23,5 +23,9 @@ public enum CompanyFeature
     Insights = 6,
 
     // Party bookings and the documents printed for each party.
-    Parties = 7
+    Parties = 7,
+
+    // Audio clips played over the kiosk music: the Audio Clips page, clip schedules and the
+    // Play Audio Clip automation action.
+    AudioClips = 8
 }

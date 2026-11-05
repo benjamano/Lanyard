@@ -2,6 +2,11 @@
 // videoPublisher runs on the hidden publisher page of the video source machine;
 // videoViewer runs on the kiosk that displays the remote stream. SDP/ICE signaling
 // travels through the server's VideoStreamSignalingService via Blazor circuits.
+//
+// A module, imported by VideoPublisher.razor and KioskLiveCaptureTemplate.razor (the only pages
+// that stream video) rather than loaded on every page from App.razor.
+
+import { acquireCaptureStream } from './js/liveCapture.js';
 
 // STUN fallback used when the server supplies no ICE servers. Note it needs internet
 // access; on an isolated LAN it is harmless (host candidates are still gathered) but a
@@ -30,7 +35,7 @@ function attachIceDiagnostics(pc, report) {
     pc.addEventListener('icecandidateerror', e => report('ice-candidate-error', `code=${e.errorCode} ${e.errorText || ''} url=${e.url || ''}`));
 }
 
-window.videoPublisher = (() => {
+export const videoPublisher = (() => {
     let dotNetRef = null;
     const sessions = new Map(); // sessionId -> { pc, deviceKey, pendingCandidates, remoteDescSet }
     const streams = new Map();  // deviceKey -> { stream, refCount } — one camera open shared by N viewers
@@ -42,7 +47,7 @@ window.videoPublisher = (() => {
             return existing.stream;
         }
 
-        const stream = await window._acquireCaptureStream(deviceName, enableAudio, idealWidth, idealHeight);
+        const stream = await acquireCaptureStream(deviceName, enableAudio, idealWidth, idealHeight);
         streams.set(deviceKey, { stream: stream, refCount: 1 });
         return stream;
     }
@@ -163,7 +168,7 @@ window.videoPublisher = (() => {
     };
 })();
 
-window.videoViewer = (() => {
+export const videoViewer = (() => {
     const sessions = new Map();        // sessionId -> { pc, videoElementId, pendingCandidates, remoteDescSet }
     const earlyCandidates = new Map(); // sessionId -> [candidate] arriving before receiveOffer runs
 

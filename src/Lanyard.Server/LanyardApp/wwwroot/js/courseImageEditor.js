@@ -1,6 +1,8 @@
 // courseImageEditor.js
+// Image controls for CourseEditor's section editor. A module the course editor imports, so the
+// click listener below only runs while that editor is open (attach/detach) rather than on every page.
 
-window.courseImageEditor = (() => {
+export const courseImageEditor = (() => {
     // --- Move up/down controls -------------------------------------------------
     //
     // quill-blot-formatter's own click-to-select overlay is NOT a real Quill/DOM
@@ -175,7 +177,7 @@ window.courseImageEditor = (() => {
         requestAnimationFrame(relocate);
     }
 
-    document.addEventListener('click', (event) => {
+    function onDocumentClick(event) {
         const img = event.target.closest('.ql-editor img');
 
         if (img) {
@@ -186,11 +188,23 @@ window.courseImageEditor = (() => {
         if (toolbarEl && !toolbarEl.contains(event.target)) {
             hideToolbar();
         }
-    });
+    }
 
     // --- Insert at cursor --------------------------------------------------
 
     return {
+        // Starts showing the move controls for clicked images. Safe to call again (the editor
+        // remounts when the course editor switches between its phone and desktop layouts).
+        attach() {
+            document.removeEventListener('click', onDocumentClick);
+            document.addEventListener('click', onDocumentClick);
+        },
+
+        detach() {
+            document.removeEventListener('click', onDocumentClick);
+            hideToolbar();
+        },
+
         // Blazored.TextEditor's own InsertImage helper calls Quill's getSelection()
         // with no argument, which returns null whenever the editor doesn't currently
         // have DOM focus - always true right after our image-picker dialog closes -

@@ -48,7 +48,8 @@ public class RouteAuthorizationCoverageTests
             ("/manage/staff-documents", CompanyFeature.Onboarding),
             ("/manage/announcements", CompanyFeature.Announcements),
             ("/manage/insights", CompanyFeature.Insights),
-            ("/manage/parties", CompanyFeature.Parties)
+            ("/manage/parties", CompanyFeature.Parties),
+            ("/manage/audio-clips", CompanyFeature.AudioClips)
         ];
 
         string[] anonymousExceptions = ["/rota/terminal", "/rota/scan/"];

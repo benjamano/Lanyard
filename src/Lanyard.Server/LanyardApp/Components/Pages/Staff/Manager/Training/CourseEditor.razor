@@ -158,6 +158,7 @@ else
     private List<Location> allLocations = [];
     private bool isNarrow;
     private DotNetObjectReference<CourseEditor>? _viewportRef;
+    private IJSObjectReference? _imageEditorModule;
 
     // A shared course owned by another location is readable here but not writable - the service
     // rejects every write. Gate the write controls on the same rule so the UI doesn't offer
@@ -222,35 +223,37 @@ else
             <FluentStack Orientation="Orientation.Vertical" Class="h-100 overflow-y-auto" VerticalGap="18px">
                 <FluentTextInput Class="w-100" @bind-Value="selectedSection.Title" Label="Section Title"
                                  Appearance="TextInputAppearance.Outline" Required="true" />
-                <div class="quill-editor-host" @ref="quillEditorHostRef">
-                    <BlazoredTextEditor @ref="sectionEditor" Placeholder="Section content...">
-                        <ToolbarContent>
-                            <span class="ql-formats">
-                                <select class="ql-header">
-                                    <option value="1"></option>
-                                    <option value="2"></option>
-                                    <option value="3"></option>
-                                    <option selected></option>
-                                </select>
-                            </span>
-                            <span class="ql-formats">
-                                <button class="ql-bold"></button>
-                                <button class="ql-italic"></button>
-                            </span>
-                            <span class="ql-formats">
-                                <button class="ql-list" value="ordered"></button>
-                                <button class="ql-list" value="bullet"></button>
-                            </span>
-                            <span class="ql-formats">
-                                <button type="button" class="ql-image-insert" @onclick="OpenImagePickerAsync"
-                                        title="Insert image">
-                                    <FluentIcon Value="@(new Icons.Regular.Size16.Image())" />
-                                </button>
-                            </span>
-                        </ToolbarContent>
-                        <EditorContent></EditorContent>
-                    </BlazoredTextEditor>
-                </div>
+                <QuillGate OnReady="OnSectionEditorReadyAsync">
+                    <div class="quill-editor-host" @ref="quillEditorHostRef">
+                        <BlazoredTextEditor @ref="sectionEditor" Placeholder="Section content...">
+                            <ToolbarContent>
+                                <span class="ql-formats">
+                                    <select class="ql-header">
+                                        <option value="1"></option>
+                                        <option value="2"></option>
+                                        <option value="3"></option>
+                                        <option selected></option>
+                                    </select>
+                                </span>
+                                <span class="ql-formats">
+                                    <button class="ql-bold"></button>
+                                    <button class="ql-italic"></button>
+                                </span>
+                                <span class="ql-formats">
+                                    <button class="ql-list" value="ordered"></button>
+                                    <button class="ql-list" value="bullet"></button>
+                                </span>
+                                <span class="ql-formats">
+                                    <button type="button" class="ql-image-insert" @onclick="OpenImagePickerAsync"
+                                            title="Insert image">
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.Image())" />
+                                    </button>
+                                </span>
+                            </ToolbarContent>
+                            <EditorContent></EditorContent>
+                        </BlazoredTextEditor>
+                    </div>
+                </QuillGate>
                 <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
                     <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
                                   Loading="@isSavingSection" Disabled="@(!canEditCourse)" OnClick="SaveSelectedSectionAsync">
@@ -405,6 +408,18 @@ else
         }
     }
 
+    // The section editor has mounted (QuillGate waits for Quill to load first). Its content is loaded
+    // by OnAfterRenderAsync on the re-render this triggers; the image move controls start here.
+    private async Task OnSectionEditorReadyAsync()
+    {
+        try
+        {
+            _imageEditorModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/courseImageEditor.js");
+            await _imageEditorModule.InvokeVoidAsync("courseImageEditor.attach");
+        }
+        catch (JSDisconnectedException) { }
+    }
+
     [JSInvokable]
     public void OnViewportChanged(bool isNarrow)
     {
@@ -430,6 +445,12 @@ else
         try
         {
             await JS.InvokeVoidAsync("viewportWatcher.dispose");
+
+            if (_imageEditorModule is not null)
+            {
+                await _imageEditorModule.InvokeVoidAsync("courseImageEditor.detach");
+                await _imageEditorModule.DisposeAsync();
+            }
         }
         catch (Microsoft.JSInterop.JSDisconnectedException) { }
         catch (InvalidOperationException) { }
@@ -483,7 +504,10 @@ else
             // 0 whenever the Quill editor doesn't currently have DOM focus - which it
             // never does right after this dialog closes. courseImageEditor.js restores
             // focus to the last cursor position before inserting instead.
-            await JS.InvokeVoidAsync("courseImageEditor.insertImageAtCursor", quillEditorHostRef, $"/api/files/download/{fileId}");
+            if (_imageEditorModule is not null)
+            {
+                await _imageEditorModule.InvokeVoidAsync("courseImageEditor.insertImageAtCursor", quillEditorHostRef, $"/api/files/download/{fileId}");
+            }
         }
     }
 
