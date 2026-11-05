@@ -11,3 +11,6 @@ public sealed record LibrarySong(Guid Id, string Name, string AlbumName, double 
 
 /// <summary>One page of a longer list, with how many there are in all.</summary>
 public sealed record PagedResult<T>(IReadOnlyList<T> Items, int Total);
+
+/// <summary>A kiosk as the Music page lists it.</summary>
+public sealed record MusicKiosk(Guid Id, string Name, bool IsConnected);

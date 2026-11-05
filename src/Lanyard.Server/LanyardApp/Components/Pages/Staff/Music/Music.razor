@@ -1,755 +1,612 @@
 ﻿@page "/music"
-
 @attribute [Authorize]
 
-@using Lanyard.App.Components.Clients
-@using Lanyard.Application.Services.Clients
 @using Lanyard.App.Components.Music
-@using Lanyard.App.Components.Music.Schedule
-@using Lanyard.Application.Services
-@using Lanyard.Application.Services.Authentication
-@using Lanyard.Infrastructure.DTO
-@using Lanyard.Infrastructure.Models
+@using Lanyard.App.Components.Dialogs
+@using Lanyard.Application.Services.Tenancy
 @using Microsoft.AspNetCore.Authorization
-@using Microsoft.JSInterop
-@using NAudio.Wave;
-@using Lanyard.App.Components.AudioClips
 
 @inject IMusicPlayerService _player
-@inject IKioskClientListService _kioskClientList
-@inject INotificationService _toastService
+@inject IMusicService _musicService
 @inject IPlaylistService _playlistService
+@inject IMusicLibraryEvents _libraryEvents
+@inject ITenantContext _tenant
 @inject IJSRuntime JS
 
 @implements IAsyncDisposable
 
 <PageTitle>Music</PageTitle>
 
-<div class="d-flex justify-content-end mb-2">
-    <HelpButton AreaKey="@HelpRegistry.Music" Topic="player" />
+<div class="music-page" @ref="_pageRoot">
+    <header class="music-page-header">
+        <h1 class="music-page-title">Music</h1>
+        <div class="music-page-links">
+            <AuthorizeView Roles="Admin,Manager">
+                <a class="music-page-link" href="/manage/music-schedule">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.CalendarClock())" Color="Color.Default" /> Schedule
+                </a>
+                <a class="music-page-link" href="/manage/audio-clips">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Megaphone())" Color="Color.Default" /> Audio clips
+                </a>
+            </AuthorizeView>
+            <HelpButton AreaKey="@HelpRegistry.Music" Topic="player" />
+        </div>
+    </header>
+
+    @if (!_loaded)
+    {
+        <div class="music-loading" aria-busy="true" aria-label="Loading music">
+            <div class="music-skeleton is-strip"></div>
+            <div class="music-layout">
+                <div class="music-skeleton is-card"></div>
+                <div class="music-skeleton is-list"></div>
+            </div>
+        </div>
+    }
+    else if (_kiosks.Count == 0)
+    {
+        <div class="music-page-empty">
+            <FluentIcon Value="@(new Icons.Regular.Size48.Speaker2())" Color="Color.Default" />
+            <h2>No kiosks yet</h2>
+            <p>Music plays through a kiosk's speakers. Once a kiosk is paired in <a href="/manage/clients">Clients</a>, you can control it here.</p>
+        </div>
+    }
+    else
+    {
+        <MusicKioskStrip Kiosks="_kiosks" Snapshots="_snapshots" SelectedId="_selectedKioskId" OnSelect="SelectKioskAsync" />
+
+        <div class="music-layout">
+            <div class="music-player-column" @ref="_cardHost">
+                @if (SelectedSnapshot is { } snapshot)
+                {
+                    <MusicNowPlayingCard Snapshot="snapshot" KioskName="@SelectedKioskName" PlaylistName="PlaylistNameFor" />
+                }
+            </div>
+
+            <div class="music-library-column">
+                <MusicPlaylistPicker Playlists="_playlists" SelectedPlaylistId="_selectedPlaylistId"
+                                     PlayingPlaylistId="SelectedSnapshot?.PlaylistId" CanEdit="_canEdit"
+                                     OnSelect="SelectPlaylistAsync" OnCreate="CreatePlaylistAsync" />
+
+                <MusicTrackList Playlist="SelectedPlaylist" Tracks="_tracks"
+                                PlayingSongId="SelectedSnapshot?.Song?.Id" PlayingPlaylistId="SelectedSnapshot?.PlaylistId"
+                                IsPlaying="@(SelectedSnapshot?.IsConnected == true && SelectedSnapshot.State == NAudio.Wave.PlaybackState.Playing)"
+                                CanEdit="_canEdit" LibraryVersion="_libraryVersion"
+                                OnPlaySong="PlaySongAsync" OnPlayAll="PlayAllAsync"
+                                OnRename="RenamePlaylistAsync" OnDelete="DeletePlaylistAsync"
+                                OnAddToPlaylist="AddToPlaylistAsync" OnRemove="RemoveFromPlaylistAsync" OnMove="MoveSongAsync" />
+            </div>
+        </div>
+
+        @if (SelectedSnapshot is { } barSnapshot)
+        {
+            <MusicCompactBar @ref="_compactBar" Snapshot="barSnapshot" KioskName="@SelectedKioskName" OnExpand="ScrollToPlayerAsync" />
+        }
+    }
 </div>
 
-<div class="music-page">
-    <div class="music-content">
-        @if (isNarrowViewport)
-        {
-            <FluentTabs Orientation="Orientation.Horizontal" Size="TabsSize.Small" Class="music-mobile-tabs">
-                <FluentTab Header="Playlists" IconStart="@(new Icons.Regular.Size16.MusicNote2())">
-                    <Playlists OnSongsSelected="HandleSongsSelected" SelectedClientId="selectedClientId"
-                               InitialPlaylistId="initialPlaylistId"></Playlists>
-                </FluentTab>
-                <FluentTab Header="Songs" IconStart="@(new Icons.Regular.Size16.Speaker2())">
-                    <SongList Songs="currentSongs" SelectedClientId="selectedClientId" AllowPlaying="allowPlaying"
-                              OnSongRemoved="HandleSongRemoved">
-                    </SongList>
-                </FluentTab>
-            </FluentTabs>
-        }
-        else
-        {
-            <div class="music-panes">
-                <div class="music-pane music-playlists-pane">
-                    <Playlists OnSongsSelected="HandleSongsSelected" SelectedClientId="selectedClientId"
-                               InitialPlaylistId="initialPlaylistId"></Playlists>
-                </div>
-
-                <div class="w-100 music-songs-pane">
-                    <SongList Songs="currentSongs" SelectedClientId="selectedClientId" AllowPlaying="allowPlaying"
-                              OnSongRemoved="HandleSongRemoved">
-                    </SongList>
-                </div>
-            </div>
-        }
-    </div>
-
-    <FluentCard class="music-bottom-controls" Appearance="CardAppearance.Filled" Margin="@Margin.Top3">
-        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center"
-                     HorizontalAlignment="HorizontalAlignment.SpaceBetween" HorizontalGap="12"
-                     Class="music-bottom-controls-stack">
-
-            <div class="music-volume-wrapper">
-                <FluentGrid Class="music-volume-grid">
-                    <FluentGridItem Xs="12">
-                        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center"
-                                     HorizontalGap="8" Width="auto">
-                            @{
-                                Icon volumeIcon = currentVolume switch
-                                {
-                                    0 => new Icons.Regular.Size24.SpeakerMute(),
-                                    > 0 and <= 20 => new Icons.Regular.Size24.Speaker0(),
-                                    > 20 and <= 70 => new Icons.Regular.Size24.Speaker1(),
-                                    > 70 => new Icons.Regular.Size24.Speaker2(),
-                                    _ => new Icons.Regular.Size24.SpeakerMute()
-                                };
-                            }
-
-                            <FluentButton IconStart="volumeIcon" Appearance="ButtonAppearance.Subtle"
-                                          Disabled="@(selectedClientId == null)" OnClick="ToggleMuteVolume" />
-
-                            <FluentStack>
-                                <FluentSlider Disabled="@(selectedClientId == null)" Min="0" Max="100"
-                                              ImmediateDelay="20" TValue="int" Value="currentVolume"
-                                              ValueChanged="(volume) => HandleVolumeChange(volume)"
-                                              @onpointerdown="OnVolumeAdjustStart" @onpointerup="OnVolumeAdjustEnd"
-                                              Orientation="Orientation.Horizontal" />
-                            </FluentStack>
-                        </FluentStack>
-                    </FluentGridItem>
-                </FluentGrid>
-            </div>
-
-            <FluentStack Orientation="Orientation.Vertical" Width="auto"
-                         HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center">
-                <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center"
-                             HorizontalAlignment="HorizontalAlignment.Center" HorizontalGap="8" Width="auto">
-
-                    @{
-                        Icon shuffleIcon = isShuffleEnabled ? new Icons.Regular.Size24.ArrowShuffle() : new
-                    Icons.Regular.Size24.ArrowShuffleOff();
-
-                        ButtonAppearance shuffleButtonAppearance = isShuffleEnabled ? ButtonAppearance.Outline :
-                    ButtonAppearance.Subtle;
-                    }
-
-                    <FluentButton Appearance="@shuffleButtonAppearance" Title="Shuffle" OnClick='ToggleShuffle'
-                                  Disabled="@(selectedClientId == null)" IconStart="shuffleIcon">
-                    </FluentButton>
-
-                    <FluentButton Appearance="ButtonAppearance.Outline"
-                                  Title="Previous (restarts the song if it's more than 3 seconds in)" OnClick="RestartSong"
-                                  Disabled="@(selectedClientId == null)" Style="border-radius: 50%;"
-                                  IconStart="@(new Icons.Regular.Size32.Previous())">
-                    </FluentButton>
-
-                    @{
-                        Icon playIcon = isPlaying ? new Icons.Regular.Size32.Pause() : new Icons.Regular.Size32.Play();
-                    }
-
-                    <FluentButton Appearance="ButtonAppearance.Primary" Title="@(isPlaying ? "Pause" : "Play")"
-                                  OnClick="TogglePlay" Disabled="@(selectedClientId == null)" Style="border-radius: 50%;"
-                                  IconStart="playIcon">
-                    </FluentButton>
-
-                    <FluentButton Appearance="ButtonAppearance.Outline" Title="Next" OnClick="NextSong"
-                                  Disabled="@(selectedClientId == null)" Style="border-radius: 50%;"
-                                  IconStart="@(new Icons.Regular.Size32.Next())">
-                    </FluentButton>
-
-                    @{
-                        Icon repeatIcon = repeatMode switch
-                        {
-                            RepeatMode.All => new Icons.Regular.Size20.ArrowRepeatAll(),
-                            RepeatMode.One => new Icons.Regular.Size20.ArrowRepeat1(),
-                            _ => new Icons.Regular.Size20.ArrowRepeatAllOff()
-                        };
-
-                        ButtonAppearance repeatButtonAppearance = repeatMode == RepeatMode.Off ? ButtonAppearance.Subtle :
-                    ButtonAppearance.Outline;
-
-                        string repeatTitle = repeatMode switch
-                        {
-                            RepeatMode.All => "Repeat: playlist",
-                            RepeatMode.One => "Repeat: current song",
-                            _ => "Repeat: off"
-                        };
-                    }
-
-                    <FluentButton Appearance="@repeatButtonAppearance" Title="@repeatTitle" OnClick="CycleRepeatMode"
-                                  Disabled="@(selectedClientId == null)" IconStart="repeatIcon">
-                    </FluentButton>
-                </FluentStack>
-
-                <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center"
-                             VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8" Class="music-seek-stack">
-                    <div @onclick="() => showTimeLeftInsteadOfElapsed = !showTimeLeftInsteadOfElapsed" role="button">
-                        @if (showTimeLeftInsteadOfElapsed)
-                        {
-                            <FluentText Color="Color.Info">-@TimeSpan.FromSeconds(currentSongLength -
-                                                            currentSongTime).ToString(@"mm\:ss")</FluentText>
-                            }
-                        else
-                            {
-                                <FluentText Color="Color.Info">@TimeSpan.FromSeconds(currentSongTime).ToString(@"mm\:ss")
-                                </FluentText>
-                            }
-                        </div>
-
-                        <FluentSlider Class="music-timeline-slider" Style="width: 100%;" Value="currentSongTime" Min="0"
-                                      Max="@(currentSongLength != 0 ? currentSongLength : 1)" TValue="double"
-                                      Orientation="Orientation.Horizontal"
-                                      Disabled="@(selectedClientId == null || currentSongLength == 0)" @onpointerdown="OnSeekStart"
-                                      @onpointerup="OnSeekEnd" ValueChanged="(double newValue) => OnSongTimeChanged(newValue)" />
-
-                        <FluentText Color="Color.Info">@TimeSpan.FromSeconds(currentSongLength).ToString(@"mm\:ss")
-                        </FluentText>
-                    </FluentStack>
-                </FluentStack>
-
-                <div class="music-client-controls">
-                    <ClientSelector OnClientSelected="SetSelectedClient" />
-                    <MusicScheduleStatusChip ClientId="selectedClientId" />
-                    <AudioClipNowPlayingChip ClientId="selectedClientId" />
-                </div>
-            </FluentStack>
-        </FluentCard>
-    </div>
-
 @code {
-    private const string StorageSelectedClientKey = "staff.music.selectedClientId";
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
-    private IEnumerable<PlaylistSongMember>? currentSongs;
-    private bool isPlaying = false;
-    private List<ClientConnectedWithCapabilitiesDTO> clients = [];
-    private Guid? selectedClientId;
-    private bool firstRenderCompleted;
+    private IJSObjectReference? _module;
+    private bool _loaded;
+    private bool _canEdit;
 
-    private bool allowPlaying = true;
-    private int currentVolume = 0;
-    private bool isShuffleEnabled = false;
-    private RepeatMode repeatMode = RepeatMode.Off;
-    private float currentSongTime = 0.0f;
-    private int currentSongLength = 0;
-    private Timer? songTimeTimer;
-    private bool showTimeLeftInsteadOfElapsed = false;
-    private bool isUserSeeking = false;
-    private bool isUserAdjustingVolume = false;
+    private IReadOnlyList<MusicKiosk> _kiosks = [];
+    private Dictionary<Guid, MusicNowPlayingSnapshot> _snapshots = [];
+    private Guid? _selectedKioskId;
 
-    private Guid? initialPlaylistId;
+    private IReadOnlyList<PlaylistOverview> _playlists = [];
+    private Guid? _selectedPlaylistId;
+    private IReadOnlyList<PlaylistTrack>? _tracks;
+    private int _libraryVersion;
 
-    private bool isNarrowViewport;
-    private DotNetObjectReference<Music>? _viewportRef;
+    private ElementReference _cardHost;
+    private ElementReference _pageRoot;
+    private (Guid?, Guid?)? _revealed;
+    private MusicCompactBar? _compactBar;
+    private bool _barObserved;
 
-    private string selectedClientIdString
-    {
-        get => selectedClientId?.ToString() ?? string.Empty;
-        set
-        {
-            if (Guid.TryParse(value, out Guid clientId))
-            {
-                SetSelectedClient(clientId);
-                _ = PersistSelectedClientIdAsync(clientId);
-            }
-            else
-            {
-                SetSelectedClient(null);
-                _ = ClearPersistedSelectedClientIdAsync();
-            }
-        }
-    }
+    // Changes arrive from the player and the library on their own threads, often several at once
+    // (a song change brings a state change with it). They're gathered into one render.
+    private int _refreshQueued;
+    private readonly HashSet<Guid> _changedPlaylists = [];
+    private bool _playlistListChanged;
+    private bool _kioskListChanged;
+    private readonly object _changesLock = new();
 
-    protected override async Task OnInitializedAsync()
-    {
-        _player.OnPlaybackStatusChanged += HandlePlaybackStateChanged;
-        _player.OnShuffleStateChanged += HandleShuffleStateChanged;
+    private MusicNowPlayingSnapshot? SelectedSnapshot =>
+        _selectedKioskId is Guid id ? _snapshots.GetValueOrDefault(id) : null;
 
-        await LoadConnectedClientsAsync();
+    private string SelectedKioskName => _kiosks.FirstOrDefault(x => x.Id == _selectedKioskId)?.Name ?? "";
 
-        await LoadFirstPlaylistAsync();
-    }
+    private PlaylistOverview? SelectedPlaylist => _playlists.FirstOrDefault(x => x.Id == _selectedPlaylistId);
 
-    private async Task LoadFirstPlaylistAsync()
-    {
-        // Playlist names only, then the members of just the first one - not every member and
-        // song of every playlist (the Playlists component next door was loading all of that a
-        // second time for its own list).
-        Result<IEnumerable<Playlist>> playlistsResult = await _playlistService.GetActivePlaylistSummariesAsync();
+    private string? PlaylistNameFor(Guid id) => _playlists.FirstOrDefault(x => x.Id == id)?.Name;
 
-        if (!playlistsResult.IsSuccess || playlistsResult.Data == null)
-        {
-            _toastService.ShowError($"Failed to load playlists: {playlistsResult.Error}");
-            return;
-        }
-
-        Playlist? firstPlaylist = playlistsResult.Data.FirstOrDefault();
-
-        if (firstPlaylist != null)
-        {
-            Result<IEnumerable<PlaylistSongMember>> membersResult = await _playlistService.GetPlaylistMembersAsync(firstPlaylist.Id);
-
-            if (!membersResult.IsSuccess || membersResult.Data == null)
-            {
-                _toastService.ShowError($"Failed to load playlist songs: {membersResult.Error}");
-                return;
-            }
-
-            currentSongs = membersResult.Data.Select(x => new PlaylistSongMember
-            {
-                SongId = x.SongId,
-                Song = x.Song,
-                PlaylistId = firstPlaylist.Id,
-                Playlist = firstPlaylist
-            })
-            .OrderByDescending(x => x.Song?.CreateDate)
-            .ToList();
-
-            initialPlaylistId = firstPlaylist.Id;
-
-            StateHasChanged();
-        }
-    }
-
+    // Everything loads after the first render: the page is prerendered, and loading during
+    // prerender would run every query twice and can't read the remembered kiosk anyway.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
-            _viewportRef = DotNetObjectReference.Create(this);
-            await JS.InvokeVoidAsync("viewportWatcher.init", _viewportRef, 600);
-        }
-
-        if (!firstRender || firstRenderCompleted)
-        {
+            await LoadAsync();
             return;
         }
 
-        firstRenderCompleted = true;
-
-        Guid? restoredClientId = await GetPersistedSelectedClientIdAsync();
-
-        if (restoredClientId.HasValue && clients.Any(x => x.Id == restoredClientId.Value))
+        // Keep the chosen kiosk and playlist in view in their sideways-scrolling rows.
+        if (_loaded && _module is not null && _revealed != (_selectedKioskId, _selectedPlaylistId))
         {
-            SetSelectedClient(restoredClientId.Value);
-        }
-        else if (selectedClientId == null && clients.Any())
-        {
-            SetSelectedClient(clients[0].Id);
-            await PersistSelectedClientIdAsync(clients[0].Id);
-        }
-        else if (!clients.Any())
-        {
-            await ClearPersistedSelectedClientIdAsync();
-        }
-    }
-
-    [JSInvokable]
-    public void OnViewportChanged(bool isNarrow)
-    {
-        isNarrowViewport = isNarrow;
-        InvokeAsync(StateHasChanged);
-    }
-
-    private void HandlePlaybackStateChanged(Guid clientId, PlaybackState state)
-    {
-        if (selectedClientId != clientId)
-        {
-            return;
-        }
-
-        isPlaying = state == PlaybackState.Playing;
-
-        currentSongTime = selectedClientId.HasValue ? _player.GetCurrentSongTime(selectedClientId.Value) : 0;
-        currentSongLength = selectedClientId.HasValue ? _player.GetCurrentSongLength(selectedClientId.Value) : 0;
-
-        if (isPlaying)
-        {
-            startSongTimeTimer();
-        }
-        else
-        {
-            stopSongTimeTimer();
-        }
-
-        InvokeAsync(StateHasChanged);
-    }
-
-    private void HandleShuffleStateChanged(Guid clientId, bool isEnabled)
-    {
-        if (selectedClientId != clientId)
-        {
-            return;
-        }
-
-        isShuffleEnabled = isEnabled;
-
-        InvokeAsync(StateHasChanged);
-    }
-
-    private async Task RefreshClientsAsync()
-    {
-        Guid? previousSelectedClientId = selectedClientId;
-
-        await LoadConnectedClientsAsync();
-
-        if (!clients.Any())
-        {
-            SetSelectedClient(null);
-            await ClearPersistedSelectedClientIdAsync();
-            return;
-        }
-
-        if (previousSelectedClientId.HasValue && !clients.Any(x => x.Id == previousSelectedClientId.Value))
-        {
-            SetSelectedClient(null);
-            _toastService.ShowWarning("Selected client disconnected. Please select another client.");
-            await ClearPersistedSelectedClientIdAsync();
-            return;
-        }
-
-        if (selectedClientId == null || !clients.Any(x => x.Id == selectedClientId.Value))
-        {
-            Guid? restoredClientId = await GetPersistedSelectedClientIdAsync();
-            Guid selectedId = restoredClientId.HasValue && clients.Any(x => x.Id == restoredClientId.Value)
-                ? restoredClientId.Value
-                : clients[0].Id;
-
-            SetSelectedClient(selectedId);
-            await PersistSelectedClientIdAsync(selectedId);
-        }
-    }
-
-    private async Task LoadConnectedClientsAsync()
-    {
-        // The same per-company list the Clients page reads, so opening Music while it's warm costs
-        // no client read. Connected-ness is worked out live on every call.
-        Result<IReadOnlyList<ClientConnectedWithCapabilitiesDTO>> result = await _kioskClientList.GetClientsAsync();
-
-        if (!result.IsSuccess || result.Data == null)
-        {
-            _toastService.ShowError($"Failed to load clients: {result.Error}");
-            clients = [];
-            SetSelectedClient(null);
-            return;
-        }
-
-        clients = result.Data
-            .Where(x => x.IsCurrentlyConnected)
-            .OrderBy(x => x.Name)
-            .ToList();
-    }
-
-    private void SetSelectedClient(Guid? clientId)
-    {
-        selectedClientId = clientId;
-
-        isPlaying = clientId.HasValue ? _player.GetCurrentPlaybackState(clientId.Value) == PlaybackState.Playing : false;
-        currentVolume = clientId.HasValue ? _player.GetCurrentVolume(clientId.Value) : 0;
-        isShuffleEnabled = clientId.HasValue ? _player.GetCurrentShuffleState(clientId.Value) : false;
-        repeatMode = clientId.HasValue ? _player.GetCurrentRepeatMode(clientId.Value) : RepeatMode.Off;
-        currentSongTime = clientId.HasValue ? _player.GetCurrentSongTime(clientId.Value) : 0;
-        currentSongLength = clientId.HasValue ? _player.GetCurrentSongLength(clientId.Value) : 0;
-
-        if (currentSongLength == 0)
-        {
-            stopSongTimeTimer();
-        }
-        else
-        {
-            startSongTimeTimer();
-        }
-
-        InvokeAsync(StateHasChanged);
-    }
-
-    private void stopSongTimeTimer()
-    {
-        if (songTimeTimer != null)
-        {
-            songTimeTimer.Dispose();
-            songTimeTimer = null;
-        }
-    }
-
-    private void startSongTimeTimer()
-    {
-        stopSongTimeTimer();
-
-        songTimeTimer = new Timer(async _ =>
-        {
-            if (selectedClientId.HasValue)
+            _revealed = (_selectedKioskId, _selectedPlaylistId);
+            try
             {
-                // While the user is dragging the timeline, don't push updates that would
-                // snap the slider thumb back to the playback position.
-                if (isUserSeeking)
-                {
-                    return;
-                }
+                await _module.InvokeVoidAsync("revealSelected", _pageRoot);
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
 
-                // Advance in whole seconds so the slider (integer step, rounds) and the
-                // elapsed-time text (TimeSpan, truncates) stay on the same value in lockstep.
-                // Never run past the end: the slider clamps its own value to Max and echoes
-                // ValueChanged back, which OnSongTimeChanged would then commit as a seek once
-                // per tick for as long as the timeline sat at the end.
-                currentSongTime = currentSongLength > 0
-                    ? Math.Min(currentSongTime + 1f, currentSongLength)
-                    : currentSongTime + 1f;
+        if (_loaded && !_barObserved && _compactBar is not null && _module is not null)
+        {
+            _barObserved = true;
+            try
+            {
+                await _module.InvokeVoidAsync("observeCard", _cardHost, _compactBar.Element);
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+    }
 
-                await InvokeAsync(StateHasChanged);
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/musicPlayer.js");
+        }
+        catch (JSDisconnectedException)
+        {
+            return;
+        }
+
+        if (AuthState is not null)
+        {
+            ClaimsPrincipal user = (await AuthState).User;
+            _canEdit = user.IsInRole("Admin") || user.IsInRole("CanManagePlaylists");
+        }
+
+        _player.OnNowPlayingChanged += HandleNowPlayingChanged;
+        _libraryEvents.Changed += HandleLibraryChanged;
+
+        await LoadKiosksAsync();
+
+        string? remembered = await _module.InvokeAsync<string?>("load", "selectedClientId");
+        _selectedKioskId = Guid.TryParse(remembered, out Guid rememberedId) && _kiosks.Any(x => x.Id == rememberedId)
+            ? rememberedId
+            : _kiosks.FirstOrDefault()?.Id;
+
+        await LoadPlaylistsAsync();
+
+        // Open on what the kiosk is playing, if it's playing a playlist; otherwise the first one.
+        _selectedPlaylistId = SelectedSnapshot?.PlaylistId is Guid playing && _playlists.Any(x => x.Id == playing)
+            ? playing
+            : _playlists.FirstOrDefault()?.Id;
+
+        await LoadTracksAsync();
+
+        _loaded = true;
+        StateHasChanged();
+    }
+
+    private async Task LoadKiosksAsync()
+    {
+        Result<IReadOnlyList<MusicKiosk>> result = await _musicService.GetKiosksAsync();
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't load kiosks.");
+            return;
+        }
+
+        _kiosks = result.Data;
+        RefreshSnapshots();
+    }
+
+    private void RefreshSnapshots()
+    {
+        // Every kiosk that connects is registered with the player, so one it has no state for is
+        // one that hasn't connected since the server started: offline.
+        _snapshots = _player.GetSnapshots(_kiosks.Select(x => x.Id)).ToDictionary(x => x.ClientId);
+    }
+
+    private async Task LoadPlaylistsAsync()
+    {
+        Result<IReadOnlyList<PlaylistOverview>> result = await _playlistService.GetPlaylistOverviewsAsync();
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't load playlists.");
+            return;
+        }
+
+        _playlists = result.Data;
+
+        if (_selectedPlaylistId is Guid id && _playlists.All(x => x.Id != id))
+        {
+            // Deleted (here or somewhere else): fall back to the library.
+            _selectedPlaylistId = null;
+            _tracks = null;
+        }
+    }
+
+    private async Task LoadTracksAsync()
+    {
+        if (_selectedPlaylistId is not Guid id)
+        {
+            _tracks = null;
+            return;
+        }
+
+        Result<IReadOnlyList<PlaylistTrack>> result = await _playlistService.GetPlaylistTracksAsync(id);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't load the playlist.");
+            _tracks = [];
+            return;
+        }
+
+        _tracks = result.Data;
+    }
+
+    #region Live updates
+
+    private void HandleNowPlayingChanged(Guid clientId)
+    {
+        if (_kiosks.All(x => x.Id != clientId))
+        {
+            // A kiosk the page doesn't know (just paired, or another company's).
+            lock (_changesLock)
+            {
+                _kioskListChanged = true;
+            }
+        }
+
+        QueueRefresh();
+    }
+
+    private void HandleLibraryChanged(int companyId, Guid? playlistId)
+    {
+        if (_tenant.CompanyId != companyId)
+        {
+            return;
+        }
+
+        lock (_changesLock)
+        {
+            _playlistListChanged = true;
+            if (playlistId is Guid id)
+            {
+                _changedPlaylists.Add(id);
             }
             else
             {
-                stopSongTimeTimer();
+                _libraryVersion++;
             }
-        }, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+        }
+
+        QueueRefresh();
     }
 
-    private async Task<Guid?> GetPersistedSelectedClientIdAsync()
+    private void QueueRefresh()
     {
-        try
-        {
-            string? value = await JS.InvokeAsync<string?>("localStorage.getItem", StorageSelectedClientKey);
-            return Guid.TryParse(value, out Guid clientId) ? clientId : null;
-        }
-        catch (JSException)
-        {
-            return null;
-        }
-    }
-
-    private async Task PersistSelectedClientIdAsync(Guid clientId)
-    {
-        try
-        {
-            await JS.InvokeVoidAsync("localStorage.setItem", StorageSelectedClientKey, clientId.ToString());
-        }
-        catch (JSException)
-        {
-        }
-    }
-
-    private async Task ClearPersistedSelectedClientIdAsync()
-    {
-        try
-        {
-            await JS.InvokeVoidAsync("localStorage.removeItem", StorageSelectedClientKey);
-        }
-        catch (JSException)
-        {
-        }
-    }
-
-    private async Task TogglePlay()
-    {
-        if (selectedClientId == null)
-        {
-            _toastService.ShowWarning("Select a connected client first.");
-            return;
-        }
-
-        await _player.TogglePlay(selectedClientId.Value);
-    }
-
-    private async Task RestartSong()
-    {
-        if (selectedClientId == null)
-        {
-            _toastService.ShowWarning("Select a connected client first.");
-            return;
-        }
-
-        await _player.RestartOrPrevious(selectedClientId.Value);
-
-        SyncSongProgressFromServer();
-    }
-
-    private async Task PreviousSong()
-    {
-        if (selectedClientId == null)
-        {
-            _toastService.ShowWarning("Select a connected client first.");
-            return;
-        }
-
-        await _player.Previous(selectedClientId.Value);
-
-        SyncSongProgressFromServer();
-    }
-
-    private async Task NextSong()
-    {
-        if (selectedClientId == null)
-        {
-            _toastService.ShowWarning("Select a connected client first.");
-            return;
-        }
-
-        await _player.Next(selectedClientId.Value);
-
-        SyncSongProgressFromServer();
-    }
-
-    // Restart/next/previous reset (or replace) the track without a playback-state transition,
-    // so HandlePlaybackStateChanged won't fire. Pull the fresh position/length so the timeline
-    // reflects the new track immediately instead of the timer counting on from the old value.
-    private void SyncSongProgressFromServer()
-    {
-        if (selectedClientId == null)
+        if (Interlocked.Exchange(ref _refreshQueued, 1) == 1)
         {
             return;
         }
 
-        currentSongTime = _player.GetCurrentSongTime(selectedClientId.Value);
-        currentSongLength = _player.GetCurrentSongLength(selectedClientId.Value);
-    }
-
-    private void HandleSongsSelected((IEnumerable<PlaylistSongMember> Songs, bool IsLocalSongs) args)
-    {
-        currentSongs = args.Songs;
-        allowPlaying = !args.IsLocalSongs;
-        StateHasChanged();
-    }
-
-    // SongList removes songs locally for immediate feedback, but currentSongs is the source of
-    // truth handed back down to it on every render (e.g. the 1s playback timer tick) — without
-    // updating it here, the next re-render clobbers SongList's local filter and the "removed"
-    // song reappears, so a second delete attempt then hits an already soft-deleted row.
-    private void HandleSongRemoved(PlaylistSongMember member)
-    {
-        currentSongs = currentSongs?.Where(x => !(x.SongId == member.SongId && x.PlaylistId == member.PlaylistId)).ToList();
-        StateHasChanged();
-    }
-
-    private async Task HandleVolumeChange(int newVolume)
-    {
-        if (selectedClientId == null)
+        _ = InvokeAsync(async () =>
         {
-            _toastService.ShowWarning("Select a connected client first.");
-            return;
+            await Task.Delay(120);
+            Interlocked.Exchange(ref _refreshQueued, 0);
+
+            bool reloadKiosks, reloadPlaylists, reloadTracks;
+            lock (_changesLock)
+            {
+                reloadKiosks = _kioskListChanged;
+                reloadPlaylists = _playlistListChanged;
+                reloadTracks = _selectedPlaylistId is Guid id && _changedPlaylists.Contains(id);
+                _kioskListChanged = false;
+                _playlistListChanged = false;
+                _changedPlaylists.Clear();
+            }
+
+            try
+            {
+                if (reloadKiosks)
+                {
+                    await LoadKiosksAsync();
+                }
+                else
+                {
+                    RefreshSnapshots();
+                }
+
+                if (reloadPlaylists)
+                {
+                    await LoadPlaylistsAsync();
+                }
+
+                if (reloadTracks)
+                {
+                    await LoadTracksAsync();
+                }
+
+                StateHasChanged();
+            }
+            catch (ObjectDisposedException)
+            {
+                // The page closed while the change was on its way.
+            }
+        });
+    }
+
+    #endregion
+
+    #region Kiosks and playlists
+
+    private async Task SelectKioskAsync(Guid kioskId)
+    {
+        _selectedKioskId = kioskId;
+        RefreshSnapshots();
+
+        if (_module is not null)
+        {
+            await _module.InvokeVoidAsync("save", "selectedClientId", kioskId.ToString());
+        }
+    }
+
+    private async Task SelectPlaylistAsync(Guid? playlistId)
+    {
+        _selectedPlaylistId = playlistId;
+        _tracks = null;
+        await LoadTracksAsync();
+    }
+
+    private async Task ScrollToPlayerAsync()
+    {
+        if (_module is not null)
+        {
+            await _module.InvokeVoidAsync("scrollIntoView", _cardHost);
+        }
+    }
+
+    // A command needs a kiosk that's online; says so if there isn't one.
+    private bool TryGetControllableKiosk(out Guid kioskId)
+    {
+        kioskId = _selectedKioskId ?? Guid.Empty;
+
+        if (SelectedSnapshot is not { IsConnected: true })
+        {
+            _toastService.ShowWarning(_selectedKioskId is null
+                ? "Choose a kiosk at the top first."
+                : $"{SelectedKioskName} is offline, so it can't play anything right now.");
+            return false;
         }
 
-        currentVolume = newVolume;
-
-        // FluentSlider raises ValueChanged continuously while dragging (see the identical
-        // comment on OnSongTimeChanged below). Track the value for display, but defer the
-        // SignalR/DB round-trip until the user releases the thumb so a drag doesn't queue up
-        // dozens of calls on the circuit's single-threaded event queue.
-        if (isUserAdjustingVolume)
-        {
-            return;
-        }
-
-        await CommitVolumeAsync();
+        return true;
     }
 
-    private void OnVolumeAdjustStart()
+    private async Task PlaySongAsync(Guid songId)
     {
-        isUserAdjustingVolume = true;
-    }
-
-    private async Task OnVolumeAdjustEnd()
-    {
-        if (!isUserAdjustingVolume)
-        {
-            return;
-        }
-
-        isUserAdjustingVolume = false;
-
-        await CommitVolumeAsync();
-    }
-
-    private async Task CommitVolumeAsync()
-    {
-        if (selectedClientId == null)
-        {
-            return;
-        }
-
-        await _player.SetVolume(selectedClientId.Value, currentVolume);
-    }
-
-    private async Task ToggleMuteVolume()
-    {
-        if (selectedClientId == null)
-        {
-            _toastService.ShowWarning("Select a connected client first.");
-            return;
-        }
-
-        currentVolume = currentVolume == 0 ? 25 : 0;
-
-        await _player.SetVolume(selectedClientId.Value, currentVolume);
-    }
-
-    private async Task ToggleShuffle()
-    {
-        if (selectedClientId == null)
-        {
-            _toastService.ShowWarning("Select a connected client first.");
-            return;
-        }
-
-        isShuffleEnabled = await _player.ToggleShuffle(selectedClientId.Value);
-    }
-
-    private async Task CycleRepeatMode()
-    {
-        if (selectedClientId == null)
-        {
-            _toastService.ShowWarning("Select a connected client first.");
-            return;
-        }
-
-        repeatMode = await _player.CycleRepeatMode(selectedClientId.Value);
-    }
-
-    private void OnSeekStart()
-    {
-        isUserSeeking = true;
-    }
-
-    private async Task OnSeekEnd()
-    {
-        // Only act if this pointer-up ends a drag we started tracking, so a stray
-        // pointer-up doesn't fire a redundant seek.
-        if (!isUserSeeking)
+        if (!TryGetControllableKiosk(out Guid kioskId))
         {
             return;
         }
 
-        isUserSeeking = false;
-
-        await CommitSeekAsync();
+        Result<bool> result = await _player.PlaySong(kioskId, songId, _selectedPlaylistId);
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowWarning(result.Error ?? "Couldn't play that song.");
+        }
     }
 
-    private async Task OnSongTimeChanged(double newTime)
+    private async Task PlayAllAsync(bool shuffle)
     {
-        // FluentSlider raises ValueChanged continuously while dragging. Follow the thumb
-        // for display, but defer the actual seek until the user releases (OnSeekEnd) so the
-        // 100ms timer can't resume mid-drag and yank the thumb back to the playback position.
-        if (isUserSeeking)
-        {
-            currentSongTime = (float)newTime;
-            return;
-        }
-
-        // Ignore echo events: re-rendering the slider (e.g. from the playback timer) makes
-        // the underlying web component re-raise ValueChanged with a rounded copy of the value
-        // we just set. Comparing before assigning keeps those echoes from stalling the timeline.
-        if (Math.Abs(newTime - currentSongTime) < 0.5)
+        if (_selectedPlaylistId is not Guid playlistId || !TryGetControllableKiosk(out Guid kioskId))
         {
             return;
         }
 
-        // Genuine change from outside a drag (e.g. keyboard adjustment) - commit immediately.
-        currentSongTime = (float)newTime;
+        Result<bool> result;
+        if (shuffle)
+        {
+            result = await _player.ShufflePlay(kioskId, playlistId);
+        }
+        else
+        {
+            // "Play" means in order, from the top.
+            if (_player.GetShuffleEnabled(kioskId))
+            {
+                await _player.ToggleShuffle(kioskId);
+            }
 
-        await CommitSeekAsync();
+            result = await _player.Play(kioskId, playlistId);
+        }
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowWarning(result.Error ?? "Couldn't play the playlist.");
+        }
     }
 
-    private async Task CommitSeekAsync()
+    private async Task CreatePlaylistAsync()
     {
-        if (selectedClientId == null)
+        DialogResult result = await _dialogService.ShowDialogAsync<PlaylistDetailsDialog>(options =>
         {
-            _toastService.ShowWarning("Select a connected client first.");
+            options.Width = "min(480px, 95vw)";
+            options.Modal = true;
+        });
+
+        if (!result.Cancelled && result.Value is Guid id)
+        {
+            await LoadPlaylistsAsync();
+            await SelectPlaylistAsync(id);
+        }
+    }
+
+    private async Task RenamePlaylistAsync()
+    {
+        if (SelectedPlaylist is not { } playlist)
+        {
             return;
         }
 
-        await _player.Seek(selectedClientId.Value, currentSongTime);
+        DialogResult result = await _dialogService.ShowDialogAsync<PlaylistDetailsDialog>(options =>
+        {
+            options.Width = "min(480px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(PlaylistDetailsDialog.PlaylistId), playlist.Id);
+            options.Parameters.Add(nameof(PlaylistDetailsDialog.InitialName), playlist.Name);
+            options.Parameters.Add(nameof(PlaylistDetailsDialog.InitialDescription), playlist.Description);
+        });
+
+        if (!result.Cancelled)
+        {
+            await LoadPlaylistsAsync();
+        }
     }
+
+    private async Task DeletePlaylistAsync()
+    {
+        if (SelectedPlaylist is not { } playlist)
+        {
+            return;
+        }
+
+        DialogResult confirm = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Delete playlist";
+            options.Width = "min(450px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message),
+                $"Delete \"{playlist.Name}\"? Its songs stay in the library. A kiosk playing it carries on until you pick something else.");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Delete");
+        });
+
+        if (confirm.Cancelled || confirm.Value is not true)
+        {
+            return;
+        }
+
+        Result<bool> deleted = await _playlistService.DeletePlaylistAsync(playlist.Id);
+        if (!deleted.IsSuccess)
+        {
+            _toastService.ShowWarning(deleted.Error ?? "Couldn't delete the playlist.");
+            return;
+        }
+
+        _toastService.ShowSuccess($"Deleted \"{playlist.Name}\"");
+        _selectedPlaylistId = null;
+        _tracks = null;
+        await LoadPlaylistsAsync();
+    }
+
+    private async Task AddToPlaylistAsync(MusicTrackList.MusicRow row)
+    {
+        await _dialogService.ShowDialogAsync<AddToPlaylistDialog>(options =>
+        {
+            options.Width = "min(440px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(AddToPlaylistDialog.SongId), row.SongId);
+            options.Parameters.Add(nameof(AddToPlaylistDialog.SongName), row.Name);
+            options.Parameters.Add(nameof(AddToPlaylistDialog.ExcludePlaylistId), _selectedPlaylistId);
+        });
+    }
+
+    private async Task RemoveFromPlaylistAsync(MusicTrackList.MusicRow row)
+    {
+        if (SelectedPlaylist is not { } playlist)
+        {
+            return;
+        }
+
+        DialogResult confirm = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Remove song";
+            options.Width = "min(450px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message), $"Remove \"{row.Name}\" from \"{playlist.Name}\"? It stays in the library.");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Remove");
+        });
+
+        if (confirm.Cancelled || confirm.Value is not true)
+        {
+            return;
+        }
+
+        Result<bool> removed = await _playlistService.RemoveSongFromPlaylistAsync(playlist.Id, row.SongId);
+        if (!removed.IsSuccess)
+        {
+            _toastService.ShowWarning(removed.Error ?? "Couldn't remove the song.");
+            return;
+        }
+
+        // The library event refreshes the list too; doing it now makes it feel instant.
+        _tracks = _tracks?.Where(x => x.SongId != row.SongId).ToList();
+        await LoadPlaylistsAsync();
+    }
+
+    private async Task MoveSongAsync((Guid SongId, int Index) move)
+    {
+        if (_selectedPlaylistId is not Guid playlistId || _tracks is null)
+        {
+            return;
+        }
+
+        // Show the new order straight away; the saved order follows via the library event.
+        List<PlaylistTrack> reordered = _tracks.ToList();
+        PlaylistTrack? moving = reordered.FirstOrDefault(x => x.SongId == move.SongId);
+        if (moving is null)
+        {
+            return;
+        }
+
+        reordered.Remove(moving);
+        reordered.Insert(Math.Clamp(move.Index, 0, reordered.Count), moving);
+        _tracks = reordered;
+
+        Result<bool> moved = await _playlistService.MoveSongAsync(playlistId, move.SongId, move.Index);
+        if (!moved.IsSuccess)
+        {
+            _toastService.ShowWarning(moved.Error ?? "Couldn't move the song.");
+            await LoadTracksAsync();
+        }
+    }
+
+    #endregion
 
     public async ValueTask DisposeAsync()
     {
-        _player.OnPlaybackStatusChanged -= HandlePlaybackStateChanged;
-        _player.OnShuffleStateChanged -= HandleShuffleStateChanged;
-
-        stopSongTimeTimer();
+        _player.OnNowPlayingChanged -= HandleNowPlayingChanged;
+        _libraryEvents.Changed -= HandleLibraryChanged;
 
         try
         {
-            await JS.InvokeVoidAsync("viewportWatcher.dispose");
-        }
-        catch (JSDisconnectedException) { }
-        catch (InvalidOperationException) { }
+            if (_module is not null)
+            {
+                if (_compactBar is not null)
+                {
+                    await _module.InvokeVoidAsync("unobserveCard", _compactBar.Element);
+                }
 
-        _viewportRef?.Dispose();
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
     }
 }

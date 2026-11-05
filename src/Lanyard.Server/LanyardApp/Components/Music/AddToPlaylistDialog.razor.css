@@ -1,0 +1,64 @@
+.add-to-playlist-song {
+    margin: 0 0 0.75rem;
+    font-weight: var(--fontWeightSemibold);
+    overflow-wrap: anywhere;
+}
+
+.add-to-playlist-empty {
+    margin: 0;
+    color: var(--colorNeutralForeground3);
+}
+
+.add-to-playlist-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: min(50vh, 420px);
+    overflow-y: auto;
+}
+
+.add-to-playlist-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    min-height: 52px;
+    padding: 0.375rem 0.5rem;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--colorNeutralForeground1);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.add-to-playlist-item:hover:not(:disabled),
+.add-to-playlist-item:focus-visible {
+    background: var(--colorNeutralBackground1Hover);
+    outline: none;
+}
+
+.add-to-playlist-item:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.add-to-playlist-text {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.add-to-playlist-name {
+    font-weight: var(--fontWeightSemibold);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.add-to-playlist-meta {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}

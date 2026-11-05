@@ -1,0 +1,69 @@
+.music-timeline-widget {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.music-timeline-widget-title {
+    font-weight: var(--fontWeightSemibold);
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+
+.music-timeline-widget-title .is-muted {
+    color: var(--colorNeutralForeground3);
+}
+
+.music-timeline-widget-transport {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.widget-icon-button,
+.widget-play-button {
+    border: 0;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.widget-icon-button {
+    width: 44px;
+    height: 44px;
+    background: transparent;
+    color: var(--colorNeutralForeground2);
+}
+
+.widget-icon-button:hover:not(:disabled) {
+    background: var(--colorNeutralBackground1Hover);
+}
+
+.widget-play-button {
+    width: 52px;
+    height: 52px;
+    background: var(--colorBrandBackground);
+    color: var(--colorNeutralForegroundOnBrand, #fff);
+}
+
+.widget-play-button:hover:not(:disabled) {
+    background: var(--colorBrandBackgroundHover);
+}
+
+.widget-icon-button:disabled,
+.widget-play-button:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.widget-icon-button:focus-visible,
+.widget-play-button:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+    outline-offset: 2px;
+}
