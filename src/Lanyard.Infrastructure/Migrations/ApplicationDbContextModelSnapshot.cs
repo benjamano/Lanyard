@@ -2658,9 +2658,10 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.HasIndex("CreateByUserId");
 
-                    b.HasIndex("SceneStepId");
-
                     b.HasIndex("UpdateByUserId");
+
+                    b.HasIndex("SceneStepId", "ChannelNumber")
+                        .IsUnique();
 
                     b.ToTable("DmxSceneStepChannelValues");
                 });

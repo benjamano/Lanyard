@@ -219,6 +219,7 @@ builder.Services.AddScoped<ITimeService, TimeService>();
 builder.Services.AddScoped<IDmxSceneService, DmxSceneService>();
 builder.Services.AddScoped<IDmxFixtureService, DmxFixtureService>();
 builder.Services.AddScoped<IDmxFixtureDefinitionService, DmxFixtureDefinitionService>();
+builder.Services.AddScoped<IDmxDeskService, DmxDeskService>();
 // The Open Fixture Library snapshot is read-only and the same for everyone: load and index it once.
 builder.Services.AddSingleton<IOflFixtureParser, OflFixtureParser>();
 builder.Services.AddSingleton<IOflCatalogueService, OflCatalogueService>();

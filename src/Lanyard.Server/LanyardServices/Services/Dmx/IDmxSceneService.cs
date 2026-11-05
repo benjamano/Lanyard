@@ -16,5 +16,8 @@ public interface IDmxSceneService
     Task<Result<bool>> UpdateSceneStepDurationAsync(Guid stepId, TimeSpan newDuration);
     Task<Result<bool>> UpdateSceneStepBeatsAsync(Guid stepId, double beats);
     Task<Result<bool>> SaveSceneStepChannelValueAsync(Guid stepId, int channelNumber, byte value);
+
+    /// <summary>Upserts many of a step's channel values in one save (latest wins per channel).</summary>
+    Task<Result<bool>> SaveSceneStepChannelValuesAsync(Guid stepId, IReadOnlyList<DmxChannel> values);
     Task<Result<bool>> StopAllScenesForClientAsync(Guid clientId);
 }

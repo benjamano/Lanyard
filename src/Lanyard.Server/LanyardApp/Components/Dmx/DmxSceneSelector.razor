@@ -4,7 +4,7 @@
 @implements IAsyncDisposable
 
 @inject IDmxSceneService _dmxSceneService
-@inject IDmxSceneRunnerService _sceneRunner
+@inject IDmxDeskService _dmxDesk
 @inject IDialogService _dialogService
 @inject INotificationService _toastService
 @inject IJSRuntime JS
@@ -28,11 +28,15 @@
             {
                 <FluentText Size="TextSize.Size400">Select a client to view scenes.</FluentText>
             }
-            else if (scenes == null)
+            else if (isLoading)
             {
                 <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center">
                     Loading... <FluentSpinner Size="SpinnerSize.Tiny"></FluentSpinner>
                 </FluentStack>
+            }
+            else if (loadError != null)
+            {
+                <FluentText Size="TextSize.Size400">Couldn't load scenes: @loadError</FluentText>
             }
             else if (!scenes.Any())
             {
@@ -107,19 +111,30 @@
     [Parameter]
     public Guid? EditedSceneId { get; set; }
 
+    // Bumped by the page on every save, so a second edit of the same scene still refreshes it
+    // (and an unchanged value doesn't re-query on every parent render, as it used to).
+    [Parameter]
+    public int EditedSceneVersion { get; set; }
+
     private List<DmxSceneDTO> scenes = [];
+    private bool isLoading;
+    private string? loadError;
 
-    private List<Guid> runningSceneIds = [];
+    // Only ever touched on the renderer's thread: runner events are marshalled in via InvokeAsync.
+    private readonly HashSet<Guid> runningSceneIds = [];
 
-    // Key: sceneId, Value: the step number playback last advanced to (drives the progress bar).
+    // Key: sceneId, Value: the 1-based step position playback last advanced to (drives the progress bar).
     private readonly Dictionary<Guid, int> sceneStepProgress = [];
 
     private Guid? previousClientId;
-
     private Guid? previousDeletedSceneId;
+    private int previousEditedSceneVersion;
 
-    // The scene currently held down on a momentary button, if any.
-    private Guid? momentaryHeldSceneId;
+    private IDisposable? _sceneSubscription;
+
+    // Momentary scenes held down by pointer. A set, so holding two flash buttons with two fingers
+    // and releasing them in any order stops each one.
+    private readonly HashSet<Guid> _pointerHeldSceneIds = [];
 
     // Keyboard-trigger state, kept separate from the pointer path so mouse and
     // keyboard holds don't clobber each other.
@@ -129,29 +144,31 @@
     private readonly HashSet<string> _heldKeybindKeys = [];
     private readonly HashSet<Guid> _keyboardHeldSceneIds = [];
 
-    protected override void OnInitialized()
-    {
-        _sceneRunner.OnSceneStarted += HandleSceneStarted;
-        _sceneRunner.OnSceneStopped += HandleSceneStopped;
-        _sceneRunner.OnSceneStepAdvanced += HandleSceneStepAdvanced;
-    }
-
     protected override async Task OnParametersSetAsync()
     {
         bool scenesChanged = false;
 
         if (ClientId != previousClientId)
         {
+            // Anything held belongs to the kiosk we're leaving; release it there.
+            await ReleaseHeldScenesAsync(previousClientId);
+
             previousClientId = ClientId;
+
+            _sceneSubscription?.Dispose();
+            _sceneSubscription = null;
+            runningSceneIds.Clear();
+            sceneStepProgress.Clear();
 
             if (ClientId != null)
             {
+                await SubscribeAsync(ClientId.Value);
                 await LoadScenes(ClientId.Value);
             }
             else
             {
                 scenes = [];
-                runningSceneIds = [];
+                loadError = null;
             }
 
             scenesChanged = true;
@@ -167,17 +184,18 @@
             scenesChanged = true;
         }
 
-        if (EditedSceneId != null)
+        if (EditedSceneId != null && EditedSceneVersion != previousEditedSceneVersion)
         {
-            DmxSceneDTO? editedScene = scenes.FirstOrDefault(scene => scene.Id == EditedSceneId.Value);
+            previousEditedSceneVersion = EditedSceneVersion;
 
-            if (editedScene != null)
+            int index = scenes.FindIndex(scene => scene.Id == EditedSceneId.Value);
+
+            if (index >= 0)
             {
                 Result<DmxSceneDTO>? result = await _dmxSceneService.GetSceneByIdAsync(EditedSceneId.Value);
 
                 if (result.IsSuccess && result.Data != null)
                 {
-                    int index = scenes.FindIndex(scene => scene.Id == EditedSceneId.Value);
                     scenes[index] = result.Data;
 
                     scenesChanged = true;
@@ -192,6 +210,41 @@
         if (scenesChanged)
         {
             await RefreshKeybindsAsync();
+        }
+    }
+
+    private async Task SubscribeAsync(Guid clientId)
+    {
+        Result<IDisposable> subscription = await _dmxDesk.SubscribeToScenesAsync(clientId, new DmxSceneEventHandlers(
+            Started: sceneId => _ = InvokeAsync(() =>
+            {
+                runningSceneIds.Add(sceneId);
+                StateHasChanged();
+            }),
+            Stopped: sceneId => _ = InvokeAsync(() =>
+            {
+                runningSceneIds.Remove(sceneId);
+                sceneStepProgress.Remove(sceneId);
+                StateHasChanged();
+            }),
+            StepAdvanced: (sceneId, position) => _ = InvokeAsync(() =>
+            {
+                sceneStepProgress[sceneId] = position;
+                StateHasChanged();
+            }),
+            Failed: (sceneId, reason) => _ = InvokeAsync(() =>
+            {
+                string name = scenes.FirstOrDefault(s => s.Id == sceneId)?.Name ?? "A scene";
+                _toastService.ShowError($"{name} stopped: {reason}");
+            })));
+
+        if (subscription.IsSuccess)
+        {
+            _sceneSubscription = subscription.Data;
+        }
+        else
+        {
+            _toastService.ShowError($"Couldn't follow scene playback: {subscription.Error}");
         }
     }
 
@@ -249,7 +302,7 @@
 
                 _keyboardHeldSceneIds.Add(scene.Id);
 
-                Result<bool> startResult = await _sceneRunner.StartSceneAsync(ClientId.Value, scene.Id);
+                Result<bool> startResult = await _dmxDesk.StartSceneAsync(ClientId.Value, scene.Id);
 
                 if (!startResult.IsSuccess)
                 {
@@ -266,84 +319,62 @@
     }
 
     [JSInvokable]
-    public void OnKeybindUp(string key)
+    public async Task OnKeybindUp(string key)
     {
         _heldKeybindKeys.Remove(key);
+
+        if (ClientId == null)
+        {
+            return;
+        }
 
         // Only momentary scenes react to release; normal scenes stay toggled.
         foreach (DmxSceneDTO scene in ScenesBoundTo(key))
         {
             if (scene.IsMomentary && _keyboardHeldSceneIds.Remove(scene.Id))
             {
-                _sceneRunner.StopScene(scene.Id);
+                await _dmxDesk.StopSceneAsync(ClientId.Value, scene.Id);
             }
         }
     }
 
     private IEnumerable<DmxSceneDTO> ScenesBoundTo(string key) =>
-        scenes.Where(scene => scene.KeyBindings.Any(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase)));
+        scenes.Where(scene => scene.KeyBindings.Any(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase))).ToList();
 
     private async Task LoadScenes(Guid clientId)
     {
+        isLoading = true;
+        loadError = null;
+
         Result<IEnumerable<DmxSceneDTO>>? scenesResult = await _dmxSceneService.GetScenesForClientAsync(clientId);
+
+        isLoading = false;
 
         if (scenesResult.IsSuccess && scenesResult.Data != null)
         {
             scenes = scenesResult.Data.ToList();
 
-            runningSceneIds = scenesResult.Data.Where(s => s.IsRunning).Select(s => s.Id).ToList();
+            foreach (DmxSceneDTO scene in scenes.Where(s => s.IsRunning))
+            {
+                runningSceneIds.Add(scene.Id);
+            }
         }
         else
         {
-            _toastService.ShowError($"Failed to load scenes: {scenesResult.Error}");
+            // Never leave the previous kiosk's scenes on screen under the new kiosk's name.
+            scenes = [];
+            loadError = scenesResult.Error;
         }
-    }
-
-    private void HandleSceneStarted(Guid clientId, Guid sceneId)
-    {
-        if (clientId != ClientId)
-        {
-            return;
-        }
-
-        runningSceneIds.Add(sceneId);
-
-        InvokeAsync(StateHasChanged);
-    }
-
-    private void HandleSceneStopped(Guid clientId, Guid sceneId)
-    {
-        if (clientId != ClientId)
-        {
-            return;
-        }
-
-        runningSceneIds.Remove(sceneId);
-        sceneStepProgress.Remove(sceneId);
-
-        InvokeAsync(StateHasChanged);
-    }
-
-    private void HandleSceneStepAdvanced(Guid clientId, Guid sceneId, int stepNumber)
-    {
-        if (clientId != ClientId)
-        {
-            return;
-        }
-
-        sceneStepProgress[sceneId] = stepNumber;
-
-        InvokeAsync(StateHasChanged);
     }
 
     private int GetSceneProgress(DmxSceneDTO scene)
     {
-        if (scene.StepCount <= 0 || !sceneStepProgress.TryGetValue(scene.Id, out int stepNumber))
+        if (scene.StepCount <= 0 || !sceneStepProgress.TryGetValue(scene.Id, out int position))
         {
             return 0;
         }
 
-        return (int)Math.Round(stepNumber / (double)scene.StepCount * 100);
+        return (int)Math.Round(Math.Clamp(position / (double)scene.StepCount, 0, 1) * 100);
     }
 
     private async Task ToggleScene(DmxSceneDTO scene, bool isRunning)
@@ -353,54 +384,67 @@
             return;
         }
 
-        if (isRunning)
+        Result<bool> result = isRunning
+            ? await _dmxDesk.StopSceneAsync(ClientId.Value, scene.Id)
+            : await _dmxDesk.StartSceneAsync(ClientId.Value, scene.Id);
+
+        if (!result.IsSuccess)
         {
-            _sceneRunner.StopScene(scene.Id);
-
-            return;
-        }
-
-        Result<bool> startResult = await _sceneRunner.StartSceneAsync(ClientId.Value, scene.Id);
-
-        if (!startResult.IsSuccess)
-        {
-            _toastService.ShowError($"Failed to start scene '{scene.Name}': {startResult.Error}");
+            _toastService.ShowError($"Failed to {(isRunning ? "stop" : "start")} scene '{scene.Name}': {result.Error}");
         }
     }
 
     private async Task StartMomentaryAsync(DmxSceneDTO scene, PointerEventArgs e)
     {
         // Button 0 is the left button. Without this, right-clicking fires the scene.
-        if (ClientId == null || e.Button != 0)
+        if (ClientId == null || e.Button != 0 || !_pointerHeldSceneIds.Add(scene.Id))
         {
             return;
         }
 
-        momentaryHeldSceneId = scene.Id;
-
-        Result<bool> startResult = await _sceneRunner.StartSceneAsync(ClientId.Value, scene.Id);
+        Result<bool> startResult = await _dmxDesk.StartSceneAsync(ClientId.Value, scene.Id);
 
         if (!startResult.IsSuccess)
         {
-            momentaryHeldSceneId = null;
+            _pointerHeldSceneIds.Remove(scene.Id);
 
             _toastService.ShowError($"Failed to start scene '{scene.Name}': {startResult.Error}");
         }
     }
 
-    private void StopMomentary(DmxSceneDTO scene)
+    private async Task StopMomentary(DmxSceneDTO scene)
     {
         // pointerup and pointerleave both fire on a normal release-then-exit, and stray
-        // leaves are common - without this guard the second call would stop whatever
-        // scene happened to be held next.
-        if (momentaryHeldSceneId != scene.Id)
+        // leaves are common - only the first one for a held scene stops it.
+        if (ClientId == null || !_pointerHeldSceneIds.Remove(scene.Id))
         {
             return;
         }
 
-        momentaryHeldSceneId = null;
+        // The runner registers a run before loading it, so a release that lands while the start
+        // is still in flight cancels it rather than leaving the scene stuck on.
+        await _dmxDesk.StopSceneAsync(ClientId.Value, scene.Id);
+    }
 
-        _sceneRunner.StopScene(scene.Id);
+    // A held flash scene must not outlive the hand holding it: leaving the page, losing the
+    // circuit or switching kiosk all count as letting go.
+    private async Task ReleaseHeldScenesAsync(Guid? clientId)
+    {
+        List<Guid> held = [.. _pointerHeldSceneIds, .. _keyboardHeldSceneIds];
+
+        _pointerHeldSceneIds.Clear();
+        _keyboardHeldSceneIds.Clear();
+        _heldKeybindKeys.Clear();
+
+        if (clientId == null)
+        {
+            return;
+        }
+
+        foreach (Guid sceneId in held.Distinct())
+        {
+            await _dmxDesk.StopSceneAsync(clientId.Value, sceneId);
+        }
     }
 
     public async Task CreateNewScene()
@@ -445,9 +489,16 @@
 
     public async ValueTask DisposeAsync()
     {
-        _sceneRunner.OnSceneStarted -= HandleSceneStarted;
-        _sceneRunner.OnSceneStopped -= HandleSceneStopped;
-        _sceneRunner.OnSceneStepAdvanced -= HandleSceneStepAdvanced;
+        _sceneSubscription?.Dispose();
+
+        try
+        {
+            await ReleaseHeldScenesAsync(ClientId);
+        }
+        catch
+        {
+            // The scope may already be going; the runner's own holdFor/stop paths still apply.
+        }
 
         try
         {

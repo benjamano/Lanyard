@@ -1177,6 +1177,12 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<DmxSceneStep>().HasQueryFilter(x => TenantFilterDisabled || x.Scene!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<DmxSceneStepChannelValue>().HasQueryFilter(x => TenantFilterDisabled || x.SceneStep!.Scene!.CompanyId == TenantCompanyId);
 
+            // One value per channel per step. Without it, two saves racing on the same fader
+            // could both insert, leaving a step with two values for one channel.
+            modelBuilder.Entity<DmxSceneStepChannelValue>()
+                .HasIndex(x => new { x.SceneStepId, x.ChannelNumber })
+                .IsUnique();
+
             // Shared-or-owned: built-in definitions (CompanyId null) are visible to everyone, a
             // company's own imports and custom fixtures only to that company.
             modelBuilder.Entity<DmxFixtureDefinition>().HasQueryFilter(x => TenantFilterDisabled || x.CompanyId == null || x.CompanyId == TenantCompanyId);

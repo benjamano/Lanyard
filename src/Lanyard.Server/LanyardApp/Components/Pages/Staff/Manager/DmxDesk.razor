@@ -138,6 +138,7 @@
                             IsEditModeEnabled="@isEditModeEnabled" 
                             DeletedSceneId="@deletedSceneId"
                             EditedSceneId="@editedScene?.Id"
+                            EditedSceneVersion="@editedSceneVersion"
                             OnOpenScene="OpenScene" 
                             CurrentlyOpenScene="selectedScene" />
     </FluentGridItem>
@@ -177,6 +178,7 @@
 
     private DmxSceneStep? editingStep = null;
     private DmxScene? editedScene = null;
+    private int editedSceneVersion;
 
     private Guid? deletedSceneId;
 
@@ -247,6 +249,12 @@
             // switching clients without stopping it would keep animating the old scene's steps
             // and paint them onto the newly selected client's rig.
             ClearScenePreview();
+
+            // The open scene (and the step the desk is bound to) belong to the old kiosk. Left
+            // open, edits with blind mode off would go live on the newly selected kiosk.
+            isASceneOpen = false;
+            selectedScene = null;
+            editingStep = null;
         }
 
         selectedClientId = clientId;
@@ -304,5 +312,6 @@
     private void OnSceneEdited(DmxScene scene)
     {
         editedScene = scene;
+        editedSceneVersion++;
     }
 }

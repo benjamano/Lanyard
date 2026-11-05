@@ -139,6 +139,10 @@ public class SignalRControlHub(
         await SendProjectionProgramInfoToClientAsync(client.Id);
         await SendMusicSettingsToClientAsync(client);
         await SendDmxSettingsToClientAsync(client);
+
+        // After the settings, so the kiosk has opened its DMX device before the universe arrives.
+        await _dmxClientService.RegisterConnectionAsync(client.Id, Context.ConnectionId);
+
         await SendZoneScoreboardSettingsToClientAsync(client);
         await SendRestartScheduleToClientAsync(client);
         await SendAudioSettingsToClientAsync(client);

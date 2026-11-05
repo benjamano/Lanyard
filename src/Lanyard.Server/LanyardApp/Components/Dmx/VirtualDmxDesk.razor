@@ -1,8 +1,8 @@
-﻿@implements IDisposable
+﻿@implements IAsyncDisposable
 
 @using Lanyard.Infrastructure.Models.Dmx
 
-@inject IDmxService _dmxService
+@inject IDmxDeskService _dmxDesk
 @inject IDmxSceneService _dmxSceneService
 @inject IDmxFixtureService _dmxFixtureService
 @inject INotificationService _toastService
@@ -182,8 +182,16 @@
     private bool _hasLoaded;
     private bool? _previousBlind;
 
-    // Per-channel debounce so dragging a fader writes to the DB once it settles.
-    private readonly Dictionary<int, CancellationTokenSource> _saveDebounce = new();
+    // Step edits waiting to be saved, per step: channel -> value. Flushed as one batch once the
+    // faders settle (and on leaving the page), instead of one database transaction per channel.
+    private const int StepSaveDebounceMs = 300;
+    private readonly Dictionary<Guid, Dictionary<int, byte>> _pendingStepSaves = new();
+    private CancellationTokenSource? _stepSaveDebounce;
+
+    // This kiosk's live channel changes; replaced whenever the kiosk changes.
+    private IDisposable? _channelSubscription;
+    private Guid? _subscribedClientId;
+    private bool? _previousEditMode;
 
     // Live channel events arrive per scene step (a batch of many channels) and, while a
     // fader is dragged, up to 50 times a second. Re-rendering 512 sliders for each one is
@@ -199,37 +207,70 @@
         _liveRenderTimer = new System.Threading.Timer(_ => FlushLiveRender(), null, Timeout.Infinite, Timeout.Infinite);
     }
 
-    protected override Task OnInitializedAsync()
-    {
-        _dmxService.OnChannelValuesChanged += HandleChannelValuesChanged;
-
-        return Task.CompletedTask;
-    }
+    // Only while the desk is showing the live universe. Editing a step, or blind-editing, shows
+    // the operator's own buffer, which live events (a running scene, physical faders) mustn't
+    // overwrite. Viewing - edit mode off - always follows the lights, which it used to skip
+    // because blind mode was on by default.
+    private bool FollowsLive => !IsEditingStep && !(IsEditModeEnabled && IsBlindModeEnabled);
 
     private void HandleChannelValuesChanged(Guid clientId, IReadOnlyList<DmxChannel> channels)
     {
-        // Blind or edit mode: the desk shows the operator's own buffer, so ignore
-        // ingested live events (physical faders / a running scene) that would
-        // otherwise overwrite what they are editing.
-        if (IsBlindModeEnabled == true || IsEditModeEnabled == true)
+        // Raised on the writer's thread (the scene runner, another user's circuit). The
+        // dictionaries are read by this component's render, so they're only touched on its
+        // dispatcher; renders are still coalesced so a busy scene doesn't re-render per batch.
+        _ = InvokeAsync(() =>
+        {
+            if (clientId != ClientId || !FollowsLive)
+            {
+                return;
+            }
+
+            foreach (DmxChannel channel in channels)
+            {
+                channelValues[channel.Address] = channel.Value;
+                channelValuesAsBytes[channel.Address] = channel.Value;
+            }
+
+            if (Interlocked.Exchange(ref _liveRenderPending, 1) == 0)
+            {
+                try
+                {
+                    _liveRenderTimer.Change(LiveRenderCoalesceMs, Timeout.Infinite);
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Disposed while this was queued.
+                }
+            }
+        });
+    }
+
+    private async Task EnsureSubscriptionAsync()
+    {
+        if (_subscribedClientId == ClientId)
         {
             return;
         }
 
-        if (ClientId == null || clientId != ClientId)
+        _channelSubscription?.Dispose();
+        _channelSubscription = null;
+        _subscribedClientId = ClientId;
+
+        if (ClientId is not Guid clientId)
         {
             return;
         }
 
-        foreach (DmxChannel channel in channels)
-        {
-            channelValues[channel.Address] = channel.Value;
-            channelValuesAsBytes[channel.Address] = channel.Value;
-        }
+        Result<IDisposable> subscription = await _dmxDesk.SubscribeToChannelsAsync(clientId,
+            channels => HandleChannelValuesChanged(clientId, channels));
 
-        if (Interlocked.Exchange(ref _liveRenderPending, 1) == 0)
+        if (subscription.IsSuccess)
         {
-            _liveRenderTimer.Change(LiveRenderCoalesceMs, Timeout.Infinite);
+            _channelSubscription = subscription.Data;
+        }
+        else
+        {
+            _toastService.ShowError($"Couldn't follow the kiosk's lights: {subscription.Error}");
         }
     }
 
@@ -242,14 +283,30 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        await EnsureSubscriptionAsync();
+
+        // Switching between viewing and blind editing changes whose values the desk shows, and
+        // live events ignored while blind were never applied, so re-read rather than show stale ones.
+        bool modeChanged = (_previousEditMode != null && _previousEditMode != IsEditModeEnabled)
+            || (_previousBlind != null && _previousBlind != IsBlindModeEnabled);
+
         bool bindingChanged = !_hasLoaded
             || _loadedClientId != ClientId
-            || _loadedStepId != EditingStep?.Id;
+            || _loadedStepId != EditingStep?.Id
+            || (modeChanged && !IsEditingStep);
+
+        if (_loadedStepId != null && _loadedStepId != EditingStep?.Id)
+        {
+            // Leaving a step: get its pending edits saved before anything else.
+            await FlushStepSavesAsync();
+        }
 
         if (bindingChanged)
         {
             await LoadChannelValues();
         }
+
+        _previousEditMode = IsEditModeEnabled;
 
         if (ClientId != _loadedFixturesClientId)
         {
@@ -454,14 +511,22 @@
                 channelValues[channelValue.ChannelNumber] = channelValue.Value;
             }
         }
-        else
+        else if (ClientId is Guid clientId)
         {
-            Result<IEnumerable<Infrastructure.Models.Dmx.DmxChannel>>? channelValuesResult = await _dmxService.GetDmxChannelsAsync(ClientId ?? Guid.Empty);
+            Result<IReadOnlyList<DmxChannel>> channelValuesResult = await _dmxDesk.GetChannelsAsync(clientId);
 
             if (channelValuesResult.IsSuccess && channelValuesResult.Data != null)
             {
                 channelValues = channelValuesResult.Data.ToDictionary(kvp => kvp.Address, kvp => (int)kvp.Value);
             }
+            else
+            {
+                _toastService.ShowError($"Couldn't read the kiosk's channels: {channelValuesResult.Error}");
+            }
+        }
+        else
+        {
+            channelValues = [];
         }
 
         channelValuesAsBytes = channelValues.ToDictionary(kvp => kvp.Key, kvp => (byte)kvp.Value);
@@ -481,7 +546,17 @@
             .Select(channel => new DmxChannel { Address = channel.Key, Value = (byte)channel.Value })
             .ToList();
 
-        await _dmxService.UpdateChannelValuesAsync(ClientId!.Value, batch);
+        await SendLiveAsync(batch);
+    }
+
+    private async Task SendLiveAsync(IReadOnlyList<DmxChannel> channels)
+    {
+        Result<bool> result = await _dmxDesk.SetChannelsAsync(ClientId!.Value, channels);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Couldn't send to the lights: {result.Error}");
+        }
     }
 
     public void CreateChannels()
@@ -509,17 +584,17 @@
             // Keep the in-memory step in sync so re-selecting it shows the edit
             // without a DB round trip, then persist (debounced).
             SyncStepChannelValue(channelNumber, (byte)newValue);
-            DebounceSaveStepChannelValue(channelNumber, (byte)newValue);
+            QueueStepSave(EditingStep!.Id, channelNumber, (byte)newValue);
 
             // Blind OFF = deliberate live preview on the client's DMX.
             if (!IsBlindModeEnabled)
             {
-                await _dmxService.UpdateChannelValue(ClientId.Value, channelNumber, (byte)newValue);
+                await SendLiveAsync([new DmxChannel { Address = channelNumber, Value = (byte)newValue }]);
             }
         }
         else if (IsBlindModeEnabled == false && IsEditModeEnabled == true)
         {
-            await _dmxService.UpdateChannelValue(ClientId.Value, channelNumber, (byte)newValue);
+            await SendLiveAsync([new DmxChannel { Address = channelNumber, Value = (byte)newValue }]);
         }
     }
 
@@ -543,51 +618,81 @@
         }
     }
 
-    private void DebounceSaveStepChannelValue(int channelNumber, byte value)
+    private void QueueStepSave(Guid stepId, int channelNumber, byte value)
     {
-        if (_saveDebounce.TryGetValue(channelNumber, out CancellationTokenSource? existing))
+        if (!_pendingStepSaves.TryGetValue(stepId, out Dictionary<int, byte>? pending))
         {
-            existing.Cancel();
-            existing.Dispose();
+            pending = [];
+            _pendingStepSaves[stepId] = pending;
         }
 
-        CancellationTokenSource cts = new();
-        _saveDebounce[channelNumber] = cts;
+        pending[channelNumber] = value;
 
-        Guid stepId = EditingStep!.Id;
+        // Restart the quiet-period timer. Only the latest timer's token is ever read, on this
+        // component's dispatcher, so a superseded (and disposed) one can't be touched.
+        _stepSaveDebounce?.Cancel();
+        _stepSaveDebounce?.Dispose();
+        _stepSaveDebounce = new CancellationTokenSource();
 
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await Task.Delay(200, cts.Token);
-
-                Result<bool> result = await _dmxSceneService.SaveSceneStepChannelValueAsync(stepId, channelNumber, value);
-
-                if (!result.IsSuccess)
-                {
-                    _toastService.ShowError($"Failed to save channel {channelNumber}: {result.Error}");
-                }
-            }
-            catch (TaskCanceledException)
-            {
-                // Superseded by a newer edit to this channel; ignore.
-            }
-        });
+        _ = DebouncedFlushAsync(_stepSaveDebounce.Token);
     }
 
-    public void Dispose()
+    private async Task DebouncedFlushAsync(CancellationToken token)
     {
-        _dmxService.OnChannelValuesChanged -= HandleChannelValuesChanged;
-        _liveRenderTimer.Dispose();
-
-        foreach (CancellationTokenSource cts in _saveDebounce.Values)
+        try
         {
-            cts.Cancel();
-            cts.Dispose();
+            await Task.Delay(StepSaveDebounceMs, token);
+        }
+        catch (TaskCanceledException)
+        {
+            // A newer edit restarted the wait.
+            return;
         }
 
-        _saveDebounce.Clear();
+        await InvokeAsync(FlushStepSavesAsync);
+    }
+
+    private async Task FlushStepSavesAsync()
+    {
+        if (_pendingStepSaves.Count == 0)
+        {
+            return;
+        }
+
+        List<KeyValuePair<Guid, Dictionary<int, byte>>> batches = [.. _pendingStepSaves];
+        _pendingStepSaves.Clear();
+
+        foreach ((Guid stepId, Dictionary<int, byte> values) in batches)
+        {
+            List<DmxChannel> batch = values.Select(v => new DmxChannel { Address = v.Key, Value = v.Value }).ToList();
+
+            Result<bool> result = await _dmxSceneService.SaveSceneStepChannelValuesAsync(stepId, batch);
+
+            if (!result.IsSuccess)
+            {
+                _toastService.ShowError($"Failed to save {batch.Count} channel(s): {result.Error}");
+            }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _channelSubscription?.Dispose();
+        _liveRenderTimer.Dispose();
+
+        _stepSaveDebounce?.Cancel();
+        _stepSaveDebounce?.Dispose();
+        _stepSaveDebounce = null;
+
+        // The last few fader moves before leaving used to be cancelled with the debounce and lost.
+        try
+        {
+            await FlushStepSavesAsync();
+        }
+        catch (Exception)
+        {
+            // The circuit's scope may already be gone; nothing more can be saved then.
+        }
 
         _scenePreviewCts?.Cancel();
         _scenePreviewCts?.Dispose();
