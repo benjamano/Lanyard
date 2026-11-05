@@ -24,6 +24,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public const string SeedCanManageFilesRoleId = "dev-role-can-manage-files";
         public const string SeedCanPostAnnouncementsRoleId = "dev-role-can-post-announcements";
         public const string SeedCanPlayAudioClipsRoleId = "dev-role-can-play-audio-clips";
+        public const string SeedCanManagePlaylistsRoleId = "dev-role-can-manage-playlists";
         public const string SeedPlatformAdminRoleId = "dev-role-platform-admin";
         public const string SystemDeletedUserPlaceholderId = "system-deleted-user-placeholder";
         public const int SeedPlay2DayCompanyId = 1;

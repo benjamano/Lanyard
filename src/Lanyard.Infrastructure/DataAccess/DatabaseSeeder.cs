@@ -22,6 +22,8 @@ public static class DatabaseSeeder
         (ApplicationDbContext.SeedCanManageFilesRoleId, "CanManageFiles", "SEED-ROLE-CAN-MANAGE-FILES-CS"),
         (ApplicationDbContext.SeedCanPostAnnouncementsRoleId, "CanPostAnnouncements", "SEED-ROLE-CAN-POST-ANNOUNCEMENTS-CS"),
         (ApplicationDbContext.SeedCanPlayAudioClipsRoleId, "CanPlayAudioClips", "SEED-ROLE-CAN-PLAY-AUDIO-CLIPS-CS"),
+        // The Music page has always offered playlist editing to this role, but nothing created it.
+        (ApplicationDbContext.SeedCanManagePlaylistsRoleId, "CanManagePlaylists", "SEED-ROLE-CAN-MANAGE-PLAYLISTS-CS"),
         (ApplicationDbContext.SeedPlatformAdminRoleId, LanyardRoles.PlatformAdmin, "SEED-ROLE-PLATFORM-ADMIN-CS"),
     ];
 
@@ -226,15 +228,23 @@ public static class DatabaseSeeder
         // an Id-based check stays correct even if a deployment renames a seeded role afterwards
         // (a name-based check would then find no match and try to re-insert the same Id, throwing
         // a primary-key violation on every startup from then on).
-        HashSet<string> existingIds = (await context.Roles
+        var existing = await context.Roles
             .AsNoTracking()
             .TagWithCallSite()
-            .Select(r => r.Id)
-            .ToListAsync())
+            .Select(r => new { r.Id, r.NormalizedName })
+            .ToListAsync();
+
+        HashSet<string> existingIds = existing.Select(r => r.Id).ToHashSet();
+
+        // A role added to StandardRoles later may already have been made by hand under its name
+        // (with another Id); inserting it again would break the unique name index on every start.
+        HashSet<string> existingNames = existing
+            .Where(r => r.NormalizedName is not null)
+            .Select(r => r.NormalizedName!)
             .ToHashSet();
 
         List<ApplicationRole> missingRoles = StandardRoles
-            .Where(r => !existingIds.Contains(r.Id))
+            .Where(r => !existingIds.Contains(r.Id) && !existingNames.Contains(r.Name.ToUpperInvariant()))
             .Select(ToApplicationRole)
             .ToList();
 

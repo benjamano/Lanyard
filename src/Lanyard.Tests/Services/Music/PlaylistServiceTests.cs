@@ -1,4 +1,5 @@
 using Lanyard.Application.Services;
+using Lanyard.Application.Services.Authentication;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
@@ -19,8 +20,11 @@ public class PlaylistServiceTests
             .Options;
     }
 
-    private static (PlaylistService Service, List<(int CompanyId, Guid? PlaylistId)> Events) GetService(DbContextOptions<ApplicationDbContext> options)
+    private static (PlaylistService Service, List<(int CompanyId, Guid? PlaylistId)> Events) GetService(
+        DbContextOptions<ApplicationDbContext> options, params string[] roles)
     {
+        string[] allowedRoles = roles.Length == 0 ? ["Admin"] : roles;
+
         Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options));
@@ -29,7 +33,10 @@ public class PlaylistServiceTests
         List<(int, Guid?)> raised = [];
         events.Changed += (company, playlist) => raised.Add((company, playlist));
 
-        return (new PlaylistService(factoryMock.Object, events, NullLogger<PlaylistService>.Instance), raised);
+        Mock<ISecurityService> security = new();
+        security.Setup(x => x.IsCurrentUserInRoleAsync(It.IsAny<string>())).ReturnsAsync((string role) => allowedRoles.Contains(role));
+
+        return (new PlaylistService(factoryMock.Object, events, security.Object, NullLogger<PlaylistService>.Instance), raised);
     }
 
     // A playlist holding `count` songs at positions 0..count-1; returns the song ids in that order.
@@ -277,5 +284,35 @@ public class PlaylistServiceTests
 
         Assert.IsFalse(deleted.IsSuccess);
         StringAssert.Contains(deleted.Error, "Party starts");
+    }
+
+    [TestMethod]
+    public async Task Changes_AreRefusedWithoutAdminOrCanManagePlaylists()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (Guid playlistId, List<Guid> songs) = await SeedAsync(options, 2);
+        (PlaylistService service, var events) = GetService(options, "Manager", "CanControlMusic");
+
+        Assert.IsFalse((await service.CreatePlaylistAsync("New", null)).IsSuccess);
+        Assert.IsFalse((await service.RenamePlaylistAsync(playlistId, "Renamed", null)).IsSuccess);
+        Assert.IsFalse((await service.MoveSongAsync(playlistId, songs[1], 0)).IsSuccess);
+        Assert.IsFalse((await service.RemoveSongFromPlaylistAsync(playlistId, songs[0])).IsSuccess);
+        Assert.IsFalse((await service.DeletePlaylistAsync(playlistId)).IsSuccess);
+        Assert.AreEqual(0, events.Count);
+
+        // Reading is fine for anyone who can open the page.
+        CollectionAssert.AreEqual(songs, await OrderAsync(service, playlistId));
+    }
+
+    [TestMethod]
+    public async Task Changes_AreAllowedWithCanManagePlaylists()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (Guid playlistId, List<Guid> songs) = await SeedAsync(options, 2);
+        (PlaylistService service, _) = GetService(options, MusicRoles.CanManagePlaylists);
+
+        Result<bool> moved = await service.MoveSongAsync(playlistId, songs[1], 0);
+
+        Assert.IsTrue(moved.IsSuccess, moved.Error);
     }
 }

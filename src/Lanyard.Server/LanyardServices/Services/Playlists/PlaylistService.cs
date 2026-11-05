@@ -1,4 +1,5 @@
-﻿using Lanyard.Infrastructure.DataAccess;
+﻿using Lanyard.Application.Services.Authentication;
+using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
@@ -10,6 +11,7 @@ namespace Lanyard.Application.Services;
 public class PlaylistService(
     IDbContextFactory<ApplicationDbContext> factory,
     IMusicLibraryEvents libraryEvents,
+    ISecurityService securityService,
     ILogger<PlaylistService> logger) : IPlaylistService
 {
     public const int NameMaxLength = 100;
@@ -17,6 +19,23 @@ public class PlaylistService(
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly IMusicLibraryEvents _libraryEvents = libraryEvents;
     private readonly ILogger<PlaylistService> _logger = logger;
+    private readonly ISecurityService _securityService = securityService;
+
+    // Every change to a playlist is checked here as well as hidden in the UI, so a hand-made
+    // request from someone who may only play music can't edit playlists.
+    private async Task<string?> CheckCanManageAsync()
+    {
+        foreach (string role in MusicRoles.ManagePlaylists.Split(','))
+        {
+            if (await _securityService.IsCurrentUserInRoleAsync(role))
+            {
+                return null;
+            }
+        }
+
+        _logger.LogWarning("Refused a playlist change by someone without {Roles}", MusicRoles.ManagePlaylists);
+        return "You don't have permission to change playlists.";
+    }
 
     public async Task<Result<IEnumerable<Playlist>>> GetActivePlaylistSummariesAsync()
     {
@@ -117,6 +136,11 @@ public class PlaylistService(
     {
         try
         {
+            if (await CheckCanManageAsync() is string denied)
+            {
+                return Result<Playlist>.Fail(denied);
+            }
+
             if (ValidateName(name) is string error)
             {
                 return Result<Playlist>.Fail(error);
@@ -149,6 +173,11 @@ public class PlaylistService(
     {
         try
         {
+            if (await CheckCanManageAsync() is string denied)
+            {
+                return Result<bool>.Fail(denied);
+            }
+
             if (ValidateName(name) is string error)
             {
                 return Result<bool>.Fail(error);
@@ -183,6 +212,11 @@ public class PlaylistService(
     {
         try
         {
+            if (await CheckCanManageAsync() is string denied)
+            {
+                return Result<bool>.Fail(denied);
+            }
+
             await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
 
             Playlist? playlist = await context.Playlists
@@ -273,6 +307,11 @@ public class PlaylistService(
     {
         try
         {
+            if (await CheckCanManageAsync() is string denied)
+            {
+                return Result<bool>.Fail(denied);
+            }
+
             await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
 
             Playlist? playlist = await context.Playlists
@@ -345,6 +384,11 @@ public class PlaylistService(
     {
         try
         {
+            if (await CheckCanManageAsync() is string denied)
+            {
+                return Result<bool>.Fail(denied);
+            }
+
             await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
 
             PlaylistSongMember? member = await context.PlaylistSongMembers
@@ -376,6 +420,11 @@ public class PlaylistService(
     {
         try
         {
+            if (await CheckCanManageAsync() is string denied)
+            {
+                return Result<bool>.Fail(denied);
+            }
+
             await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
 
             List<PlaylistSongMember> members = await context.PlaylistSongMembers
