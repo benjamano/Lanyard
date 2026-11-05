@@ -1,0 +1,13 @@
+/* Fills the editor's width and roughly its height (toolbar plus a few lines), so the page doesn't
+   jump when the editor replaces the placeholder. */
+.quill-gate-placeholder {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 200px;
+    padding: 12px;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: var(--borderRadiusMedium);
+}

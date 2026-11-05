@@ -71,22 +71,24 @@
                                                   Placeholder="Welcome to Lanyard" />
 
                                 <FluentText>Welcome email body</FluentText>
-                                <div class="onboarding-editor-host">
-                                    <BlazoredTextEditor @ref="_editor" Placeholder="Write a welcome message...">
-                                        <ToolbarContent>
-                                            <span class="ql-formats">
-                                                <button class="ql-bold"></button>
-                                                <button class="ql-italic"></button>
-                                                <button class="ql-underline"></button>
-                                            </span>
-                                            <span class="ql-formats">
-                                                <button class="ql-list" value="ordered"></button>
-                                                <button class="ql-list" value="bullet"></button>
-                                            </span>
-                                        </ToolbarContent>
-                                        <EditorContent></EditorContent>
-                                    </BlazoredTextEditor>
-                                </div>
+                                <QuillGate OnReady="StateHasChanged">
+                                    <div class="onboarding-editor-host">
+                                        <BlazoredTextEditor @ref="_editor" Placeholder="Write a welcome message...">
+                                            <ToolbarContent>
+                                                <span class="ql-formats">
+                                                    <button class="ql-bold"></button>
+                                                    <button class="ql-italic"></button>
+                                                    <button class="ql-underline"></button>
+                                                </span>
+                                                <span class="ql-formats">
+                                                    <button class="ql-list" value="ordered"></button>
+                                                    <button class="ql-list" value="bullet"></button>
+                                                </span>
+                                            </ToolbarContent>
+                                            <EditorContent></EditorContent>
+                                        </BlazoredTextEditor>
+                                    </div>
+                                </QuillGate>
                             }
                         }
                     }
