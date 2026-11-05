@@ -20,5 +20,12 @@ public enum CompanyFeature
     Announcements = 5,
 
     // Demand and staffing insights: the Insights page and its dashboard widget.
-    Insights = 6
+    Insights = 6,
+
+    // Party bookings and the documents printed for each party.
+    Parties = 7,
+
+    // Audio clips played over the kiosk music: the Audio Clips page, clip schedules and the
+    // Play Audio Clip automation action.
+    AudioClips = 8
 }

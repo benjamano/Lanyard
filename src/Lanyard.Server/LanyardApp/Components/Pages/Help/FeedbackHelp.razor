@@ -1,0 +1,11 @@
+@page "/help/feedback"
+@attribute [Authorize(Roles = LanyardRoles.PlatformAdmin)]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.Feedback
+
+<HelpPage AreaKey="@HelpRegistry.Feedback">
+    <FluentTab Id="help-inbox" Header="Feedback Inbox" IconStart="@(new Icons.Regular.Size16.PersonFeedback())">
+        <FeedbackInboxHelpTab />
+    </FluentTab>
+</HelpPage>

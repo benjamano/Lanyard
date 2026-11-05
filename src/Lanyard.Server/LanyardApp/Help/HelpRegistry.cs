@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Lanyard.Infrastructure.Enum;
+using Lanyard.Infrastructure.Models;
 using Microsoft.FluentUI.AspNetCore.Components;
 using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons;
 
@@ -79,6 +80,8 @@ public static class HelpRegistry
     public const string Dmx = "dmx";
     public const string Kiosks = "kiosks";
     public const string Insights = "insights";
+    public const string Parties = "parties";
+    public const string Feedback = "feedback";
 
     public static IReadOnlyList<HelpArea> Areas { get; } =
     [
@@ -277,6 +280,31 @@ public static class HelpRegistry
             ["/manage/insights"],
             Roles: "Admin,Manager",
             Feature: CompanyFeature.Insights),
+
+        new(Parties,
+            "Parties",
+            "Booking parties, deposits and payments, printing the party documents, and the menus and printouts behind them.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.Balloon(),
+            [
+                new("bookings", "Booking a Party"),
+                new("payments", "Payments & Cancelling"),
+                new("printing", "Printing"),
+                new("settings", "Settings & Printouts")
+            ],
+            ["/manage/parties"],
+            Roles: "Admin,Manager",
+            Feature: CompanyFeature.Parties),
+        new(Feedback,
+            "Lanyard Feedback",
+            "Reading and replying to the thumbs and star ratings staff send about Lanyard.",
+            HelpAudience.Admins,
+            () => new Icons.Regular.Size20.PersonFeedback(),
+            [
+                new("inbox", "Feedback Inbox")
+            ],
+            ["/manage/feedback"],
+            Roles: LanyardRoles.PlatformAdmin),
 
         new(Users,
             "Users & Roles",

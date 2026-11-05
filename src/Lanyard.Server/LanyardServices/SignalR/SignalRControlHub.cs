@@ -12,6 +12,7 @@ using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.Contracts;
 using Lanyard.Shared.DTO;
 using Lanyard.Shared.Enum;
+using Lanyard.Shared.SignalR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -36,7 +37,8 @@ public class SignalRControlHub(
     IKioskMediaTokenService mediaTokenService,
     KioskConnectionRegistry connectionRegistry,
     IKioskHealthService kioskHealthService,
-    IAudioClipPlaybackService audioClipPlaybackService) : Hub, ISignalRProjectionControlHub
+    IAudioClipPlaybackService audioClipPlaybackService,
+    IKioskFleetEventBus fleetEvents) : Hub, ISignalRProjectionControlHub
 {
     private readonly ILogger<SignalRControlHub> _logger = logger;
     private readonly IKioskMediaTokenService _mediaTokenService = mediaTokenService;
@@ -53,6 +55,7 @@ public class SignalRControlHub(
     private readonly IGameResultService _gameResultService = gameResultService;
     private readonly IKioskHealthService _kioskHealthService = kioskHealthService;
     private readonly IAudioClipPlaybackService _audioClipPlaybackService = audioClipPlaybackService;
+    private readonly IKioskFleetEventBus _fleetEvents = fleetEvents;
 
     private static readonly ConcurrentDictionary<string, bool> _connections = new();
 
@@ -149,6 +152,10 @@ public class SignalRControlHub(
 
         _connections.TryAdd(Context.ConnectionId, true);
 
+        // After TryAdd, so a Clients page refreshing on this sees the kiosk as connected.
+        Context.Items[CompanyIdItemKey] = client.CompanyId;
+        _fleetEvents.Publish(client.CompanyId);
+
         // So a scheduled clip is already on the kiosk's disk when it's due. Logs its own failures.
         await _audioClipPlaybackService.PrefetchScheduledClipsAsync(client.Id, Context.ConnectionId);
 
@@ -202,6 +209,11 @@ public class SignalRControlHub(
         _connections.TryRemove(Context.ConnectionId, out _);
         _connectionRegistry.Unregister(Context.ConnectionId);
         _dmxClientService.ForgetConnection(Context.ConnectionId);
+
+        if (Context.Items.TryGetValue(CompanyIdItemKey, out object? companyId) && companyId is int id)
+        {
+            _fleetEvents.Publish(id);
+        }
 
         await base.OnDisconnectedAsync(exception);
     }
@@ -373,6 +385,9 @@ public class SignalRControlHub(
     // Kiosks share one hub, so music commands go only to kiosks of the sender's own company.
     private const string MusicGroupItemKey = "MusicGroup";
 
+    // Kept from connect so the disconnect can tell the kiosk's company's open pages.
+    private const string CompanyIdItemKey = "CompanyId";
+
     private static string MusicGroupFor(int companyId) => $"{ClientGroup.Music}:{companyId}";
 
     private IClientProxy MusicGroupClients() =>
@@ -454,15 +469,9 @@ public class SignalRControlHub(
 
         ZoneScoreboardSettings settings = getResult.Data;
 
-        ZoneScoreboardSettingsDTO settingsDto = new()
-        {
-            PreferredDeviceMacAddress = settings.PreferredDeviceMacAddress,
-            ZoneScoreboardVersion = settings.ZoneScoreboardVersion,
-            SourceIp = settings.SourceIp,
-            DestinationIp = settings.DestinationIp
-        };
+        ZoneScoreboardSettingsDTO settingsDto = ClientZoneScoreboardService.ToDto(settings);
 
-        await Clients.Caller.SendAsync("ReceiveZoneScoreboardSettings", settingsDto);
+        await Clients.Caller.SendAsync(ClientHubMethods.ReceiveZoneScoreboardSettings, settingsDto);
         _logger.LogInformation("Sent zone scoreboard settings to client {ClientId}", client.Id);
     }
 

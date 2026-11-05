@@ -142,6 +142,10 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<AudioClip> AudioClips { get; set; }
         public DbSet<AudioClipPlay> AudioClipPlays { get; set; }
         public DbSet<AudioClipSchedule> AudioClipSchedules { get; set; }
+        public DbSet<PartyBooking> PartyBookings { get; set; }
+        public DbSet<PartyLocationSettings> PartyLocationSettings { get; set; }
+        public DbSet<PartyMenuItem> PartyMenuItems { get; set; }
+        public DbSet<PartyDocumentTemplate> PartyDocumentTemplates { get; set; }
         public DbSet<ChatConversation> ChatConversations { get; set; }
         public DbSet<ChatMember> ChatMembers { get; set; }
         public DbSet<ChatMessage> ChatMessages { get; set; }
@@ -572,6 +576,55 @@ namespace Lanyard.Infrastructure.DataAccess
                 .OnDelete(DeleteBehavior.SetNull);
 
             modelBuilder.Entity<Shift>()
+                .HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<PartyBooking>()
+                .HasIndex(x => new { x.LocationId, x.StartUtc });
+
+            modelBuilder.Entity<PartyBooking>()
+                .HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // The host is optional, so a deleted user just leaves the party without a host.
+            modelBuilder.Entity<PartyBooking>()
+                .HasOne(x => x.PartyHost)
+                .WithMany()
+                .HasForeignKey(x => x.PartyHostUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<PartyBooking>()
+                .Property(x => x.TotalPrice)
+                .HasPrecision(10, 2);
+
+            modelBuilder.Entity<PartyBooking>()
+                .Property(x => x.DepositAmount)
+                .HasPrecision(10, 2);
+
+            modelBuilder.Entity<PartyLocationSettings>()
+                .HasIndex(x => x.LocationId)
+                .IsUnique();
+
+            modelBuilder.Entity<PartyMenuItem>()
+                .HasIndex(x => new { x.LocationId, x.Kind, x.SortOrder });
+
+            modelBuilder.Entity<PartyDocumentTemplate>()
+                .HasIndex(x => new { x.CompanyId, x.Document })
+                .IsUnique();
+
+            modelBuilder.Entity<PartyDocumentTemplate>()
+                .Property(x => x.WidthMm)
+                .HasPrecision(6, 1);
+
+            modelBuilder.Entity<PartyDocumentTemplate>()
+                .Property(x => x.HeightMm)
+                .HasPrecision(6, 1);
+
+            modelBuilder.Entity<PartyMenuItem>()
                 .HasOne(x => x.Location)
                 .WithMany()
                 .HasForeignKey(x => x.LocationId)
@@ -1138,6 +1191,8 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<ClockInTerminal>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<TimeEntry>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<TimeOffRequest>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
+            modelBuilder.Entity<PartyLocationSettings>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
+            modelBuilder.Entity<PartyMenuItem>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<LocationSchedulingSettings>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<MusicSchedule>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<MusicDaypart>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.MusicSchedule!.LocationId && l.CompanyId == TenantCompanyId));

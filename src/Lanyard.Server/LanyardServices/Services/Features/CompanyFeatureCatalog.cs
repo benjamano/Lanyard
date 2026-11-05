@@ -22,7 +22,11 @@ public static class CompanyFeatureCatalog
         new(CompanyFeature.Announcements, "Announcements",
             "The Announcements page and widget."),
         new(CompanyFeature.Insights, "Insights",
-            "Busy hours against staffing: games, players, clocked and rota hours by hour of the week.")
+            "Busy hours against staffing: games, players, clocked and rota hours by hour of the week."),
+        new(CompanyFeature.Parties, "Parties",
+            "Party bookings, deposits and the documents printed for each party."),
+        new(CompanyFeature.AudioClips, "Audio clips",
+            "Short recordings played over the kiosk music, clip schedules and the Play Audio Clip automation action.")
     ];
 
     // The module a dashboard widget belongs to, or null for widgets every company gets.

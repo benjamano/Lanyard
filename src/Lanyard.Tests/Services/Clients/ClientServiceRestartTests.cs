@@ -1,4 +1,5 @@
 using Lanyard.Application.Services;
+using Lanyard.Application.Services.Clients;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
@@ -24,7 +25,7 @@ public class ClientServiceRestartTests
         IDbContextFactory<ApplicationDbContext> factory,
         IHubContext<SignalRControlHub> hubContext,
         IReadOnlyCollection<string> connectedIds)
-        : ClientService(factory, hubContext, new Mock<ILogger<ClientService>>().Object, new MemoryCache(new MemoryCacheOptions()))
+        : ClientService(factory, hubContext, new Mock<ILogger<ClientService>>().Object, new MemoryCache(new MemoryCacheOptions()), new KioskFleetEventBus())
     {
         protected override IReadOnlyCollection<string> GetConnectedConnectionIds()
         {

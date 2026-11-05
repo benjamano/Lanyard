@@ -81,7 +81,7 @@
                 </FluentNavItem>
             }
 
-            @if (_canPlayAudioClips)
+            @if (_canPlayAudioClips && Has(CompanyFeature.AudioClips))
             {
                 <FluentNavItem Href="/manage/audio-clips" IconRest="@(new Icons.Regular.Size20.Speaker2())"
                                IconActive="@(new Icons.Filled.Size20.Speaker2())">
@@ -201,6 +201,17 @@
                         <FluentNavItem Href="/manage/rota/staff">Staff</FluentNavItem>
                         <FluentNavItem Href="/manage/rota/positions">Positions</FluentNavItem>
                         <FluentNavItem Href="/manage/rota/settings">Rota Settings</FluentNavItem>
+                    </FluentNavCategory>
+                }
+
+                @if (Has(CompanyFeature.Parties))
+                {
+                    <FluentNavCategory Title="Parties" IconRest="@(new Icons.Regular.Size20.Balloon())"
+                                       IconActive="@(new Icons.Filled.Size20.Balloon())">
+                        <FluentNavItem Href="/manage/parties" Match="NavLinkMatch.All">Parties</FluentNavItem>
+                        <FluentNavItem Href="/manage/parties/new">Book a Party</FluentNavItem>
+                        <FluentNavItem Href="/manage/parties/settings">Party Settings</FluentNavItem>
+                        <FluentNavItem Href="/manage/parties/printouts">Printouts</FluentNavItem>
                     </FluentNavCategory>
                 }
             }

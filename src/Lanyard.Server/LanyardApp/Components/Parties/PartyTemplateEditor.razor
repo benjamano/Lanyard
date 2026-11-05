@@ -1,0 +1,352 @@
+@using System.Globalization
+@using Lanyard.App.Components.Files
+@using Lanyard.Application.Services.Parties
+@using Lanyard.Infrastructure.DTO.Parties
+
+@inject IPartyTemplateService _partyTemplateService
+
+@* One printout's artwork and boxes. The drawing on the left is the artwork at its real proportions
+   with every box on it, so positions can be checked as they're typed; Preview prints the saved
+   version with a made-up party. Drawn as SVG so the boxes are placed with attributes, not styles. *@
+<section class="tpl-card">
+    <div class="tpl-heading">
+        <h2>@Title</h2>
+        <p>@Intro</p>
+    </div>
+
+    @if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else if (template is null)
+    {
+        <FluentSpinner />
+    }
+    else
+    {
+        <div class="tpl-body">
+            <div class="tpl-drawing">
+                <svg viewBox="@ViewBox" class="tpl-svg" role="img" aria-label="@($"{Title} layout")" preserveAspectRatio="xMidYMid meet">
+                    <rect x="0" y="0" width="@Mm(template.WidthMm)" height="@Mm(template.HeightMm)" class="tpl-paper" />
+
+                    @if (template.ArtworkFileId is Guid artworkId)
+                    {
+                        <image href="@($"/api/files/download/{artworkId}")" x="0" y="0" width="@Mm(template.WidthMm)" height="@Mm(template.HeightMm)"
+                               preserveAspectRatio="xMidYMid meet" />
+
+                        @for (int i = 0; i < fields.Count; i++)
+                        {
+                            PartyTemplateField field = fields[i];
+                            int index = i;
+                            double labelSize = Math.Clamp(Math.Min(field.WidthMm, field.HeightMm) * 0.45, 1.5, 4);
+
+                            <g class="@(index == selected ? "tpl-box tpl-box-selected" : "tpl-box")" @onclick="@(() => selected = index)">
+                                <rect x="@Mm(field.XMm)" y="@Mm(field.YMm)" width="@Mm(field.WidthMm)" height="@Mm(field.HeightMm)" rx="0.8" />
+                                <text x="@Mm(field.XMm + field.WidthMm / 2)" y="@Mm(field.YMm + field.HeightMm / 2)" font-size="@Mm(labelSize)"
+                                      text-anchor="middle" dominant-baseline="central"
+                                      transform="@LabelTransform(field)">@ShortLabel(field.Kind)</text>
+                            </g>
+                        }
+                    }
+                    else
+                    {
+                        @* Wrapped in <g>: Razor reads a bare <text> in a code block as its own keyword. *@
+                        <g>
+                        <text x="@Mm(template.WidthMm / 2)" y="@Mm(template.HeightMm / 2)" font-size="6" text-anchor="middle" class="tpl-placeholder">
+                            Standard design
+                        </text>
+                        <text x="@Mm(template.WidthMm / 2)" y="@Mm(template.HeightMm / 2 + 9)" font-size="4" text-anchor="middle" class="tpl-placeholder">
+                            Upload artwork to use your own
+                        </text>
+                        </g>
+                    }
+                </svg>
+            </div>
+
+            <div class="tpl-settings">
+                <FileUploader Id="@($"artwork-{Document}")" Accept="image/png,image/jpeg" MaximumFileSize="@(10 * 1024 * 1024)"
+                              MaximumFileCount="1" Label="Upload the blank artwork (PNG or JPEG)" OnFileUploaded="@OnArtworkUploaded" />
+
+                @if (template.ArtworkFileId is not null)
+                {
+                    <div>
+                        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Delete())"
+                                      OnClick="@(() => template.ArtworkFileId = null)">Remove artwork (use the standard design)</FluentButton>
+                    </div>
+
+                    <div class="tpl-group">
+                        <span class="tpl-label">Printed size</span>
+                        <div class="tpl-presets" role="group" aria-label="Paper size presets">
+                            @foreach ((string name, decimal w, decimal h) in Presets)
+                            {
+                                <FluentButton Size="ButtonSize.Small" Appearance="@(template.WidthMm == w && template.HeightMm == h ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                              OnClick="@(() => SetSize(w, h))">@name</FluentButton>
+                            }
+                        </div>
+                        <div class="tpl-pair">
+                            <FluentNumberInput TValue="decimal" @bind-Value="template.WidthMm" Label="Width (mm)" Min="40" Max="420" Width="100%" />
+                            <FluentNumberInput TValue="decimal" @bind-Value="template.HeightMm" Label="Height (mm)" Min="40" Max="420" Width="100%" />
+                        </div>
+                    </div>
+
+                    <div class="tpl-group">
+                        <span class="tpl-label">Lettering</span>
+                        <div class="tpl-presets" role="group" aria-label="Lettering">
+                            <FluentButton Size="ButtonSize.Small" Appearance="@(template.Font == PartyTemplateFont.Handwritten ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                          OnClick="@(() => template.Font = PartyTemplateFont.Handwritten)">Handwritten</FluentButton>
+                            <FluentButton Size="ButtonSize.Small" Appearance="@(template.Font == PartyTemplateFont.Standard ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                          OnClick="@(() => template.Font = PartyTemplateFont.Standard)">Standard</FluentButton>
+                        </div>
+                    </div>
+                }
+
+                @if (Document == PartyArtworkDocument.Voucher)
+                {
+                    <FluentNumberInput TValue="int" @bind-Value="template.VoucherValidityMonths" Label="Voucher valid for (months after the party)"
+                                       Min="1" Max="60" Width="100%" />
+                }
+
+                @if (template.ArtworkFileId is not null)
+                {
+                    <div class="tpl-group">
+                        <span class="tpl-label">Boxes</span>
+                        <span class="tpl-hint">Millimetres from the top-left corner of the artwork. Click a box on the drawing to edit it.</span>
+
+                        @for (int i = 0; i < fields.Count; i++)
+                        {
+                            PartyTemplateField field = fields[i];
+                            int index = i;
+
+                            @if (index == selected)
+                            {
+                                <div class="tpl-field tpl-field-open">
+                                    <div class="tpl-field-top">
+                                        <FluentSelect TOption="KindOption" TValue="string" Items="@KindOptions" OptionText="@(x => x.Name)" OptionValue="@(x => x.Kind.ToString())"
+                                                      Value="@field.Kind.ToString()" ValueChanged="@(v => SetKind(field, v))" Label="What goes here" Width="100%" />
+                                        <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.Delete())" Title="Remove this box"
+                                                      OnClick="@(() => RemoveField(index))" />
+                                    </div>
+                                    <div class="tpl-quad">
+                                        <FluentNumberInput TValue="double" @bind-Value="field.XMm" Label="Across" Min="0" Step="0.5" Width="100%" />
+                                        <FluentNumberInput TValue="double" @bind-Value="field.YMm" Label="Down" Min="0" Step="0.5" Width="100%" />
+                                        <FluentNumberInput TValue="double" @bind-Value="field.WidthMm" Label="Width" Min="2" Step="0.5" Width="100%" />
+                                        <FluentNumberInput TValue="double" @bind-Value="field.HeightMm" Label="Height" Min="2" Step="0.5" Width="100%" />
+                                    </div>
+                                    <div class="tpl-pair">
+                                        <FluentNumberInput TValue="double" @bind-Value="field.FontSize" Label="Text size" Min="4" Max="120" Width="100%" />
+                                        <FluentSelect TOption="RotationOption" TValue="string" Items="@RotationOptions" OptionText="@(x => x.Name)" OptionValue="@(x => x.Degrees.ToString(CultureInfo.InvariantCulture))"
+                                                      Value="@field.Rotation.ToString(CultureInfo.InvariantCulture)" ValueChanged="@(v => field.Rotation = int.Parse(v ?? "0", CultureInfo.InvariantCulture))"
+                                                      Label="Turn" Width="100%" />
+                                    </div>
+                                    <div class="tpl-pair">
+                                        <FluentSelect TOption="string" TValue="string" Items="@AlignOptions" OptionText="@(x => x)" OptionValue="@(x => x)"
+                                                      Value="@field.Align.ToString()" ValueChanged="@(v => field.Align = Enum.Parse<PartyTextAlign>(v ?? nameof(PartyTextAlign.Left)))"
+                                                      Label="Align" Width="100%" />
+                                        <FluentTextInput @bind-Value="field.ColourHex" Label="Colour" Maxlength="7" Class="tpl-full" />
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <button type="button" class="tpl-field" @onclick="@(() => selected = index)">
+                                    <span class="tpl-field-name">@field.Kind.Label()</span>
+                                    <span class="tpl-field-meta">@($"{field.XMm:0.#}, {field.YMm:0.#} · {field.WidthMm:0.#} × {field.HeightMm:0.#} mm{(field.Rotation != 0 ? $" · turned {field.Rotation}°" : string.Empty)}")</span>
+                                </button>
+                            }
+                        }
+
+                        <div class="tpl-presets">
+                            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Add())" OnClick="@AddField">Add a box</FluentButton>
+                            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowReset())" OnClick="@ResetFields">Reset to default positions</FluentButton>
+                        </div>
+                    </div>
+                }
+
+                <div class="tpl-actions">
+                    <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" Loading="@isBusy" OnClick="@SaveAsync">Save</FluentButton>
+                    <FluentAnchorButton Href="@PreviewHref" Target="LinkTarget.Blank" Appearance="ButtonAppearance.Outline"
+                                        IconStart="@(new Icons.Regular.Size20.DocumentPdf())">Preview saved version</FluentAnchorButton>
+                </div>
+            </div>
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public LocationScope Scope { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public int CompanyId { get; set; }
+
+    [Parameter, EditorRequired]
+    public PartyArtworkDocument Document { get; set; }
+
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? Intro { get; set; }
+
+    private record KindOption(PartyTemplateFieldKind Kind, string Name);
+
+    private record RotationOption(int Degrees, string Name);
+
+    private static readonly List<KindOption> KindOptions =
+        Enum.GetValues<PartyTemplateFieldKind>().Select(k => new KindOption(k, k.Label())).ToList();
+
+    private static readonly List<RotationOption> RotationOptions =
+    [
+        new(0, "None"),
+        new(90, "Clockwise"),
+        new(270, "Anticlockwise")
+    ];
+
+    private static readonly List<string> AlignOptions = [nameof(PartyTextAlign.Left), nameof(PartyTextAlign.Centre)];
+
+    private static readonly (string Name, decimal Width, decimal Height)[] Presets =
+    [
+        ("A5 portrait", 148, 210),
+        ("A5 landscape", 210, 148),
+        ("A4 portrait", 210, 297),
+        ("A4 landscape", 297, 210)
+    ];
+
+    private PartyDocumentTemplate? template;
+    private List<PartyTemplateField> fields = [];
+    private int selected = -1;
+    private bool isBusy;
+    private string? loadError;
+
+    private string ViewBox => template is null ? "0 0 1 1" : $"0 0 {Mm(template.WidthMm)} {Mm(template.HeightMm)}";
+
+    private string PreviewHref => $"/api/parties/printouts/{(Document == PartyArtworkDocument.Voucher ? "voucher" : "feedback-form")}/preview";
+
+    private static string Mm(decimal value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+
+    private static string Mm(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+
+    private static string LabelTransform(PartyTemplateField field)
+    {
+        string cx = Mm(field.XMm + field.WidthMm / 2), cy = Mm(field.YMm + field.HeightMm / 2);
+
+        return field.Rotation switch
+        {
+            90 => $"rotate(90 {cx} {cy})",
+            270 => $"rotate(-90 {cx} {cy})",
+            _ => string.Empty
+        };
+    }
+
+    private static string ShortLabel(PartyTemplateFieldKind kind) => kind switch
+    {
+        PartyTemplateFieldKind.PresentedTo => "Child's name",
+        PartyTemplateFieldKind.PartyName => "Party name",
+        _ => kind.Label()
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (template is null)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        Result<PartyDocumentTemplate> result = await _partyTemplateService.GetTemplateAsync(Scope, CompanyId, Document);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            loadError = result.Error;
+            return;
+        }
+
+        template = result.Data;
+        fields = PartyTemplateFields.Parse(template.FieldsJson);
+        selected = -1;
+    }
+
+    private void OnArtworkUploaded(FileMetadata file)
+    {
+        if (template is not null)
+        {
+            template.ArtworkFileId = file.Id;
+        }
+    }
+
+    private void SetSize(decimal width, decimal height)
+    {
+        if (template is not null)
+        {
+            template.WidthMm = width;
+            template.HeightMm = height;
+        }
+    }
+
+    private static void SetKind(PartyTemplateField field, string? value)
+    {
+        if (Enum.TryParse(value, out PartyTemplateFieldKind kind))
+        {
+            field.Kind = kind;
+        }
+    }
+
+    private void AddField()
+    {
+        PartyTemplateFieldKind kind = KindOptions.Select(x => x.Kind).FirstOrDefault(k => fields.All(f => f.Kind != k));
+        fields.Add(new PartyTemplateField { Kind = kind, XMm = 10, YMm = 10 });
+        selected = fields.Count - 1;
+    }
+
+    private void RemoveField(int index)
+    {
+        fields.RemoveAt(index);
+        selected = -1;
+    }
+
+    private void ResetFields()
+    {
+        fields = PartyTemplateFields.Parse(PartyTemplateFields.Default(Document, CompanyId).FieldsJson);
+        selected = -1;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (template is null)
+        {
+            return;
+        }
+
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || actingUser.Data is null)
+        {
+            _toastService.ShowError($"Couldn't work out who you are: {actingUser.Error}");
+            return;
+        }
+
+        template.FieldsJson = PartyTemplateFields.Serialize(fields);
+        isBusy = true;
+
+        try
+        {
+            Result<PartyDocumentTemplate> result = await _partyTemplateService.SaveTemplateAsync(Scope, template, actingUser.Data);
+
+            if (!result.IsSuccess || result.Data is null)
+            {
+                _toastService.ShowError(result.Error ?? "Couldn't save the printout.");
+                return;
+            }
+
+            template = result.Data;
+            fields = PartyTemplateFields.Parse(template.FieldsJson);
+            _toastService.ShowSuccess($"{Title} saved.");
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+}

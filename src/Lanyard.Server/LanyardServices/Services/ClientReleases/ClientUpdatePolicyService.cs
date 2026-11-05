@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Clients;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
@@ -11,10 +12,12 @@ namespace Lanyard.Application.Services.ClientReleases;
 public sealed class ClientUpdatePolicyService(
     IDbContextFactory<ApplicationDbContext> factory,
     IClientReleaseCatalogService catalog,
+    IKioskFleetEventBus fleetEvents,
     ILogger<ClientUpdatePolicyService> logger) : IClientUpdatePolicyService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly IClientReleaseCatalogService _catalog = catalog;
+    private readonly IKioskFleetEventBus _fleetEvents = fleetEvents;
     private readonly ILogger<ClientUpdatePolicyService> _logger = logger;
 
     public async Task<Result<ClientUpdateTargetDTO>> GetTargetAsync(Guid clientId, CancellationToken cancellationToken = default)
@@ -59,6 +62,18 @@ public sealed class ClientUpdatePolicyService(
                 .TagWithCallSite()
                 .ToListAsync(cancellationToken);
 
+            return await GetTargetsAsync(clients, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            return Result<IReadOnlyDictionary<Guid, ClientUpdateTargetDTO>>.Fail($"Failed to work out target versions: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<IReadOnlyDictionary<Guid, ClientUpdateTargetDTO>>> GetTargetsAsync(IEnumerable<Client> clients, CancellationToken cancellationToken = default)
+    {
+        try
+        {
             Result<IReadOnlyList<ClientRelease>> releases = await _catalog.GetReleasesAsync(cancellationToken: cancellationToken);
 
             if (!releases.IsSuccess)
@@ -130,6 +145,8 @@ public sealed class ClientUpdatePolicyService(
             await ctx.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation("Client {ClientId} update setting changed to {UpdateRing} (pinned version {PinnedVersion})", clientId, ring, pin);
+
+            _fleetEvents.Publish(client.CompanyId);
 
             return Result<ClientUpdateTargetDTO>.Ok(ToTarget(client, releases.Data!));
         }
