@@ -791,6 +791,10 @@
       "A kiosk that still showed \"Shared secret\" on Manage > Clients can't connect any more. Pair it again with Add kiosk: it keeps its settings.",
       "Tell us what you think: a new feedback button in the top bar lets you give Lanyard a thumbs up or down, with an optional comment, from any page. It goes straight to the Lanyard team.",
       "Every month or so Lanyard asks you to rate it out of 5 stars and say why. Press Not now to be asked again in a week, or Don't ask again to stop it for good.",
+      "Manage > Clients keeps itself up to date without the page working away every second: a kiosk connecting or disconnecting, or a change to its settings or update ring, now shows within a second, even when it was made in another tab.",
+      "The Session Length column on Manage > Clients no longer starts again from zero after 24 hours (it shows the days, like 1d 02:15:00) and has lost the stray \"s\" on the end.",
+      "Chat keeps up faster when someone posts: an open conversation now adds just the new message instead of reloading everything, so busy channels stay quick on phones.",
+      "Screen readers now read out new chat messages from other people as they arrive, with who sent them and the start of what they say.",
       "Kiosks use much less processing power while reading laser game traffic. They log far less during a game, handle game messages in the order the control box sent them, and send the scoreboard at most four updates a second, while game starts and ends still reach the server straight away.",
       "A kiosk's Zone Scoreboard settings have two new switches. \"Only read laser game traffic\" has the network card throw away everything except the game's messages, which saves even more processing power on a busy network. \"Read traffic sent to other machines\" can be turned off where the control box sends to a broadcast address. Saved changes reach a connected kiosk straight away.",
       "Platform admins have a help page for Lanyard Feedback, with a Help button on the feedback inbox."
@@ -817,6 +821,38 @@
       "Without your own artwork, Lanyard prints a standard voucher and feedback form with your logo and colour.",
       "A5 printouts print at their real size on A4. Print everything puts the voucher and feedback form side by side on one sheet.",
       "New Parties help page, with a Help button on every Parties page: booking, payments, printing, menus and printouts."
+    ]
+  },
+  {
+    "version": "1.4.20",
+    "releaseDate": "2026-11-04",
+    "summary": "Audio clips can now be switched on or off for each company. A redesigned Music page that works on phones, and a more reliable music player.",
+    "details": [
+      "Admins can switch Audio clips on or off for each company under Manage > Companies & Locations. It stays on for every company until someone turns it off.",
+      "With Audio clips off, the Audio Clips page and its menu link are hidden, the Play Audio Clip action is no longer offered in automation rules, and the Audio Clips tab disappears from Music help.",
+      "Clips no longer play for a company with Audio clips off, whether from a schedule, an automation rule or the Play button. Nothing is deleted, so switching it back on brings every clip and schedule back.",
+      "The Print buttons on a party (Print everything, reserved table card, food sheet, voucher and feedback form) and Preview saved version on the Printouts page now open the PDF in a new tab again, instead of showing Not Found.",
+      "Lanyard loads faster, especially on a phone: pages no longer wait for scripts they don't use, and the text editor's files now come from Lanyard itself instead of an outside server.",
+      "Shuffle now plays every song in a playlist once before any repeat, and Previous goes back to the song that actually played before.",
+      "Turning shuffle off carries on in playlist order from the song that's playing.",
+      "Playing a song from a playlist now carries on with the songs after it, instead of moving that song to the front.",
+      "Previous restarts the song if it's more than 3 seconds in, otherwise goes back one.",
+      "A kiosk reconnecting no longer briefly shows the wrong song or loses its place in the queue.",
+      "Music commands that fail (for example when a kiosk has just dropped off) now say so instead of failing silently.",
+      "The music schedule retries a playlist that failed to start, and no longer jumps the volume up from silence on a kiosk that hasn't reported its volume yet.",
+      "Adding a song back to a playlist it was removed from now works, instead of failing with an error.",
+      "Playlists keep their own song order, ready for reordering on the Music page.",
+      "Playlist pickers list playlists alphabetically.",
+      "Editing a playlist while it's playing updates what plays next without interrupting the song.",
+      "The Music page is redesigned. Every kiosk is shown along the top with what it's playing, and the player shows the song, its playlist and what's up next.",
+      "The page now fits phones properly: two-line song lists, bigger controls, and a small player along the bottom while you scroll through songs.",
+      "Songs in All songs can now be played, and the library and playlists can be searched.",
+      "Playlists can be renamed, deleted and reordered (drag on a computer, or Move up/down in a song's ⋯ menu).",
+      "The Music page and the music timeline dashboard widget no longer refresh every second while music plays, and update straight away when a kiosk goes offline or comes back.",
+      "The Music page is now only for Admins, Managers and people with the CanControlMusic or CanManagePlaylists role. It used to open for anyone signed in.",
+      "Music has its own item in the menu (it was tucked under Clients and only shown to Admins).",
+      "The CanManagePlaylists role now exists, so it can be given to people who should look after playlists without being Admins.",
+      "With kiosk version 1.0.45, a kiosk responds to pause, stop and other commands straight away even while it's still downloading a song, and skipping quickly through songs no longer queues up downloads."
     ]
   }
 ]

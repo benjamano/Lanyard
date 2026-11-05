@@ -1,28 +1,73 @@
 <HelpTab>
     <FluentText>
-        <a href="/music">Music</a> controls what plays through a kiosk's speakers. Start by choosing the kiosk
-        (client) at the top. Everything you do then applies to that kiosk.
+        <a href="/music">Music</a> controls what plays through each kiosk's speakers. The row of kiosks along the top
+        shows what every kiosk is playing right now. Select one, and everything else on the page applies to it.
     </FluentText>
+
+    <HelpNote>
+        Admins, Managers and people with the <strong>CanControlMusic</strong> or <strong>CanManagePlaylists</strong>
+        role can open Music; it's in the menu as <strong>Music</strong>. Admins and Managers also get links to the
+        <a href="/manage/music-schedule">music schedule</a> and <a href="/manage/audio-clips">audio clips</a> at the
+        top of the page.
+    </HelpNote>
+
+    <HelpSection Title="Choosing a kiosk">
+        <ul>
+            <li>Each kiosk shows a dot: green while it's playing, orange when it's paused or stopped, and an empty
+                circle when it's <strong>Offline</strong>.</li>
+            <li>The page remembers the kiosk you chose on this device.</li>
+            <li>An offline kiosk can't be controlled. It may still be playing music it saved earlier, and its
+                controls come back by themselves as soon as it reconnects.</li>
+        </ul>
+    </HelpSection>
+
+    <HelpSection Title="Now playing">
+        <ul>
+            <li>The player shows the song, its album, and the playlist it's playing from.</li>
+            <li>The controls are <strong>Shuffle</strong>, <strong>Previous</strong>, play and pause,
+                <strong>Next</strong>, and repeat (off, the playlist, or this song). Shuffle and repeat show a dot
+                underneath while they're on.</li>
+            <li><strong>Previous</strong> restarts the song if it's more than 3 seconds in; press it again to go back
+                to the song before.</li>
+            <li>Drag the timeline to jump to a point in the song. Select the time on the left to switch between time
+                played and time left.</li>
+            <li>Drag the volume slider, or select the speaker to mute and unmute.</li>
+            <li><strong>Up next</strong> lists the next few songs. If the music schedule is about to change playlist,
+                it says so here.</li>
+        </ul>
+        <HelpNote>
+            On a phone, a small player appears along the bottom once you scroll down to the songs, so you can pause
+            or skip without scrolling back up. Select it to jump back to the full player.
+        </HelpNote>
+    </HelpSection>
 
     <HelpSection Title="Playing music">
         <ul>
-            <li>On the <strong>Playlists</strong> tab, choose a playlist to see its songs. On <strong>Songs</strong>,
-                pick a song to play it.</li>
-            <li>The controls at the bottom are <strong>Shuffle</strong>, previous or restart (click once to restart
-                the song, twice for the previous one), play and pause, <strong>Next</strong>, and repeat (off, the
-                playlist, or the current song).</li>
-            <li>Drag the volume slider, or select the speaker to mute.</li>
+            <li>Choose a playlist, or <strong>All songs</strong> for the whole library.</li>
+            <li><strong>Play</strong> plays the playlist in order from the top. <strong>Shuffle</strong> plays every
+                song once, in a random order, before any song repeats.</li>
+            <li>Select a song to play it. In a playlist, the songs after it follow; in <strong>All songs</strong>,
+                just that song plays.</li>
+            <li>Use the search box to find a song by its name or album.</li>
+            <li>Turning shuffle off carries on in playlist order from the song that's playing.</li>
         </ul>
-        <FluentText>
-            While an audio clip is playing over the music, it's shown here with a <strong>Stop</strong> button.
-        </FluentText>
     </HelpSection>
 
-    <HelpSection Title="Playlists and songs">
+    <HelpSection Title="Managing playlists">
         <FluentText>
-            Upload songs in the <a href="/files">File Manager</a>. Audio files are added to the music library
-            automatically. Admins and people with the CanManagePlaylists role can create playlists (name and
-            optional description) and add songs to them.
+            Admins and people with the CanManagePlaylists role can change playlists. Upload songs in the
+            <a href="/files">File Manager</a>: audio files are added to the library automatically.
         </FluentText>
+        <ul>
+            <li><strong>New playlist</strong> at the end of the playlist list creates one, with a name and an
+                optional description.</li>
+            <li>The pencil and bin beside a playlist's <strong>Play</strong> button rename and delete it. A
+                playlist used by the music schedule or an automation rule can't be deleted until you choose another
+                playlist there.</li>
+            <li>A song's <strong>⋯</strong> menu adds it to another playlist, moves it up or down, or removes it from
+                this playlist. Removing a song doesn't delete it from the library.</li>
+            <li>On a computer you can also drag a song by its handle to reorder the playlist.</li>
+            <li>Changes reach a kiosk that's playing the playlist straight away, without interrupting the song.</li>
+        </ul>
     </HelpSection>
 </HelpTab>

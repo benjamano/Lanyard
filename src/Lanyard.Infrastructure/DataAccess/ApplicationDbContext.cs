@@ -24,6 +24,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public const string SeedCanManageFilesRoleId = "dev-role-can-manage-files";
         public const string SeedCanPostAnnouncementsRoleId = "dev-role-can-post-announcements";
         public const string SeedCanPlayAudioClipsRoleId = "dev-role-can-play-audio-clips";
+        public const string SeedCanManagePlaylistsRoleId = "dev-role-can-manage-playlists";
         public const string SeedPlatformAdminRoleId = "dev-role-platform-admin";
         public const string SystemDeletedUserPlaceholderId = "system-deleted-user-placeholder";
         public const int SeedPlay2DayCompanyId = 1;
@@ -1028,6 +1029,14 @@ namespace Lanyard.Infrastructure.DataAccess
             // SongAnalysisHostedService sweeps for NotAnalyzed songs every five minutes.
             modelBuilder.Entity<Song>()
                 .HasIndex(x => x.BpmAnalysisStatus);
+
+            // The Music page's library search lists a company's active songs by name, a page at a time.
+            modelBuilder.Entity<Song>()
+                .HasIndex(x => new { x.CompanyId, x.IsActive, x.Name });
+
+            // A playlist's songs are read in order.
+            modelBuilder.Entity<PlaylistSongMember>()
+                .HasIndex(x => new { x.PlaylistId, x.Position });
 
             ConfigureDmxFixtureDefinitions(modelBuilder);
 

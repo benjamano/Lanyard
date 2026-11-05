@@ -63,7 +63,8 @@ public class SignalRControlHubKioskHealthTests
             Mock.Of<IKioskMediaTokenService>(),
             new KioskConnectionRegistry(),
             kioskHealthService.Object,
-            Mock.Of<IAudioClipPlaybackService>())
+            Mock.Of<IAudioClipPlaybackService>(),
+            new KioskFleetEventBus())
         {
             Context = hubCallerContextMock.Object
         };

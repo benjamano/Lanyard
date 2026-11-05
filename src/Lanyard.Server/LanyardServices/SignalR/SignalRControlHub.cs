@@ -25,7 +25,7 @@ namespace Lanyard.Application.SignalR;
 
 public class SignalRControlHub(
     ILogger<SignalRControlHub> logger,
-    MusicPlayerService playerService,
+    IMusicPlayerService playerService,
     IClientService clientService,
     ILaserGameStatusStore laserGameStatusStore,
     SignalRProjectionControlHubEvents hubEvents,
@@ -37,13 +37,14 @@ public class SignalRControlHub(
     IKioskMediaTokenService mediaTokenService,
     KioskConnectionRegistry connectionRegistry,
     IKioskHealthService kioskHealthService,
-    IAudioClipPlaybackService audioClipPlaybackService) : Hub, ISignalRProjectionControlHub
+    IAudioClipPlaybackService audioClipPlaybackService,
+    IKioskFleetEventBus fleetEvents) : Hub, ISignalRProjectionControlHub
 {
     private readonly ILogger<SignalRControlHub> _logger = logger;
     private readonly IKioskMediaTokenService _mediaTokenService = mediaTokenService;
     private readonly KioskConnectionRegistry _connectionRegistry = connectionRegistry;
 
-    private readonly MusicPlayerService _playerService = playerService;
+    private readonly IMusicPlayerService _playerService = playerService;
     private readonly IClientService _clientService = clientService;
     private readonly SignalRProjectionControlHubEvents _hubEvents = hubEvents;
     private readonly ILaserGameStatusStore _laserGameStatusStore = laserGameStatusStore;
@@ -54,6 +55,7 @@ public class SignalRControlHub(
     private readonly IGameResultService _gameResultService = gameResultService;
     private readonly IKioskHealthService _kioskHealthService = kioskHealthService;
     private readonly IAudioClipPlaybackService _audioClipPlaybackService = audioClipPlaybackService;
+    private readonly IKioskFleetEventBus _fleetEvents = fleetEvents;
 
     private static readonly ConcurrentDictionary<string, bool> _connections = new();
 
@@ -141,14 +143,15 @@ public class SignalRControlHub(
         await SendRestartScheduleToClientAsync(client);
         await SendAudioSettingsToClientAsync(client);
 
-        string musicGroup = MusicGroupFor(client.CompanyId);
-        Context.Items[MusicGroupItemKey] = musicGroup;
-
-        await Groups.AddToGroupAsync(Context.ConnectionId, musicGroup);
-
-        _logger.LogInformation("Client {ClientName} ({ConnectionId}) connected and added to {MusicGroup}", client.Name, Context.ConnectionId, musicGroup);
+        _logger.LogInformation("Client {ClientName} ({ConnectionId}) connected", client.Name, Context.ConnectionId);
 
         _connections.TryAdd(Context.ConnectionId, true);
+
+        // After TryAdd, so a Clients page refreshing on this sees the kiosk as connected.
+        Context.Items[CompanyIdItemKey] = client.CompanyId;
+        _fleetEvents.Publish(client.CompanyId);
+
+        _playerService.MarkClientConnected(client.Id);
 
         // So a scheduled clip is already on the kiosk's disk when it's due. Logs its own failures.
         await _audioClipPlaybackService.PrefetchScheduledClipsAsync(client.Id, Context.ConnectionId);
@@ -178,12 +181,7 @@ public class SignalRControlHub(
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        if (Context.Items.TryGetValue(MusicGroupItemKey, out object? musicGroup) && musicGroup is string group)
-        {
-            await Groups.RemoveFromGroupAsync(Context.ConnectionId, group);
-        }
-
-        _logger.LogInformation("Client {ConnectionId} disconnected from its Music group", Context.ConnectionId);
+        _logger.LogInformation("Client {ConnectionId} disconnected", Context.ConnectionId);
 
         Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
         if (getClientResult.IsSuccess)
@@ -195,6 +193,7 @@ public class SignalRControlHub(
             if (await IsCurrentConnectionForClientAsync(getClientResult.Data))
             {
                 _laserGameStatusStore.RemoveStatus(getClientResult.Data);
+                _playerService.MarkClientDisconnected(getClientResult.Data);
             }
 
             await RecordClientDisconnectAsync(getClientResult.Data);
@@ -203,6 +202,11 @@ public class SignalRControlHub(
         _connections.TryRemove(Context.ConnectionId, out _);
         _connectionRegistry.Unregister(Context.ConnectionId);
         _dmxClientService.ForgetConnection(Context.ConnectionId);
+
+        if (Context.Items.TryGetValue(CompanyIdItemKey, out object? companyId) && companyId is int id)
+        {
+            _fleetEvents.Publish(id);
+        }
 
         await base.OnDisconnectedAsync(exception);
     }
@@ -293,7 +297,7 @@ public class SignalRControlHub(
             return;
         }
 
-        _playerService.UpdateCurrentSong(getClientResult.Data, song);
+        await _playerService.UpdateCurrentSongAsync(getClientResult.Data, song);
     }
 
     public async Task UpdateAvailableScreens(IEnumerable<ClientAvailableScreenDTO> screens)
@@ -371,43 +375,8 @@ public class SignalRControlHub(
         return recordResult.Data;
     }
 
-    // Kiosks share one hub, so music commands go only to kiosks of the sender's own company.
-    private const string MusicGroupItemKey = "MusicGroup";
-
-    private static string MusicGroupFor(int companyId) => $"{ClientGroup.Music}:{companyId}";
-
-    private IClientProxy MusicGroupClients() =>
-        Context.Items.TryGetValue(MusicGroupItemKey, out object? group) && group is string name
-            ? Clients.Group(name)
-            : Clients.Clients([]);
-
-    public async Task Load(Guid songId)
-    {
-        _logger.LogInformation("Load command received for song {SongId}", songId);
-
-        await MusicGroupClients().SendAsync("Load", songId);
-    }
-
-    public async Task Play()
-    {
-        _logger.LogInformation("Play command received");
-
-        await MusicGroupClients().SendAsync("Play");
-    }
-
-    public async Task Pause()
-    {
-        _logger.LogInformation("Pause command received");
-
-        await MusicGroupClients().SendAsync("Pause");
-    }
-
-    public async Task Stop()
-    {
-        _logger.LogInformation("Stop command received");
-
-        await MusicGroupClients().SendAsync("Stop");
-    }
+    // Kept from connect so the disconnect can tell the kiosk's company's open pages.
+    private const string CompanyIdItemKey = "CompanyId";
 
     private async Task SendMusicSettingsToClientAsync(Client client)
     {

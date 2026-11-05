@@ -26,4 +26,10 @@ public interface ICompanyFeatureService
 
     // Convenience over the above: false on failure as well as when switched off.
     Task<bool> IsEnabledForCurrentUserAsync(CompanyFeature feature);
+
+    // Whether the company itself has the feature, ignoring who's asking. Admins always see every
+    // feature, so use this when the server enforces a switch for them too (audio clips won't
+    // play for a company without them) and the UI shouldn't offer what will be refused. False
+    // when the check fails.
+    Task<bool> IsEnabledForCompanyAsync(int companyId, CompanyFeature feature);
 }

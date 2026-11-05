@@ -2,75 +2,108 @@
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Hosting;
 
 namespace Lanyard.Application.Services;
 
-public class MusicService(IDbContextFactory<ApplicationDbContext> factory, IHostEnvironment hostEnvironment) : IMusicService
+public class MusicService(IDbContextFactory<ApplicationDbContext> factory) : IMusicService
 {
-    private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
-    private readonly IHostEnvironment _hostEnvironment = hostEnvironment;
-    private static readonly string[] _audioExtensions = [".mp3", ".wav", ".flac", ".ogg", ".aac", ".m4a", ".wma"];
+    public const int MaxPageSize = 200;
 
+    private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+
+    // Every environment reads the library from the database. Development used to scan the
+    // machine's Music folder instead, but those songs got new ids on every call, so they could
+    // never be played on a kiosk or kept in a playlist. Upload songs in the File Manager.
     public async Task<Result<IEnumerable<Song>>> GetSongsAsync()
     {
         try
         {
-            if (_hostEnvironment.IsProduction())
-            {
-                // BECAUSE WE USE THE DATABASE IN PRODUCTION, WE NEED TO GET THE SONGS FROM THE DATABASE
-                // (files themselves live in the Railway bucket; see FileService for the upload path)
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
 
-                await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+            IEnumerable<Song> songs = await context.Songs
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(song => song.IsActive)
+                .OrderBy(song => song.AlbumName)
+                .ThenBy(song => song.Name)
+                .ToListAsync();
 
-                IEnumerable<Song> songs = await context.Songs
-                    .AsNoTracking()
-                    .TagWithCallSite()
-                    .Where(song => song.IsActive)
-                    .OrderBy(song => song.AlbumName)
-                    .ThenBy(song => song.Name)
-                    .ToListAsync();
-
-                return Result<IEnumerable<Song>>.Ok(songs);
-            }
-            else
-            {
-                string musicFolder = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
-
-                IEnumerable<Song> songs = Directory
-                    .EnumerateFiles(musicFolder, "*.*", SearchOption.AllDirectories)
-                    .Where(f => _audioExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
-                    .Select(f =>
-                    {
-                        double duration = 0;
-                        try
-                        {
-                            using TagLib.File tag = TagLib.File.Create(f);
-                            duration = tag.Properties.Duration.TotalSeconds;
-                        }
-                        catch { }
-
-                        return new Song
-                        {
-                            Id = Guid.NewGuid(),
-                            Name = Path.GetFileNameWithoutExtension(f),
-                            AlbumName = Path.GetFileName(Path.GetDirectoryName(f)) ?? string.Empty,
-                            FilePath = f,
-                            DurationSeconds = duration,
-                            CreateDate = File.GetCreationTime(f),
-                            IsDownloaded = true,
-                            IsActive = true
-                        };
-                    });
-
-                return Result<IEnumerable<Song>>.Ok(songs);
-            }
+            return Result<IEnumerable<Song>>.Ok(songs);
         }
         catch (Exception ex)
         {
             return Result<IEnumerable<Song>>.Fail($"An error occurred while retrieving songs: {ex.Message}");
         }
     }
+
+    public async Task<Result<PagedResult<LibrarySong>>> SearchSongsAsync(string? search, int skip, int take, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync(cancellationToken);
+
+            IQueryable<Song> query = context.Songs
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.IsActive);
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                string term = search.Trim().ToLower();
+                query = query.Where(x => x.Name.ToLower().Contains(term) || x.AlbumName.ToLower().Contains(term));
+            }
+
+            int total = await query.CountAsync(cancellationToken);
+
+            List<LibrarySong> items = await query
+                .OrderBy(x => x.Name)
+                .ThenBy(x => x.Id)
+                .Skip(Math.Max(0, skip))
+                .Take(Math.Clamp(take, 1, MaxPageSize))
+                .Select(x => new LibrarySong(x.Id, x.Name, x.AlbumName, x.DurationSeconds, x.CreateDate))
+                .ToListAsync(cancellationToken);
+
+            return Result<PagedResult<LibrarySong>>.Ok(new PagedResult<LibrarySong>(items, total));
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return Result<PagedResult<LibrarySong>>.Fail($"An error occurred while searching songs: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<IReadOnlyList<MusicKiosk>>> GetKiosksAsync()
+    {
+        try
+        {
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+
+            var rows = await context.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Select(x => new { x.Id, x.Name, x.MostRecentConnectionId })
+                .ToListAsync();
+
+            List<MusicKiosk> kiosks = rows
+                .Select(x => new MusicKiosk(x.Id, x.Name, IsConnected(x.MostRecentConnectionId)))
+                .OrderByDescending(x => x.IsConnected)
+                .ThenBy(x => x.Name, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+
+            return Result<IReadOnlyList<MusicKiosk>>.Ok(kiosks);
+        }
+        catch (Exception ex)
+        {
+            return Result<IReadOnlyList<MusicKiosk>>.Fail($"An error occurred while loading kiosks: {ex.Message}");
+        }
+    }
+
+    // SignalRControlHub.ConnectedIds is process-static, so tests override this.
+    protected virtual bool IsConnected(string? connectionId) =>
+        !string.IsNullOrEmpty(connectionId) && Lanyard.Application.SignalR.SignalRControlHub.ConnectedIds.Contains(connectionId);
 
     public async Task<Result<IReadOnlyDictionary<Guid, string>>> GetSongNamesAsync(IReadOnlyCollection<Guid> songIds)
     {

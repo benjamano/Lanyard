@@ -1,0 +1,155 @@
+@using Lanyard.App.Components.AudioClips
+@using Lanyard.App.Components.Music.Schedule
+@using NAudio.Wave
+@inject IMusicPlayerService _player
+
+<section class="music-now-playing" aria-label="Now playing on @KioskName">
+    <div class="music-now-playing-kiosk">
+        <span class="music-status-dot @StatusClass" aria-hidden="true"></span>
+        <span class="music-now-playing-kiosk-name">@KioskName</span>
+        <span class="music-now-playing-kiosk-state">@StatusText</span>
+    </div>
+
+    @if (!Snapshot.IsConnected)
+    {
+        <div class="music-now-playing-empty">
+            <FluentIcon Value="@(new Icons.Regular.Size48.PlugDisconnected())" Color="Color.Default" />
+            <div>
+                <div class="music-now-playing-empty-title">This kiosk is offline</div>
+                <div class="music-now-playing-empty-hint">It may still be playing music it saved earlier. Controls come back as soon as it reconnects.</div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="music-now-playing-track">
+            <MusicArtwork Seed="@(Snapshot.Song?.Id ?? Snapshot.ClientId)" Title="@Snapshot.Song?.Name" IsPlaying="@IsPlaying" Size="MusicArtwork.ArtworkSize.Large" />
+
+            <div class="music-now-playing-text">
+                @if (Snapshot.Song is { } song)
+                {
+                    <div class="music-now-playing-title" title="@song.Name">@song.Name</div>
+                    <div class="music-now-playing-meta">
+                        <span>@song.AlbumName</span>
+                        @if (Snapshot.PlaylistName is { } playlistName)
+                        {
+                            <span class="music-dot-sep" aria-hidden="true">·</span>
+                            <span>from <strong>@playlistName</strong></span>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="music-now-playing-title is-muted">Nothing playing</div>
+                    <div class="music-now-playing-meta">Pick a playlist or a song below to start the music.</div>
+                }
+            </div>
+        </div>
+
+        <MusicProgress Snapshot="Snapshot" ReadOnly="@(!CanControl)" />
+
+        <div class="music-transport" role="group" aria-label="Playback controls">
+            <button type="button" class="music-icon-button @(Snapshot.IsShuffleEnabled ? "is-on" : "")"
+                    aria-pressed="@(Snapshot.IsShuffleEnabled ? "true" : "false")" aria-label="Shuffle" title="Shuffle"
+                    disabled="@(!CanControl)" @onclick="ToggleShuffleAsync">
+                <FluentIcon Value="@(new Icons.Regular.Size20.ArrowShuffle())" Color="Color.Default" />
+            </button>
+            <button type="button" class="music-icon-button is-large" aria-label="Previous" title="Previous (restarts the song if it's more than 3 seconds in)"
+                    disabled="@(!CanControl || Snapshot.Song is null)" @onclick="PreviousAsync">
+                <FluentIcon Value="@(new Icons.Filled.Size24.Previous())" Color="Color.Default" />
+            </button>
+            <button type="button" class="music-play-button" aria-label="@(IsPlaying ? "Pause" : "Play")" title="@(IsPlaying ? "Pause" : "Play")"
+                    disabled="@(!CanControl || (Snapshot.Song is null && !IsPlaying))" @onclick="TogglePlayAsync">
+                <FluentIcon Value="@(IsPlaying ? (Icon)new Icons.Filled.Size28.Pause() : new Icons.Filled.Size28.Play())" Color="Color.Custom" CustomColor="currentColor" />
+            </button>
+            <button type="button" class="music-icon-button is-large" aria-label="Next" title="Next"
+                    disabled="@(!CanControl || Snapshot.Song is null)" @onclick="NextAsync">
+                <FluentIcon Value="@(new Icons.Filled.Size24.Next())" Color="Color.Default" />
+            </button>
+            <button type="button" class="music-icon-button @(Snapshot.RepeatMode != RepeatMode.Off ? "is-on" : "")"
+                    aria-label="@RepeatLabel" title="@RepeatLabel" disabled="@(!CanControl)" @onclick="CycleRepeatAsync">
+                <FluentIcon Value="@RepeatIcon" Color="Color.Default" />
+            </button>
+        </div>
+
+        <div class="music-now-playing-footer">
+            <MusicVolume ClientId="Snapshot.ClientId" Volume="Snapshot.Volume" Disabled="@(!CanControl)" />
+            <div class="music-now-playing-chips">
+                <MusicScheduleStatusChip ClientId="Snapshot.ClientId" AllowResume="CanControl" />
+                <AudioClipNowPlayingChip ClientId="Snapshot.ClientId" />
+            </div>
+        </div>
+
+        @if (ShowUpNext && (Snapshot.UpNext.Count > 0 || Snapshot.PendingPlaylistId is not null))
+        {
+            <div class="music-up-next">
+                <div class="music-section-label">Up next</div>
+                @if (Snapshot.PendingPlaylistId is Guid pending)
+                {
+                    <div class="music-up-next-pending">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.CalendarClock())" Color="Color.Default" />
+                        <span>Switching to <strong>@(PlaylistName?.Invoke(pending) ?? "the scheduled playlist")</strong> when this song ends</span>
+                    </div>
+                }
+                <ol class="music-up-next-list">
+                    @foreach (MusicTrackInfo track in Snapshot.UpNext)
+                    {
+                        <li @key="track.Id">
+                            <span class="music-up-next-name">@track.Name</span>
+                            <span class="music-up-next-length">@MusicProgress.FormatTime(track.DurationSeconds)</span>
+                        </li>
+                    }
+                </ol>
+            </div>
+        }
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public MusicNowPlayingSnapshot Snapshot { get; set; } = default!;
+    [Parameter, EditorRequired] public string KioskName { get; set; } = "";
+    [Parameter] public bool ShowUpNext { get; set; } = true;
+
+    /// <summary>Looks up a playlist's name for the "switching to" note.</summary>
+    [Parameter] public Func<Guid, string?>? PlaylistName { get; set; }
+
+    private bool IsPlaying => Snapshot.State == PlaybackState.Playing;
+    private bool CanControl => Snapshot.IsConnected;
+
+    private string StatusClass => !Snapshot.IsConnected ? "is-offline" : IsPlaying ? "is-playing" : "is-idle";
+
+    private string StatusText => !Snapshot.IsConnected ? "Offline"
+        : IsPlaying ? "Playing"
+        : Snapshot.State == PlaybackState.Paused ? "Paused"
+        : "Stopped";
+
+    private string RepeatLabel => Snapshot.RepeatMode switch
+    {
+        RepeatMode.All => "Repeat: the playlist",
+        RepeatMode.One => "Repeat: this song",
+        _ => "Repeat: off"
+    };
+
+    private Icon RepeatIcon => Snapshot.RepeatMode switch
+    {
+        RepeatMode.One => new Icons.Regular.Size20.ArrowRepeat1(),
+        RepeatMode.All => new Icons.Regular.Size20.ArrowRepeatAll(),
+        _ => new Icons.Regular.Size20.ArrowRepeatAllOff()
+    };
+
+    private Task TogglePlayAsync() => Run(_player.TogglePlay(Snapshot.ClientId), "Couldn't reach the kiosk.");
+    private Task NextAsync() => Run(_player.Next(Snapshot.ClientId), "There's nothing after this song.");
+    private Task PreviousAsync() => Run(_player.RestartOrPrevious(Snapshot.ClientId), "There's nothing before this song.");
+
+    private Task ToggleShuffleAsync() => _player.ToggleShuffle(Snapshot.ClientId);
+    private Task CycleRepeatAsync() => _player.CycleRepeatMode(Snapshot.ClientId);
+
+    private async Task Run(Task<Result<bool>> command, string fallback)
+    {
+        Result<bool> result = await command;
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowWarning(result.Error ?? fallback);
+        }
+    }
+}

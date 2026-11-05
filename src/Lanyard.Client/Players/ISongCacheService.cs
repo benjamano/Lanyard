@@ -12,7 +12,11 @@ public interface ISongCacheService
     /// Returns a local file path if the song is cached, otherwise downloads it first.
     /// Falls back to the API URL if caching is not possible (no space).
     /// </summary>
-    Task<string> GetAudioSourceAsync(Guid songId);
+    /// <remarks>
+    /// Cancelling only stops this caller waiting; a download that's started carries on into the
+    /// cache, so asking for the song again soon after is quick.
+    /// </remarks>
+    Task<string> GetAudioSourceAsync(Guid songId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Starts a background download of a song without blocking.

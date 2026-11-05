@@ -117,6 +117,7 @@ if (!builder.Environment.IsDevelopment())
 }
 builder.Services.AddScoped<ApplicationRolesService>();
 builder.Services.AddScoped<IPlaylistService, PlaylistService>();
+builder.Services.AddSingleton<IMusicLibraryEvents, MusicLibraryEvents>();
 builder.Services.AddScoped<IMusicScheduleService, MusicScheduleService>();
 // Singleton: it remembers what it last applied to each kiosk between ticks.
 builder.Services.AddSingleton<IMusicScheduleEngine, MusicScheduleEngine>();
@@ -135,6 +136,7 @@ builder.Services.AddScoped<IClientReleaseAdminService, ClientReleaseAdminService
 builder.Services.AddScoped<IClientDiagnosticsService, ClientDiagnosticsService>();
 builder.Services.AddScoped<IKioskSelfTestService, KioskSelfTestService>();
 builder.Services.AddScoped<IKioskHealthService, KioskHealthService>();
+builder.Services.AddScoped<IKioskClientListService, KioskClientListService>();
 builder.Services.AddScoped<IKioskOfflineManifestService, KioskOfflineManifestService>();
 builder.Services.Configure<KioskHealthOptions>(builder.Configuration.GetSection(KioskHealthOptions.SectionName));
 builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>();
@@ -173,6 +175,8 @@ builder.Services.AddSingleton<ITerminalEphemeralTokenService, TerminalEphemeralT
 builder.Services.AddSingleton<ITerminalEventBus, TerminalEventBus>();
 builder.Services.AddSingleton<ITimeOffEventBus, TimeOffEventBus>();
 builder.Services.AddSingleton<IShiftClaimEventBus, ShiftClaimEventBus>();
+builder.Services.AddSingleton<IKioskFleetEventBus, KioskFleetEventBus>();
+builder.Services.AddSingleton<IKioskClientListCache, KioskClientListCache>();
 builder.Services.AddScoped<IShiftClaimService, ShiftClaimService>();
 builder.Services.AddSingleton<IChatEventBus, ChatEventBus>();
 builder.Services.AddSingleton<IChatPresence, ChatPresence>();
@@ -226,9 +230,8 @@ builder.Services.AddSingleton<SignalRProjectionControlHubEvents>();
 builder.Services.AddSingleton<IVideoStreamTokenService, VideoStreamTokenService>();
 builder.Services.AddSingleton<IVideoStreamSignalingService, VideoStreamSignalingService>();
 builder.Services.Configure<VideoStreamingOptions>(builder.Configuration.GetSection("VideoStreaming"));
-builder.Services.AddSingleton<MusicPlayerService>();
-// Same instance either way - playback state lives in the singleton, so the interface must not get its own.
-builder.Services.AddSingleton<IMusicPlayerService>(sp => sp.GetRequiredService<MusicPlayerService>());
+// Playback state lives in this singleton; everything takes it through the interface.
+builder.Services.AddSingleton<IMusicPlayerService, MusicPlayerService>();
 builder.Services.AddScoped<ISongAnalysisService, SongAnalysisService>();
 builder.Services.AddSingleton<ISongAnalysisQueue, SongAnalysisQueue>();
 builder.Services.AddSingleton<IBeatClockService, BeatClockService>();
@@ -598,8 +601,10 @@ app.Use(async (context, next) =>
 
     context.Response.Headers["Content-Security-Policy"] =
         "default-src 'self'; " +
-        "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; " +
-        "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; " +
+        // Every script and stylesheet is served from Lanyard itself; third-party libraries are
+        // vendored under wwwroot/lib (see its README) rather than loaded from a CDN.
+        "script-src 'self' 'unsafe-inline'; " +
+        "style-src 'self' 'unsafe-inline'; " +
         "font-src 'self' data:; " +
         // blob: for the demo's "try your own branding" logo, which never leaves the visitor's browser.
         "img-src 'self' data: blob:; " +

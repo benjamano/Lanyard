@@ -1,0 +1,52 @@
+@using NAudio.Wave
+@inject IMusicPlayerService _player
+
+@* Slides up from the bottom once the full player has scrolled off screen, so the music can be
+   paused from anywhere in a long song list. musicPlayer.js shows and hides it. *@
+<div class="music-compact-bar" @ref="Element" role="region" aria-label="Now playing">
+    <MusicProgress Snapshot="Snapshot" Compact="true" ReadOnly="true" />
+    <div class="music-compact-bar-row">
+        <button type="button" class="music-compact-bar-info" @onclick="OnExpand" aria-label="Show the full player">
+            <MusicArtwork Seed="@(Snapshot.Song?.Id ?? Snapshot.ClientId)" Title="@Snapshot.Song?.Name" IsPlaying="@IsPlaying" Size="MusicArtwork.ArtworkSize.Small" />
+            <span class="music-compact-bar-text">
+                <span class="music-compact-bar-title">@(Snapshot.Song?.Name ?? "Nothing playing")</span>
+                <span class="music-compact-bar-kiosk">@KioskName</span>
+            </span>
+        </button>
+        <button type="button" class="music-play-button is-small" aria-label="@(IsPlaying ? "Pause" : "Play")"
+                disabled="@(!Snapshot.IsConnected || Snapshot.Song is null)" @onclick="TogglePlayAsync">
+            <FluentIcon Value="@(IsPlaying ? (Icon)new Icons.Filled.Size20.Pause() : new Icons.Filled.Size20.Play())" Color="Color.Custom" CustomColor="currentColor" />
+        </button>
+        <button type="button" class="music-icon-button" aria-label="Next" disabled="@(!Snapshot.IsConnected || Snapshot.Song is null)" @onclick="NextAsync">
+            <FluentIcon Value="@(new Icons.Filled.Size20.Next())" Color="Color.Default" />
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public MusicNowPlayingSnapshot Snapshot { get; set; } = default!;
+    [Parameter, EditorRequired] public string KioskName { get; set; } = "";
+    [Parameter] public EventCallback OnExpand { get; set; }
+
+    public ElementReference Element { get; private set; }
+
+    private bool IsPlaying => Snapshot.IsConnected && Snapshot.State == PlaybackState.Playing;
+
+    private async Task TogglePlayAsync()
+    {
+        Result<bool> result = await _player.TogglePlay(Snapshot.ClientId);
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowWarning(result.Error ?? "Couldn't reach the kiosk.");
+        }
+    }
+
+    private async Task NextAsync()
+    {
+        Result<bool> result = await _player.Next(Snapshot.ClientId);
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowWarning(result.Error ?? "There's nothing after this song.");
+        }
+    }
+}
