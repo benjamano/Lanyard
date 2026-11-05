@@ -842,7 +842,8 @@
       "The Music page and the music timeline dashboard widget no longer refresh every second while music plays, and update straight away when a kiosk goes offline or comes back.",
       "The Music page is now only for Admins, Managers and people with the CanControlMusic or CanManagePlaylists role. It used to open for anyone signed in.",
       "Music has its own item in the menu (it was tucked under Clients and only shown to Admins).",
-      "The CanManagePlaylists role now exists, so it can be given to people who should look after playlists without being Admins."
+      "The CanManagePlaylists role now exists, so it can be given to people who should look after playlists without being Admins.",
+      "With kiosk version 1.0.45, a kiosk responds to pause, stop and other commands straight away even while it's still downloading a song, and skipping quickly through songs no longer queues up downloads."
     ]
   }
 ]
