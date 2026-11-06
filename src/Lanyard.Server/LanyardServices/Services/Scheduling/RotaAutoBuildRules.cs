@@ -160,7 +160,7 @@ public static class RotaAutoBuildRules
                     ? "Everyone free would go over their weekly maximum, miss their rest between shifts, or has asked for that day off."
                     : possible == 0
                         ? $"Nobody here works as {slot.PositionName} and is free then."
-                        : $"Everyone who works as {slot.PositionName} is already busy then.";
+                        : $"Everyone else who could work as {slot.PositionName} then is already on another shift.";
 
                 picks.Add(new AutoBuildPick(shift, Line(slot, null, null, null, whyOpen)));
                 continue;
