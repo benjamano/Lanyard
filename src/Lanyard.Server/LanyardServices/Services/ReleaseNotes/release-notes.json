@@ -871,7 +871,11 @@
       "Edit Mode and Blind Editing Mode are replaced by a simple Live / Blind switch. In Blind, an amber bar reminds you the lights aren't following, with Send to lights and Discard changes.",
       "New on the DMX desk: a Master slider that dims every light together without moving heads or changing colours, a Blackout button, and a Lock that stops faders being moved by accident (on by default on phones).",
       "Scenes show Run, Stop and Hold buttons, their keybinds, how far through a running scene is, and why a scene stopped if something went wrong. Stop all stops every scene on the kiosk.",
-      "The DMX desk lists every kiosk, including ones that are switched off (marked offline), and remembers the one you used last."
+      "The DMX desk lists every kiosk, including ones that are switched off (marked offline), and remembers the one you used last.",
+      "DMX scenes have their own editor page. Steps sit in a strip along the top with a preview of each look; set a step with the fixture cards or faders, and it saves as you go.",
+      "Scene steps can be renamed, dragged into a new order, duplicated, and set to fractions of a second (such as 0.25 s) for fast chases.",
+      "Capture lights saves what the lights are showing right now into a step. Channels a step doesn't set are shown dimmed and left alone when it plays; × takes a channel out of a step.",
+      "The scene editor starts Blind so the lights don't change while you work; Show on lights previews the selected step on the kiosk. Deleting a scene warns you if an automation rule runs it, and adding a keybind warns if another scene already uses that key."
     ]
   }
 ]

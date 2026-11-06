@@ -38,6 +38,9 @@
                           Value="@ValueAt(address)"
                           Disabled="@Disabled"
                           Patches="@State.PatchesFor(address)"
+                          StepMode="@State.IsEditingStep"
+                          IsUnset="@(State.IsEditingStep && !State.IsInStep(address))"
+                          OnClear="OnFaderCleared"
                           OnChange="OnFaderChanged" />
             }
         </div>
@@ -138,4 +141,6 @@
     }
 
     private Task OnFaderChanged(DmxFaderChange change) => State.SetChannelAsync(change.Address, change.Value);
+
+    private Task OnFaderCleared(int address) => State.ClearStepChannelAsync(address);
 }

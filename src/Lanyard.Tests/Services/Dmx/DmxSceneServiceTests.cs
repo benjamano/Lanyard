@@ -263,4 +263,153 @@ public class DmxSceneServiceTests
 
         Assert.IsFalse(result.IsSuccess);
     }
+
+    private static async Task<List<(Guid Id, int Number, string Name)>> StepsOfAsync(Harness harness, Guid sceneId)
+    {
+        await using ApplicationDbContext ctx = harness.System();
+
+        return (await ctx.DmxSceneSteps.Where(s => s.SceneId == sceneId).OrderBy(s => s.StepNumber).ToListAsync())
+            .Select(s => (s.Id, s.StepNumber, s.Name))
+            .ToList();
+    }
+
+    [TestMethod]
+    public async Task DuplicateStepAsync_CopiesValuesToJustAfterItAndShiftsTheRest()
+    {
+        Harness harness = new();
+        Guid clientId = await harness.SeedClientAsync();
+        (Guid sceneId, List<Guid> steps) = await harness.SeedSceneAsync(clientId, stepNumbers: [1, 2]);
+        DmxSceneService service = harness.Service();
+        await service.SaveSceneStepChannelValuesAsync(steps[0], Batch((5, 50), (6, 60)));
+
+        Result<DmxSceneStep> copy = await service.DuplicateStepAsync(steps[0]);
+
+        Assert.IsTrue(copy.IsSuccess, copy.Error);
+        List<(Guid Id, int Number, string Name)> after = await StepsOfAsync(harness, sceneId);
+        CollectionAssert.AreEqual(new[] { steps[0], copy.Data!.Id, steps[1] }, after.Select(s => s.Id).ToArray());
+        CollectionAssert.AreEqual(new[] { 1, 2, 3 }, after.Select(s => s.Number).ToArray());
+        Assert.AreEqual("Step 1 copy", after[1].Name);
+
+        await using ApplicationDbContext ctx = harness.System();
+        Assert.AreEqual(2, await ctx.DmxSceneStepChannelValues.CountAsync(v => v.SceneStepId == copy.Data.Id));
+    }
+
+    [TestMethod]
+    public async Task ReorderStepsAsync_RenumbersInTheGivenOrder()
+    {
+        Harness harness = new();
+        Guid clientId = await harness.SeedClientAsync();
+        (Guid sceneId, List<Guid> steps) = await harness.SeedSceneAsync(clientId, stepNumbers: [1, 2, 3]);
+
+        Result<bool> result = await harness.Service().ReorderStepsAsync(sceneId, [steps[2], steps[0], steps[1]]);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        CollectionAssert.AreEqual(new[] { steps[2], steps[0], steps[1] }, (await StepsOfAsync(harness, sceneId)).Select(s => s.Id).ToArray());
+        harness.Runner.Verify(r => r.StopScene(sceneId), Times.Once);
+    }
+
+    [TestMethod]
+    public async Task ReorderStepsAsync_AStaleList_IsRefusedAndNothingMoves()
+    {
+        Harness harness = new();
+        Guid clientId = await harness.SeedClientAsync();
+        (Guid sceneId, List<Guid> steps) = await harness.SeedSceneAsync(clientId, stepNumbers: [1, 2, 3]);
+
+        Result<bool> missing = await harness.Service().ReorderStepsAsync(sceneId, [steps[1], steps[0]]);
+        Result<bool> repeated = await harness.Service().ReorderStepsAsync(sceneId, [steps[1], steps[1], steps[0]]);
+
+        Assert.IsFalse(missing.IsSuccess);
+        Assert.IsFalse(repeated.IsSuccess);
+        CollectionAssert.AreEqual(steps.ToArray(), (await StepsOfAsync(harness, sceneId)).Select(s => s.Id).ToArray());
+    }
+
+    [TestMethod]
+    public async Task ReplaceStepChannelValuesAsync_LeavesExactlyTheCapturedChannels()
+    {
+        Harness harness = new();
+        Guid clientId = await harness.SeedClientAsync();
+        (_, List<Guid> steps) = await harness.SeedSceneAsync(clientId, stepNumbers: 1);
+        DmxSceneService service = harness.Service();
+        await service.SaveSceneStepChannelValuesAsync(steps[0], Batch((1, 1), (2, 2)));
+
+        Result<bool> result = await service.ReplaceStepChannelValuesAsync(steps[0], Batch((2, 20), (3, 30)));
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        await using ApplicationDbContext ctx = harness.System();
+        Dictionary<int, byte> values = await ctx.DmxSceneStepChannelValues.Where(v => v.SceneStepId == steps[0]).ToDictionaryAsync(v => v.ChannelNumber, v => v.Value);
+        CollectionAssert.AreEquivalent(new[] { 2, 3 }, values.Keys.ToArray());
+        Assert.AreEqual((byte)20, values[2]);
+    }
+
+    [TestMethod]
+    public async Task ClearStepChannelAsync_RemovesTheChannelNotJustZeroesIt()
+    {
+        Harness harness = new();
+        Guid clientId = await harness.SeedClientAsync();
+        (Guid sceneId, List<Guid> steps) = await harness.SeedSceneAsync(clientId, stepNumbers: 1);
+        DmxSceneService service = harness.Service();
+        await service.SaveSceneStepChannelValuesAsync(steps[0], Batch((4, 99)));
+
+        Result<bool> result = await service.ClearStepChannelAsync(steps[0], 4);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        await using ApplicationDbContext ctx = harness.System();
+        Assert.AreEqual(0, await ctx.DmxSceneStepChannelValues.CountAsync());
+    }
+
+    [TestMethod]
+    public async Task ClearStepChannelAsync_AnotherCompanysStep_LeavesItAlone()
+    {
+        Harness harness = new();
+        Guid theirClient = await harness.SeedClientAsync(OtherCompany);
+        (_, List<Guid> steps) = await harness.SeedSceneAsync(theirClient, OtherCompany, stepNumbers: 1);
+        await harness.Service(OtherCompany).SaveSceneStepChannelValuesAsync(steps[0], Batch((4, 99)));
+
+        await harness.Service(MyCompany).ClearStepChannelAsync(steps[0], 4);
+
+        await using ApplicationDbContext ctx = harness.System();
+        Assert.AreEqual(1, await ctx.DmxSceneStepChannelValues.CountAsync());
+    }
+
+    [TestMethod]
+    public async Task RenameStepAsync_TrimsAndRefusesBlank()
+    {
+        Harness harness = new();
+        Guid clientId = await harness.SeedClientAsync();
+        (Guid sceneId, List<Guid> steps) = await harness.SeedSceneAsync(clientId, stepNumbers: 1);
+        DmxSceneService service = harness.Service();
+
+        Assert.IsFalse((await service.RenameStepAsync(steps[0], "   ")).IsSuccess);
+        Assert.IsTrue((await service.RenameStepAsync(steps[0], "  Red hit ")).IsSuccess);
+
+        Assert.AreEqual("Red hit", (await StepsOfAsync(harness, sceneId))[0].Name);
+        harness.Runner.Verify(r => r.StopScene(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [TestMethod]
+    public async Task GetAutomationRulesUsingSceneAsync_FindsRulesWhoseDmxActionRunsIt()
+    {
+        Harness harness = new();
+        Guid clientId = await harness.SeedClientAsync();
+        (Guid sceneId, _) = await harness.SeedSceneAsync(clientId);
+        (Guid otherScene, _) = await harness.SeedSceneAsync(clientId, name: "Other");
+
+        await using (ApplicationDbContext ctx = harness.System())
+        {
+            AutomationRule uses = new() { Id = Guid.NewGuid(), CompanyId = MyCompany, Name = "Winner lights", TriggerClientId = clientId, IsActive = true };
+            AutomationRule other = new() { Id = Guid.NewGuid(), CompanyId = MyCompany, Name = "Other rule", TriggerClientId = clientId, IsActive = true };
+            ctx.AutomationRules.AddRange(uses, other);
+            ctx.AutomationRuleActions.AddRange(
+                new AutomationRuleAction { Id = Guid.NewGuid(), AutomationRuleId = uses.Id, ActionType = AutomationActionTypes.DmxSceneControl, IsActive = true,
+                    ParametersJson = $"{{\"TargetClientId\":\"{clientId}\",\"Operation\":\"StartScene\",\"SceneId\":\"{sceneId}\"}}" },
+                new AutomationRuleAction { Id = Guid.NewGuid(), AutomationRuleId = other.Id, ActionType = AutomationActionTypes.DmxSceneControl, IsActive = true,
+                    ParametersJson = $"{{\"TargetClientId\":\"{clientId}\",\"Operation\":\"StartScene\",\"SceneId\":\"{otherScene}\"}}" });
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<IReadOnlyList<string>> result = await harness.Service().GetAutomationRulesUsingSceneAsync(sceneId);
+
+        CollectionAssert.AreEqual(new[] { "Winner lights" }, result.Data!.ToArray());
+    }
 }
+

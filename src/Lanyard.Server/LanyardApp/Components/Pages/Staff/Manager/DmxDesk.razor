@@ -18,7 +18,7 @@
 
 <PageTitle>DMX Desk</PageTitle>
 
-<div class="dmx-page">
+<DmxSurface>
     <div class="dmx-toolbar" role="toolbar" aria-label="DMX desk">
         <div class="dmx-toolbar-kiosk">
             <ClientSelector InitialClientId="@initialClientId" OnClientSelected="SetSelectedClientAsync" />
@@ -84,17 +84,7 @@
         </div>
     }
 
-    @if (state.IsEditingStep)
-    {
-        <div class="dmx-banner dmx-banner--info" role="status">
-            <span>
-                <strong>Editing step @EditingStepPosition of @(state.EditingScene?.Name).</strong>
-                Faders save to the step. @(state.Output == DmxDeskOutput.Live ? "Live: the lights show it too." : "Choose Live to see it on the lights.")
-            </span>
-            <FluentButton Appearance="ButtonAppearance.Outline" Size="ButtonSize.Small" OnClick="CloseSceneEditorAsync">Done editing</FluentButton>
-        </div>
-    }
-    else if (state.Output == DmxDeskOutput.Blind)
+    @if (state.Output == DmxDeskOutput.Blind)
     {
         <div class="dmx-banner dmx-banner--warning" role="status">
             <span><strong>Blind.</strong> The lights aren't following the desk. @(state.HasUnsentChanges ? "You have changes the lights haven't seen." : "Move faders, then send them when ready.")</span>
@@ -102,19 +92,6 @@
                 <FluentButton Appearance="ButtonAppearance.Primary" Size="ButtonSize.Small" Disabled="@(!state.HasUnsentChanges)" OnClick="SendToLightsAsync">Send to lights</FluentButton>
                 <FluentButton Appearance="ButtonAppearance.Outline" Size="ButtonSize.Small" Disabled="@(!state.HasUnsentChanges)" OnClick="DiscardAsync">Discard changes</FluentButton>
             </span>
-        </div>
-    }
-
-    @if (preview.IsActive)
-    {
-        <div class="dmx-banner dmx-banner--preview" role="status">
-            <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small"
-                          IconStart="@(preview.IsPlaying ? new Icons.Regular.Size20.Pause() : new Icons.Regular.Size20.Play())"
-                          OnClick="preview.TogglePlay" aria-label="@(preview.IsPlaying ? "Pause preview" : "Play preview")" />
-            <span><strong>Preview</strong> on screen only · step @(preview.StepIndex + 1) of @preview.Steps.Count</span>
-            <input type="range" class="dmx-preview-scrub" min="0" max="@(preview.Steps.Count - 1)" value="@preview.StepIndex"
-                   aria-label="Preview step" @oninput="OnScrub" />
-            <FluentButton Appearance="ButtonAppearance.Outline" Size="ButtonSize.Small" OnClick="StopPreview">Stop preview</FluentButton>
         </div>
     }
 
@@ -136,15 +113,11 @@
             }
             else if (tab == DeskTab.Channels)
             {
-                <DmxChannelsView State="@state" Version="@(state.Version + previewVersion)"
-                                 OverrideValues="@(preview.IsActive ? preview.Values : null)"
-                                 Disabled="@(state.IsLocked || preview.IsActive)" />
+                <DmxChannelsView State="@state" Version="@state.Version" Disabled="@state.IsLocked" />
             }
             else
             {
-                <DmxFixturesView State="@state" Version="@(state.Version + previewVersion)"
-                                 OverrideValues="@(preview.IsActive ? preview.Values : null)"
-                                 OverrideView="@(preview.IsActive ? preview.ValuesView : null)"
+                <DmxFixturesView State="@state" Version="@state.Version"
                                  Disabled="@state.IsLocked"
                                  OnManageFixtures="OpenFixtureManager" />
             }
@@ -152,32 +125,12 @@
         </section>
 
         <aside class="dmx-side @(tab == DeskTab.Scenes ? "is-phone-active" : null)">
-            @if (openScene != null)
-            {
-                <DmxSceneEditor ClientId="@state.ClientId"
-                                OpenScene="@openScene"
-                                OnClose="CloseSceneEditorAsync"
-                                OnSceneDeleted="OnSceneDeletedAsync"
-                                OnEditingStepChanged="OnEditingStepChangedAsync"
-                                IsEditModeEnabled="@(!state.IsLocked)"
-                                OnSceneEdited="OnSceneEdited"
-                                OnPreviewingStepsChanged="OnPreviewingStepsChanged"
-                                PreviewingSceneId="@preview.SceneId" />
-            }
-
-            @* Always mounted, so scene keybinds keep working while the editor is open. *@
-            <div class="@(openScene != null ? "dmx-side-hidden" : null)">
-                <DmxSceneSelector ClientId="@state.ClientId"
-                                  IsLocked="@state.IsLocked"
-                                  DeletedSceneId="@deletedSceneId"
-                                  EditedSceneId="@editedScene?.Id"
-                                  EditedSceneVersion="@editedSceneVersion"
-                                  OnOpenScene="OpenScene"
-                                  CurrentlyOpenSceneId="@openScene?.Id" />
-            </div>
+            <DmxSceneSelector ClientId="@state.ClientId"
+                              IsLocked="@state.IsLocked"
+                              OnOpenScene="OpenScene" />
         </aside>
     </div>
-</div>
+</DmxSurface>
 
 @code {
     [SupplyParameterFromQuery(Name = "client")]
@@ -186,16 +139,9 @@
     private enum DeskTab { Fixtures, Channels, Scenes }
 
     private DmxDeskState state = null!;
-    private DmxScenePreview preview = null!;
-    private int previewVersion;
 
     private DeskTab tab = DeskTab.Fixtures;
     private Guid? initialClientId;
-
-    private DmxScene? openScene;
-    private DmxScene? editedScene;
-    private int editedSceneVersion;
-    private Guid? deletedSceneId;
 
     private IJSObjectReference? _deskModule;
     private bool _interactive;
@@ -210,17 +156,14 @@
 
     private string MasterPercent => $"{Math.Round(state.OutputState.GrandMaster / 2.55)}%";
 
-    private int EditingStepPosition => state.EditingStep?.StepNumber ?? 0;
 
     protected override void OnInitialized()
     {
         state = new DmxDeskState(_dmxDesk, _dmxFixtureService, _dmxSceneService,
             work => InvokeAsync(work),
             message => _toastService.ShowError(message));
-        preview = new DmxScenePreview(work => InvokeAsync(work));
 
         state.Changed += ScheduleRender;
-        preview.Changed += OnPreviewChanged;
 
         _renderTimer = new Timer(_ =>
         {
@@ -262,12 +205,6 @@
         }
     }
 
-    private void OnPreviewChanged()
-    {
-        previewVersion++;
-        ScheduleRender();
-    }
-
     private void ScheduleRender()
     {
         if (Interlocked.Exchange(ref _renderPending, 1) == 0)
@@ -288,10 +225,6 @@
         {
             return;
         }
-
-        // The open scene, the step being edited and the preview all belong to the kiosk we're leaving.
-        preview.Stop();
-        openScene = null;
 
         await state.SetClientAsync(clientId);
 
@@ -376,64 +309,13 @@
         await state.RefreshFixturesAsync();
     }
 
-    private void OpenScene(DmxScene scene)
-    {
-        openScene = scene;
-    }
-
-    private async Task CloseSceneEditorAsync()
-    {
-        openScene = null;
-        preview.Stop();
-        await state.EditStepAsync(null, null);
-    }
-
-    private async Task OnSceneDeletedAsync(DmxScene scene)
-    {
-        deletedSceneId = scene.Id;
-
-        if (openScene?.Id == scene.Id)
-        {
-            await CloseSceneEditorAsync();
-        }
-    }
-
-    private Task OnEditingStepChangedAsync(DmxSceneStep? step) => state.EditStepAsync(openScene, step);
-
-    private void OnSceneEdited(DmxScene scene)
-    {
-        editedScene = scene;
-        editedSceneVersion++;
-    }
-
-    private void OnPreviewingStepsChanged(List<DmxSceneStep>? steps)
-    {
-        if (steps != null && openScene != null)
-        {
-            preview.Start(openScene.Id, steps, openScene.Loop);
-        }
-        else
-        {
-            preview.Stop();
-        }
-    }
-
-    private void StopPreview() => preview.Stop();
-
-    private void OnScrub(ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out int index))
-        {
-            preview.ScrubTo(index);
-        }
-    }
+    // Scenes are edited on their own page.
+    private void OpenScene(DmxScene scene) => _navigationManager.NavigateTo($"/dmx/scenes/{scene.Id}");
 
     public async ValueTask DisposeAsync()
     {
         state.Changed -= ScheduleRender;
-        preview.Changed -= OnPreviewChanged;
         _renderTimer?.Dispose();
-        preview.Dispose();
 
         await state.DisposeAsync();
 

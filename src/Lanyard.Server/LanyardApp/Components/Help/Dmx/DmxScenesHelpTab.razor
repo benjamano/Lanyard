@@ -6,14 +6,32 @@
 
     <HelpSection Title="Making a scene">
         <ol>
-            <li>Press <strong>New scene</strong> and give it a <strong>Scene name</strong>.</li>
-            <li>Press the pencil next to the scene to edit it, then add steps.</li>
-            <li>Click a step to edit it. The desk switches to that step and shows a blue bar: whatever you set on the
-                fixtures or faders is saved to the step as you go. It starts in <strong>Blind</strong>; choose
-                <strong>Live</strong> to see the step on the lights while you work.</li>
-            <li>Set each step's <strong>Duration</strong> (hh:mm:ss). Press <strong>Done editing</strong> when finished.</li>
+            <li>On the desk, press <strong>New scene</strong> and give it a name. Its editor opens. (The pencil next to
+                a scene opens the editor later.)</li>
+            <li>Press <strong>Add step</strong>. A step is one look: the levels the lights go to, and how long they hold.</li>
+            <li>Set the step with the fixture cards or the <strong>Channels</strong> faders below. Everything saves as
+                you go; the top bar says <strong>Saved</strong>.</li>
+            <li>Set how long the step lasts in <strong>Seconds</strong> (fractions work, such as 0.25 for a fast chase), and
+                give it a <strong>Name</strong> if you like.</li>
+            <li>Add more steps. Each step shows small coloured blocks for how the lights will look.</li>
         </ol>
-        <FluentText>The play button in the editor previews the scene on screen only; the lights don't change.</FluentText>
+    </HelpSection>
+
+    <HelpSection Title="Working on steps">
+        <ul>
+            <li>Drag a step to move it, or use the arrows. <strong>Duplicate</strong> copies a step to just after itself,
+                and <strong>Delete step</strong> removes it.</li>
+            <li><strong>Capture lights</strong> makes the step look exactly like the lights do right now, so you can set
+                a look on the desk first and then save it into a step.</li>
+            <li>On the <strong>Channels</strong> tab, dimmed faders aren't part of the step: when it plays, those channels
+                are left as they are (which is different from 0). Move a fader to add it; press <strong>×</strong> to
+                take a channel out.</li>
+            <li>The editor starts <strong>Blind</strong>, so the lights don't change while you work. Choose
+                <strong>Show on lights</strong> to see the selected step on the kiosk.</li>
+            <li><strong>Preview</strong> plays the scene on screen only. <strong>Run on kiosk</strong> plays it for real.
+                Changing a running scene stops it, so it never plays an old version.</li>
+            <li><strong>Delete</strong> at the top removes the whole scene, and tells you first if an automation rule runs it.</li>
+        </ul>
     </HelpSection>
 
     <HelpSection Title="Scene settings">
@@ -22,7 +40,8 @@
             <li><strong>Momentary</strong>: the scene only runs while you hold its play button down, like a flash button.</li>
             <li><strong>BPM sync</strong>: change steps on the beat of the song that's playing. Each step then lasts its
                 <strong>Beats</strong>. When nothing is playing, steps use their fixed duration.</li>
-            <li><strong>Keybinds</strong>: keyboard keys that run the scene from the desk.</li>
+            <li><strong>Keybinds</strong>: keyboard keys that run the scene while the desk is open. If another scene
+                already uses the key you press, the editor says so (pressing it then runs both). Tab and Enter can't be used.</li>
         </ul>
     </HelpSection>
 
