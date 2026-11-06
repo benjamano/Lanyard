@@ -6,7 +6,7 @@ namespace Lanyard.Infrastructure.DTO.Scheduling;
 // (Caution). Kind lets the UI pick an icon and colour; Text is what it says.
 public record SuggestionReason(SuggestionReasonKind Kind, string Text)
 {
-    public bool IsCaution => Kind is SuggestionReasonKind.OverMaxHours or SuggestionReasonKind.PendingTimeOff or SuggestionReasonKind.ShortRest;
+    public bool IsCaution => Kind is SuggestionReasonKind.OverMaxHours or SuggestionReasonKind.PendingTimeOff or SuggestionReasonKind.ShortRest or SuggestionReasonKind.OverPreferredHours;
 }
 
 // One person considered for a shift. Ranked people have Rank 1, 2, 3...; someone who can't work it

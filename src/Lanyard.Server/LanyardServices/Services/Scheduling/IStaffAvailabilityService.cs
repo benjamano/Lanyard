@@ -17,4 +17,10 @@ public interface IStaffAvailabilityService
     Task<Result<StaffAvailability>> SaveAsync(LocationScope scope, StaffAvailability row, string actingUserId);
 
     Task<Result<bool>> RemoveAsync(LocationScope scope, Guid id, string actingUserId);
+
+    // How much they'd like to work each week, or null if they haven't said.
+    Task<Result<StaffWorkPreference?>> GetPreferenceAsync(LocationScope scope, string userId, string actingUserId);
+
+    // Sets (or, with both values null, clears) how much they'd like to work each week.
+    Task<Result<StaffWorkPreference?>> SavePreferenceAsync(LocationScope scope, string userId, int? maxShiftsPerWeek, decimal? maxHoursPerWeek, string actingUserId);
 }

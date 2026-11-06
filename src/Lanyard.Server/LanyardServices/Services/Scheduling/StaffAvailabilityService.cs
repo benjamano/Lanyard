@@ -115,6 +115,98 @@ public class StaffAvailabilityService(
         }
     }
 
+    internal static IQueryable<StaffWorkPreference> PreferencesForUsers(ApplicationDbContext ctx, IReadOnlyCollection<string> userIds, int companyId) =>
+        ctx.StaffWorkPreferences
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => x.CompanyId == companyId && userIds.Contains(x.UserId));
+
+    public const int MaxShiftsWish = 14;
+    public const decimal MaxHoursWish = 100m;
+
+    public async Task<Result<StaffWorkPreference?>> GetPreferenceAsync(LocationScope scope, string userId, string actingUserId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            (int? companyId, string? error) = await ResolveCompanyAsync(ctx, scope, userId, actingUserId);
+
+            if (companyId is not int company)
+            {
+                return Result<StaffWorkPreference?>.Fail(error!);
+            }
+
+            return Result<StaffWorkPreference?>.Ok(await PreferencesForUsers(ctx, [userId], company).FirstOrDefaultAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load work preference for {UserId}", userId);
+            return Result<StaffWorkPreference?>.Fail($"Failed to load how much they'd like to work: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<StaffWorkPreference?>> SavePreferenceAsync(LocationScope scope, string userId, int? maxShiftsPerWeek, decimal? maxHoursPerWeek, string actingUserId)
+    {
+        try
+        {
+            if (maxShiftsPerWeek is int shifts && (shifts < 1 || shifts > MaxShiftsWish))
+            {
+                return Result<StaffWorkPreference?>.Fail($"Shifts a week must be between 1 and {MaxShiftsWish}.");
+            }
+
+            if (maxHoursPerWeek is decimal hours && (hours <= 0 || hours > MaxHoursWish))
+            {
+                return Result<StaffWorkPreference?>.Fail($"Hours a week must be more than 0 and no more than {MaxHoursWish:0}.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            (int? companyId, string? error) = await ResolveCompanyAsync(ctx, scope, userId, actingUserId);
+
+            if (companyId is not int company)
+            {
+                return Result<StaffWorkPreference?>.Fail(error!);
+            }
+
+            StaffWorkPreference? row = await ctx.StaffWorkPreferences.FirstOrDefaultAsync(x => x.CompanyId == company && x.UserId == userId);
+
+            if (maxShiftsPerWeek is null && maxHoursPerWeek is null)
+            {
+                if (row is not null)
+                {
+                    ctx.StaffWorkPreferences.Remove(row);
+                    await ctx.SaveChangesAsync();
+                }
+
+                _logger.LogInformation("Work preference cleared for {UserId} by {ActingUserId}", userId, actingUserId);
+                return Result<StaffWorkPreference?>.Ok(null);
+            }
+
+            if (row is null)
+            {
+                row = new StaffWorkPreference { Id = Guid.NewGuid(), CompanyId = company, UserId = userId };
+                ctx.StaffWorkPreferences.Add(row);
+            }
+
+            row.MaxShiftsPerWeek = maxShiftsPerWeek;
+            row.MaxHoursPerWeek = maxHoursPerWeek is decimal h ? Math.Round(h, 2) : null;
+            row.UpdateDate = DateTime.UtcNow;
+            row.UpdatedByUserId = actingUserId == userId ? null : actingUserId;
+
+            await ctx.SaveChangesAsync();
+
+            _logger.LogInformation("Work preference saved for {UserId} by {ActingUserId}", userId, actingUserId);
+
+            return Result<StaffWorkPreference?>.Ok(row);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save work preference for {UserId}", userId);
+            return Result<StaffWorkPreference?>.Fail($"Failed to save how much they'd like to work: {ex.Message}");
+        }
+    }
+
     public async Task<Result<bool>> RemoveAsync(LocationScope scope, Guid id, string actingUserId)
     {
         try

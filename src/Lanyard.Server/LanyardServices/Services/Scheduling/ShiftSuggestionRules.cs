@@ -9,7 +9,8 @@ namespace Lanyard.Application.Services.Scheduling;
 // week to the day after it (the extra days are for the rest-gap check). CantWorkReason is
 // ShiftClaimRules.WhyCantWork's answer - null when they can work it. PendingTimeOffName is the
 // type of an undecided time-off request covering the shift's day ("holiday"), or null.
-// Availability is their active StaffAvailability rows at this company.
+// Availability is their active StaffAvailability rows at this company; Wish is how much they'd
+// like to work each week, if they've said.
 public record SuggestionCandidate(
     string UserId,
     string DisplayName,
@@ -20,7 +21,8 @@ public record SuggestionCandidate(
     string? PendingTimeOffName = null,
     bool HasPendingClaim = false,
     string? CantWorkReason = null,
-    IReadOnlyCollection<StaffAvailability>? Availability = null);
+    IReadOnlyCollection<StaffAvailability>? Availability = null,
+    StaffWorkPreference? Wish = null);
 
 // Ranks people for one shift. Pure and deterministic - no database, no clock - so it can be
 // tested directly and reused by any later "fill the week" drafting.
@@ -30,6 +32,7 @@ public record SuggestionCandidate(
 // a fixed list of tie-breaks rather than a weighted score, so it can always be explained ("ahead
 // because they need another shift this week"):
 //   1. wouldn't go over their weekly maximum
+//   1b. wouldn't go past how much they've said they'd like to work (shifts or hours a week)
 //   2. hasn't asked for that day off
 //   3. gets a proper rest either side (11 h, the Working Time Regulations daily rest)
 //   4. needs the shift to meet their contract minimum this week
@@ -53,6 +56,7 @@ public static class ShiftSuggestionRules
         decimal HoursAfter,
         List<SuggestionReason> Reasons,
         bool BreaksMax,
+        bool PastWish,
         bool PendingTimeOff,
         bool ShortRest,
         bool HelpsContract,
@@ -102,6 +106,7 @@ public static class ShiftSuggestionRules
 
         List<ShiftSuggestion> ranked = scored
             .OrderBy(x => x.BreaksMax)
+            .ThenBy(x => x.PastWish)
             .ThenBy(x => x.PendingTimeOff)
             .ThenBy(x => x.ShortRest)
             .ThenByDescending(x => x.HelpsContract)
@@ -186,6 +191,24 @@ public static class ShiftSuggestionRules
                 $"Would go over their {RotaFormat.Hours(maxHours)} weekly maximum"));
         }
 
+        bool pastWish = false;
+
+        if (person.Wish is StaffWorkPreference wish)
+        {
+            if (wish.MaxShiftsPerWeek is int wishShifts && week.Count + 1 > wishShifts)
+            {
+                reasons.Add(new SuggestionReason(SuggestionReasonKind.OverPreferredHours,
+                    $"Would rather work at most {wishShifts} {(wishShifts == 1 ? "shift" : "shifts")} a week"));
+                pastWish = true;
+            }
+            else if (wish.MaxHoursPerWeek is decimal wishHours && after > wishHours)
+            {
+                reasons.Add(new SuggestionReason(SuggestionReasonKind.OverPreferredHours,
+                    $"Would rather work no more than {RotaFormat.Hours(wishHours)} a week"));
+                pastWish = true;
+            }
+        }
+
         bool pendingTimeOff = person.PendingTimeOffName is not null;
 
         if (person.PendingTimeOffName is string timeOffName)
@@ -215,7 +238,7 @@ public static class ShiftSuggestionRules
             shortRest = true;
         }
 
-        return new Scored(person, before, after, reasons, breaksMax, pendingTimeOff, shortRest, helpsContract, prefersTime, usualPosition);
+        return new Scored(person, before, after, reasons, breaksMax, pastWish, pendingTimeOff, shortRest, helpsContract, prefersTime, usualPosition);
     }
 
     // The weekly hours someone's load is measured against: their maximum, else their minimum, else

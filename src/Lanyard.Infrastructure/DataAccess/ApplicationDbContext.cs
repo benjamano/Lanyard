@@ -125,6 +125,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ContractRequirement> ContractRequirements { get; set; }
         public DbSet<UserClockInPin> UserClockInPins { get; set; }
         public DbSet<StaffAvailability> StaffAvailabilities { get; set; }
+        public DbSet<StaffWorkPreference> StaffWorkPreferences { get; set; }
         public DbSet<ShiftTemplate> ShiftTemplates { get; set; }
         public DbSet<ShiftTemplateSlot> ShiftTemplateSlots { get; set; }
         public DbSet<CompanySchedulingSettings> CompanySchedulingSettings { get; set; }
@@ -550,6 +551,20 @@ namespace Lanyard.Infrastructure.DataAccess
 
             modelBuilder.Entity<StaffAvailability>()
                 .HasIndex(x => new { x.UserId, x.DayOfWeek });
+
+            modelBuilder.Entity<StaffWorkPreference>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<StaffWorkPreference>()
+                .HasIndex(x => new { x.CompanyId, x.UserId })
+                .IsUnique();
+
+            modelBuilder.Entity<StaffWorkPreference>()
+                .Property(x => x.MaxHoursPerWeek)
+                .HasPrecision(5, 2);
 
             // A location's weekly shift templates, read for one location at a time. Slots are part
             // of their template (replaced whenever it's saved); a position in use can only be

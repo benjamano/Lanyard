@@ -207,4 +207,31 @@ public class RotaAutoBuildRulesTests
         Assert.AreEqual("aaron", picks.Single(x => x.Shift.StaffPositionId == Duty).Shift.UserId);
         Assert.AreEqual("zoe", picks.Single(x => x.Shift.StaffPositionId == Host).Shift.UserId);
     }
+
+    [TestMethod]
+    public void Assign_PastSomeonesWish_OnlyPersonLeft_StillPicked()
+    {
+        List<DemandSlot> slots = RotaAutoBuildRules.ExpandTemplates([Template(slots: [(Host, "Host", 1)])], Saturday, Saturday);
+        AutoBuildWorker amy = Worker("Amy", Host) with { Wish = new StaffWorkPreference { CompanyId = 1, UserId = "amy", MaxHoursPerWeek = 2 } };
+
+        List<AutoBuildPick> picks = RotaAutoBuildRules.Assign(1, slots, [amy], (_, _) => null, "m", Now);
+
+        Assert.AreEqual("amy", picks.Single().Shift.UserId, "a wish is soft");
+    }
+
+    [TestMethod]
+    public void Assign_PastSomeonesWish_SomeoneElsePickedFirst()
+    {
+        List<DemandSlot> slots = RotaAutoBuildRules.ExpandTemplates([Template(slots: [(Host, "Host", 1)])], Saturday, Saturday);
+        AutoBuildWorker amy = Worker("Amy", Host) with { Wish = new StaffWorkPreference { CompanyId = 1, UserId = "amy", MaxShiftsPerWeek = 1 } };
+        amy.Shifts.Add(new Shift { Id = Guid.NewGuid(), LocationId = 1, UserId = "amy", CreateByUserId = "m", IsActive = true,
+            StartUtc = RotaTime.ToUtc(Week, new TimeOnly(9, 0)), EndUtc = RotaTime.ToUtc(Week, new TimeOnly(10, 0)) });
+        AutoBuildWorker tom = Worker("Tom", Host);
+        tom.Shifts.Add(new Shift { Id = Guid.NewGuid(), LocationId = 1, UserId = "tom", CreateByUserId = "m", IsActive = true,
+            StartUtc = RotaTime.ToUtc(Week, new TimeOnly(9, 0)), EndUtc = RotaTime.ToUtc(Week, new TimeOnly(17, 0)) });
+
+        List<AutoBuildPick> picks = RotaAutoBuildRules.Assign(1, slots, [amy, tom], (_, _) => null, "m", Now);
+
+        Assert.AreEqual("tom", picks.Single().Shift.UserId);
+    }
 }

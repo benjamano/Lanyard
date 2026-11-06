@@ -3960,6 +3960,42 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("StaffPositionRequiredCourses");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.StaffWorkPreference", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("MaxHoursPerWeek")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<int?>("MaxShiftsPerWeek")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("CompanyId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("StaffWorkPreferences");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.TimeEntry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6370,6 +6406,25 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("Course");
 
                     b.Navigation("StaffPosition");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.StaffWorkPreference", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.TimeEntry", b =>

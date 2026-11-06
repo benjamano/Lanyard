@@ -536,4 +536,37 @@ public class ShiftSuggestionRulesTests
 
         Assert.AreEqual(0, result.Ranked[0].Reasons.Count);
     }
+
+    [TestMethod]
+    public void Rank_PastTheirWishedHours_BehindOthersButStillSuggested()
+    {
+        StaffWorkPreference wish = new() { CompanyId = 1, UserId = "amy", MaxHoursPerWeek = 4 };
+        SuggestionCandidate amy = Person("Amy") with { Wish = wish };
+
+        ShiftSuggestions result = ShiftSuggestionRules.Rank(Open(), [amy, Person("Tom", shifts: [ShiftOn(Week, 9, 17, userId: "tom")])]);
+
+        CollectionAssert.AreEqual(new[] { "Tom", "Amy" }, Order(result));
+        Assert.IsTrue(result.Ranked[1].Reasons.Any(x => x.Kind == SuggestionReasonKind.OverPreferredHours && x.IsCaution));
+    }
+
+    [TestMethod]
+    public void Rank_PastTheirWishedShifts_Demoted()
+    {
+        StaffWorkPreference wish = new() { CompanyId = 1, UserId = "amy", MaxShiftsPerWeek = 1 };
+        SuggestionCandidate amy = Person("Amy", shifts: [ShiftOn(Week, 9, 11, userId: "amy")]) with { Wish = wish };
+
+        ShiftSuggestions result = ShiftSuggestionRules.Rank(Open(), [amy, Person("Tom", shifts: [ShiftOn(Week, 9, 17, userId: "tom")])]);
+
+        CollectionAssert.AreEqual(new[] { "Tom", "Amy" }, Order(result));
+    }
+
+    [TestMethod]
+    public void Rank_WithinTheirWish_NoCaution()
+    {
+        StaffWorkPreference wish = new() { CompanyId = 1, UserId = "amy", MaxShiftsPerWeek = 3, MaxHoursPerWeek = 20 };
+
+        ShiftSuggestions result = ShiftSuggestionRules.Rank(Open(), [Person("Amy") with { Wish = wish }]);
+
+        Assert.IsFalse(result.Ranked[0].Reasons.Any(x => x.Kind == SuggestionReasonKind.OverPreferredHours));
+    }
 }
