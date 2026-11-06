@@ -40,6 +40,8 @@ internal static class DemoDataWiper
         await ctx.ShiftClaims.ExecuteDeleteAsync(ct);
         await ctx.TimeEntries.ExecuteDeleteAsync(ct);
         await ctx.Shifts.ExecuteDeleteAsync(ct);
+        await ctx.ShiftTemplateSlots.ExecuteDeleteAsync(ct);
+        await ctx.ShiftTemplates.ExecuteDeleteAsync(ct);
         await ctx.ClockInTerminals.ExecuteDeleteAsync(ct);
         await ctx.LocationSchedulingSettings.ExecuteDeleteAsync(ct);
         await ctx.LocationOpeningHours.ExecuteDeleteAsync(ct);

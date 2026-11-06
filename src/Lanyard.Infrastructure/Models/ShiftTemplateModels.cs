@@ -1,0 +1,72 @@
+namespace Lanyard.Infrastructure.Models
+{
+    // A shift a location needs every week: "Saturday AM, 09:00 to 14:00, 2 Duty Managers and 4
+    // Hosts". Auto-build on the rota turns each template into draft shifts for the dates it covers
+    // and picks who works them; nothing here is ever shown to staff. Templates are the rota's
+    // recurring demand, which is why they belong to one location rather than the company.
+    //
+    // Times are venue-local wall-clock (RotaTime), the same convention as StaffAvailability and
+    // LocationOpeningHours: an EndTime at or before StartTime runs past midnight into the next day.
+    // EffectiveFrom/EffectiveTo bound it to some dates ("summer holidays only"), judged on the day
+    // the shift starts. Archived (IsActive = false) rather than deleted, so a template that's
+    // already been used can be put back.
+    public class ShiftTemplate : ICompanyOwned
+    {
+        public Guid Id { get; set; }
+
+        public required int CompanyId { get; set; }
+        public Company? Company { get; set; }
+
+        public required int LocationId { get; set; }
+        public Location? Location { get; set; }
+
+        public required string Name { get; set; }
+
+        public DayOfWeek DayOfWeek { get; set; }
+        public TimeOnly StartTime { get; set; }
+        public TimeOnly EndTime { get; set; }
+
+        public int BreakMinutes { get; set; }
+
+        public DateOnly? EffectiveFrom { get; set; }
+        public DateOnly? EffectiveTo { get; set; }
+
+        public bool IsActive { get; set; } = true;
+
+        public List<ShiftTemplateSlot> Slots { get; set; } = [];
+
+        public DateTime CreateDate { get; set; }
+        public string? CreateByUserId { get; set; }
+        public DateTime? UpdateDate { get; set; }
+        public string? UpdateByUserId { get; set; }
+
+        public bool RunsPastMidnight => EndTime <= StartTime;
+
+        public TimeSpan Length => RunsPastMidnight
+            ? TimeSpan.FromDays(1) - (StartTime - EndTime)
+            : EndTime - StartTime;
+
+        public int TotalHeadcount => Slots.Sum(x => x.Headcount);
+
+        public bool AppliesOn(DateOnly day) =>
+            IsActive
+            && day.DayOfWeek == DayOfWeek
+            && (EffectiveFrom is not DateOnly from || day >= from)
+            && (EffectiveTo is not DateOnly to || day <= to);
+    }
+
+    // How many people of one position a template needs. A template lists each position once;
+    // Headcount is how many shifts of that position auto-build makes.
+    public class ShiftTemplateSlot
+    {
+        public Guid Id { get; set; }
+
+        public required Guid ShiftTemplateId { get; set; }
+        public ShiftTemplate? ShiftTemplate { get; set; }
+
+        public required Guid StaffPositionId { get; set; }
+        public StaffPosition? StaffPosition { get; set; }
+
+        public int Headcount { get; set; } = 1;
+    }
+}
