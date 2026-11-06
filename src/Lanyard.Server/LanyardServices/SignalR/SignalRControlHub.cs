@@ -92,6 +92,7 @@ public class SignalRControlHub(
 
         bool supportsDmxBatch = httpContext?.Request.Query[ClientConnectionQuery.DmxBatch].ToString() == "1";
         _dmxClientService.SetConnectionSupportsBatch(Context.ConnectionId, supportsDmxBatch);
+        _dmxClientService.SetConnectionSupportsFrame(Context.ConnectionId, httpContext?.Request.Query[ClientConnectionQuery.DmxFrame].ToString() == "1");
 
         if (!supportsDmxBatch)
         {

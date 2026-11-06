@@ -13,6 +13,12 @@ public interface IDmxClientService
     void SetConnectionSupportsBatch(string connectionId, bool supportsBatch);
 
     /// <summary>
+    /// Records whether a kiosk connection takes a whole universe as one 512-byte message
+    /// (client 1.0.46+). Others get the universe resync as a 512-entry batch.
+    /// </summary>
+    void SetConnectionSupportsFrame(string connectionId, bool supportsFrame);
+
+    /// <summary>
     /// Tells the engine which connection now reaches a kiosk (so sends need no database lookup),
     /// and re-sends the universe the server holds for it, so a kiosk that restarted to an all-zero
     /// frame gets its lights back.
