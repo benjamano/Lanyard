@@ -43,6 +43,10 @@ This used to be the single biggest gotcha comparing the two systems, and it's wo
 
 `DmxSceneRunnerService` re-derives each step's delay from `IBeatClockService.GetDelayUntilNextStepAsync` (current live playback position + a bounded correction) on every step, rather than accumulating a running total from a fixed duration. This is deliberate — it's heavily commented in the source but not documented outside it. **If you "simplify" this to a running-total accumulator, you will reintroduce timing drift** relative to the actual music playback position; that's the exact bug this design avoids.
 
+## Fades are inside the step, not added to it
+
+`DmxSceneStep.FadeTime` (default 0 = snap). For each step the runner works out its hold first (fixed `Duration`, or the beat-clock delay), records the step's start, fades over `DmxFade.Effective(fade, hold)` (never longer than the hold) writing a frame every 25 ms with only the channels that moved, then waits out `hold - elapsed`. Measuring from the step start keeps BPM steps on the grid however long the fade took. Fades start from the engine's current values (`GetDmxChannelsAsync`), so a fade from whatever another scene or the desk left behind works. The on-screen preview (`DmxScenePreview`) uses the same `DmxFade` helper; scrubbing jumps without fading.
+
 ## Momentary scenes and restart-by-`sceneId` semantics
 
 - Momentary scenes force their channels back to 0 in a `finally` block regardless of how playback ends (natural completion, cancellation, error) — so cleanup always happens.

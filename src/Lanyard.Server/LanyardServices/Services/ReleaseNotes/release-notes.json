@@ -875,7 +875,8 @@
       "DMX scenes have their own editor page. Steps sit in a strip along the top with a preview of each look; set a step with the fixture cards or faders, and it saves as you go.",
       "Scene steps can be renamed, dragged into a new order, duplicated, and set to fractions of a second (such as 0.25 s) for fast chases.",
       "Capture lights saves what the lights are showing right now into a step. Channels a step doesn't set are shown dimmed and left alone when it plays; × takes a channel out of a step.",
-      "The scene editor starts Blind so the lights don't change while you work; Show on lights previews the selected step on the kiosk. Deleting a scene warns you if an automation rule runs it, and adding a keybind warns if another scene already uses that key."
+      "The scene editor starts Blind so the lights don't change while you work; Show on lights previews the selected step on the kiosk. Deleting a scene warns you if an automation rule runs it, and adding a keybind warns if another scene already uses that key.",
+      "DMX scene steps can fade in: set Fade in (s) on a step and the lights blend smoothly into it, on the kiosk and in Preview, instead of snapping. The fade is part of the step's length."
     ]
   },
   {

@@ -151,7 +151,7 @@
                         <button type="button" class="dmx-step-button" aria-pressed="@(selected ? "true" : "false")" @onclick="() => SelectStepAsync(step)">
                             <span class="dmx-step-number">@(index + 1)</span>
                             <span class="dmx-step-name">@step.Name</span>
-                            <span class="dmx-step-time">@StepTime(step)</span>
+                            <span class="dmx-step-time">@StepTime(step)@(step.FadeTime > TimeSpan.Zero ? $" · fade {step.FadeTime.TotalSeconds:0.##} s" : null)</span>
                             <span class="dmx-step-swatches" aria-hidden="true">
                                 @foreach (string colour in SwatchesFor(step))
                                 {
@@ -198,6 +198,12 @@
                         <span>@(scene.BpmSyncEnabled ? "Seconds (no music)" : "Seconds")</span>
                         <input type="number" min="0.05" max="3600" step="0.05" value="@selectedStep.Duration.TotalSeconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)"
                                disabled="@state.IsLocked" @onchange="e => SetDurationAsync(selectedStep, e)" />
+                    </label>
+
+                    <label class="dmx-field" title="How long the step takes to fade in from the step before. 0 snaps straight to it. It's part of the step's length, not added to it.">
+                        <span>Fade in (s)</span>
+                        <input type="number" min="0" max="3600" step="0.05" value="@selectedStep.FadeTime.TotalSeconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)"
+                               disabled="@state.IsLocked" @onchange="e => SetFadeAsync(selectedStep, e)" />
                     </label>
 
                     <div class="dmx-step-actions">
@@ -562,6 +568,31 @@
         else
         {
             _toastService.ShowError(result.Error ?? "Couldn't change the step's length.");
+        }
+    }
+
+    private async Task SetFadeAsync(DmxSceneStep step, ChangeEventArgs e)
+    {
+        if (!double.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double seconds))
+        {
+            return;
+        }
+
+        TimeSpan fade = TimeSpan.FromMilliseconds(Math.Round(Math.Max(seconds, 0) * 1000));
+        Result<bool> result = await _dmxSceneService.UpdateSceneStepFadeAsync(step.Id, fade);
+
+        if (result.IsSuccess)
+        {
+            step.FadeTime = fade;
+
+            if (!scene!.BpmSyncEnabled && fade > step.Duration)
+            {
+                _toastService.ShowWarning($"The fade is longer than the step, so it will only fade for {step.Duration.TotalSeconds:0.##} s.");
+            }
+        }
+        else
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't change the fade.");
         }
     }
 

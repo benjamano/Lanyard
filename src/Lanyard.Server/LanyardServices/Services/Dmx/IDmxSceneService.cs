@@ -15,6 +15,9 @@ public interface IDmxSceneService
     Task<Result<DmxSceneStep>> CreateSceneStepAsync(Guid sceneId);
     Task<Result<bool>> UpdateSceneStepDurationAsync(Guid stepId, TimeSpan newDuration);
     Task<Result<bool>> UpdateSceneStepBeatsAsync(Guid stepId, double beats);
+
+    /// <summary>How long the step fades in over (0 = snap). The runner keeps it within the step's hold.</summary>
+    Task<Result<bool>> UpdateSceneStepFadeAsync(Guid stepId, TimeSpan fade);
     Task<Result<bool>> SaveSceneStepChannelValueAsync(Guid stepId, int channelNumber, byte value);
 
     /// <summary>Upserts many of a step's channel values in one save (latest wins per channel).</summary>

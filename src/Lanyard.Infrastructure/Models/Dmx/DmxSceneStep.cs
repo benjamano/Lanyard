@@ -17,5 +17,9 @@ public class DmxSceneStep : CreateAndUpdateBase
     // eighth-note chases; clamped to [0.25, 64] at the service boundary.
     public double Beats { get; set; } = 1;
 
+    // How long the step takes to fade in from whatever the lights show when it starts. Zero snaps
+    // straight to the step. Part of the step's hold, not added to it: the runner clamps it to the hold.
+    public TimeSpan FadeTime { get; set; } = TimeSpan.Zero;
+
     public virtual ICollection<DmxSceneStepChannelValue> ChannelValues { get; set; } = [];
 }
