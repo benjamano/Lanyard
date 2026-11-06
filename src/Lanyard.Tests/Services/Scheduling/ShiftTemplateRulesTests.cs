@@ -79,9 +79,28 @@ public class ShiftTemplateRulesTests
     }
 
     [TestMethod]
-    public void Validate_ZeroHeadcount_Refused()
+    public void Validate_ZeroHeadcount_AllowedForPartiesAndHires()
     {
-        StringAssert.Contains(ShiftTemplateRules.Validate(Template(9, 14, (Host, 0))), "between 1 and");
+        Assert.IsNull(ShiftTemplateRules.Validate(Template(9, 14, (Host, 0))));
+    }
+
+    [TestMethod]
+    public void Validate_NegativeHeadcount_Refused()
+    {
+        StringAssert.Contains(ShiftTemplateRules.Validate(Template(9, 14, (Host, -1))), "between 0 and");
+    }
+
+    [TestMethod]
+    public void Validate_SameRegularTwice_Refused()
+    {
+        ShiftTemplate template = Template(9, 14, (Host, 2));
+        template.Slots[0].Regulars =
+        [
+            new ShiftTemplateSlotRegular { ShiftTemplateSlotId = Guid.Empty, UserId = "amy" },
+            new ShiftTemplateSlotRegular { ShiftTemplateSlotId = Guid.Empty, UserId = "amy" }
+        ];
+
+        StringAssert.Contains(ShiftTemplateRules.Validate(template), "once");
     }
 
     [TestMethod]

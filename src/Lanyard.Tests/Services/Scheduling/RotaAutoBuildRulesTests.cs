@@ -437,4 +437,88 @@ public class RotaAutoBuildRulesTests
 
         Assert.AreEqual("amy", picks.Single().Shift.UserId);
     }
+
+    // --- Regulars and zero headcount ---
+
+    private static ShiftTemplate WithRegulars(ShiftTemplate template, params string[] userIds)
+    {
+        template.Slots[0].Regulars = userIds
+            .Select((id, i) => new ShiftTemplateSlotRegular { ShiftTemplateSlotId = Guid.Empty, UserId = id, SortOrder = i })
+            .ToList();
+        return template;
+    }
+
+    [TestMethod]
+    public void Assign_RegularGetsTheirShiftOverABetterRankedPerson()
+    {
+        // Without a regular, Amy (fewer hours, alphabetically first) would win.
+        List<DemandSlot> slots = RotaAutoBuildRules.ExpandTemplates([WithRegulars(Template(slots: [(Host, "Host", 1)]), "tom")], Saturday, Saturday);
+
+        AutoBuildPick pick = RotaAutoBuildRules.Assign(1, slots, [Worker("Amy", Host), Worker("Tom", Host)], (_, _) => null, "m", Now).Single();
+
+        Assert.AreEqual("tom", pick.Shift.UserId);
+        Assert.AreEqual("Regular on this shift", pick.Line.Reason);
+    }
+
+    [TestMethod]
+    public void Assign_RegularWhoCantWorkIt_SomeoneElsePicked()
+    {
+        List<DemandSlot> slots = RotaAutoBuildRules.ExpandTemplates([WithRegulars(Template(slots: [(Host, "Host", 1)]), "tom")], Saturday, Saturday);
+        AutoBuildWorker tom = Worker("Tom", Host) with
+        {
+            Availability = [new StaffAvailability { CompanyId = 1, UserId = "tom", DayOfWeek = DayOfWeek.Saturday, Kind = AvailabilityKind.Unavailable }]
+        };
+
+        AutoBuildPick pick = RotaAutoBuildRules.Assign(1, slots, [Worker("Amy", Host), tom], (_, _) => null, "m", Now).Single();
+
+        Assert.AreEqual("amy", pick.Shift.UserId);
+    }
+
+    [TestMethod]
+    public void Assign_RegularsShiftFilledBeforeAnotherThatCouldUseThem()
+    {
+        // Rupert is the regular on the 08:30-18:30 manager shift. A harder 08:30-21:30 manager shift
+        // (fewer could work it) mustn't take him first.
+        ShiftTemplate regular = WithRegulars(Template(DayOfWeek.Saturday, 8, 18, (Duty, "Duty Manager", 1)), "rupert");
+        ShiftTemplate late = Template(DayOfWeek.Saturday, 8, 21, (Duty, "Duty Manager", 1));
+        late.Name = "Saturday late";
+        List<DemandSlot> slots = RotaAutoBuildRules.ExpandTemplates([regular, late], Saturday, Saturday);
+
+        List<AutoBuildPick> picks = RotaAutoBuildRules.Assign(1, slots, [Worker("Rupert", Duty), Worker("Ryan", Duty)], (_, _) => null, "m", Now);
+
+        Assert.AreEqual("rupert", picks.Single(x => x.Line.Name == "Saturday AM").Shift.UserId);
+        Assert.AreEqual("ryan", picks.Single(x => x.Line.Name == "Saturday late").Shift.UserId);
+    }
+
+    [TestMethod]
+    public void ZeroHeadcount_NothingNormally_HireAddsToThatShift()
+    {
+        ShiftTemplate evening = Template(DayOfWeek.Saturday, 14, 21, (Host, "Host", 0));
+        evening.Name = "Saturday evening";
+        List<DemandSlot> shifts = RotaAutoBuildRules.ExpandTemplates([evening], Saturday, Saturday);
+
+        (List<DemandSlot> remaining, _) = RotaAutoBuildRules.SubtractCovered(shifts, []);
+        Assert.AreEqual(0, remaining.Count, "nobody needed without a hire");
+
+        PartyBooking hire = Party("", 18, 21);
+        hire.HireKind = PrivateHireKind.PlayOnly;
+        (List<DemandSlot> extra, _) = RotaAutoBuildRules.ExpandParties([hire], [HireRule(PrivateHireKind.PlayOnly, 2, Host, "Host")], shifts);
+
+        Assert.AreEqual(2, extra.Single().Needed);
+        Assert.AreEqual(RotaTime.ToUtc(Saturday, new TimeOnly(14, 0)), extra.Single().StartUtc);
+    }
+
+    [TestMethod]
+    public void Assign_HireJoiningALineWithARegular_RegularPickedFirst()
+    {
+        ShiftTemplate late = WithRegulars(Template(DayOfWeek.Saturday, 8, 21, (Duty, "Duty Manager", 0)), "ryan");
+        List<DemandSlot> shifts = RotaAutoBuildRules.ExpandTemplates([late], Saturday, Saturday);
+        PartyBooking hire = Party("", 18, 21);
+        hire.HireKind = PrivateHireKind.LaserTagAndPlay;
+
+        (List<DemandSlot> extra, _) = RotaAutoBuildRules.ExpandParties([hire], [HireRule(PrivateHireKind.LaserTagAndPlay, 1, Duty, "Duty Manager")], shifts);
+        AutoBuildPick pick = RotaAutoBuildRules.Assign(1, extra, [Worker("Amy", Duty), Worker("Ryan", Duty)], (_, _) => null, "m", Now).Single();
+
+        Assert.AreEqual("ryan", pick.Shift.UserId);
+    }
 }

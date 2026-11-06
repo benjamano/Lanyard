@@ -56,7 +56,10 @@ namespace Lanyard.Infrastructure.Models
     }
 
     // How many people of one position a template needs. A template lists each position once;
-    // Headcount is how many shifts of that position auto-build makes.
+    // Headcount is how many shifts of that position auto-build makes. Zero is allowed: the shift then
+    // only exists for parties and private hires to add people to (an evening shift on a night with
+    // no hire needs nobody). Regulars are the people who normally work it - Auto-build gives them
+    // the shift first whenever they can work it.
     public class ShiftTemplateSlot
     {
         public Guid Id { get; set; }
@@ -68,5 +71,23 @@ namespace Lanyard.Infrastructure.Models
         public StaffPosition? StaffPosition { get; set; }
 
         public int Headcount { get; set; } = 1;
+
+        public List<ShiftTemplateSlotRegular> Regulars { get; set; } = [];
+    }
+
+    // Someone who normally works a template's position ("Rupert does the Saturday manager shift").
+    // Configuration, replaced with its slot whenever the template is saved; it goes with the
+    // person's account.
+    public class ShiftTemplateSlotRegular
+    {
+        public Guid Id { get; set; }
+
+        public required Guid ShiftTemplateSlotId { get; set; }
+        public ShiftTemplateSlot? ShiftTemplateSlot { get; set; }
+
+        public required string UserId { get; set; }
+        public UserProfile? User { get; set; }
+
+        public int SortOrder { get; set; }
     }
 }

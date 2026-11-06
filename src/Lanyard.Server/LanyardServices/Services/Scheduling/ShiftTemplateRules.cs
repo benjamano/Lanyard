@@ -46,9 +46,19 @@ public static class ShiftTemplateRules
             return "Say who the shift needs - add at least one position.";
         }
 
-        if (template.Slots.Any(x => x.Headcount < 1 || x.Headcount > MaxHeadcount))
+        if (template.Slots.Any(x => x.Headcount < 0 || x.Headcount > MaxHeadcount))
         {
-            return $"Each position needs between 1 and {MaxHeadcount} people.";
+            return $"Each position needs between 0 and {MaxHeadcount} people.";
+        }
+
+        if (template.Slots.Any(x => x.Regulars.Count > MaxHeadcount))
+        {
+            return $"A position can have at most {MaxHeadcount} regulars.";
+        }
+
+        if (template.Slots.Any(x => x.Regulars.GroupBy(r => r.UserId).Any(g => g.Count() > 1)))
+        {
+            return "List each regular once.";
         }
 
         if (template.Slots.GroupBy(x => x.StaffPositionId).Any(g => g.Count() > 1))

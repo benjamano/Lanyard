@@ -45,12 +45,38 @@
                                           OptionValue="@(x => x.Id.ToString())" @bind-Value="current.PositionId" Label="Position" Width="100%" />
                         </div>
                         <div class="template-slot-count">
-                            <FluentNumberInput TValue="int" @bind-Value="current.Headcount" Label="How many" Min="1" Max="@ShiftTemplateRules.MaxHeadcount"
+                            <FluentNumberInput TValue="int" @bind-Value="current.Headcount" Label="How many" Min="0" Max="@ShiftTemplateRules.MaxHeadcount"
                                                Width="100%" />
                         </div>
                         <div class="template-slot-remove">
                             <FluentButton IconStart="@(new Icons.Regular.Size16.Delete())" Title="Remove this position"
                                           Disabled="@(slots.Count == 1)" OnClick="@(() => slots.Remove(current))" />
+                        </div>
+                        <div class="template-slot-regulars">
+                            @if (current.Headcount == 0)
+                            {
+                                <span class="template-slot-hint">Nobody normally. Parties and private hires can add people to this shift.</span>
+                            }
+                            <span class="template-slot-regulars-label">Regulars</span>
+                            @foreach (string regularId in current.Regulars)
+                            {
+                                string id = regularId;
+                                <span class="template-regular-chip">
+                                    @NameOf(id)
+                                    <button type="button" class="template-regular-remove" title="@($"Remove {NameOf(id)}")" aria-label="@($"Remove {NameOf(id)}")"
+                                            @onclick="@(() => current.Regulars.Remove(id))">×</button>
+                                </span>
+                            }
+                            @if (RegularOptions(current) is { Count: > 0 } options)
+                            {
+                                <FluentSelect @key="@($"{current.Key}-{current.Regulars.Count}")" TOption="RegularCandidate" TValue="string" Items="@options"
+                                              OptionText="@(x => x.Name)" OptionValue="@(x => x.UserId)" Placeholder="Add a regular..."
+                                              ValueChanged="@(value => AddRegular(current, value))" Width="200px" Class="template-regular-pick" />
+                            }
+                            else if (current.Regulars.Count == 0)
+                            {
+                                <span class="template-slot-hint">Nobody here holds this position yet.</span>
+                            }
                         </div>
                     </div>
                 }
@@ -88,12 +114,34 @@
     [Parameter]
     public ShiftTemplate? Existing { get; set; }
 
+    // The location's staff, for choosing regulars.
+    [Parameter]
+    public List<RegularCandidate> Candidates { get; set; } = [];
+
     private record DayOption(string Value, string Label);
 
     private sealed class SlotModel
     {
+        public Guid Key { get; } = Guid.NewGuid();
         public string? PositionId { get; set; }
         public int Headcount { get; set; } = 1;
+        public List<string> Regulars { get; set; } = [];
+    }
+
+    private string NameOf(string userId) => Candidates.FirstOrDefault(x => x.UserId == userId)?.Name ?? "Someone";
+
+    // People who hold the line's position and aren't regulars on it already.
+    private List<RegularCandidate> RegularOptions(SlotModel slot) =>
+        Guid.TryParse(slot.PositionId, out Guid position)
+            ? Candidates.Where(x => x.Positions.Contains(position) && !slot.Regulars.Contains(x.UserId)).ToList()
+            : [];
+
+    private void AddRegular(SlotModel slot, string? userId)
+    {
+        if (!string.IsNullOrEmpty(userId) && !slot.Regulars.Contains(userId))
+        {
+            slot.Regulars.Add(userId);
+        }
     }
 
     // Monday first, as the rota reads.
@@ -138,7 +186,12 @@
                     allPositions.Add(position);
                 }
 
-                slots.Add(new SlotModel { PositionId = slot.StaffPositionId.ToString(), Headcount = slot.Headcount });
+                slots.Add(new SlotModel
+                {
+                    PositionId = slot.StaffPositionId.ToString(),
+                    Headcount = slot.Headcount,
+                    Regulars = slot.Regulars.OrderBy(x => x.SortOrder).Select(x => x.UserId).ToList()
+                });
             }
         }
 
@@ -180,7 +233,13 @@
             EffectiveTo = effectiveTo is DateTime to ? DateOnly.FromDateTime(to) : null,
             Slots = slots
                 .Where(s => Guid.TryParse(s.PositionId, out _))
-                .Select(s => new ShiftTemplateSlot { ShiftTemplateId = Guid.Empty, StaffPositionId = Guid.Parse(s.PositionId!), Headcount = s.Headcount })
+                .Select(s => new ShiftTemplateSlot
+                {
+                    ShiftTemplateId = Guid.Empty,
+                    StaffPositionId = Guid.Parse(s.PositionId!),
+                    Headcount = s.Headcount,
+                    Regulars = s.Regulars.Select(id => new ShiftTemplateSlotRegular { ShiftTemplateSlotId = Guid.Empty, UserId = id }).ToList()
+                })
                 .ToList()
         };
 

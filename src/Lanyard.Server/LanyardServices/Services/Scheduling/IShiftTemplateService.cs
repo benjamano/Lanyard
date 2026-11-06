@@ -16,6 +16,12 @@ public interface IShiftTemplateService
     // Creates (Id empty) or updates a template, replacing its slots with template.Slots.
     Task<Result<ShiftTemplate>> SaveTemplateAsync(LocationScope scope, ShiftTemplate template, string actingUserId);
 
+    // The location's staff, with the positions each holds, for picking a template position's regulars.
+    Task<Result<List<RegularCandidate>>> GetRegularCandidatesAsync(LocationScope scope, int locationId);
+
     // Archives (active = false) or restores a template. Shifts already made from it are untouched.
     Task<Result<bool>> SetArchivedAsync(LocationScope scope, Guid templateId, bool archived, string actingUserId);
 }
+
+// Someone who could be a template position's regular. Positions are the ones they hold.
+public sealed record RegularCandidate(string UserId, string Name, IReadOnlySet<Guid> Positions);

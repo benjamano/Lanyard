@@ -886,6 +886,8 @@
     "details": [
       "New Rota > Shift Templates page: add the shifts a location needs every week, such as Saturday AM 09:00 to 14:00, and how many people of each position they need (for example 2 Duty Managers and 4 Hosts).",
       "A template can be limited to some dates, such as the school holidays, and archived when it's no longer needed.",
+      "Each position on a template can have regulars, the people who normally work it. Auto-build gives them the shift first whenever they can work it.",
+      "A template position can need 0 people, for a shift that only exists when a party or private hire needs extra staff, such as a late evening shift.",
       "New Auto-build button on the rota: it fills the week or month you're looking at from your shift templates and picks who works each shift, using their positions, training, contracts, availability and time off. You see the whole list first, and the shifts are added as drafts to check before you publish.",
       "Auto-build never puts someone on a time they've said they can't work, over their weekly maximum, without 11 hours' rest overnight, or on a day they've asked for off. Shifts nobody can take are added as open shifts, and shifts already on the rota are left as they are.",
       "Staff can now say how much they'd like to work, as at most so many shifts or hours a week, on My Shifts > Availability (managers can set it from the person's Rota tab). Suggestions and Auto-build pick people who'd go past it last.",
