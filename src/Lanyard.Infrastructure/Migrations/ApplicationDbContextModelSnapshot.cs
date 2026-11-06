@@ -2624,6 +2624,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<TimeSpan>("Duration")
                         .HasColumnType("interval");
 
+                    b.Property<TimeSpan>("FadeTime")
+                        .HasColumnType("interval");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");

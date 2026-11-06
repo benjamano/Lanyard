@@ -121,16 +121,61 @@ public sealed class DmxScenePreview(Func<Func<Task>, Task> dispatch) : IDisposab
         _ = RunAsync(_playback.Token);
     }
 
+    private static readonly TimeSpan PreviewFadeTick = TimeSpan.FromMilliseconds(50);
+
     private async Task RunAsync(CancellationToken token)
     {
+        // The step on screen at start was applied instantly; later steps fade in if they have a fade.
+        bool fadeIn = false;
+
         try
         {
             while (!token.IsCancellationRequested)
             {
                 DmxSceneStep step = Steps[StepIndex];
                 TimeSpan hold = step.Duration > TimeSpan.Zero ? step.Duration : FallbackStep;
+                System.Diagnostics.Stopwatch elapsed = System.Diagnostics.Stopwatch.StartNew();
+                TimeSpan fade = fadeIn ? DmxFade.Effective(step.FadeTime, hold) : TimeSpan.Zero;
 
-                await Task.Delay(hold, token);
+                if (fade > TimeSpan.Zero)
+                {
+                    byte[] from = (byte[])Values.Clone();
+                    double progress = 0;
+
+                    while (progress < 1)
+                    {
+                        await Task.Delay(PreviewFadeTick, token);
+                        progress = Math.Min(elapsed.Elapsed / fade, 1);
+
+                        double p = progress;
+                        await dispatch(() =>
+                        {
+                            if (!token.IsCancellationRequested)
+                            {
+                                foreach (DmxSceneStepChannelValue value in step.ChannelValues)
+                                {
+                                    if (value.ChannelNumber is >= 1 and <= UniverseSize)
+                                    {
+                                        Values[value.ChannelNumber] = DmxFade.Interpolate(from[value.ChannelNumber], value.Value, p);
+                                    }
+                                }
+
+                                Changed?.Invoke();
+                            }
+
+                            return Task.CompletedTask;
+                        });
+                    }
+                }
+
+                TimeSpan remaining = hold - elapsed.Elapsed;
+
+                if (remaining > TimeSpan.Zero)
+                {
+                    await Task.Delay(remaining, token);
+                }
+
+                bool stop = false;
 
                 await dispatch(() =>
                 {
@@ -146,6 +191,7 @@ public sealed class DmxScenePreview(Func<Func<Task>, Task> dispatch) : IDisposab
                             IsPlaying = false;
                             CancelPlayback();
                             Changed?.Invoke();
+                            stop = true;
                             return Task.CompletedTask;
                         }
 
@@ -156,11 +202,24 @@ public sealed class DmxScenePreview(Func<Func<Task>, Task> dispatch) : IDisposab
                         StepIndex++;
                     }
 
-                    Apply(Steps[StepIndex]);
+                    DmxSceneStep next = Steps[StepIndex];
+                    fadeIn = next.FadeTime > TimeSpan.Zero;
+
+                    // A fading step is drawn by the fade itself; others snap.
+                    if (!fadeIn)
+                    {
+                        Apply(next);
+                    }
+
                     Changed?.Invoke();
 
                     return Task.CompletedTask;
                 });
+
+                if (stop)
+                {
+                    return;
+                }
             }
         }
         catch (TaskCanceledException)

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
@@ -150,10 +151,6 @@ public class DmxSceneRunnerService(
                     int position = index + 1;
                     Raise(OnSceneStepAdvanced, h => h(clientId, sceneId, position));
 
-                    // One batched write per step: a single change notification for any open desk
-                    // and (coalesced) a single kiosk message.
-                    await _dmxService.UpdateChannelValuesAsync(clientId, ToChannelBatch(step.ChannelValues));
-
                     // The delay IS the scheduler: hold the values, then move on.
                     // BPM sync recomputes from the live playback position every step,
                     // so timing errors never accumulate. Each delay is one step length
@@ -163,7 +160,8 @@ public class DmxSceneRunnerService(
                     // double-fire steps. The first step fires immediately on start
                     // (operators start scenes on a downbeat by hand). When nothing is
                     // playing or the song has no known BPM, the step's fixed Duration
-                    // applies instead.
+                    // applies instead. Worked out before the step's write, and measured
+                    // from the step's start, so a fade inside the step doesn't lengthen it.
                     TimeSpan delay = step.Duration;
 
                     if (bpmSyncEnabled)
@@ -176,7 +174,31 @@ public class DmxSceneRunnerService(
                         }
                     }
 
-                    await Task.Delay(delay < MinimumStepDelay ? MinimumStepDelay : delay, token);
+                    if (delay < MinimumStepDelay)
+                    {
+                        delay = MinimumStepDelay;
+                    }
+
+                    long stepStarted = Stopwatch.GetTimestamp();
+                    TimeSpan fade = DmxFade.Effective(step.FadeTime, delay);
+
+                    if (fade > TimeSpan.Zero)
+                    {
+                        await FadeToStepAsync(clientId, step, fade, token);
+                    }
+                    else
+                    {
+                        // One batched write per step: a single change notification for any open desk
+                        // and (coalesced) a single kiosk message.
+                        await _dmxService.UpdateChannelValuesAsync(clientId, ToChannelBatch(step.ChannelValues));
+                    }
+
+                    TimeSpan remaining = delay - Stopwatch.GetElapsedTime(stepStarted);
+
+                    if (remaining > TimeSpan.Zero)
+                    {
+                        await Task.Delay(remaining, token);
+                    }
                 }
             } while (loop && !token.IsCancellationRequested);
         }
@@ -236,6 +258,40 @@ public class DmxSceneRunnerService(
 
                 Raise(OnSceneStopped, h => h(clientId, sceneId));
             }
+        }
+    }
+
+    // Crossfades from what the lights show now to the step, one frame every ~25 ms, sending only
+    // channels whose level moved since the last frame. The engine coalesces sends to the kiosk too.
+    private async Task FadeToStepAsync(Guid clientId, DmxSceneStep step, TimeSpan fade, CancellationToken token)
+    {
+        Result<IEnumerable<DmxChannel>>? current = await _dmxService.GetDmxChannelsAsync(clientId);
+        Dictionary<int, byte> from = current?.Data?.ToDictionary(c => c.Address, c => c.Value) ?? [];
+
+        List<(int Address, byte From, byte To)> channels = step.ChannelValues
+            .Select(v => (v.ChannelNumber, from.GetValueOrDefault(v.ChannelNumber), v.Value))
+            .ToList();
+
+        long started = Stopwatch.GetTimestamp();
+        double previous = -1;
+
+        while (true)
+        {
+            double progress = Math.Min(Stopwatch.GetElapsedTime(started) / fade, 1);
+            List<DmxChannel> frame = DmxFade.Frame(channels, progress, previous);
+
+            if (frame.Count > 0)
+            {
+                await _dmxService.UpdateChannelValuesAsync(clientId, frame);
+            }
+
+            if (progress >= 1)
+            {
+                return;
+            }
+
+            previous = progress;
+            await Task.Delay(DmxFade.FrameInterval, token);
         }
     }
 

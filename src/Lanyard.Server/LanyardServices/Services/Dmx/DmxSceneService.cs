@@ -390,6 +390,16 @@ public class DmxSceneService(
         return await UpdateStepAsync(stepId, step => step.Duration = newDuration, "duration");
     }
 
+    public async Task<Result<bool>> UpdateSceneStepFadeAsync(Guid stepId, TimeSpan fade)
+    {
+        if (fade < TimeSpan.Zero || fade > MaxStepDuration)
+        {
+            return Result<bool>.Fail("A fade must be between 0 seconds and an hour.");
+        }
+
+        return await UpdateStepAsync(stepId, step => step.FadeTime = fade, "fade");
+    }
+
     public async Task<Result<bool>> UpdateSceneStepBeatsAsync(Guid stepId, double beats)
     {
         // Same clamp as the editor UI: fractions give sub-beat chases, 64 covers
@@ -649,6 +659,7 @@ public class DmxSceneService(
                 Name = Truncate($"{source.Name} copy", MaxStepNameLength),
                 Duration = source.Duration,
                 Beats = source.Beats,
+                FadeTime = source.FadeTime,
                 CreateByUserId = user.Data,
                 CreateDate = now,
                 ChannelValues = source.ChannelValues
