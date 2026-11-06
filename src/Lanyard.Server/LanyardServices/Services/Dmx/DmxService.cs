@@ -239,7 +239,7 @@ public class DmxService(ISystemDbContextFactory factory,
 
             state.HasUniverse = true;
             state.PersistDirty = true;
-            sendNow = Stopwatch.GetElapsedTime(state.LastSendTimestamp) >= CoalesceWindow;
+            sendNow = IsQuiet(state);
         }
 
         // After the write, outside the lock, each subscriber isolated: a desk that throws can't
@@ -260,6 +260,12 @@ public class DmxService(ISystemDbContextFactory factory,
             EnsureFlushLoop();
         }
     }
+
+    // Nothing sent within the coalescing window, so this write can go straight out. "Never sent"
+    // is its own case: Stopwatch timestamps count from boot on Windows, so measuring from 0 would
+    // hold back a kiosk's first write on a machine that booted less than a window ago.
+    private bool IsQuiet(ClientDmxState state) =>
+        state.LastSendTimestamp == 0 || Stopwatch.GetElapsedTime(state.LastSendTimestamp) >= CoalesceWindow;
 
     private List<DmxChannel> Validate(Guid clientId, IReadOnlyList<DmxChannel> channels)
     {
@@ -347,7 +353,7 @@ public class DmxService(ISystemDbContextFactory factory,
             state.HasUniverse = true;
             state.PersistDirty = true;
             output = new DmxOutputState(state.GrandMaster, state.IsBlackout);
-            sendNow = Stopwatch.GetElapsedTime(state.LastSendTimestamp) >= CoalesceWindow;
+            sendNow = IsQuiet(state);
         }
 
         _logger.LogInformation("DMX output for client {ClientId}: master {GrandMaster}/255, blackout {IsBlackout}", state.ClientId, output.GrandMaster, output.IsBlackout);
@@ -410,7 +416,7 @@ public class DmxService(ISystemDbContextFactory factory,
                     return;
                 }
 
-                sendNow = Stopwatch.GetElapsedTime(state.LastSendTimestamp) >= CoalesceWindow;
+                sendNow = IsQuiet(state);
             }
 
             await SendOrScheduleAsync(state, sendNow);
