@@ -507,4 +507,18 @@ public class RotaAutoBuildRulesTests
         Assert.AreEqual(2, extra.Single().Needed);
         Assert.AreEqual(RotaTime.ToUtc(Saturday, new TimeOnly(14, 0)), extra.Single().StartUtc);
     }
+
+    [TestMethod]
+    public void Assign_HireJoiningALineWithARegular_RegularPickedFirst()
+    {
+        ShiftTemplate late = WithRegulars(Template(DayOfWeek.Saturday, 8, 21, (Duty, "Duty Manager", 0)), "ryan");
+        List<DemandSlot> shifts = RotaAutoBuildRules.ExpandTemplates([late], Saturday, Saturday);
+        PartyBooking hire = Party("", 18, 21);
+        hire.HireKind = PrivateHireKind.LaserTagAndPlay;
+
+        (List<DemandSlot> extra, _) = RotaAutoBuildRules.ExpandParties([hire], [HireRule(PrivateHireKind.LaserTagAndPlay, 1, Duty, "Duty Manager")], shifts);
+        AutoBuildPick pick = RotaAutoBuildRules.Assign(1, extra, [Worker("Amy", Duty), Worker("Ryan", Duty)], (_, _) => null, "m", Now).Single();
+
+        Assert.AreEqual("ryan", pick.Shift.UserId);
+    }
 }

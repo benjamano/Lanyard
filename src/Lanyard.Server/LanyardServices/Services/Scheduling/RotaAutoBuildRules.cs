@@ -129,7 +129,9 @@ public static class RotaAutoBuildRules
                     PositionName = rule.StaffPosition?.Name ?? "Position",
                     Needed = rule.StaffCount,
                     PartyBookingId = party.Id,
-                    RegularUserIds = null
+                    // Joining a line that lists the position: its regulars are the people to ask first
+                    // (the late manager line's regular does a hire's extra manager shift).
+                    RegularUserIds = withPosition.Count > 0 ? shift.RegularUserIds : null
                 });
             }
         }
