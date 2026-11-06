@@ -105,9 +105,9 @@
                                                         @(line.HireOnly ? $"{line.PositionName} for private hires" : $"{line.Headcount} × {line.PositionName}")
                                                         @if (line.Regulars.Count > 0)
                                                         {
-                                                            <span class="learn-muted">(@string.Join(", ", line.Regulars.Select(r => r.Name)))</span>
+                                                            <span class="learn-muted">&nbsp;(@string.Join(", ", line.Regulars.Select(r => r.Name)))</span>
                                                         }
-                                                        <span class="learn-muted">· @line.DaysSeen of @line.DaysOpen @(day.Key)s</span>
+                                                        <span class="learn-muted">&nbsp;· @line.DaysSeen of @line.DaysOpen @(day.Key)s</span>
                                                     </span>
                                                 }
                                             </div>
