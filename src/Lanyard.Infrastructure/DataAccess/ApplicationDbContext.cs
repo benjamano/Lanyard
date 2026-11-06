@@ -97,6 +97,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<DmxSceneStep> DmxSceneSteps { get; set; }
         public DbSet<DmxSceneStepChannelValue> DmxSceneStepChannelValues { get; set; }
         public DbSet<DmxFixture> DmxFixtures { get; set; }
+        public DbSet<DmxClientOutputState> DmxClientOutputStates { get; set; }
         public DbSet<DmxFixtureDefinition> DmxFixtureDefinitions { get; set; }
         public DbSet<DmxFixtureMode> DmxFixtureModes { get; set; }
         public DbSet<DmxFixtureModeChannel> DmxFixtureModeChannels { get; set; }
@@ -1164,6 +1165,14 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<ClientAvailableVideoDevice>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableNetworkInterface>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableDmxDevice>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
+
+            modelBuilder.Entity<DmxClientOutputState>(entity =>
+            {
+                entity.HasKey(x => x.ClientId);
+                entity.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
+                entity.Property(x => x.GrandMaster).HasDefaultValue((byte)255);
+                entity.HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
+            });
             modelBuilder.Entity<ClientAvailableAudioDevice>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ZoneScoreboardSettings>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<PlaylistSongMember>().HasQueryFilter(x => TenantFilterDisabled || x.Playlist!.CompanyId == TenantCompanyId);

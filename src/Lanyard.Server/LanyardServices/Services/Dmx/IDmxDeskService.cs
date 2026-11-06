@@ -17,7 +17,13 @@ public interface IDmxDeskService
     /// Channel changes for one kiosk, on the writer's thread (marshal with InvokeAsync).
     /// Dispose the result to stop.
     /// </summary>
-    Task<Result<IDisposable>> SubscribeToChannelsAsync(Guid clientId, Action<IReadOnlyList<DmxChannel>> handler);
+    Task<Result<IDisposable>> SubscribeToChannelsAsync(Guid clientId, Action<IReadOnlyList<DmxChannel>> handler, Action<DmxOutputState>? onOutputChanged = null);
+
+    Task<Result<DmxOutputState>> GetOutputStateAsync(Guid clientId);
+
+    Task<Result<bool>> SetGrandMasterAsync(Guid clientId, byte level);
+
+    Task<Result<bool>> SetBlackoutAsync(Guid clientId, bool isBlackout);
 
     Task<Result<bool>> StartSceneAsync(Guid clientId, Guid sceneId, TimeSpan? holdFor = null);
 

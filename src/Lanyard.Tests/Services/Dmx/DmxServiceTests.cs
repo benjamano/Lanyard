@@ -25,8 +25,19 @@ public class DmxServiceTests
         public Mock<IHubContext<SignalRControlHub>> HubContext { get; } = new();
         public DmxService Service { get; }
 
-        public Harness(string? connectionId = ConnectionId)
+        // Shared by every engine a test builds, so a second engine can play "after a restart".
+        public DbContextOptions<ApplicationDbContext> Options { get; }
+
+        public Harness(string? connectionId = ConnectionId, DbContextOptions<ApplicationDbContext>? options = null)
         {
+            Options = options ?? new DbContextOptionsBuilder<ApplicationDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+
+            Mock<ISystemDbContextFactory> factory = new();
+            factory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new ApplicationDbContext(Options));
+
             Mock<IHubContext<SignalRControlHub>> hubContext = HubContext;
             hubContext.Setup(h => h.Clients.Client(It.IsAny<string>())).Returns(ClientProxy.Object);
 
@@ -44,7 +55,7 @@ public class DmxServiceTests
             scopeFactory.Setup(f => f.CreateScope()).Returns(scope.Object);
 
             Service = new DmxService(
-                Mock.Of<ISystemDbContextFactory>(),
+                factory.Object,
                 hubContext.Object,
                 Mock.Of<ILogger<DmxService>>(),
                 scopeFactory.Object);

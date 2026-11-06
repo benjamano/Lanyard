@@ -864,7 +864,8 @@
       "Deleting a scene step renumbers the steps after it, so a running scene's progress bar no longer runs past the end. Steps must now last longer than 0 seconds.",
       "With kiosk version 1.0.46, a kiosk's DMX lights keep working after it reconnects to Lanyard. Before, a reconnect could leave the DMX interface stuck closed until the kiosk was restarted.",
       "With kiosk version 1.0.46, unplugging and replugging the DMX USB interface brings the lights back within a few seconds, and an interface plugged in after the kiosk started is picked up on its own.",
-      "With kiosk version 1.0.46, a kiosk sends DMX at a steady 40 frames a second, even while scenes and faders send it lots of changes."
+      "With kiosk version 1.0.46, a kiosk sends DMX at a steady 40 frames a second, even while scenes and faders send it lots of changes.",
+      "Lanyard now remembers each kiosk's DMX lights, so if Lanyard itself restarts, every kiosk's lights come back as they were when it reconnects."
     ]
   }
 ]

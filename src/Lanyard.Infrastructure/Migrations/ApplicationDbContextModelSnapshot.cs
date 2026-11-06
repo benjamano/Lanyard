@@ -2183,6 +2183,31 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("ClientAvailableDmxDevices");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxClientOutputState", b =>
+                {
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte>("GrandMaster")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((byte)255);
+
+                    b.Property<bool>("IsBlackout")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("UpdatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<byte[]>("Values")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.HasKey("ClientId");
+
+                    b.ToTable("DmxClientOutputStates");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxFixture", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5563,6 +5588,17 @@ namespace Lanyard.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.ClientAvailableDmxDevice", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxClientOutputState", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
                         .WithMany()
