@@ -16,6 +16,9 @@ public interface ITemplateLearningService
     // The monthly suggestions look back this many whole weeks.
     public const int MonthlyWeeks = 8;
 
+    // A location with no templates is offered them once this many of those weeks have a published rota.
+    public const int FirstSetupWeeks = 4;
+
     // The last `weeks` whole weeks (Monday to Sunday) before this week.
     Task<Result<TemplateLearningResult>> LearnAsync(LocationScope scope, int locationId, int weeks);
 

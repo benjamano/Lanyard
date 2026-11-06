@@ -167,15 +167,42 @@ public class TemplateLearningServiceTests
     // --- Monthly suggestions ---
 
     [TestMethod]
-    public async Task RunMonthlyAsync_NoTemplatesYet_DoesNothing()
+    public async Task RunMonthlyAsync_NoTemplatesButARotaBuiltByHand_OffersFirstSetup()
     {
         World w = await SeedAsync();
 
-        await using ApplicationDbContext ctx = new(w.Options);
-        TemplateSuggestionRun? run = await GetService(w.Options).RunMonthlyAsync(ctx, w.Location, Now);
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            TemplateSuggestionRun? run = await GetService(w.Options).RunMonthlyAsync(ctx, w.Location, Now);
 
-        Assert.IsNull(run, "a location building its rota by hand isn't nagged");
-        Assert.AreEqual(0, await ctx.TemplateSuggestionRuns.CountAsync());
+            Assert.IsNotNull(run);
+            Assert.IsTrue(run.FirstSetup);
+            Assert.AreEqual(5, run.Suggestions, "four templates and the hire staffing");
+            Assert.AreEqual(100, run.MatchPercent);
+        }
+
+        TemplateSuggestionRun? open = (await GetService(w.Options).GetOpenSuggestionsAsync(w.Scope, w.Location.Id)).Data;
+        Assert.IsTrue(open is { FirstSetup: true });
+    }
+
+    [TestMethod]
+    public async Task RunMonthlyAsync_NoTemplatesAndTooLittleRota_NothingYet()
+    {
+        World w = await SeedAsync();
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            // Keep only the last three weeks of the rota.
+            DateTime cutoff = RotaTime.StartOfDayUtc(new DateOnly(2026, 11, 9));
+            ctx.Shifts.RemoveRange(await ctx.Shifts.Where(x => x.StartUtc < cutoff).ToListAsync());
+            await ctx.SaveChangesAsync();
+        }
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            Assert.IsNull(await GetService(w.Options).RunMonthlyAsync(ctx, w.Location, Now));
+            Assert.AreEqual(0, await ctx.TemplateSuggestionRuns.CountAsync());
+        }
     }
 
     [TestMethod]
@@ -192,6 +219,8 @@ public class TemplateLearningServiceTests
         {
             TemplateSuggestionRun? run = await service.RunMonthlyAsync(ctx, w.Location, Now);
             Assert.AreEqual(4, run!.Suggestions, "two templates, the hire-only one and its hire staffing");
+            Assert.IsFalse(run.FirstSetup);
+            Assert.IsNull(run.MatchPercent);
         }
 
         TemplateSuggestionRun? open = (await service.GetOpenSuggestionsAsync(w.Scope, w.Location.Id)).Data;

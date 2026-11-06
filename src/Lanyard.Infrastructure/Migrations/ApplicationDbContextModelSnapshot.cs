@@ -4089,10 +4089,16 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<DateTime?>("DismissedUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("FirstSetup")
+                        .HasColumnType("boolean");
+
                     b.Property<DateOnly>("From")
                         .HasColumnType("date");
 
                     b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MatchPercent")
                         .HasColumnType("integer");
 
                     b.Property<DateTime>("RunUtc")

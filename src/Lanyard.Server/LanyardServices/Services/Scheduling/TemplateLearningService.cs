@@ -379,8 +379,10 @@ public class TemplateLearningService(
     }
 
     // The monthly run for one location (no signed-in user): learns from the last MonthlyWeeks whole
-    // weeks and records how many changes it would suggest. Only locations that already use
-    // templates are looked at, so a site that builds its rota by hand isn't nagged.
+    // weeks and records how many changes it would suggest. A location with templates gets suggested
+    // changes; one without gets its first templates suggested, once at least FirstSetupWeeks of
+    // those weeks have a published rota - with the check, so managers see how well they'd work.
+    // Returns null when there's nothing to look at yet.
     public async Task<TemplateSuggestionRun?> RunMonthlyAsync(ApplicationDbContext ctx, Location location, DateTime nowUtc)
     {
         bool usesTemplates = await ctx.ShiftTemplates
@@ -388,16 +390,36 @@ public class TemplateLearningService(
             .TagWithCallSite()
             .AnyAsync(x => x.LocationId == location.Id && x.IsActive);
 
-        if (!usesTemplates)
-        {
-            return null;
-        }
-
         DateOnly thisWeek = RotaTime.GetWeekStart(RotaTime.Today(nowUtc));
         DateOnly from = thisWeek.AddDays(-7 * ITemplateLearningService.MonthlyWeeks);
         DateOnly to = thisWeek.AddDays(-1);
 
-        TemplateLearningResult result = await LearnAsync(ctx, location.Id, from, to, withCheck: false);
+        if (!usesTemplates)
+        {
+            DateTime fromUtc = RotaTime.StartOfDayUtc(from);
+            DateTime toUtc = RotaTime.StartOfDayUtc(to.AddDays(1));
+
+            List<DateTime> starts = await ctx.Shifts
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.LocationId == location.Id && x.IsActive && x.PublishedDateUtc != null && x.StartUtc >= fromUtc && x.StartUtc < toUtc)
+                .Select(x => x.StartUtc)
+                .ToListAsync();
+
+            int weeksWithRota = starts.Select(x => RotaTime.GetWeekStart(RotaTime.LocalDate(x))).Distinct().Count();
+
+            if (weeksWithRota < ITemplateLearningService.FirstSetupWeeks)
+            {
+                return null;
+            }
+        }
+
+        TemplateLearningResult result = await LearnAsync(ctx, location.Id, from, to, withCheck: !usesTemplates);
+
+        if (!usesTemplates && result.Templates.Count == 0)
+        {
+            return null;
+        }
 
         TemplateSuggestionRun run = new()
         {
@@ -407,7 +429,9 @@ public class TemplateLearningService(
             RunUtc = nowUtc,
             From = from,
             To = to,
-            Suggestions = result.Suggestions
+            Suggestions = result.Suggestions,
+            FirstSetup = !usesTemplates,
+            MatchPercent = result.Check?.MatchPercent
         };
 
         ctx.TemplateSuggestionRuns.Add(run);

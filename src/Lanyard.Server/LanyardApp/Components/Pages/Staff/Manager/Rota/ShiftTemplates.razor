@@ -45,10 +45,23 @@
     @if (openSuggestions is TemplateSuggestionRun run)
     {
         <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false" Class="templates-suggestions">
-            The rota you published from @RotaDisplayExtensions.RangeLabel(run.From, run.To) suggests
-            @run.Suggestions @(run.Suggestions == 1 ? "change" : "changes") to these templates.
+            @if (run.FirstSetup)
+            {
+                <text>
+                    Lanyard has learned @run.Suggestions @(run.Suggestions == 1 ? "template" : "templates") from the rota you published
+                    from @RotaDisplayExtensions.RangeLabel(run.From, run.To)@(run.MatchPercent is int match ? $". With them, Auto-build would have made {match}% of that rota the same" : string.Empty).
+                    Review them to set up Auto-build.
+                </text>
+            }
+            else
+            {
+                <text>
+                    The rota you published from @RotaDisplayExtensions.RangeLabel(run.From, run.To) suggests
+                    @run.Suggestions @(run.Suggestions == 1 ? "change" : "changes") to these templates.
+                </text>
+            }
             <div class="templates-suggestions-actions">
-                <FluentButton Appearance="ButtonAppearance.Primary" Size="ButtonSize.Small" OnClick="@(() => LearnAsync(ITemplateLearningService.MonthlyWeeks))">Review</FluentButton>
+                <FluentButton Appearance="ButtonAppearance.Primary" Size="ButtonSize.Small" OnClick="@(() => LearnAsync(ITemplateLearningService.MonthlyWeeks))">@(run.FirstSetup ? "Set up Auto-build" : "Review")</FluentButton>
                 <FluentButton Size="ButtonSize.Small" Disabled="@isBusy" OnClick="@DismissSuggestionsAsync">Dismiss</FluentButton>
             </div>
         </FluentMessageBar>

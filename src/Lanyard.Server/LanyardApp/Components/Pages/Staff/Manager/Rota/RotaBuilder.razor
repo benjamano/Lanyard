@@ -78,8 +78,16 @@
             @if (templateSuggestions is TemplateSuggestionRun suggestionRun)
             {
                 <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
-                    Last month's rota suggests @suggestionRun.Suggestions @(suggestionRun.Suggestions == 1 ? "change" : "changes") to your shift templates.
-                    <a href="@($"/manage/rota/templates?location={locationId}")">Review @(suggestionRun.Suggestions == 1 ? "it" : "them")</a>
+                    @if (suggestionRun.FirstSetup)
+                    {
+                        <text>Lanyard has learned your shift templates from the rota you've been building@(suggestionRun.MatchPercent is int match ? $" ({match}% match)" : string.Empty), so Auto-build can do it for you.</text>
+                        <a href="@($"/manage/rota/templates?location={locationId}")">Set up Auto-build</a>
+                    }
+                    else
+                    {
+                        <text>Last month's rota suggests @suggestionRun.Suggestions @(suggestionRun.Suggestions == 1 ? "change" : "changes") to your shift templates.</text>
+                        <a href="@($"/manage/rota/templates?location={locationId}")">Review @(suggestionRun.Suggestions == 1 ? "it" : "them")</a>
+                    }
                 </FluentMessageBar>
             }
 

@@ -14,7 +14,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20261106225818_AddTemplateSuggestionRuns")]
+    [Migration("20261106231310_AddTemplateSuggestionRuns")]
     partial class AddTemplateSuggestionRuns
     {
         /// <inheritdoc />
@@ -4092,10 +4092,16 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<DateTime?>("DismissedUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("FirstSetup")
+                        .HasColumnType("boolean");
+
                     b.Property<DateOnly>("From")
                         .HasColumnType("date");
 
                     b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MatchPercent")
                         .HasColumnType("integer");
 
                     b.Property<DateTime>("RunUtc")

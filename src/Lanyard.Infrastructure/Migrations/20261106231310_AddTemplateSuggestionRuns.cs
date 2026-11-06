@@ -22,6 +22,8 @@ namespace Lanyard.Infrastructure.Migrations
                     From = table.Column<DateOnly>(type: "date", nullable: false),
                     To = table.Column<DateOnly>(type: "date", nullable: false),
                     Suggestions = table.Column<int>(type: "integer", nullable: false),
+                    FirstSetup = table.Column<bool>(type: "boolean", nullable: false),
+                    MatchPercent = table.Column<int>(type: "integer", nullable: true),
                     DismissedUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     DismissedByUserId = table.Column<string>(type: "text", nullable: true)
                 },

@@ -10,9 +10,10 @@ using Microsoft.Extensions.Logging;
 
 namespace Lanyard.Application.Services.Scheduling;
 
-// Once a month, for every location that uses shift templates, compares the rota it published over
-// the last few weeks with its templates (TemplateLearningService.RunMonthlyAsync) and records how
-// many changes that suggests, for a banner on Shift Templates. Checks daily and runs a location
+// Once a month, for every location, compares the rota it published over the last few weeks with
+// its templates (TemplateLearningService.RunMonthlyAsync) and records how many changes that
+// suggests, for a banner on Shift Templates and the rota. A location with no templates is offered
+// its first ones as soon as it has enough rota to learn from, without waiting for a new month. Checks daily and runs a location
 // once its last run is from an earlier calendar month (venue time), so a restart never skips or
 // repeats a month.
 public class TemplateSuggestionHostedService(
@@ -65,18 +66,25 @@ public class TemplateSuggestionHostedService(
             DateOnly monthStart = new(today.Year, today.Month, 1);
             DateTime monthStartUtc = RotaTime.StartOfDayUtc(monthStart);
 
-            List<int> withTemplates = await ctx.ShiftTemplates
+            // Locations with templates, and ones still building by hand that have published a rota
+            // recently (they may be ready for their first templates).
+            DateTime recentUtc = nowUtc.AddDays(-7 * ITemplateLearningService.MonthlyWeeks);
+
+            List<int> candidates = await ctx.ShiftTemplates
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Where(x => x.IsActive)
                 .Select(x => x.LocationId)
+                .Union(ctx.Shifts
+                    .Where(x => x.IsActive && x.PublishedDateUtc != null && x.StartUtc >= recentUtc)
+                    .Select(x => x.LocationId))
                 .Distinct()
                 .ToListAsync(cancellationToken);
 
             List<Location> locations = await ctx.Locations
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(x => x.IsActive && withTemplates.Contains(x.Id))
+                .Where(x => x.IsActive && candidates.Contains(x.Id))
                 .ToListAsync(cancellationToken);
 
             foreach (Location location in locations)
