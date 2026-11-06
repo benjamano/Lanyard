@@ -195,4 +195,31 @@ public class ShiftTemplateServiceTests
 
         CollectionAssert.AreEqual(new[] { "Monday", "Sunday AM", "Sunday PM" }, names);
     }
+
+    [TestMethod]
+    public async Task SaveTemplateAsync_Regulars_SavedInOrderAndMustWorkHere()
+    {
+        World w = await SeedAsync();
+        UserProfile amy = await SchedulingTestHelpers.SeedUserAsync(w.Options, w.Ipswich, "Amy");
+        UserProfile tom = await SchedulingTestHelpers.SeedUserAsync(w.Options, w.Ipswich, "Tom");
+        UserProfile priya = await SchedulingTestHelpers.SeedUserAsync(w.Options, w.Wisbech, "Priya");
+        ShiftTemplateService service = GetService(w.Options);
+
+        ShiftTemplate template = Template(w.Ipswich, (w.Host, 2));
+        template.Slots[0].Regulars =
+        [
+            new ShiftTemplateSlotRegular { ShiftTemplateSlotId = Guid.Empty, UserId = tom.Id },
+            new ShiftTemplateSlotRegular { ShiftTemplateSlotId = Guid.Empty, UserId = amy.Id }
+        ];
+
+        Result<ShiftTemplate> saved = await service.SaveTemplateAsync(w.ManagerScope, template, ManagerId);
+        Assert.IsTrue(saved.IsSuccess, saved.Error);
+
+        ShiftTemplate loaded = (await service.GetTemplatesAsync(w.ManagerScope, w.Ipswich.Id)).Data!.Single();
+        CollectionAssert.AreEqual(new[] { tom.Id, amy.Id }, loaded.Slots.Single().Regulars.OrderBy(x => x.SortOrder).Select(x => x.UserId).ToList());
+
+        ShiftTemplate elsewhere = Template(w.Ipswich, (w.Host, 1));
+        elsewhere.Slots[0].Regulars = [new ShiftTemplateSlotRegular { ShiftTemplateSlotId = Guid.Empty, UserId = priya.Id }];
+        Assert.IsFalse((await service.SaveTemplateAsync(w.ManagerScope, elsewhere, ManagerId)).IsSuccess, "Priya works at Wisbech");
+    }
 }

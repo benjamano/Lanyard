@@ -1,7 +1,9 @@
 namespace Lanyard.Infrastructure.DTO.Scheduling;
 
 // One thing the rota needs on one day: "Saturday AM needs 4 Hosts 09:00-14:00". Made from a shift
-// template, or from a booked party (PartyBookingId set) and its type's staffing rules; Needed is how many more shifts it wants once the shifts already on the rota for it
+// template, or from a booked party (PartyBookingId set) and its type's staffing rules. Needed can
+// be 0 for a template position that's only there for parties and hires to add to. RegularUserIds
+// are the template's regulars for the position, given the shift first when they can work it. Needed is how many more shifts it wants once the shifts already on the rota for it
 // have been counted.
 public sealed record DemandSlot(
     string Name,
@@ -13,7 +15,8 @@ public sealed record DemandSlot(
     string PositionName,
     int Needed,
     Guid? TemplateId,
-    Guid? PartyBookingId = null);
+    Guid? PartyBookingId = null,
+    IReadOnlyList<string>? RegularUserIds = null);
 
 // One shift Auto-build would make (or made). UserId null = left as an open shift, with WhyOpen
 // saying why nobody was picked. Reason is the main reason that person was picked, if any.

@@ -129,6 +129,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ShiftTemplate> ShiftTemplates { get; set; }
         public DbSet<PartyStaffingRule> PartyStaffingRules { get; set; }
         public DbSet<ShiftTemplateSlot> ShiftTemplateSlots { get; set; }
+        public DbSet<ShiftTemplateSlotRegular> ShiftTemplateSlotRegulars { get; set; }
         public DbSet<CompanySchedulingSettings> CompanySchedulingSettings { get; set; }
         public DbSet<Shift> Shifts { get; set; }
         public DbSet<ClockInTerminal> ClockInTerminals { get; set; }
@@ -593,6 +594,22 @@ namespace Lanyard.Infrastructure.DataAccess
 
             modelBuilder.Entity<ShiftTemplateSlot>()
                 .HasIndex(x => new { x.ShiftTemplateId, x.StaffPositionId })
+                .IsUnique();
+
+            modelBuilder.Entity<ShiftTemplateSlot>()
+                .HasMany(x => x.Regulars)
+                .WithOne(x => x.ShiftTemplateSlot)
+                .HasForeignKey(x => x.ShiftTemplateSlotId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ShiftTemplateSlotRegular>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ShiftTemplateSlotRegular>()
+                .HasIndex(x => new { x.ShiftTemplateSlotId, x.UserId })
                 .IsUnique();
 
             // A party's staff shifts keep their place on the rota if the booking row ever goes.
@@ -1294,6 +1311,7 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<UserPosition>().HasQueryFilter(x => TenantFilterDisabled || x.StaffPosition!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<StaffPositionRequiredCourse>().HasQueryFilter(x => TenantFilterDisabled || x.StaffPosition!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ShiftTemplateSlot>().HasQueryFilter(x => TenantFilterDisabled || x.ShiftTemplate!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ShiftTemplateSlotRegular>().HasQueryFilter(x => TenantFilterDisabled || x.ShiftTemplateSlot!.ShiftTemplate!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ChatMember>().HasQueryFilter(x => TenantFilterDisabled || x.Conversation!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ChatMessage>().HasQueryFilter(x => TenantFilterDisabled || x.Conversation!.CompanyId == TenantCompanyId);
         }

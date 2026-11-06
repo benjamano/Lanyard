@@ -3755,6 +3755,32 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("ShiftTemplateSlots");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ShiftTemplateSlotRegular", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ShiftTemplateSlotId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("ShiftTemplateSlotId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("ShiftTemplateSlotRegulars");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Song", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6385,6 +6411,25 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("StaffPosition");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ShiftTemplateSlotRegular", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.ShiftTemplateSlot", "ShiftTemplateSlot")
+                        .WithMany("Regulars")
+                        .HasForeignKey("ShiftTemplateSlotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ShiftTemplateSlot");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Song", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.Company", null)
@@ -6916,6 +6961,11 @@ namespace Lanyard.Infrastructure.Migrations
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ShiftTemplate", b =>
                 {
                     b.Navigation("Slots");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ShiftTemplateSlot", b =>
+                {
+                    b.Navigation("Regulars");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.StaffPosition", b =>

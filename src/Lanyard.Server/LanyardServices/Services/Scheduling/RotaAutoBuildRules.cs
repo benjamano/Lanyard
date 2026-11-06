@@ -35,8 +35,10 @@ public sealed record AutoBuildPick(Shift Shift, AutoBuildLine Line);
 // afternoon) are a split shift, not a short rest, so they're allowed. If that leaves nobody, the shift is
 // made as an open shift for the manager (or a pick-up) to fill.
 //
-// Shifts are filled hardest first - the ones the fewest people could work - so a scarce person
-// isn't used up on a shift plenty of others could have done; then in time order.
+// A template position's regulars get its shifts first whenever they can work them (the same hard
+// rules apply). Shifts with regulars are filled first; then the hardest - the ones the fewest
+// people could work - so a scarce person isn't used up on a shift plenty of others could have done;
+// then in time order.
 public static class RotaAutoBuildRules
 {
     private static readonly SuggestionReasonKind[] AutoBlocking =
@@ -59,10 +61,14 @@ public static class RotaAutoBuildRules
                 DateTime startUtc = RotaTime.ToUtc(day, template.StartTime);
                 DateTime endUtc = RotaTime.ToUtc(template.RunsPastMidnight ? day.AddDays(1) : day, template.EndTime);
 
-                foreach (ShiftTemplateSlot slot in template.Slots.Where(x => x.Headcount > 0))
+                // Positions needing nobody are kept (Needed 0): parties and hires add to them.
+                foreach (ShiftTemplateSlot slot in template.Slots.Where(x => x.Headcount >= 0))
                 {
+                    List<string> regulars = slot.Regulars.OrderBy(x => x.SortOrder).Select(x => x.UserId).ToList();
+
                     slots.Add(new DemandSlot(template.Name, day, startUtc, endUtc, template.BreakMinutes,
-                        slot.StaffPositionId, slot.StaffPosition?.Name ?? "Position", slot.Headcount, template.Id));
+                        slot.StaffPositionId, slot.StaffPosition?.Name ?? "Position", slot.Headcount, template.Id,
+                        null, regulars.Count > 0 ? regulars : null));
                 }
             }
         }
@@ -122,7 +128,8 @@ public static class RotaAutoBuildRules
                     StaffPositionId = rule.StaffPositionId,
                     PositionName = rule.StaffPosition?.Name ?? "Position",
                     Needed = rule.StaffCount,
-                    PartyBookingId = party.Id
+                    PartyBookingId = party.Id,
+                    RegularUserIds = null
                 });
             }
         }
@@ -209,7 +216,9 @@ public static class RotaAutoBuildRules
 
                 return (Slot: slot, Index: index, Possible: possible);
             })
-            .OrderBy(x => x.Possible)
+            // Shifts with regulars first, so a regular isn't used up on another shift before their own.
+            .OrderBy(x => x.Slot.RegularUserIds is { Count: > 0 } ? 0 : 1)
+            .ThenBy(x => x.Possible)
             .ThenBy(x => x.Slot.StartUtc)
             .ThenBy(x => x.Index)
             .ToList();
@@ -234,8 +243,17 @@ public static class RotaAutoBuildRules
                 worker.Wish)).ToList();
 
             ShiftSuggestions ranking = ShiftSuggestionRules.Rank(shift, candidates);
-            ShiftSuggestion? best = ranking.Ranked.FirstOrDefault(x => !x.Reasons.Any(r => AutoBlocking.Contains(r.Kind))
-                && !ShortOvernightRest(workers.First(w => w.UserId == x.UserId), shift));
+
+            bool Allowed(ShiftSuggestion x) => !x.Reasons.Any(r => AutoBlocking.Contains(r.Kind))
+                && !ShortOvernightRest(workers.First(w => w.UserId == x.UserId), shift);
+
+            // A regular who can work it gets it, in the order the template lists them; otherwise the
+            // usual ranking decides.
+            ShiftSuggestion? regular = slot.RegularUserIds?
+                .Select(id => ranking.Ranked.FirstOrDefault(x => x.UserId == id))
+                .FirstOrDefault(x => x is not null && Allowed(x));
+
+            ShiftSuggestion? best = regular ?? ranking.Ranked.FirstOrDefault(Allowed);
 
             if (best is null)
             {
@@ -253,7 +271,7 @@ public static class RotaAutoBuildRules
             shift.UserId = chosen.UserId;
             chosen.Shifts.Add(shift);
 
-            string? reason = best.Positives.FirstOrDefault()?.Text;
+            string? reason = regular is not null ? "Regular on this shift" : best.Positives.FirstOrDefault()?.Text;
             picks.Add(new AutoBuildPick(shift, Line(slot, chosen.UserId, chosen.DisplayName, reason, null)));
         }
 

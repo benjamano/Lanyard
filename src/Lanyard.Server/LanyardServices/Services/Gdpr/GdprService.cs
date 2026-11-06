@@ -490,6 +490,7 @@ public class GdprService : IGdprService
             // account is going.
             ctx.StaffAvailabilities.RemoveRange(await ctx.StaffAvailabilities.IgnoreQueryFilters().Where(x => x.UserId == userId).ToListAsync());
             ctx.StaffWorkPreferences.RemoveRange(await ctx.StaffWorkPreferences.IgnoreQueryFilters().Where(x => x.UserId == userId).ToListAsync());
+            ctx.ShiftTemplateSlotRegulars.RemoveRange(await ctx.ShiftTemplateSlotRegulars.IgnoreQueryFilters().Where(x => x.UserId == userId).ToListAsync());
 
             // Their devices and notification choices exist only for them.
             ctx.PushSubscriptions.RemoveRange(await ctx.PushSubscriptions.Where(x => x.UserId == userId).ToListAsync());
