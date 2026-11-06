@@ -188,7 +188,8 @@ public class RotaAutoBuildServiceTests
 
     // --- Parties ---
 
-    private static async Task<PartyBooking> SeedPartyAsync(World w, string type = "Play", PartyBookingStatus status = PartyBookingStatus.Booked)
+    // A party in the Saturday AM shift (09:00-14:00) unless it's given other hours.
+    private static async Task<PartyBooking> SeedPartyAsync(World w, string type = "Play", PartyBookingStatus status = PartyBookingStatus.Booked, int startHour = 10, int endHour = 12)
     {
         await using ApplicationDbContext ctx = new(w.Options);
 
@@ -200,8 +201,7 @@ public class RotaAutoBuildServiceTests
                 CompanyId = w.Ipswich.CompanyId,
                 LocationId = w.Ipswich.Id,
                 StaffPositionId = w.Host.Id,
-                StaffCount = 1,
-                MinutesBefore = 30
+                StaffCount = 1
             });
         }
 
@@ -211,8 +211,8 @@ public class RotaAutoBuildServiceTests
             CompanyId = w.Ipswich.CompanyId,
             LocationId = w.Ipswich.Id,
             PartyType = type,
-            StartUtc = RotaTime.ToUtc(Saturday, new TimeOnly(15, 0)),
-            EndUtc = RotaTime.ToUtc(Saturday, new TimeOnly(17, 0)),
+            StartUtc = RotaTime.ToUtc(Saturday, new TimeOnly(startHour, 0)),
+            EndUtc = RotaTime.ToUtc(Saturday, new TimeOnly(endHour, 0)),
             Status = status
         };
 
@@ -237,8 +237,10 @@ public class RotaAutoBuildServiceTests
         await using (ApplicationDbContext ctx = new(w.Options))
         {
             Shift partyShift = await ctx.Shifts.SingleAsync(x => x.PartyBookingId == party.Id);
-            Assert.AreEqual(party.StartUtc.AddMinutes(-30), partyShift.StartUtc);
-            Assert.IsNotNull(partyShift.UserId, "Amy and Tom are both free after the morning shift");
+            Assert.AreEqual(RotaTime.ToUtc(Saturday, new TimeOnly(9, 0)), partyShift.StartUtc, "the whole Saturday AM shift");
+            Assert.AreEqual(RotaTime.ToUtc(Saturday, new TimeOnly(14, 0)), partyShift.EndUtc);
+            Assert.AreEqual("Saturday AM · Party: Play", partyShift.Notes);
+            Assert.AreEqual(4, await ctx.Shifts.CountAsync(), "3 template Hosts + 1 for the party");
         }
 
         Result<AutoBuildResult> again = await service.PreviewAsync(w.ManagerScope, w.Ipswich.Id, Week, Week.AddDays(6));
@@ -313,5 +315,18 @@ public class RotaAutoBuildServiceTests
 
         Assert.AreEqual(0, preview.Data!.PartyCount);
         Assert.AreEqual(3, preview.Data.Lines.Count, "only the template's three Hosts");
+    }
+
+    [TestMethod]
+    public async Task PreviewAsync_PartyNoShiftCovers_WarnsAndAddsNobody()
+    {
+        World w = await SeedAsync();
+        await SeedPartyAsync(w, startHour: 16, endHour: 18);
+
+        Result<AutoBuildResult> preview = await GetService(w.Options).PreviewAsync(w.ManagerScope, w.Ipswich.Id, Week, Week.AddDays(6));
+
+        Assert.AreEqual(0, preview.Data!.PartyCount);
+        Assert.AreEqual(3, preview.Data.Lines.Count, "only the template's three Hosts");
+        StringAssert.Contains(preview.Data.WarningLines.Single(), "No shift template covers the Play party");
     }
 }

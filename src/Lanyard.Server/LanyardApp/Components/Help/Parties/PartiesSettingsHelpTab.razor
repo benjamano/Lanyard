@@ -18,23 +18,28 @@
     <HelpSection Title="Party staffing">
         <FluentText>
             Under <strong>Party staffing</strong> on Party Settings, say how many extra staff each type of party needs.
-            <strong>Auto-build</strong> on the rota then adds those shifts for every booked party. It needs Staff Scheduling
-            to be switched on.
+            When you use <strong>Auto-build</strong> on the rota, it adds them to the shift each booked party falls in, on top
+            of what that shift's template needs. They work the whole shift, for example 09:00 to 14:00 for a party at 10:00,
+            and do the party as part of it. It needs Staff Scheduling to be switched on.
         </FluentText>
         <ol>
             <li>Select <strong>Add party staffing</strong>.</li>
             <li>Under <strong>For</strong>, pick a party type you've used on bookings, <strong>Another type...</strong> to type
                 one in, or <strong>Any other party</strong> for every type that has no staffing of its own.</li>
-            <li>Choose the <strong>Position</strong> and <strong>How many</strong>, and how many minutes before the party
-                they start and after it they finish.</li>
+            <li>Choose the <strong>Position</strong> and <strong>How many extra</strong>, then save.</li>
         </ol>
         <FluentText>
             Add one line per position, for example 2 Party Hosts and 1 Kitchen for "Lazer + Play". Types are matched to each
-            booking's type ignoring capitals. The shift shows as "Party: " and the type, never the child's name.
+            booking's type ignoring capitals. Two parties in the same shift add up. A party that overlaps two shifts adds
+            staff to both. On the rota the extra shift's note shows the shift and "Party: " with the type, never the child's name.
         </FluentText>
         <FluentText>
-            If a party is cancelled or its times change after Auto-build, the next Auto-build takes off the party's draft
-            shifts and adds new ones. A shift you've already published is left alone, with a warning to change it yourself.
+            If no shift template covers a party's time, Auto-build adds nobody for it and warns you, so you can add a template
+            or staff it by hand.
+        </FluentText>
+        <FluentText>
+            If a party is cancelled or moves to another shift after Auto-build, the next Auto-build takes off the party's
+            draft shifts and adds new ones where needed. A shift you've already published is left alone, with a warning to change it yourself.
         </FluentText>
     </HelpSection>
 

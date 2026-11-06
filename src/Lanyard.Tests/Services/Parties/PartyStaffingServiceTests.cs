@@ -38,9 +38,7 @@ public class PartyStaffingServiceTests
         LocationId = w.Ipswich.Id,
         PartyType = type,
         StaffPositionId = w.Host.Id,
-        StaffCount = count,
-        MinutesBefore = 30,
-        MinutesAfter = 15
+        StaffCount = count
     };
 
     [TestMethod]
@@ -84,10 +82,7 @@ public class PartyStaffingServiceTests
         World w = await SeedAsync();
 
         Assert.IsFalse((await GetService(w.Options).SaveRuleAsync(w.ManagerScope, Rule(w, "Play", count: 0), ManagerId)).IsSuccess);
-
-        PartyStaffingRule longBuffer = Rule(w, "Play");
-        longBuffer.MinutesBefore = 500;
-        Assert.IsFalse((await GetService(w.Options).SaveRuleAsync(w.ManagerScope, longBuffer, ManagerId)).IsSuccess);
+        Assert.IsFalse((await GetService(w.Options).SaveRuleAsync(w.ManagerScope, Rule(w, "Play", count: 21), ManagerId)).IsSuccess);
     }
 
     [TestMethod]

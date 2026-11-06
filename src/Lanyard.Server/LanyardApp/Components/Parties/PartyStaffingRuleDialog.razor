@@ -27,15 +27,11 @@
             <div class="staffing-dialog-pair">
                 <FluentSelect TOption="StaffPosition" TValue="string" Items="@Positions" OptionText="@(x => x.Name)" OptionValue="@(x => x.Id.ToString())"
                               @bind-Value="positionId" Label="Position" Width="100%" />
-                <FluentNumberInput TValue="int" @bind-Value="staffCount" Label="How many" Min="1" Max="20" Width="100%" />
-            </div>
-
-            <div class="staffing-dialog-pair">
-                <FluentNumberInput TValue="int" @bind-Value="minutesBefore" Label="Start (minutes before)" Min="0" Max="240" Step="15" Width="100%" />
-                <FluentNumberInput TValue="int" @bind-Value="minutesAfter" Label="Finish (minutes after)" Min="0" Max="240" Step="15" Width="100%" />
+                <FluentNumberInput TValue="int" @bind-Value="staffCount" Label="How many extra" Min="1" Max="20" Width="100%" />
             </div>
 
             <div class="staffing-dialog-hint">
+                They're added to the shift the party falls in and work the whole shift, doing the party as part of it.
                 Types are matched to the type on each booking, ignoring capitals. "Any other party" is used for every type without its own staffing.
             </div>
         </div>
@@ -78,8 +74,6 @@
     private string? newType;
     private string? positionId;
     private int staffCount = 1;
-    private int minutesBefore = 15;
-    private int minutesAfter = 15;
     private string? errorMessage;
     private bool isBusy;
 
@@ -103,8 +97,6 @@
             typeChoice = rule.PartyType is string type ? typeOptions.First(x => string.Equals(x.Value, type, StringComparison.OrdinalIgnoreCase)).Value : AnyType;
             positionId = rule.StaffPositionId.ToString();
             staffCount = rule.StaffCount;
-            minutesBefore = rule.MinutesBefore;
-            minutesAfter = rule.MinutesAfter;
 
             if (rule.StaffPosition is StaffPosition position && Positions.All(x => x.Id != position.Id))
             {
@@ -157,9 +149,7 @@
             LocationId = LocationId,
             PartyType = partyType,
             StaffPositionId = position,
-            StaffCount = staffCount,
-            MinutesBefore = minutesBefore,
-            MinutesAfter = minutesAfter
+            StaffCount = staffCount
         }, actingUser.Data);
 
         isBusy = false;

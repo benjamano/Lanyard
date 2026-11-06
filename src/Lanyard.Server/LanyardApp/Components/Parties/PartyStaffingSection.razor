@@ -11,7 +11,8 @@
     <h2 id="party-staffing-title">Party staffing</h2>
     <p class="staffing-intro">
         How many extra staff each type of party needs. <strong>Auto-build</strong> on the
-        <a href="@RotaLink">rota</a> adds these shifts for every booked party, on top of your shift templates.
+        <a href="@RotaLink">rota</a> adds them to the shift each booked party falls in, on top of what the shift template
+        needs. They work the whole shift and do the party as part of it.
     </p>
 
     @if (!schedulingEnabled)
@@ -51,8 +52,8 @@
                         {
                             <li>
                                 <span class="staffing-rule">
-                                    <strong>@rule.StaffCount × @(rule.StaffPosition?.Name ?? "Position")</strong>
-                                    <span class="staffing-when">@WhenLabel(rule)</span>
+                                    <strong>+@rule.StaffCount @(rule.StaffPosition?.Name ?? "Position")</strong>
+                                    <span class="staffing-when">for the whole shift the party is in</span>
                                 </span>
                                 <span class="staffing-actions">
                                     @if (confirmingRemoveId == rule.Id)
@@ -184,13 +185,4 @@
 
         await LoadAsync();
     }
-
-    // "From 30 min before to 15 min after the party", "For the length of the party".
-    private static string WhenLabel(PartyStaffingRule rule) => (rule.MinutesBefore, rule.MinutesAfter) switch
-    {
-        (0, 0) => "for the length of the party",
-        (int before, 0) => $"from {before} min before the party until it ends",
-        (0, int after) => $"from the start of the party until {after} min after",
-        (int before, int after) => $"from {before} min before to {after} min after the party"
-    };
 }

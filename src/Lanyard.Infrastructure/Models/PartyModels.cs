@@ -77,9 +77,9 @@ namespace Lanyard.Infrastructure.Models
             : TotalPrice is decimal total ? Math.Max(0m, total - (DepositPaidUtc is not null ? DepositAmount ?? 0m : 0m)) : null;
     }
 
-    // How many extra staff a kind of party needs on the rota: "a Lazer + Play party needs 2 Party
-    // Hosts from 30 minutes before it starts to 15 minutes after it ends". Auto-build on the rota
-    // adds these shifts for every booked party. PartyType is matched to the booking's free-text type
+    // How many extra staff a kind of party needs on the rota: "a Lazer + Play party needs 2 more
+    // Party Hosts". They work the whole template shift the party falls in (09:00-14:00 for a 10:00
+    // party) and do the party as part of it; Auto-build adds them for every booked party. PartyType is matched to the booking's free-text type
     // ignoring case and spaces at either end; null is the rule for any type that has no rules of
     // its own. A type can have several rules, one per position. Archived (IsActive = false) rather
     // than deleted, like the rest of the rota setup.
@@ -99,9 +99,6 @@ namespace Lanyard.Infrastructure.Models
         public StaffPosition? StaffPosition { get; set; }
 
         public int StaffCount { get; set; } = 1;
-
-        public int MinutesBefore { get; set; }
-        public int MinutesAfter { get; set; }
 
         public bool IsActive { get; set; } = true;
 

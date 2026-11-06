@@ -15,7 +15,6 @@ public class PartyStaffingService(
     private const string NoAccess = "You can only change party settings for your own location.";
 
     public const int MaxStaff = 20;
-    public const int MaxBufferMinutes = 240;
     public const int MaxTypeLength = 100;
 
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
@@ -75,11 +74,6 @@ public class PartyStaffingService(
             if (rule.StaffCount is < 1 or > MaxStaff)
             {
                 return Result<PartyStaffingRule>.Fail($"A party needs between 1 and {MaxStaff} staff of a position.");
-            }
-
-            if (rule.MinutesBefore is < 0 or > MaxBufferMinutes || rule.MinutesAfter is < 0 or > MaxBufferMinutes)
-            {
-                return Result<PartyStaffingRule>.Fail($"Time before and after must be between 0 and {MaxBufferMinutes} minutes.");
             }
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
@@ -145,8 +139,6 @@ public class PartyStaffingService(
             target.PartyType = partyType;
             target.StaffPositionId = rule.StaffPositionId;
             target.StaffCount = rule.StaffCount;
-            target.MinutesBefore = rule.MinutesBefore;
-            target.MinutesAfter = rule.MinutesAfter;
             target.UpdateDate = DateTime.UtcNow;
             target.UpdatedByUserId = actingUserId;
 

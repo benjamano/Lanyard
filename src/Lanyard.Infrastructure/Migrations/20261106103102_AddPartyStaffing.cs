@@ -27,8 +27,6 @@ namespace Lanyard.Infrastructure.Migrations
                     PartyType = table.Column<string>(type: "text", nullable: true),
                     StaffPositionId = table.Column<Guid>(type: "uuid", nullable: false),
                     StaffCount = table.Column<int>(type: "integer", nullable: false),
-                    MinutesBefore = table.Column<int>(type: "integer", nullable: false),
-                    MinutesAfter = table.Column<int>(type: "integer", nullable: false),
                     IsActive = table.Column<bool>(type: "boolean", nullable: false),
                     UpdateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdatedByUserId = table.Column<string>(type: "text", nullable: true)

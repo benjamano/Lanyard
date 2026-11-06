@@ -106,8 +106,13 @@ public class RotaAutoBuildService(
                 }
             }
 
-            List<DemandSlot> demand = RotaAutoBuildRules.ExpandTemplates(templates, firstDay, to)
-                .Concat(RotaAutoBuildRules.ExpandParties(parties, partyRules))
+            // Parties are matched to every template shift those days, including any already started,
+            // so a party during a shift that's under way isn't reported as having no shift.
+            List<DemandSlot> templateDemand = RotaAutoBuildRules.ExpandTemplates(templates, firstDay, to);
+            (List<DemandSlot> partyDemand, List<PartyBooking> uncovered) = RotaAutoBuildRules.ExpandParties(parties, partyRules, templateDemand);
+
+            List<DemandSlot> demand = templateDemand
+                .Concat(partyDemand)
                 .Where(x => x.StartUtc > nowUtc)
                 .ToList();
 
@@ -173,6 +178,13 @@ public class RotaAutoBuildService(
                 {
                     warnings.Add($"{who}'s {position} shift on {day.ToString("ddd d MMM", RotaFormat.Uk)} ({RotaFormat.TimeRange(shift.StartUtc, shift.EndUtc)}) is for a party that was cancelled or no longer needs it. It's published, so remove it on the rota if it isn't needed.");
                 }
+            }
+
+            foreach (PartyBooking party in uncovered.Where(x => x.StartUtc > nowUtc))
+            {
+                warnings.Add($"No shift template covers the {(PartyStaffingRule.Normalise(party.PartyType) is string type ? type + " party" : "party")} on "
+                    + $"{RotaTime.LocalDate(party.StartUtc).ToString("ddd d MMM", RotaFormat.Uk)} ({RotaFormat.TimeRange(party.StartUtc, party.EndUtc)}), "
+                    + "so nobody was added for it. Add a template for that time, or add its staff by hand.");
             }
 
             int partyCount = parties.Count(p => demand.Any(d => d.PartyBookingId == p.Id));

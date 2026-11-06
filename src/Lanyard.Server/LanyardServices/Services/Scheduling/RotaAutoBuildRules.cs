@@ -70,31 +70,61 @@ public static class RotaAutoBuildRules
         return slots.OrderBy(x => x.StartUtc).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
-    // The extra shifts booked parties need: for each party, its type's PartyStaffingRules (or the
-    // default rules), each covering the party plus the rule's time before and after.
-    public static List<DemandSlot> ExpandParties(IEnumerable<PartyBooking> parties, IReadOnlyCollection<PartyStaffingRule> rules)
+    // The extra people booked parties need. Party staff work the whole template shift the party
+    // falls in - a 09:00-14:00 shift with a party at 10:00 - and do the party as part of it, so each
+    // of the party type's PartyStaffingRules (or the default rules) adds its StaffCount of that
+    // position to every template shift the party overlaps. Two parties in one shift add up. Shifts
+    // are the template ones from ExpandTemplates (the same days); a party no template shift
+    // overlaps is returned in Uncovered, for a warning, and adds nobody.
+    public static (List<DemandSlot> Slots, List<PartyBooking> Uncovered) ExpandParties(
+        IEnumerable<PartyBooking> parties, IReadOnlyCollection<PartyStaffingRule> rules, IEnumerable<DemandSlot> templateSlots)
     {
+        List<DemandSlot> shifts = templateSlots
+            .Where(x => x.PartyBookingId is null)
+            .DistinctBy(x => (x.TemplateId, x.StartUtc, x.EndUtc))
+            .ToList();
+
         List<DemandSlot> slots = [];
+        List<PartyBooking> uncovered = [];
 
         foreach (PartyBooking party in parties.Where(x => x.Status == PartyBookingStatus.Booked))
         {
-            string name = PartyName(party);
+            List<PartyStaffingRule> partyRules = PartyStaffingRule.For(rules, party.PartyType).Where(x => x.StaffCount > 0).ToList();
 
-            foreach (PartyStaffingRule rule in PartyStaffingRule.For(rules, party.PartyType).Where(x => x.StaffCount > 0))
+            if (partyRules.Count == 0)
             {
-                DateTime startUtc = party.StartUtc.AddMinutes(-rule.MinutesBefore);
-                DateTime endUtc = party.EndUtc.AddMinutes(rule.MinutesAfter);
+                continue;
+            }
 
-                slots.Add(new DemandSlot(name, RotaTime.LocalDate(startUtc), startUtc, endUtc, 0,
-                    rule.StaffPositionId, rule.StaffPosition?.Name ?? "Position", rule.StaffCount, null, party.Id));
+            List<DemandSlot> during = shifts.Where(x => x.StartUtc < party.EndUtc && x.EndUtc > party.StartUtc).ToList();
+
+            if (during.Count == 0)
+            {
+                uncovered.Add(party);
+                continue;
+            }
+
+            foreach (DemandSlot shift in during)
+            {
+                foreach (PartyStaffingRule rule in partyRules)
+                {
+                    slots.Add(shift with
+                    {
+                        Name = $"{shift.Name} · {PartyName(party)}",
+                        StaffPositionId = rule.StaffPositionId,
+                        PositionName = rule.StaffPosition?.Name ?? "Position",
+                        Needed = rule.StaffCount,
+                        PartyBookingId = party.Id
+                    });
+                }
             }
         }
 
-        return slots.OrderBy(x => x.StartUtc).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        return (slots.OrderBy(x => x.StartUtc).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList(), uncovered);
     }
 
-    // What a party's staff shift is called on the rota. The type, not the child's name: the shift
-    // is shown to the staff member and stays on their record after the party.
+    // How a party is named on the rota. The type, not the child's name: the shift is shown to the
+    // staff member and stays on their record after the party.
     public static string PartyName(PartyBooking party) =>
         PartyStaffingRule.Normalise(party.PartyType) is string type ? $"Party: {type}" : "Party";
 

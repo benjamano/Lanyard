@@ -3263,12 +3263,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<int>("LocationId")
                         .HasColumnType("integer");
 
-                    b.Property<int>("MinutesAfter")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("MinutesBefore")
-                        .HasColumnType("integer");
-
                     b.Property<string>("PartyType")
                         .HasColumnType("text");
 
