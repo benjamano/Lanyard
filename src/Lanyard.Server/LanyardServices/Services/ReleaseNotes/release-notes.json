@@ -894,10 +894,12 @@
   {
     "version": "1.4.21",
     "releaseDate": "2026-11-05",
-    "summary": "Shift templates: set up the shifts each location needs every week, ready for building the rota automatically.",
+    "summary": "Build the rota automatically: set up the shifts each location needs every week, then let Auto-build pick who works them.",
     "details": [
       "New Rota > Shift Templates page: add the shifts a location needs every week, such as Saturday AM 09:00 to 14:00, and how many people of each position they need (for example 2 Duty Managers and 4 Hosts).",
-      "A template can be limited to some dates, such as the school holidays, and archived when it's no longer needed."
+      "A template can be limited to some dates, such as the school holidays, and archived when it's no longer needed.",
+      "New Auto-build button on the rota: it fills the week or month you're looking at from your shift templates and picks who works each shift, using their positions, training, contracts, availability and time off. You see the whole list first, and the shifts are added as drafts to check before you publish.",
+      "Auto-build never puts someone on a time they've said they can't work, over their weekly maximum, without 11 hours' rest, or on a day they've asked for off. Shifts nobody can take are added as open shifts, and shifts already on the rota are left as they are."
     ]
   }
 ]

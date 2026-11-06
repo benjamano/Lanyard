@@ -81,72 +81,16 @@ public class ShiftSuggestionService(
                 shift.StaffPosition = position;
             }
 
-            List<string> memberIds = await ctx.UserLocationMemberships
-                .AsNoTracking()
-                .TagWithCallSite()
-                .Where(x => x.LocationId == shift.LocationId && x.UserId != ApplicationDbContext.SystemDeletedUserPlaceholderId)
-                .Select(x => x.UserId)
-                .Distinct()
-                .ToListAsync();
-
-            List<UserProfile> users = await ctx.Users
-                .AsNoTracking()
-                .TagWithCallSite()
-                .Where(x => memberIds.Contains(x.Id))
-                .ToListAsync();
-
-            if (users.Count == 0)
-            {
-                return Result<ShiftSuggestions>.Ok(ShiftSuggestions.Empty);
-            }
-
-            List<string> userIds = users.Select(x => x.Id).ToList();
-
             // The shift's week, plus a day either side so a late finish the night before (or an
             // early start the morning after) is seen by the rest check.
             DateOnly day = RotaTime.LocalDate(shift.StartUtc);
-            DateOnly weekStart = RotaTime.GetWeekStart(day);
-            DateTime fromUtc = RotaTime.StartOfDayUtc(weekStart.AddDays(-1));
-            DateTime toUtc = RotaTime.StartOfDayUtc(weekStart.AddDays(8));
 
-            Dictionary<string, ShiftClaimRules.WorkerCalendar> calendars =
-                await ShiftClaimRules.LoadCalendarsAsync(ctx, userIds, shift.StartUtc.AddDays(-1), shift.EndUtc.AddDays(1));
+            SuggestionPool pool = await SuggestionPool.LoadAsync(ctx, _contractRequirementService, _logger, shift.LocationId, companyId, day, day);
 
-            List<int> companyLocationIds = await ctx.Locations
-                .AsNoTracking()
-                .TagWithCallSite()
-                .Where(x => x.CompanyId == companyId)
-                .Select(x => x.Id)
-                .ToListAsync();
-
-            ILookup<string, Shift> shiftsByUser = (await ctx.Shifts
-                .AsNoTracking()
-                .TagWithCallSite()
-                .Where(x => x.IsActive && x.UserId != null && userIds.Contains(x.UserId)
-                    && companyLocationIds.Contains(x.LocationId)
-                    && x.StartUtc < toUtc && x.EndUtc > fromUtc)
-                .ToListAsync())
-                .ToLookup(x => x.UserId!);
-
-            Result<Dictionary<string, ResolvedContract>> contractsResult =
-                await _contractRequirementService.ResolveForUsersAsync(userIds, companyId);
-
-            Dictionary<string, ResolvedContract> contracts = contractsResult.IsSuccess && contractsResult.Data is not null
-                ? contractsResult.Data
-                : [];
-
-            if (!contractsResult.IsSuccess)
+            if (pool.Users.Count == 0)
             {
-                _logger.LogWarning("Failed to resolve contracts for shift suggestions at {LocationId}: {Error}", shift.LocationId, contractsResult.Error);
+                return Result<ShiftSuggestions>.Ok(ShiftSuggestions.Empty);
             }
-
-            // Approved time off already rules someone out (WhyCantWork); an undecided request is
-            // only a caution.
-            Dictionary<string, string> pendingTimeOff = (await TimeOffService.LiveTimeOffQuery(ctx, userIds, day, day)
-                .Where(x => x.Status == TimeOffStatus.Pending)
-                .ToListAsync())
-                .GroupBy(x => x.UserId)
-                .ToDictionary(g => g.Key, g => g.First().TimeOffType?.Name ?? "time off");
 
             HashSet<string> claimants = shift.Id == Guid.Empty
                 ? []
@@ -158,33 +102,21 @@ public class ShiftSuggestionService(
                     .Select(x => x.UserId)
                     .ToListAsync()).ToHashSet();
 
-            Dictionary<string, StaffPosition> primaryPositions = (await ctx.UserPositions
-                .AsNoTracking()
-                .TagWithCallSite()
-                .Include(x => x.StaffPosition)
-                .Where(x => userIds.Contains(x.UserId) && x.IsPrimary && x.StaffPosition!.IsActive && x.StaffPosition.CompanyId == companyId)
-                .ToListAsync())
-                .GroupBy(x => x.UserId)
-                .ToDictionary(g => g.Key, g => g.First().StaffPosition!);
-
-            ILookup<string, StaffAvailability> availabilityByUser =
-                (await StaffAvailabilityService.ForUsers(ctx, userIds, companyId).ToListAsync()).ToLookup(x => x.UserId);
-
-            List<SuggestionCandidate> candidates = users.Select(user =>
+            List<SuggestionCandidate> candidates = pool.Users.Select(user =>
             {
-                StaffPosition? primary = primaryPositions.GetValueOrDefault(user.Id);
+                StaffPosition? primary = pool.PrimaryPositions.GetValueOrDefault(user.Id);
 
                 return new SuggestionCandidate(
                     user.Id,
                     RotaNames.For(user),
                     primary?.Id,
                     primary?.Name,
-                    contracts.GetValueOrDefault(user.Id) ?? ResolvedContract.Empty,
-                    shiftsByUser[user.Id].ToList(),
-                    pendingTimeOff.GetValueOrDefault(user.Id),
+                    pool.ContractFor(user.Id),
+                    pool.ShiftsByUser[user.Id].ToList(),
+                    pool.PendingTimeOffOn(user.Id, day),
                     claimants.Contains(user.Id),
-                    ShiftClaimRules.WhyCantWork(calendars.GetValueOrDefault(user.Id, ShiftClaimRules.WorkerCalendar.Empty), shift, null, aboutViewer: false),
-                    availabilityByUser[user.Id].ToList());
+                    ShiftClaimRules.WhyCantWork(pool.CalendarFor(user.Id), shift, null, aboutViewer: false),
+                    pool.Availability[user.Id].ToList());
             }).ToList();
 
             return Result<ShiftSuggestions>.Ok(ShiftSuggestionRules.Rank(shift, candidates));
@@ -194,5 +126,114 @@ public class ShiftSuggestionService(
             _logger.LogError(ex, "Failed to suggest staff for a shift at {LocationId}", shift.LocationId);
             return Result<ShiftSuggestions>.Fail($"Failed to suggest staff: {ex.Message}");
         }
+    }
+}
+
+// Everything the suggestion ranking needs about a location's people for some days, loaded in a
+// fixed number of queries whatever the number of people or shifts: the one-shift suggestions and
+// Auto-build (many shifts at once) share it. Shifts are each person's active shifts at any of the
+// company's locations from the day before the first day's week to the day after the last day's
+// week (the weekly hours and the rest check need them); calendars cover the days themselves, a day
+// either side.
+internal sealed record SuggestionPool(
+    List<UserProfile> Users,
+    Dictionary<string, ShiftClaimRules.WorkerCalendar> Calendars,
+    ILookup<string, Shift> ShiftsByUser,
+    Dictionary<string, ResolvedContract> Contracts,
+    ILookup<string, TimeOffRequest> PendingTimeOff,
+    Dictionary<string, StaffPosition> PrimaryPositions,
+    ILookup<string, StaffAvailability> Availability)
+{
+    public ResolvedContract ContractFor(string userId) => Contracts.GetValueOrDefault(userId) ?? ResolvedContract.Empty;
+
+    public ShiftClaimRules.WorkerCalendar CalendarFor(string userId) =>
+        Calendars.GetValueOrDefault(userId, ShiftClaimRules.WorkerCalendar.Empty);
+
+    // The type of an undecided time-off request covering that day ("Holiday"), or null.
+    public string? PendingTimeOffOn(string userId, DateOnly day) =>
+        PendingTimeOff[userId].FirstOrDefault(x => x.Covers(day)) is TimeOffRequest request
+            ? request.TimeOffType?.Name ?? "time off"
+            : null;
+
+    public static async Task<SuggestionPool> LoadAsync(
+        ApplicationDbContext ctx, IContractRequirementService contractRequirementService, ILogger logger,
+        int locationId, int companyId, DateOnly firstDay, DateOnly lastDay)
+    {
+        List<string> memberIds = await ctx.UserLocationMemberships
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => x.LocationId == locationId && x.UserId != ApplicationDbContext.SystemDeletedUserPlaceholderId)
+            .Select(x => x.UserId)
+            .Distinct()
+            .ToListAsync();
+
+        List<UserProfile> users = await ctx.Users
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => memberIds.Contains(x.Id))
+            .ToListAsync();
+
+        if (users.Count == 0)
+        {
+            return new SuggestionPool([], [], Array.Empty<Shift>().ToLookup(x => x.UserId!), [],
+                Array.Empty<TimeOffRequest>().ToLookup(x => x.UserId), [], Array.Empty<StaffAvailability>().ToLookup(x => x.UserId));
+        }
+
+        List<string> userIds = users.Select(x => x.Id).ToList();
+
+        DateTime fromUtc = RotaTime.StartOfDayUtc(RotaTime.GetWeekStart(firstDay).AddDays(-1));
+        DateTime toUtc = RotaTime.StartOfDayUtc(RotaTime.GetWeekStart(lastDay).AddDays(8));
+
+        Dictionary<string, ShiftClaimRules.WorkerCalendar> calendars = await ShiftClaimRules.LoadCalendarsAsync(
+            ctx, userIds, RotaTime.StartOfDayUtc(firstDay.AddDays(-1)), RotaTime.StartOfDayUtc(lastDay.AddDays(2)));
+
+        List<int> companyLocationIds = await ctx.Locations
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => x.CompanyId == companyId)
+            .Select(x => x.Id)
+            .ToListAsync();
+
+        ILookup<string, Shift> shiftsByUser = (await ctx.Shifts
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => x.IsActive && x.UserId != null && userIds.Contains(x.UserId)
+                && companyLocationIds.Contains(x.LocationId)
+                && x.StartUtc < toUtc && x.EndUtc > fromUtc)
+            .ToListAsync())
+            .ToLookup(x => x.UserId!);
+
+        Result<Dictionary<string, ResolvedContract>> contractsResult =
+            await contractRequirementService.ResolveForUsersAsync(userIds, companyId);
+
+        Dictionary<string, ResolvedContract> contracts = contractsResult.IsSuccess && contractsResult.Data is not null
+            ? contractsResult.Data
+            : [];
+
+        if (!contractsResult.IsSuccess)
+        {
+            logger.LogWarning("Failed to resolve contracts for shift suggestions at {LocationId}: {Error}", locationId, contractsResult.Error);
+        }
+
+        // Approved time off already rules someone out (WhyCantWork); an undecided request is
+        // only a caution.
+        ILookup<string, TimeOffRequest> pendingTimeOff = (await TimeOffService.LiveTimeOffQuery(ctx, userIds, firstDay, lastDay)
+            .Where(x => x.Status == TimeOffStatus.Pending)
+            .ToListAsync())
+            .ToLookup(x => x.UserId);
+
+        Dictionary<string, StaffPosition> primaryPositions = (await ctx.UserPositions
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Include(x => x.StaffPosition)
+            .Where(x => userIds.Contains(x.UserId) && x.IsPrimary && x.StaffPosition!.IsActive && x.StaffPosition.CompanyId == companyId)
+            .ToListAsync())
+            .GroupBy(x => x.UserId)
+            .ToDictionary(g => g.Key, g => g.First().StaffPosition!);
+
+        ILookup<string, StaffAvailability> availabilityByUser =
+            (await StaffAvailabilityService.ForUsers(ctx, userIds, companyId).ToListAsync()).ToLookup(x => x.UserId);
+
+        return new SuggestionPool(users, calendars, shiftsByUser, contracts, pendingTimeOff, primaryPositions, availabilityByUser);
     }
 }

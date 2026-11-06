@@ -1,0 +1,106 @@
+.auto-build {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+}
+
+.auto-build-summary {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.auto-build-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--colorNeutralBackground3);
+}
+
+.auto-build-stat-open {
+    background: var(--colorPaletteYellowBackground1);
+}
+
+.auto-build-number {
+    font-size: 1.5rem;
+    font-weight: 600;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+}
+
+.auto-build ::deep .auto-build-note {
+    color: var(--colorNeutralForeground3);
+}
+
+.auto-build-days {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 50vh;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.auto-build-day h4 {
+    margin: 0 0 4px;
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.auto-build-day ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+}
+
+.auto-build-line {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 4px 12px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.auto-build-line:last-child {
+    border-bottom: none;
+}
+
+.auto-build-line-open {
+    border-left: 3px solid var(--colorPaletteYellowBorderActive);
+}
+
+.auto-build-line-what,
+.auto-build-line-who {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.auto-build-line-who {
+    text-align: right;
+    flex: 1 1 160px;
+}
+
+.auto-build-time {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.auto-build-why {
+    font-size: 0.8rem;
+    color: var(--colorNeutralForeground3);
+}
+
+@media (max-width: 600px) {
+    .auto-build-line-who {
+        text-align: left;
+    }
+}
