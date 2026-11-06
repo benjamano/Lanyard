@@ -125,3 +125,8 @@
     gap: 4px;
     flex-shrink: 0;
 }
+
+.templates-toolbar ::deep fluent-field {
+    margin-top: 0;
+    margin-bottom: 0;
+}

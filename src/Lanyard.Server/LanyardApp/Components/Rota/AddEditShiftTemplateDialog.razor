@@ -40,13 +40,18 @@
                 {
                     SlotModel current = slot;
                     <div class="template-slot-row">
-                        <FluentSelect TOption="StaffPosition" TValue="string" Items="@ChoosablePositions(current)" OptionText="@(x => x.Name)"
-                                      OptionValue="@(x => x.Id.ToString())" @bind-Value="current.PositionId" Label="Position" Width="100%"
-                                      Class="template-slot-position" />
-                        <FluentNumberInput TValue="int" @bind-Value="current.Headcount" Label="How many" Min="1" Max="@ShiftTemplateRules.MaxHeadcount"
-                                           Width="100%" Class="template-slot-count" />
-                        <FluentButton IconStart="@(new Icons.Regular.Size16.Delete())" Title="Remove this position"
-                                      Disabled="@(slots.Count == 1)" OnClick="@(() => slots.Remove(current))" Class="template-slot-remove" />
+                        <div class="template-slot-position">
+                            <FluentSelect TOption="StaffPosition" TValue="string" Items="@ChoosablePositions(current)" OptionText="@(x => x.Name)"
+                                          OptionValue="@(x => x.Id.ToString())" @bind-Value="current.PositionId" Label="Position" Width="100%" />
+                        </div>
+                        <div class="template-slot-count">
+                            <FluentNumberInput TValue="int" @bind-Value="current.Headcount" Label="How many" Min="1" Max="@ShiftTemplateRules.MaxHeadcount"
+                                               Width="100%" />
+                        </div>
+                        <div class="template-slot-remove">
+                            <FluentButton IconStart="@(new Icons.Regular.Size16.Delete())" Title="Remove this position"
+                                          Disabled="@(slots.Count == 1)" OnClick="@(() => slots.Remove(current))" />
+                        </div>
                     </div>
                 }
                 <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size16.Add())"
