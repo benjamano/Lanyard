@@ -125,6 +125,18 @@ public class TemplateLearningServiceTests
     }
 
     [TestMethod]
+    public async Task LearnAsync_LongerPeriodThanTheRota_StartsAtTheFirstWeekWithARota()
+    {
+        World w = await SeedAsync();
+
+        TemplateLearningResult result = (await GetService(w.Options).LearnAsync(w.Scope, w.Location.Id, 26)).Data!;
+
+        Assert.AreEqual(new DateOnly(2026, 10, 5), result.From, "the rota starts the week of 5 October, not in June");
+        Assert.AreEqual(100, result.Check!.MatchPercent);
+        Assert.AreEqual(0, result.Check.Extra, "no shifts built for weeks nobody worked");
+    }
+
+    [TestMethod]
     public async Task ApplyAsync_SavesTemplatesAndHireStaffing_ThenEverythingIsAlreadySetUp()
     {
         World w = await SeedAsync();
