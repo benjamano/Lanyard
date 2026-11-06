@@ -9,6 +9,10 @@ public static class ClientConnectionQuery
     public const string Secret = "secret";
     public const string DmxBatch = "dmxBatch";
 
+    // dmxFrame=1: the kiosk handles DmxReceiveMethods.Frame (a whole 512-byte universe in one
+    // message). Clients older than 1.0.46 don't send it and get the universe as a batch instead.
+    public const string DmxFrame = "dmxFrame";
+
     // The Velopack version the kiosk is running. Clients older than 1.0.41 don't send it, so the
     // server must treat a missing value as "unknown", not as "no version".
     public const string ClientVersion = "clientVersion";

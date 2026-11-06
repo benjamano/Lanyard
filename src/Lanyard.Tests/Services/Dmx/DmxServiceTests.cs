@@ -385,4 +385,25 @@ public class DmxServiceTests
         harness.ClientService.VerifyNoOtherCalls();
         harness.ClientProxy.VerifyNoOtherCalls();
     }
+
+    [TestMethod]
+    public async Task RegisterConnectionAsync_KioskThatTakesFrames_GetsTheUniverseAsOne512ByteMessage()
+    {
+        Harness harness = new();
+        harness.Service.CoalesceWindow = TimeSpan.Zero;
+        Guid clientId = Guid.NewGuid();
+
+        await harness.Service.UpdateChannelValue(clientId, 2, 42);
+        harness.ClientProxy.Invocations.Clear();
+
+        harness.Service.ForgetConnection(ConnectionId);
+        harness.Service.SetConnectionSupportsFrame(ConnectionId, true);
+        await harness.Service.RegisterConnectionAsync(clientId, ConnectionId);
+
+        IInvocation send = harness.ClientProxy.Invocations.Single();
+        Assert.AreEqual(Lanyard.Shared.Dmx.DmxReceiveMethods.Frame, send.Arguments[0]);
+        byte[] frame = (byte[])((object?[])send.Arguments[1])[0]!;
+        Assert.AreEqual(512, frame.Length);
+        Assert.AreEqual((byte)42, frame[1], "Index 0 is channel 1.");
+    }
 }

@@ -4,6 +4,7 @@ using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models.Dmx;
+using Lanyard.Shared.Dmx;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -55,6 +56,7 @@ public class DmxService(ISystemDbContextFactory factory,
 
     private readonly ConcurrentDictionary<Guid, ClientDmxState> _stateByClientId = new();
     private readonly ConcurrentDictionary<string, byte> _legacyConnectionIds = new();
+    private readonly ConcurrentDictionary<string, byte> _frameConnectionIds = new();
     private readonly ConcurrentDictionary<string, Guid> _clientIdByConnectionId = new();
 
     private int _flushLoopRunning;
@@ -343,6 +345,18 @@ public class DmxService(ISystemDbContextFactory factory,
         }
     }
 
+    public void SetConnectionSupportsFrame(string connectionId, bool supportsFrame)
+    {
+        if (supportsFrame)
+        {
+            _frameConnectionIds[connectionId] = 0;
+        }
+        else
+        {
+            _frameConnectionIds.TryRemove(connectionId, out _);
+        }
+    }
+
     public async Task RegisterConnectionAsync(Guid clientId, string connectionId)
     {
         if (clientId == Guid.Empty || string.IsNullOrEmpty(connectionId))
@@ -391,9 +405,21 @@ public class DmxService(ISystemDbContextFactory factory,
                 state.LastSendTimestamp = Stopwatch.GetTimestamp();
             }
 
-            _logger.LogInformation("Re-sent the DMX universe to client {ClientId} after it connected", state.ClientId);
+            _logger.LogInformation("Re-sending the DMX universe to client {ClientId} after it connected", state.ClientId);
 
-            await SendToKioskAsync(state, universe);
+            string? connectionId = await GetConnectionIdAsync(state);
+
+            if (connectionId != null && _frameConnectionIds.ContainsKey(connectionId))
+            {
+                // One 512-byte message (base64 on the wire, ~700 bytes) instead of 512 objects.
+                byte[] frame = universe.Select(c => c.Value).ToArray();
+
+                await _hubContext.Clients.Client(connectionId).SendAsync(DmxReceiveMethods.Frame, frame);
+            }
+            else
+            {
+                await SendToKioskAsync(state, universe);
+            }
         }
         catch (Exception ex)
         {
@@ -408,6 +434,7 @@ public class DmxService(ISystemDbContextFactory factory,
     public void ForgetConnection(string connectionId)
     {
         _legacyConnectionIds.TryRemove(connectionId, out _);
+        _frameConnectionIds.TryRemove(connectionId, out _);
 
         if (_clientIdByConnectionId.TryRemove(connectionId, out Guid clientId)
             && _stateByClientId.TryGetValue(clientId, out ClientDmxState? state))
