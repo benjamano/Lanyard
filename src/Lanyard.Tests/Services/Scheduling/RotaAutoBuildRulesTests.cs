@@ -308,12 +308,57 @@ public class RotaAutoBuildRulesTests
     }
 
     [TestMethod]
-    public void ExpandParties_PartyAcrossTwoShifts_StaffsBoth()
+    public void ExpandParties_PartyAcrossTwoShifts_GoesToTheShiftCoveringMostOfIt()
     {
-        (List<DemandSlot> slots, _) = RotaAutoBuildRules.ExpandParties([Party("Play", 13, 15)], [Rule(null, 1)], SaturdayShifts());
+        (List<DemandSlot> slots, _) = RotaAutoBuildRules.ExpandParties([Party("Play", 13, 16)], [Rule(null, 1)], SaturdayShifts());
 
-        Assert.AreEqual(2, slots.Count);
-        Assert.IsTrue(slots.Any(x => x.Name.StartsWith("Saturday AM")) && slots.Any(x => x.Name.StartsWith("Saturday PM")));
+        Assert.AreEqual("Saturday PM · Party: Play", slots.Single().Name, "1 h in the AM shift, 2 h in the PM one");
+    }
+
+    private static PartyStaffingRule HireRule(PrivateHireKind kind, int count, Guid position, string positionName)
+    {
+        PartyStaffingRule rule = Rule(null, count, position);
+        rule.HireKind = kind;
+        rule.StaffPosition = new StaffPosition { Id = position, CompanyId = 1, Name = positionName };
+        return rule;
+    }
+
+    [TestMethod]
+    public void ExpandParties_ShiftThatListsThePosition_WinsOverOtherOverlappingShifts()
+    {
+        // Saturday has a Host evening shift 14:00-21:00 and a late Duty Manager shift 08:00-21:00. A
+        // hire's extra Duty Manager joins the late manager shift; its extra Host joins the evening
+        // shift, even though the late shift covers the hire just as well.
+        ShiftTemplate evening = Template(DayOfWeek.Saturday, 14, 21, (Host, "Host", 1));
+        evening.Name = "Saturday evening";
+        ShiftTemplate late = Template(DayOfWeek.Saturday, 8, 21, (Duty, "Duty Manager", 1));
+        late.Name = "Saturday late manager";
+        List<DemandSlot> shifts = RotaAutoBuildRules.ExpandTemplates([evening, late], Saturday, Saturday);
+
+        PartyBooking hire = Party("", 18, 21);
+        hire.HireKind = PrivateHireKind.LaserTagAndPlay;
+
+        (List<DemandSlot> slots, _) = RotaAutoBuildRules.ExpandParties([hire],
+            [HireRule(PrivateHireKind.LaserTagAndPlay, 1, Duty, "Duty Manager"), HireRule(PrivateHireKind.LaserTagAndPlay, 1, Host, "Host")], shifts);
+
+        Assert.AreEqual(2, slots.Count, "one shift each, not one per overlapping template");
+        Assert.AreEqual("Saturday late manager · Private hire: Laser tag + Play", slots.Single(x => x.StaffPositionId == Duty).Name);
+        Assert.AreEqual("Saturday evening · Private hire: Laser tag + Play", slots.Single(x => x.StaffPositionId == Host).Name);
+    }
+
+    [TestMethod]
+    public void ExpandParties_HireUsesOnlyItsOwnLines()
+    {
+        PartyBooking hire = Party("", 10, 12);
+        hire.HireKind = PrivateHireKind.PlayOnly;
+
+        (List<DemandSlot> none, List<PartyBooking> uncovered) = RotaAutoBuildRules.ExpandParties([hire], [Rule(null, 1)], SaturdayShifts());
+        Assert.AreEqual(0, none.Count, "the kids' party default doesn't apply to a hire");
+        Assert.AreEqual(0, uncovered.Count);
+
+        (List<DemandSlot> slots, _) = RotaAutoBuildRules.ExpandParties([hire],
+            [Rule(null, 1), HireRule(PrivateHireKind.PlayOnly, 3, Host, "Host"), HireRule(PrivateHireKind.LaserTagOnly, 5, Host, "Host")], SaturdayShifts());
+        Assert.AreEqual(3, slots.Single().Needed);
     }
 
     [TestMethod]

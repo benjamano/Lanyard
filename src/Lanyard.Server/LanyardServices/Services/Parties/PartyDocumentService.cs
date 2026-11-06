@@ -36,6 +36,12 @@ public class PartyDocumentService(
 
             PartyBooking booking = bookingResult.Data;
 
+            // The printouts are all about the birthday child and the party food.
+            if (booking.IsPrivateHire)
+            {
+                return Result<PartyDocument>.Fail("Private hires don't have party printouts.");
+            }
+
             Result<List<PartyMenuItem>> menuResult = await _settingsService.GetMenuAsync(scope, booking.LocationId);
 
             if (!menuResult.IsSuccess || menuResult.Data is null)

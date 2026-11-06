@@ -31,8 +31,9 @@
             </div>
 
             <div class="staffing-dialog-hint">
-                They're added to the shift the party falls in and work the whole shift, doing the party as part of it.
-                Types are matched to the type on each booking, ignoring capitals. "Any other party" is used for every type without its own staffing.
+                They're added to the shift the booking falls in and work the whole shift, doing the party or hire as part of it.
+                Party types are matched to the type on each booking, ignoring capitals. "Any other party" is used for every party type
+                without its own staffing; private hires only use their own lines.
             </div>
         </div>
     </ChildContent>
@@ -47,6 +48,7 @@
 @code {
     private const string AnyType = "__any";
     private const string NewType = "__new";
+    private const string HirePrefix = "__hire:";
 
     [CascadingParameter]
     public required IDialogInstance Dialog { get; set; }
@@ -90,11 +92,19 @@
             types.Add(current);
         }
 
-        typeOptions = [new(AnyType, "Any other party"), .. types.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).Select(x => new TypeOption(x, $"{x} parties")), new(NewType, "Another type...")];
+        typeOptions =
+        [
+            new(AnyType, "Any other party"),
+            .. types.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).Select(x => new TypeOption(x, $"{x} parties")),
+            new(NewType, "Another party type..."),
+            .. PrivateHireKindExtensions.All.Select(k => new TypeOption(HirePrefix + (int)k, $"Private hire: {k.Label()}"))
+        ];
 
         if (Existing is PartyStaffingRule rule)
         {
-            typeChoice = rule.PartyType is string type ? typeOptions.First(x => string.Equals(x.Value, type, StringComparison.OrdinalIgnoreCase)).Value : AnyType;
+            typeChoice = rule.HireKind is PrivateHireKind hire ? HirePrefix + (int)hire
+                : rule.PartyType is string type ? typeOptions.First(x => string.Equals(x.Value, type, StringComparison.OrdinalIgnoreCase)).Value
+                : AnyType;
             positionId = rule.StaffPositionId.ToString();
             staffCount = rule.StaffCount;
 
@@ -119,7 +129,11 @@
             return;
         }
 
-        string? partyType = typeChoice switch
+        PrivateHireKind? hireKind = typeChoice.StartsWith(HirePrefix, StringComparison.Ordinal)
+            ? (PrivateHireKind)int.Parse(typeChoice[HirePrefix.Length..])
+            : null;
+
+        string? partyType = hireKind is not null ? null : typeChoice switch
         {
             AnyType => null,
             NewType => PartyStaffingRule.Normalise(newType),
@@ -148,6 +162,7 @@
             CompanyId = 0,
             LocationId = LocationId,
             PartyType = partyType,
+            HireKind = hireKind,
             StaffPositionId = position,
             StaffCount = staffCount
         }, actingUser.Data);

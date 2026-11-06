@@ -59,6 +59,18 @@ namespace Lanyard.Infrastructure.Models
         public DateTime? BalancePaidUtc { get; set; }
         public string? PaymentNotes { get; set; }
 
+        // Set when the whole venue (or the play area / laser tag) is hired out rather than a kids'
+        // party being booked: the child, food and printout fields don't apply, and Party staffing
+        // has its own lines for each kind of hire.
+        public PrivateHireKind? HireKind { get; set; }
+
+        public bool IsPrivateHire => HireKind is not null;
+
+        // "Ava's party" / "Private hire: Laser tag + Play".
+        public string DisplayName => HireKind is PrivateHireKind kind
+            ? $"Private hire: {kind.Label()}"
+            : string.IsNullOrWhiteSpace(ChildName) ? "Party" : $"{ChildName}'s party";
+
         // Cancelling is the soft delete: a cancelled party stays on record and can be reinstated.
         public PartyBookingStatus Status { get; set; }
 
@@ -95,6 +107,10 @@ namespace Lanyard.Infrastructure.Models
 
         public string? PartyType { get; set; }
 
+        // Set for a private hire's staffing (PartyType is then null). Hires only use these lines, and
+        // a kids' party never does.
+        public PrivateHireKind? HireKind { get; set; }
+
         public required Guid StaffPositionId { get; set; }
         public StaffPosition? StaffPosition { get; set; }
 
@@ -111,10 +127,17 @@ namespace Lanyard.Infrastructure.Models
         public static string? Normalise(string? partyType) =>
             string.IsNullOrWhiteSpace(partyType) ? null : partyType.Trim();
 
-        // The rules that apply to a party of this type: its own, or the default ones if it has none.
+        // The rules that apply to a booking: a private hire's lines for that kind of hire, or a kids'
+        // party's lines for its type (or the default ones).
+        public static List<PartyStaffingRule> For(IEnumerable<PartyStaffingRule> rules, PartyBooking booking) =>
+            booking.HireKind is PrivateHireKind kind
+                ? rules.Where(x => x.IsActive && x.HireKind == kind).ToList()
+                : For(rules, booking.PartyType);
+
+        // The rules that apply to a kids' party of this type: its own, or the default ones if it has none.
         public static List<PartyStaffingRule> For(IEnumerable<PartyStaffingRule> rules, string? partyType)
         {
-            List<PartyStaffingRule> active = rules.Where(x => x.IsActive).ToList();
+            List<PartyStaffingRule> active = rules.Where(x => x.IsActive && x.HireKind is null).ToList();
             List<PartyStaffingRule> own = Normalise(partyType) is null ? [] : active.Where(x => x.PartyType is not null && x.Matches(partyType)).ToList();
 
             return own.Count > 0 ? own : active.Where(x => x.PartyType is null).ToList();

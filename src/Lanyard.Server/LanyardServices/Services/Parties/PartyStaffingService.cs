@@ -2,6 +2,7 @@ using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -42,7 +43,9 @@ public class PartyStaffingService(
             List<PartyStaffingRule> rules = await ForLocation(ctx, locationId).ToListAsync();
 
             return Result<List<PartyStaffingRule>>.Ok(rules
-                .OrderBy(x => x.PartyType is null)
+                .OrderBy(x => x.HireKind is not null)
+                .ThenBy(x => x.HireKind)
+                .ThenBy(x => x.PartyType is null)
                 .ThenBy(x => x.PartyType, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.StaffPosition?.SortOrder ?? int.MaxValue)
                 .ThenBy(x => x.StaffPosition?.Name)
@@ -64,7 +67,8 @@ public class PartyStaffingService(
                 return Result<PartyStaffingRule>.Fail(NoAccess);
             }
 
-            string? partyType = PartyStaffingRule.Normalise(rule.PartyType);
+            // A private hire's line has no party type; a kids' party's line has no hire kind.
+            string? partyType = rule.HireKind is null ? PartyStaffingRule.Normalise(rule.PartyType) : null;
 
             if (partyType is { Length: > MaxTypeLength })
             {
@@ -116,11 +120,12 @@ public class PartyStaffingService(
                 .Where(x => x.LocationId == rule.LocationId && x.IsActive && x.StaffPositionId == rule.StaffPositionId && x.Id != rule.Id)
                 .ToListAsync();
 
-            if (others.Any(x => x.Matches(partyType)))
+            if (others.Any(x => x.HireKind == rule.HireKind && (rule.HireKind is not null || x.Matches(partyType))))
             {
-                return Result<PartyStaffingRule>.Fail(partyType is null
-                    ? $"Other parties already have a rule for {position.Name}. Change that one instead."
-                    : $"{partyType} parties already have a rule for {position.Name}. Change that one instead.");
+                string what = rule.HireKind is PrivateHireKind kind ? $"{kind.Label()} private hires"
+                    : partyType is null ? "Other parties" : $"{partyType} parties";
+
+                return Result<PartyStaffingRule>.Fail($"{what} already have a line for {position.Name}. Change that one instead.");
             }
 
             PartyStaffingRule target = existing ?? new PartyStaffingRule
@@ -137,6 +142,7 @@ public class PartyStaffingService(
             }
 
             target.PartyType = partyType;
+            target.HireKind = rule.HireKind;
             target.StaffPositionId = rule.StaffPositionId;
             target.StaffCount = rule.StaffCount;
             target.UpdateDate = DateTime.UtcNow;
