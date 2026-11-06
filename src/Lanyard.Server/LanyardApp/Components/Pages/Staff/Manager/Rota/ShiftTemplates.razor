@@ -35,6 +35,10 @@
                       Disabled="@(templates is null || positions.Count == 0)" OnClick="@(() => OpenDialogAsync(null))">
             New shift template
         </FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.LightbulbFilament())"
+                      Disabled="@(templates is null)" OnClick="@LearnAsync">
+            Learn from past rota
+        </FluentButton>
     </div>
 
     @if (loadError is not null)
@@ -257,6 +261,26 @@
             options.Parameters.Add(nameof(AddEditShiftTemplateDialog.Positions), positions);
             options.Parameters.Add(nameof(AddEditShiftTemplateDialog.Existing), existing);
             options.Parameters.Add(nameof(AddEditShiftTemplateDialog.Candidates), candidates);
+        });
+
+        if (result.Value is true)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task LearnAsync()
+    {
+        if (locationId is not int location)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<LearnTemplatesDialog>(options =>
+        {
+            options.Width = "680px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(LearnTemplatesDialog.LocationId), location);
         });
 
         if (result.Value is true)
