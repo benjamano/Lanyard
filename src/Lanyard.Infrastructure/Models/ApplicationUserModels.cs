@@ -25,6 +25,9 @@ namespace Lanyard.Infrastructure.Models
         // whose lock screen others can see.
         public bool ShowMessagePreviews { get; set; } = true;
 
+        // Personal opt-out from the company's seasonal decorations (snow, pumpkins).
+        public bool ShowSeasonalThemes { get; set; } = true;
+
         public DateTime? InvitedDate { get; set; }
         public DateTime? PasswordSetDate { get; set; }
 

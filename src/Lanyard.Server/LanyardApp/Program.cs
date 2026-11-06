@@ -5,6 +5,7 @@ using Lanyard.App;
 using Lanyard.App.Components;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.Feedback;
+using Lanyard.Application.Services.Themes;
 using Lanyard.Application.Services.Announcements;
 using Lanyard.Application.Services.AudioClips;
 using Lanyard.Application.Services.MusicScheduling;
@@ -209,6 +210,8 @@ builder.Services.AddHttpClient(WebPushSender.HttpClientName, client => client.Ti
 builder.Services.AddScoped<IPushSender, WebPushSender>();
 builder.Services.AddScoped<IPushSubscriptionService, PushSubscriptionService>();
 builder.Services.AddScoped<INotificationPreferenceService, NotificationPreferenceService>();
+builder.Services.AddScoped<ISeasonalThemeService, SeasonalThemeService>();
+builder.Services.AddScoped<SeasonalThemeState>();
 builder.Services.AddScoped<IAppInstallationService, AppInstallationService>();
 builder.Services.AddHostedService<PushDeviceCleanupHostedService>();
 builder.Services.AddHostedService<NotificationDeliveryHostedService>();
