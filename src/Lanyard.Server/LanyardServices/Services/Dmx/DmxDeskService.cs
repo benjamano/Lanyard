@@ -130,7 +130,65 @@ public class DmxDeskService(
         }
     }
 
-    public async Task<Result<IDisposable>> SubscribeToChannelsAsync(Guid clientId, Action<IReadOnlyList<DmxChannel>> handler)
+    public async Task<Result<DmxOutputState>> GetOutputStateAsync(Guid clientId)
+    {
+        try
+        {
+            if (!await CanUseClientAsync(clientId))
+            {
+                return Result<DmxOutputState>.Fail(KioskNotFound);
+            }
+
+            return Result<DmxOutputState>.Ok(await _dmxService.GetOutputStateAsync(clientId));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reading DMX output state for client {ClientId}", clientId);
+            return Result<DmxOutputState>.Fail("An error occurred while reading the master and blackout.");
+        }
+    }
+
+    public async Task<Result<bool>> SetGrandMasterAsync(Guid clientId, byte level)
+    {
+        try
+        {
+            if (!await CanUseClientAsync(clientId))
+            {
+                return Result<bool>.Fail(KioskNotFound);
+            }
+
+            await _dmxService.SetGrandMasterAsync(clientId, level);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting the DMX grand master for client {ClientId}", clientId);
+            return Result<bool>.Fail("An error occurred while setting the master.");
+        }
+    }
+
+    public async Task<Result<bool>> SetBlackoutAsync(Guid clientId, bool isBlackout)
+    {
+        try
+        {
+            if (!await CanUseClientAsync(clientId))
+            {
+                return Result<bool>.Fail(KioskNotFound);
+            }
+
+            await _dmxService.SetBlackoutAsync(clientId, isBlackout);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting DMX blackout for client {ClientId}", clientId);
+            return Result<bool>.Fail("An error occurred while setting blackout.");
+        }
+    }
+
+    public async Task<Result<IDisposable>> SubscribeToChannelsAsync(Guid clientId, Action<IReadOnlyList<DmxChannel>> handler, Action<DmxOutputState>? onOutputChanged = null)
     {
         try
         {
@@ -139,7 +197,7 @@ public class DmxDeskService(
                 return Result<IDisposable>.Fail(KioskNotFound);
             }
 
-            return Result<IDisposable>.Ok(_dmxService.SubscribeToClient(clientId, handler));
+            return Result<IDisposable>.Ok(_dmxService.SubscribeToClient(clientId, handler, onOutputChanged));
         }
         catch (Exception ex)
         {

@@ -26,5 +26,19 @@ public interface IDmxService
     /// Calls <paramref name="handler"/> once per applied batch for this kiosk only, on the
     /// writer's thread - Blazor subscribers must marshal with InvokeAsync. Dispose to stop.
     /// </summary>
-    IDisposable SubscribeToClient(Guid clientId, Action<IReadOnlyList<DmxChannel>> handler);
+    IDisposable SubscribeToClient(Guid clientId, Action<IReadOnlyList<DmxChannel>> handler, Action<DmxOutputState>? onOutputChanged = null);
+
+    /// <summary>Scales the kiosk's dimmable channels (255 = full). Faders keep their programmed levels.</summary>
+    Task SetGrandMasterAsync(Guid clientId, byte level);
+
+    /// <summary>Takes every dimmable channel to 0 until released; releasing restores them exactly.</summary>
+    Task SetBlackoutAsync(Guid clientId, bool isBlackout);
+
+    Task<DmxOutputState> GetOutputStateAsync(Guid clientId);
+
+    /// <summary>Re-reads which channels master/blackout act on, after the kiosk's fixtures change.</summary>
+    Task RefreshPatchAsync(Guid clientId);
 }
+
+/// <summary>A kiosk's grand master (0-255) and blackout.</summary>
+public sealed record DmxOutputState(byte GrandMaster, bool IsBlackout);

@@ -244,6 +244,7 @@ builder.Services.AddSingleton<DmxService>();
 builder.Services.AddSingleton<IDmxService>(sp => sp.GetRequiredService<DmxService>());
 builder.Services.AddSingleton<IDmxClientService>(sp => sp.GetRequiredService<DmxService>());
 builder.Services.AddSingleton<IDmxSceneRunnerService, DmxSceneRunnerService>();
+builder.Services.AddHostedService<DmxOutputStatePersister>();
 
 // Data sources a projection parameter can be bound to. Every key in ProjectionBindingCatalogue needs
 // one here, or that binding silently shows its fallback forever (a test checks the two match).
