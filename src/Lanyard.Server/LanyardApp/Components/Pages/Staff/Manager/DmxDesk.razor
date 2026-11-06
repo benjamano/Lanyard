@@ -2,316 +2,450 @@
 
 @using Lanyard.App.Components.Clients
 @using Lanyard.App.Components.Dmx
+@using Lanyard.App.Components.Dialogs
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.JSInterop
 @using Lanyard.Infrastructure.Models.Dmx
 
 @attribute [Authorize(Roles = "Admin, CanManageDmxSystems")]
 
+@implements IAsyncDisposable
+
+@inject IDmxDeskService _dmxDesk
+@inject IDmxFixtureService _dmxFixtureService
 @inject IDmxSceneService _dmxSceneService
+@inject IJSRuntime JS
 
 <PageTitle>DMX Desk</PageTitle>
 
-<FluentGrid Spacing="1">
-    <FluentGridItem Xs="@(isASceneOpen ? 12 : 12)" 
-                    Sm="@(isASceneOpen ? 12 : 12)" 
-                    Md="@(isASceneOpen ? 9 : 12)" 
-                    Lg="@(isASceneOpen ? 9 : 12)" 
-                    Xl="@(isASceneOpen ? 9 : 12)">
-        <FluentCard Appearance="@CardAppearance.Default" Padding="@Padding.Vertical2">
-            <FluentStack Orientation="@Orientation.Horizontal" 
-                            VerticalAlignment="@VerticalAlignment.Center" 
-                            HorizontalAlignment="@HorizontalAlignment.SpaceBetween"
-                            Wrap="true">
-                <FluentStack Orientation="@Orientation.Horizontal" 
-                                VerticalAlignment="@VerticalAlignment.Center" 
-                                HorizontalAlignment="@HorizontalAlignment.Start"
-                                HorizontalGap="6">
-                    <FluentStack Width="auto">
-                        <FluentGrid>
-                            <FluentGridItem HiddenWhen="@GridItemHidden.SmAndDown">
-                                    <FluentButton IconStart="@(isEditModeEnabled ? new Icons.Filled.Size20.Edit() : new Icons.Regular.Size20.Edit())"
-                                            Appearance="ButtonAppearance.Primary"
-                                            OnClick="ToggleEditMode">
-                                        @(isEditModeEnabled ? "Disable Edit Mode" : "Enable Edit Mode")
-                                    </FluentButton>
-                                </FluentGridItem>
-                                <FluentGridItem HiddenWhen="@GridItemHidden.MdAndUp">
-                                    <FluentButton IconStart="@(isEditModeEnabled ? new Icons.Filled.Size20.Edit() : new Icons.Regular.Size20.Edit())"
-                                            Appearance="ButtonAppearance.Primary"
-                                            OnClick="ToggleEditMode"
-                                            Title="Toggle Edit Mode"
-                                            Tooltip="Toggle Edit Mode"/>
-                                </FluentGridItem>
-                        </FluentGrid>
-                    </FluentStack>
+<div class="dmx-page">
+    <div class="dmx-toolbar" role="toolbar" aria-label="DMX desk">
+        <div class="dmx-toolbar-kiosk">
+            <ClientSelector InitialClientId="@initialClientId" OnClientSelected="SetSelectedClientAsync" />
+        </div>
 
-                    <FluentStack Width="auto">
-                        <FluentGrid>
-                            <FluentGridItem HiddenWhen="@GridItemHidden.SmAndDown">
-                                    <FluentButton IconStart="@(showFixturePreview ? new Icons.Filled.Size20.Lightbulb() : new Icons.Regular.Size20.SlideGrid())"
-                                            Appearance="ButtonAppearance.Outline"
-                                            OnClick="ToggleFixturePreview">
-                                        @(showFixturePreview ? "Edit Sliders" : "Fixture Preview")
-                                    </FluentButton>
-                                </FluentGridItem>
-                                <FluentGridItem HiddenWhen="@GridItemHidden.MdAndUp">
-                                    <FluentButton IconStart="@(showFixturePreview ? new Icons.Filled.Size20.Lightbulb() : new Icons.Regular.Size20.SlideGrid())"
-                                            Appearance="ButtonAppearance.Outline"
-                                            OnClick="ToggleFixturePreview"
-                                            Title="Toggle Fixture Preview"
-                                            Tooltip="Toggle Fixture Preview"/>
-                                </FluentGridItem>
-                        </FluentGrid>
-                    </FluentStack>
+        <div class="dmx-segmented" role="radiogroup" aria-label="Output">
+            <button type="button" role="radio" aria-checked="@(state.Output == DmxDeskOutput.Live)"
+                    class="@(state.Output == DmxDeskOutput.Live ? "is-active is-live" : null)"
+                    disabled="@NoClient" @onclick="GoLiveAsync"
+                    title="The faders drive the lights">
+                <span class="dmx-dot" aria-hidden="true"></span> Live
+            </button>
+            <button type="button" role="radio" aria-checked="@(state.Output == DmxDeskOutput.Blind)"
+                    class="@(state.Output == DmxDeskOutput.Blind ? "is-active is-blind" : null)"
+                    disabled="@NoClient" @onclick="GoBlindAsync"
+                    title="Change the desk without the lights following">
+                Blind
+            </button>
+        </div>
 
-                    @if (!showFixturePreview)
-                    {
-                        <FluentStack Width="auto">
-                            <FluentGrid>
-                                <FluentGridItem HiddenWhen="@GridItemHidden.SmAndDown">
-                                    <FluentButton IconStart="@(groupByFixture ? new Icons.Filled.Size20.GroupList() : new Icons.Regular.Size20.GroupList())"
-                                                  Appearance="ButtonAppearance.Outline"
-                                                  Disabled="@(selectedClientId == null)"
-                                                  OnClick="ToggleGroupByFixture">
-                                        @(groupByFixture ? "All Channels" : "Group by Fixture")
-                                    </FluentButton>
-                                </FluentGridItem>
-                                <FluentGridItem HiddenWhen="@GridItemHidden.MdAndUp">
-                                    <FluentButton IconStart="@(groupByFixture ? new Icons.Filled.Size20.GroupList() : new Icons.Regular.Size20.GroupList())"
-                                                  Appearance="ButtonAppearance.Outline"
-                                                  Disabled="@(selectedClientId == null)"
-                                                  OnClick="ToggleGroupByFixture"
-                                                  Title="@(groupByFixture ? "Show all channels" : "Group sliders by fixture")"
-                                                  Tooltip="@(groupByFixture ? "Show all channels" : "Group sliders by fixture")" />
-                                </FluentGridItem>
-                            </FluentGrid>
-                        </FluentStack>
-                    }
+        <FluentButton Appearance="@(state.IsLocked ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                      IconStart="@(state.IsLocked ? new Icons.Filled.Size20.LockClosed() : new Icons.Regular.Size20.LockOpen())"
+                      Disabled="@NoClient"
+                      OnClick="ToggleLock"
+                      Title="@(state.IsLocked ? "Unlock the faders" : "Lock the faders")"
+                      aria-pressed="@(state.IsLocked ? "true" : "false")">
+            <span class="dmx-toolbar-label">@(state.IsLocked ? "Locked" : "Lock")</span>
+        </FluentButton>
 
-                    <FluentButton IconStart="new Icons.Regular.Size20.Settings()"
-                                    Appearance="ButtonAppearance.Outline"
-                                    Disabled="@(selectedClientId == null)"
-                                    OnClick="OpenFixtureManager"
-                                    Title="Manage Fixtures"
-                                    Tooltip="Manage Fixtures" />
+        <label class="dmx-master" title="Grand master: scales every light's brightness, never position or colour">
+            <span class="dmx-master-label">Master</span>
+            <input type="range" min="0" max="255" value="@state.OutputState.GrandMaster"
+                   disabled="@(NoClient || state.IsLocked)" aria-label="Grand master" @oninput="OnMasterInput" />
+            <span class="dmx-master-value">@MasterPercent</span>
+        </label>
 
-                    <HelpButton AreaKey="@HelpRegistry.Dmx" Compact="true" />
+        <FluentButton Appearance="@(state.OutputState.IsBlackout ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                      Class="@(state.OutputState.IsBlackout ? "dmx-blackout is-on" : "dmx-blackout")"
+                      IconStart="new Icons.Regular.Size20.WeatherMoon()"
+                      Disabled="@NoClient"
+                      OnClick="ToggleBlackoutAsync"
+                      aria-pressed="@(state.OutputState.IsBlackout ? "true" : "false")"
+                      Title="@(state.OutputState.IsBlackout ? "Bring the lights back" : "Turn every light off at once")">
+            <span class="dmx-toolbar-label">Blackout</span>
+        </FluentButton>
 
-                    @if (isEditModeEnabled)
-                    {
-                        <FluentStack Width="auto">
-                            <FluentGrid>
-                                <FluentGridItem HiddenWhen="@GridItemHidden.SmAndDown">
-                                        <FluentButton IconStart="@(isBlindModeEnabled ? new Icons.Filled.Size20.EyeOff() : new Icons.Regular.Size20.Eye())"
-                                            Appearance="ButtonAppearance.Primary"
-                                            OnClick="ToggleBlindMode">
-                                            @(isBlindModeEnabled ? "Disable Blind Editing Mode" : "Enable Blind Editing Mode")
-                                        </FluentButton>
-                                    </FluentGridItem>
-                                    <FluentGridItem HiddenWhen="@GridItemHidden.MdAndUp">
-                                        <FluentButton IconStart="@(isBlindModeEnabled ? new Icons.Filled.Size20.EyeOff() : new Icons.Regular.Size20.Eye())"
-                                            Appearance="ButtonAppearance.Primary"
-                                            OnClick="ToggleBlindMode"
-                                            Title="Toggle Blind Mode"
-                                            Tooltip="Toggle Blind Mode"/>
-                                    </FluentGridItem>
-                            </FluentGrid>
-                        </FluentStack>
-                    }
-                </FluentStack>
-                <ClientSelector OnClientSelected="SetSelectedClient" />
-            </FluentStack>
-        </FluentCard>
+        <FluentButton Appearance="ButtonAppearance.Outline"
+                      IconStart="new Icons.Regular.Size20.Lightbulb()"
+                      Disabled="@NoClient"
+                      OnClick="OpenFixtureManager"
+                      Title="Add, move and remove this kiosk's lights">
+            <span class="dmx-toolbar-label">Fixtures</span>
+        </FluentButton>
 
-        <VirtualDmxDesk @ref="virtualDmxDesk"
-                        ClientId="@selectedClientId"
-                        IsEditModeEnabled="@isEditModeEnabled"
-                        IsBlindModeEnabled="@isBlindModeEnabled"
-                        EditingStep="@editingStep"
-                        ShowFixturePreview="@showFixturePreview"
-                        GroupByFixture="@groupByFixture"
-                        PreviewingSceneId="@previewingSceneId"
-                        PreviewingSceneSteps="@previewingSceneSteps"
-                        PreviewSceneLoop="@(selectedScene?.Loop ?? true)" />
+        <HelpButton AreaKey="@HelpRegistry.Dmx" Compact="true" />
+    </div>
 
-        <DmxSceneSelector ClientId="@selectedClientId" 
-                            IsEditModeEnabled="@isEditModeEnabled" 
-                            DeletedSceneId="@deletedSceneId"
-                            EditedSceneId="@editedScene?.Id"
-                            EditedSceneVersion="@editedSceneVersion"
-                            OnOpenScene="OpenScene" 
-                            CurrentlyOpenScene="selectedScene" />
-    </FluentGridItem>
-    <FluentGridItem Xs="@(isASceneOpen ? 12 : 0)" 
-                    Sm="@(isASceneOpen ? 12 : 0)" 
-                    Md="@(isASceneOpen ? 3 : 0)" 
-                    Lg="@(isASceneOpen ? 3 : 0)" 
-                    Xl="@(isASceneOpen ? 3 : 0)">
-        @if (isASceneOpen)
-        {
-            <DmxSceneEditor ClientId="@selectedClientId"
-                            OpenScene="@selectedScene"
-                            OnClose="OnCloseSceneEditor"
-                            OnSceneDeleted="OnSceneDeleted"
-                            OnEditingStepChanged="OnEditingStepChanged"
-                            IsEditModeEnabled="@isEditModeEnabled"
-                            OnSceneEdited="OnSceneEdited"
-                            OnPreviewingStepsChanged="OnPreviewingStepsChanged"
-                            PreviewingSceneId="@previewingSceneId"/>
-        }
-    </FluentGridItem>
-</FluentGrid>
+    @if (state.OutputState.IsBlackout)
+    {
+        <div class="dmx-banner dmx-banner--danger" role="status">
+            <span><strong>Blackout is on.</strong> Every light is off. Faders still set what comes back.</span>
+            <FluentButton Appearance="ButtonAppearance.Primary" Size="ButtonSize.Small" OnClick="ToggleBlackoutAsync">Bring lights back</FluentButton>
+        </div>
+    }
 
-@code{
-    private Guid? selectedClientId = null;
+    @if (state.IsEditingStep)
+    {
+        <div class="dmx-banner dmx-banner--info" role="status">
+            <span>
+                <strong>Editing step @EditingStepPosition of @(state.EditingScene?.Name).</strong>
+                Faders save to the step. @(state.Output == DmxDeskOutput.Live ? "Live: the lights show it too." : "Choose Live to see it on the lights.")
+            </span>
+            <FluentButton Appearance="ButtonAppearance.Outline" Size="ButtonSize.Small" OnClick="CloseSceneEditorAsync">Done editing</FluentButton>
+        </div>
+    }
+    else if (state.Output == DmxDeskOutput.Blind)
+    {
+        <div class="dmx-banner dmx-banner--warning" role="status">
+            <span><strong>Blind.</strong> The lights aren't following the desk. @(state.HasUnsentChanges ? "You have changes the lights haven't seen." : "Move faders, then send them when ready.")</span>
+            <span class="dmx-banner-actions">
+                <FluentButton Appearance="ButtonAppearance.Primary" Size="ButtonSize.Small" Disabled="@(!state.HasUnsentChanges)" OnClick="SendToLightsAsync">Send to lights</FluentButton>
+                <FluentButton Appearance="ButtonAppearance.Outline" Size="ButtonSize.Small" Disabled="@(!state.HasUnsentChanges)" OnClick="DiscardAsync">Discard changes</FluentButton>
+            </span>
+        </div>
+    }
 
-    private bool isEditModeEnabled = false;
+    @if (preview.IsActive)
+    {
+        <div class="dmx-banner dmx-banner--preview" role="status">
+            <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small"
+                          IconStart="@(preview.IsPlaying ? new Icons.Regular.Size20.Pause() : new Icons.Regular.Size20.Play())"
+                          OnClick="preview.TogglePlay" aria-label="@(preview.IsPlaying ? "Pause preview" : "Play preview")" />
+            <span><strong>Preview</strong> on screen only · step @(preview.StepIndex + 1) of @preview.Steps.Count</span>
+            <input type="range" class="dmx-preview-scrub" min="0" max="@(preview.Steps.Count - 1)" value="@preview.StepIndex"
+                   aria-label="Preview step" @oninput="OnScrub" />
+            <FluentButton Appearance="ButtonAppearance.Outline" Size="ButtonSize.Small" OnClick="StopPreview">Stop preview</FluentButton>
+        </div>
+    }
 
-    private bool isBlindModeEnabled = true;
+    <div class="dmx-body">
+        <section class="dmx-main @(tab == DeskTab.Scenes ? "is-phone-hidden" : null)">
+            <div class="dmx-tabs" role="tablist" aria-label="Desk view">
+                <button type="button" role="tab" aria-selected="@(tab == DeskTab.Fixtures)" class="@(tab == DeskTab.Fixtures ? "is-active" : null)" @onclick="() => tab = DeskTab.Fixtures">Fixtures</button>
+                <button type="button" role="tab" aria-selected="@(tab == DeskTab.Channels)" class="@(tab == DeskTab.Channels ? "is-active" : null)" @onclick="() => tab = DeskTab.Channels">Channels</button>
+                <button type="button" role="tab" aria-selected="@(tab == DeskTab.Scenes)" class="dmx-tabs-phone @(tab == DeskTab.Scenes ? "is-active" : null)" @onclick="() => tab = DeskTab.Scenes">Scenes</button>
+            </div>
 
-    private bool showFixturePreview = false;
-    private bool groupByFixture = false;
+            <div class="dmx-main-content">
+            @if (NoClient)
+            {
+                <div class="dmx-empty">
+                    <FluentText Weight="TextWeight.Semibold">Choose a kiosk</FluentText>
+                    <FluentText>Pick the kiosk whose lights you want to control. Kiosks that are off show as offline: you can still set up their fixtures and scenes.</FluentText>
+                </div>
+            }
+            else if (tab == DeskTab.Channels)
+            {
+                <DmxChannelsView State="@state" Version="@(state.Version + previewVersion)"
+                                 OverrideValues="@(preview.IsActive ? preview.Values : null)"
+                                 Disabled="@(state.IsLocked || preview.IsActive)" />
+            }
+            else
+            {
+                <DmxFixturesView State="@state" Version="@(state.Version + previewVersion)"
+                                 OverrideValues="@(preview.IsActive ? preview.Values : null)"
+                                 OverrideView="@(preview.IsActive ? preview.ValuesView : null)"
+                                 Disabled="@state.IsLocked"
+                                 OnManageFixtures="OpenFixtureManager" />
+            }
+            </div>
+        </section>
 
-    private bool isASceneOpen = false;
+        <aside class="dmx-side @(tab == DeskTab.Scenes ? "is-phone-active" : null)">
+            @if (openScene != null)
+            {
+                <DmxSceneEditor ClientId="@state.ClientId"
+                                OpenScene="@openScene"
+                                OnClose="CloseSceneEditorAsync"
+                                OnSceneDeleted="OnSceneDeletedAsync"
+                                OnEditingStepChanged="OnEditingStepChangedAsync"
+                                IsEditModeEnabled="@(!state.IsLocked)"
+                                OnSceneEdited="OnSceneEdited"
+                                OnPreviewingStepsChanged="OnPreviewingStepsChanged"
+                                PreviewingSceneId="@preview.SceneId" />
+            }
 
-    private DmxScene? selectedScene = null;
+            @* Always mounted, so scene keybinds keep working while the editor is open. *@
+            <div class="@(openScene != null ? "dmx-side-hidden" : null)">
+                <DmxSceneSelector ClientId="@state.ClientId"
+                                  IsLocked="@state.IsLocked"
+                                  DeletedSceneId="@deletedSceneId"
+                                  EditedSceneId="@editedScene?.Id"
+                                  EditedSceneVersion="@editedSceneVersion"
+                                  OnOpenScene="OpenScene"
+                                  CurrentlyOpenSceneId="@openScene?.Id" />
+            </div>
+        </aside>
+    </div>
+</div>
 
-    private DmxSceneStep? editingStep = null;
-    private DmxScene? editedScene = null;
+@code {
+    [SupplyParameterFromQuery(Name = "client")]
+    public Guid? ClientQuery { get; set; }
+
+    private enum DeskTab { Fixtures, Channels, Scenes }
+
+    private DmxDeskState state = null!;
+    private DmxScenePreview preview = null!;
+    private int previewVersion;
+
+    private DeskTab tab = DeskTab.Fixtures;
+    private Guid? initialClientId;
+
+    private DmxScene? openScene;
+    private DmxScene? editedScene;
     private int editedSceneVersion;
-
     private Guid? deletedSceneId;
 
-    private VirtualDmxDesk? virtualDmxDesk;
+    private IJSObjectReference? _deskModule;
+    private bool _interactive;
 
-    // Forwarded to VirtualDmxDesk so a previewed scene renders inline in the main desk area.
-    private Guid? previewingSceneId;
-    private List<DmxSceneStep>? previewingSceneSteps;
+    // Live updates arrive at up to ~40 batches a second while a scene runs; one render per 50 ms
+    // absorbs them.
+    private const int RenderCoalesceMs = 50;
+    private Timer? _renderTimer;
+    private int _renderPending;
 
-    private void ToggleEditMode()
+    private bool NoClient => state.ClientId == null;
+
+    private string MasterPercent => $"{Math.Round(state.OutputState.GrandMaster / 2.55)}%";
+
+    private int EditingStepPosition => state.EditingStep?.StepNumber ?? 0;
+
+    protected override void OnInitialized()
     {
-        isEditModeEnabled = !isEditModeEnabled;
+        state = new DmxDeskState(_dmxDesk, _dmxFixtureService, _dmxSceneService,
+            work => InvokeAsync(work),
+            message => _toastService.ShowError(message));
+        preview = new DmxScenePreview(work => InvokeAsync(work));
 
-        // Step editing requires edit mode; leaving it drops the step the desk was bound to.
-        if (!isEditModeEnabled)
+        state.Changed += ScheduleRender;
+        preview.Changed += OnPreviewChanged;
+
+        _renderTimer = new Timer(_ =>
         {
-            editingStep = null;
+            Interlocked.Exchange(ref _renderPending, 0);
+            _ = InvokeAsync(StateHasChanged);
+        }, null, Timeout.Infinite, Timeout.Infinite);
+
+        initialClientId = ClientQuery;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        _interactive = true;
+
+        try
+        {
+            _deskModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/dmxDesk.js");
+
+            // Phones start locked, so a pocket can't change the lights.
+            if (await _deskModule.InvokeAsync<bool>("prefersLock"))
+            {
+                state.IsLocked = true;
+            }
+
+            if (initialClientId == null && Guid.TryParse(await _deskModule.InvokeAsync<string?>("getLastClientId"), out Guid last))
+            {
+                initialClientId = last;
+            }
+
+            StateHasChanged();
+        }
+        catch (JSDisconnectedException)
+        {
         }
     }
 
-    private async Task ToggleBlindMode()
+    private void OnPreviewChanged()
     {
-        isBlindModeEnabled = !isBlindModeEnabled;
+        previewVersion++;
+        ScheduleRender();
+    }
 
-        // Turning blind editing OFF makes the operator the sole controller of the
-        // client's live DMX, so stop any running scenes that would fight them for channels.
-        if (!isBlindModeEnabled && selectedClientId != null)
+    private void ScheduleRender()
+    {
+        if (Interlocked.Exchange(ref _renderPending, 1) == 0)
         {
-            await _dmxSceneService.StopAllScenesForClientAsync(selectedClientId.Value);
+            try
+            {
+                _renderTimer?.Change(RenderCoalesceMs, Timeout.Infinite);
+            }
+            catch (ObjectDisposedException)
+            {
+            }
         }
     }
 
-    private void OnEditingStepChanged(DmxSceneStep? step)
+    private async Task SetSelectedClientAsync(Guid? clientId)
     {
-        editingStep = step;
-    }
-
-    private void OnSceneDeleted(DmxScene scene)
-    {
-        deletedSceneId = scene.Id;
-
-        if (selectedScene != null && selectedScene.Id == scene.Id)
+        if (clientId == state.ClientId)
         {
-            isASceneOpen = false;
-            selectedScene = null;
-            editingStep = null;
-            ClearScenePreview();
+            return;
+        }
+
+        // The open scene, the step being edited and the preview all belong to the kiosk we're leaving.
+        preview.Stop();
+        openScene = null;
+
+        await state.SetClientAsync(clientId);
+
+        // Remembered in the URL (shareable, survives refresh) and for the next visit. Only once
+        // interactive: during prerender NavigateTo becomes an HTTP redirect, to this same page.
+        if (_interactive && ClientQuery != clientId)
+        {
+            _navigationManager.NavigateTo(_navigationManager.GetUriWithQueryParameter("client", clientId), replace: true);
+        }
+
+        if (_deskModule != null)
+        {
+            try
+            {
+                await _deskModule.InvokeVoidAsync("setLastClientId", clientId?.ToString());
+            }
+            catch (JSDisconnectedException)
+            {
+            }
         }
     }
 
-    private void OnPreviewingStepsChanged(List<DmxSceneStep>? steps)
+    private async Task GoLiveAsync()
     {
-        previewingSceneSteps = steps;
-        previewingSceneId = steps != null ? selectedScene?.Id : null;
-    }
-
-    private void ClearScenePreview()
-    {
-        previewingSceneSteps = null;
-        previewingSceneId = null;
-    }
-
-    private void SetSelectedClient(Guid? clientId)
-    {
-        if (clientId != selectedClientId)
+        if (state.Output == DmxDeskOutput.Live)
         {
-            // A running scene preview is scoped to the previously selected client's fixtures;
-            // switching clients without stopping it would keep animating the old scene's steps
-            // and paint them onto the newly selected client's rig.
-            ClearScenePreview();
-
-            // The open scene (and the step the desk is bound to) belong to the old kiosk. Left
-            // open, edits with blind mode off would go live on the newly selected kiosk.
-            isASceneOpen = false;
-            selectedScene = null;
-            editingStep = null;
+            return;
         }
 
-        selectedClientId = clientId;
+        if (state.HasUnsentChanges && !state.IsEditingStep)
+        {
+            DialogResult result = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+            {
+                options.Header.Title = "Send your changes?";
+                options.Width = "min(450px, calc(100vw - 32px))";
+                options.Modal = true;
+                options.Parameters.Add(nameof(ConfirmationDialog.Message), "The lights haven't seen the changes you made in Blind. Going Live sends them now. To go Live without them, press Discard changes first.");
+                options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Send and go Live");
+                options.Parameters.Add(nameof(ConfirmationDialog.CancelText), "Stay Blind");
+            });
+
+            if (result.Cancelled)
+            {
+                return;
+            }
+
+            await state.SetOutputAsync(DmxDeskOutput.Live, sendChanges: true);
+            return;
+        }
+
+        await state.SetOutputAsync(DmxDeskOutput.Live);
     }
 
-    private void ToggleFixturePreview()
-    {
-        showFixturePreview = !showFixturePreview;
-    }
+    private Task GoBlindAsync() => state.SetOutputAsync(DmxDeskOutput.Blind);
 
-    private void ToggleGroupByFixture()
-    {
-        groupByFixture = !groupByFixture;
-    }
+    private Task SendToLightsAsync() => state.SendBufferAsync();
+
+    private Task DiscardAsync() => state.DiscardBlindChangesAsync();
+
+    private void ToggleLock() => state.IsLocked = !state.IsLocked;
+
+    private Task OnMasterInput(ChangeEventArgs e) =>
+        byte.TryParse(e.Value?.ToString(), out byte level) ? state.SetGrandMasterAsync(level) : Task.CompletedTask;
+
+    private Task ToggleBlackoutAsync() => state.SetBlackoutAsync(!state.OutputState.IsBlackout);
 
     private async Task OpenFixtureManager()
     {
-        if (selectedClientId == null)
+        if (state.ClientId is not Guid clientId)
         {
             return;
         }
 
         await _dialogService.ShowDialogAsync<DmxFixtureManagerDialog>(options =>
         {
-            options.Width = "700px";
+            options.Width = "min(700px, calc(100vw - 32px))";
             options.Modal = true;
-            options.Parameters.Add(nameof(DmxFixtureManagerDialog.ClientId), selectedClientId.Value);
+            options.Parameters.Add(nameof(DmxFixtureManagerDialog.ClientId), clientId);
         });
 
-        // The dialog's own add/edit/delete calls don't touch selectedClientId, so the desk's
-        // fixture list (keyed only on client changes) would otherwise never see the update.
-        // VirtualDmxDesk is also the sole owner of fixture data now (used for both the live
-        // preview and any scene preview), so nothing else needs telling.
-        if (virtualDmxDesk != null)
-        {
-            await virtualDmxDesk.RefreshFixturesAsync();
-        }
+        // The dialog's adds/edits/deletes don't otherwise reach the desk.
+        await state.RefreshFixturesAsync();
     }
 
     private void OpenScene(DmxScene scene)
     {
-        selectedScene = scene;
-
-        isASceneOpen = true;
+        openScene = scene;
     }
 
-    private void OnCloseSceneEditor()
+    private async Task CloseSceneEditorAsync()
     {
-        isASceneOpen = false;
-        selectedScene = null;
-        editingStep = null;
-        ClearScenePreview();
+        openScene = null;
+        preview.Stop();
+        await state.EditStepAsync(null, null);
     }
+
+    private async Task OnSceneDeletedAsync(DmxScene scene)
+    {
+        deletedSceneId = scene.Id;
+
+        if (openScene?.Id == scene.Id)
+        {
+            await CloseSceneEditorAsync();
+        }
+    }
+
+    private Task OnEditingStepChangedAsync(DmxSceneStep? step) => state.EditStepAsync(openScene, step);
 
     private void OnSceneEdited(DmxScene scene)
     {
         editedScene = scene;
         editedSceneVersion++;
+    }
+
+    private void OnPreviewingStepsChanged(List<DmxSceneStep>? steps)
+    {
+        if (steps != null && openScene != null)
+        {
+            preview.Start(openScene.Id, steps, openScene.Loop);
+        }
+        else
+        {
+            preview.Stop();
+        }
+    }
+
+    private void StopPreview() => preview.Stop();
+
+    private void OnScrub(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int index))
+        {
+            preview.ScrubTo(index);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        state.Changed -= ScheduleRender;
+        preview.Changed -= OnPreviewChanged;
+        _renderTimer?.Dispose();
+        preview.Dispose();
+
+        await state.DisposeAsync();
+
+        if (_deskModule != null)
+        {
+            try
+            {
+                await _deskModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
     }
 }

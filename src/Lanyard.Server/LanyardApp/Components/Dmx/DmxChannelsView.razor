@@ -1,0 +1,141 @@
+@using Lanyard.Infrastructure.Models.Dmx
+
+@* Raw channel faders, one bank at a time: 32 channels, or one fixture's footprint when grouped.
+   That's ~32 faders on the page instead of all 512. *@
+<div class="dmx-channels">
+    <div class="dmx-channels-bar">
+        <div class="dmx-segmented" role="group" aria-label="Show channels by">
+            <button type="button" class="@(GroupByFixture ? null : "is-active")" aria-pressed="@(!GroupByFixture)" @onclick="() => SetGrouping(false)">Banks of 32</button>
+            <button type="button" class="@(GroupByFixture ? "is-active" : null)" aria-pressed="@GroupByFixture" disabled="@(State.Fixtures.Count == 0)" @onclick="() => SetGrouping(true)">By fixture</button>
+        </div>
+
+        <div class="dmx-channels-nav">
+            <FluentButton IconStart="new Icons.Regular.Size20.ChevronLeft()" Appearance="ButtonAppearance.Subtle"
+                          Disabled="@(bankIndex <= 0)" OnClick="@(() => SelectBank(bankIndex - 1))" Title="Previous" aria-label="Previous bank" />
+            <select class="dmx-channels-select" aria-label="Channel bank" value="@bankIndex" @onchange="OnBankChanged">
+                @for (int i = 0; i < Banks.Count; i++)
+                {
+                    <option value="@i">@Banks[i].Label</option>
+                }
+            </select>
+            <FluentButton IconStart="new Icons.Regular.Size20.ChevronRight()" Appearance="ButtonAppearance.Subtle"
+                          Disabled="@(bankIndex >= Banks.Count - 1)" OnClick="@(() => SelectBank(bankIndex + 1))" Title="Next" aria-label="Next bank" />
+        </div>
+    </div>
+
+    @if (CurrentBank is Bank bank)
+    {
+        @if (bank.Detail != null)
+        {
+            <p class="dmx-channels-detail">@bank.Detail</p>
+        }
+
+        <div class="dmx-channels-faders">
+            @foreach (int address in bank.Addresses)
+            {
+                <DmxFader @key="address"
+                          Address="@address"
+                          Value="@ValueAt(address)"
+                          Disabled="@Disabled"
+                          Patches="@State.PatchesFor(address)"
+                          OnChange="OnFaderChanged" />
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required DmxDeskState State { get; set; }
+
+    // Re-render trigger: the state's version, so the bank redraws (faders decide for themselves).
+    [Parameter]
+    public int Version { get; set; }
+
+    // Read-only values to show instead of the state's (the scene preview).
+    [Parameter]
+    public byte[]? OverrideValues { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    private bool GroupByFixture;
+    private int bankIndex;
+
+    private sealed record Bank(string Label, string? Detail, IReadOnlyList<int> Addresses);
+
+    private List<Bank> Banks = [];
+    private IReadOnlyList<DmxFixture>? _banksBuiltFor;
+    private bool _banksBuiltGrouped;
+
+    private Bank? CurrentBank => Banks.Count == 0 ? null : Banks[Math.Clamp(bankIndex, 0, Banks.Count - 1)];
+
+    private byte ValueAt(int address) => (OverrideValues ?? State.Values)[address];
+
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_banksBuiltFor, State.Fixtures) || _banksBuiltGrouped != GroupByFixture)
+        {
+            BuildBanks();
+        }
+    }
+
+    private void BuildBanks()
+    {
+        _banksBuiltFor = State.Fixtures;
+        _banksBuiltGrouped = GroupByFixture;
+
+        if (GroupByFixture && State.Fixtures.Count > 0)
+        {
+            Banks = State.Fixtures
+                .Select(f =>
+                {
+                    List<int> addresses = DmxFixtureControls.Addresses(f).ToList();
+                    string range = addresses.Count == 0 ? "" : addresses.Count == 1 ? $"ch {addresses[0]}" : $"ch {addresses[0]}-{addresses[^1]}";
+                    DmxFixtureDefinition? definition = f.FixtureMode?.Definition;
+                    string? type = definition == null ? null
+                        : definition.Source == DmxFixtureDefinitionSource.BuiltIn ? definition.Model
+                        : $"{definition.Manufacturer} {definition.Model}";
+
+                    return new Bank($"{f.Name} ({range})", type, addresses);
+                })
+                .ToList();
+
+            HashSet<int> patched = [.. State.Patches.Keys];
+            List<int> unpatched = Enumerable.Range(1, DmxDeskState.UniverseSize).Where(a => !patched.Contains(a)).ToList();
+
+            for (int i = 0; i < unpatched.Count; i += 32)
+            {
+                List<int> chunk = unpatched.Skip(i).Take(32).ToList();
+                Banks.Add(new Bank($"Unpatched {chunk[0]}-{chunk[^1]}", "Channels no fixture uses", chunk));
+            }
+        }
+        else
+        {
+            Banks = Enumerable.Range(0, DmxDeskState.UniverseSize / 32)
+                .Select(i => new Bank($"Channels {i * 32 + 1}-{i * 32 + 32}", null, Enumerable.Range(i * 32 + 1, 32).ToList()))
+                .ToList();
+        }
+
+        bankIndex = Math.Clamp(bankIndex, 0, Math.Max(Banks.Count - 1, 0));
+    }
+
+    private void SetGrouping(bool grouped)
+    {
+        GroupByFixture = grouped;
+        bankIndex = 0;
+        BuildBanks();
+    }
+
+    private void SelectBank(int index) => bankIndex = Math.Clamp(index, 0, Math.Max(Banks.Count - 1, 0));
+
+    private void OnBankChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int index))
+        {
+            SelectBank(index);
+        }
+    }
+
+    private Task OnFaderChanged(DmxFaderChange change) => State.SetChannelAsync(change.Address, change.Value);
+}

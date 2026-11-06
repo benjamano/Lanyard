@@ -204,8 +204,8 @@
     [Parameter]
     public EventCallback<DmxScene> OnSceneEdited { get; set; }
 
-    // Reported up to DmxDesk, which forwards it to VirtualDmxDesk so the scene's simulated look
-    // renders inline in the main desk area (the same DmxFixturePreview used for the live preview)
+    // Reported up to DmxDesk, which plays it in DmxScenePreview so the scene's simulated look
+    // renders on the main desk area's fixture cards and faders
     // instead of a separate copy here in the narrow sidebar.
     [Parameter]
     public EventCallback<List<DmxSceneStep>?> OnPreviewingStepsChanged { get; set; }
@@ -268,8 +268,8 @@
         }
     }
 
-    // The actual animation/scrubbing lives in VirtualDmxDesk so it renders inline in the main
-    // desk area through the same DmxFixturePreview used for the live preview; this component
+    // The actual animation/scrubbing lives in DmxScenePreview (owned by DmxDesk) so it renders on the
+    // main desk area's fixture cards; this component
     // just tells the parent which steps to preview (or null to stop).
     private async Task ToggleScenePreview()
     {
