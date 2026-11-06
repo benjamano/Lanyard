@@ -1,0 +1,298 @@
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@inject ITemplateLearningService _learningService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.LightbulbFilament())" />
+            <FluentText As="@TextTag.H3">Learn from past rota</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="learn">
+            <p class="learn-intro">
+                Lanyard looks at the shifts you published and suggests templates that would build the same rota: the shifts you
+                had most weeks, how many people, and who usually worked them. Nothing changes until you save.
+            </p>
+
+            <div class="learn-period">
+                <FluentSelect TOption="WeeksOption" TValue="string" Items="@weekOptions" OptionText="@(x => x.Label)" OptionValue="@(x => x.Weeks.ToString())"
+                              Value="@weeks.ToString()" ValueChanged="@OnWeeksChanged" Label="Learn from" Width="220px" Disabled="@isBusy" />
+            </div>
+
+            @if (errorMessage is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
+            }
+
+            @if (result is null && errorMessage is null)
+            {
+                <FluentStack HorizontalAlignment="HorizontalAlignment.Center" HorizontalGap="8px">
+                    <FluentSpinner />
+                    <FluentText>Reading the rota and trying the templates out...</FluentText>
+                </FluentStack>
+            }
+            else if (result is not null)
+            {
+                <p class="learn-read">
+                    Read @result.ShiftsRead published @(result.ShiftsRead == 1 ? "shift" : "shifts") from
+                    @RotaDisplayExtensions.RangeLabel(result.From, result.To).
+                    @if (result.LeftOut > 0)
+                    {
+                        <text> @result.LeftOut didn't happen often enough to learn from, such as one-off cover.</text>
+                    }
+                </p>
+
+                @if (result.Templates.Count == 0)
+                {
+                    <FluentText>
+                        There isn't a pattern to learn yet. Build and publish the rota by hand for a few more weeks, or learn from a longer period.
+                    </FluentText>
+                }
+                else
+                {
+                    @if (result.Check is LearnedCheck check)
+                    {
+                        <div class="learn-check" role="status">
+                            <div class="learn-check-number">@check.MatchPercent%</div>
+                            <div>
+                                <strong>of the shifts you worked would be the same</strong>, with the same person, if Auto-build had used these
+                                templates. @check.ShiftPercent% would be the right shift.
+                                @if (check.Examples.Count > 0)
+                                {
+                                    <details class="learn-examples">
+                                        <summary>Where it differs</summary>
+                                        <ul>
+                                            @foreach (string example in check.Examples)
+                                            {
+                                                <li>@example</li>
+                                            }
+                                        </ul>
+                                    </details>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    <div class="learn-list">
+                        @foreach (IGrouping<DayOfWeek, LearnedTemplate> day in result.Templates.GroupBy(x => x.DayOfWeek))
+                        {
+                            <section class="learn-day" aria-label="@RotaFormat.Uk.DateTimeFormat.GetDayName(day.Key)">
+                                <h4>@RotaFormat.Uk.DateTimeFormat.GetDayName(day.Key)</h4>
+                                @foreach (LearnedTemplate template in day)
+                                {
+                                    LearnedTemplate current = template;
+                                    bool same = current.Status == LearnedStatus.Same;
+                                    <div class="learn-item @(same ? "learn-item-same" : "")">
+                                        <FluentCheckbox Value="@(!same && chosenTemplates.Contains(current.Key))" Disabled="@same"
+                                                        ValueChanged="@(on => Toggle(chosenTemplates, current.Key, on))"
+                                                        aria-label="@($"Save {current.Name}")" />
+                                        <div class="learn-item-body">
+                                            <div class="learn-item-title">
+                                                <span class="learn-time">@current.StartTime.ToString("HH:mm") – @current.EndTime.ToString("HH:mm")</span>
+                                                <FluentBadge Appearance="BadgeAppearance.Tint" Color="@StatusColor(current.Status)">@StatusLabel(current.Status)</FluentBadge>
+                                                @if (current.BreakMinutes > 0)
+                                                {
+                                                    <span class="learn-muted">@current.BreakMinutes min break</span>
+                                                }
+                                            </div>
+                                            <div class="learn-lines">
+                                                @foreach (LearnedLine line in current.Lines)
+                                                {
+                                                    <span>
+                                                        @(line.HireOnly ? $"{line.PositionName} for private hires" : $"{line.Headcount} × {line.PositionName}")
+                                                        @if (line.Regulars.Count > 0)
+                                                        {
+                                                            <span class="learn-muted">(@string.Join(", ", line.Regulars.Select(r => r.Name)))</span>
+                                                        }
+                                                        <span class="learn-muted">· @line.DaysSeen of @line.DaysOpen @(day.Key)s</span>
+                                                    </span>
+                                                }
+                                            </div>
+                                            @if (current.Status == LearnedStatus.Changed)
+                                            {
+                                                <div class="learn-changes">Changes to "@current.Name": @string.Join("; ", current.Changes)</div>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </section>
+                        }
+                    </div>
+
+                    @if (result.HireStaffing.Count > 0)
+                    {
+                        <section class="learn-day" aria-label="Private hire staffing">
+                            <h4>Private hire staffing</h4>
+                            @foreach (LearnedHireStaffing line in result.HireStaffing)
+                            {
+                                LearnedHireStaffing current = line;
+                                <div class="learn-item @(current.AlreadySet ? "learn-item-same" : "")">
+                                    <FluentCheckbox Value="@(!current.AlreadySet && chosenStaffing.Contains(current.Key))" Disabled="@current.AlreadySet"
+                                                    ValueChanged="@(on => Toggle(chosenStaffing, current.Key, on))"
+                                                    aria-label="@($"Save {current.HireKind.Label()} hire {current.PositionName}")" />
+                                    <div class="learn-item-body">
+                                        <div class="learn-item-title">
+                                            <span>@current.HireKind.Label() hire: +@current.Count @current.PositionName</span>
+                                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="@(current.AlreadySet ? BadgeColor.Subtle : BadgeColor.Brand)">@(current.AlreadySet ? "Already set up" : "New")</FluentBadge>
+                                        </div>
+                                        <div class="learn-muted">From @current.HiresSeen @(current.HiresSeen == 1 ? "hire" : "hires")</div>
+                                    </div>
+                                </div>
+                            }
+                        </section>
+                    }
+                }
+            }
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentStack HorizontalAlignment="HorizontalAlignment.End" HorizontalGap="8px">
+            @if (ChosenCount > 0)
+            {
+                <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" OnClick="@SaveAsync">
+                    @(isBusy ? "Saving..." : $"Save {ChosenCount} {(ChosenCount == 1 ? "suggestion" : "suggestions")}")
+                </FluentButton>
+            }
+            <FluentButton Disabled="@isBusy" OnClick="@(() => Dialog.CancelAsync())">@(ChosenCount > 0 ? "Cancel" : "Close")</FluentButton>
+        </FluentStack>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required int LocationId { get; set; }
+
+    private record WeeksOption(int Weeks, string Label);
+
+    private readonly List<WeeksOption> weekOptions = [new(4, "The last 4 weeks"), new(8, "The last 8 weeks"), new(12, "The last 12 weeks"), new(26, "The last 6 months")];
+
+    private int weeks = 8;
+    private TemplateLearningResult? result;
+    private HashSet<string> chosenTemplates = [];
+    private HashSet<string> chosenStaffing = [];
+    private string? errorMessage;
+    private bool isBusy;
+    private LocationScope? scope;
+
+    private int ChosenCount =>
+        (result?.Templates.Count(x => x.Status != LearnedStatus.Same && chosenTemplates.Contains(x.Key)) ?? 0)
+        + (result?.HireStaffing.Count(x => !x.AlreadySet && chosenStaffing.Contains(x.Key)) ?? 0);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            errorMessage = "Couldn't confirm who you are - try reloading the page.";
+            return;
+        }
+
+        scope = scopeResult.Data;
+        await LearnAsync();
+    }
+
+    private async Task OnWeeksChanged(string? value)
+    {
+        if (int.TryParse(value, out int picked) && picked != weeks)
+        {
+            weeks = picked;
+            await LearnAsync();
+        }
+    }
+
+    private async Task LearnAsync()
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        result = null;
+        errorMessage = null;
+        isBusy = true;
+        StateHasChanged();
+
+        Result<TemplateLearningResult> learned = await _learningService.LearnAsync(scope, LocationId, weeks);
+
+        isBusy = false;
+
+        if (!learned.IsSuccess || learned.Data is null)
+        {
+            errorMessage = learned.Error;
+            return;
+        }
+
+        result = learned.Data;
+
+        // Everything new or changed is ticked to start with.
+        chosenTemplates = result.Templates.Where(x => x.Status != LearnedStatus.Same).Select(x => x.Key).ToHashSet();
+        chosenStaffing = result.HireStaffing.Where(x => !x.AlreadySet).Select(x => x.Key).ToHashSet();
+    }
+
+    private static void Toggle(HashSet<string> set, string key, bool on)
+    {
+        if (on)
+        {
+            set.Add(key);
+        }
+        else
+        {
+            set.Remove(key);
+        }
+    }
+
+    private static string StatusLabel(LearnedStatus status) => status switch
+    {
+        LearnedStatus.New => "New",
+        LearnedStatus.Changed => "Update",
+        _ => "Already set up"
+    };
+
+    private static BadgeColor StatusColor(LearnedStatus status) => status switch
+    {
+        LearnedStatus.New => BadgeColor.Brand,
+        LearnedStatus.Changed => BadgeColor.Warning,
+        _ => BadgeColor.Subtle
+    };
+
+    private async Task SaveAsync()
+    {
+        if (scope is null || result is null)
+        {
+            return;
+        }
+
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            errorMessage = "Couldn't confirm who you are - try reloading the page.";
+            return;
+        }
+
+        isBusy = true;
+
+        Result<int> saved = await _learningService.ApplyAsync(scope, LocationId,
+            result.Templates.Where(x => chosenTemplates.Contains(x.Key)).ToList(),
+            result.HireStaffing.Where(x => chosenStaffing.Contains(x.Key)).ToList(),
+            actingUser.Data);
+
+        isBusy = false;
+
+        if (!saved.IsSuccess)
+        {
+            errorMessage = saved.Error;
+            return;
+        }
+
+        _toastService.ShowSuccess($"Saved {saved.Data} {(saved.Data == 1 ? "suggestion" : "suggestions")}. Try Auto-build on the rota.");
+        await Dialog.CloseAsync(true);
+    }
+}
