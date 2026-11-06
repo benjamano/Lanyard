@@ -2,6 +2,7 @@ using Lanyard.Application.Services.Authentication;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Dmx;
+using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.Models.Dmx;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -17,6 +18,7 @@ public class DmxSceneService(
     ISecurityService securityService) : IDmxSceneService
 {
     public const int MaxSceneNameLength = 100;
+    public const int MaxStepNameLength = 60;
     public static readonly TimeSpan MaxStepDuration = TimeSpan.FromHours(1);
 
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
@@ -561,6 +563,292 @@ public class DmxSceneService(
             return Result<bool>.Fail("An error occurred while stopping DMX scenes.");
         }
     }
+
+    public async Task<Result<bool>> RenameStepAsync(Guid stepId, string name)
+    {
+        string trimmed = (name ?? string.Empty).Trim();
+
+        if (trimmed.Length == 0 || trimmed.Length > MaxStepNameLength)
+        {
+            return Result<bool>.Fail($"Step names need 1 to {MaxStepNameLength} characters.");
+        }
+
+        // A rename doesn't change playback, so it doesn't stop a running scene.
+        try
+        {
+            Result<string> user = await _securityService.GetCurrentUserIdAsync();
+
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+
+            DmxSceneStep? step = await context.DmxSceneSteps
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(s => s.Id == stepId && s.Scene!.IsActive);
+
+            if (step == null)
+            {
+                return Result<bool>.Fail("Scene step not found.");
+            }
+
+            step.Name = trimmed;
+            step.UpdateByUserId = user.IsSuccess ? user.Data : null;
+            step.UpdateDate = DateTime.UtcNow;
+
+            await context.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error renaming DMX scene step {StepId}", stepId);
+            return Result<bool>.Fail("An error occurred while renaming the step.");
+        }
+    }
+
+    public async Task<Result<DmxSceneStep>> DuplicateStepAsync(Guid stepId)
+    {
+        try
+        {
+            Result<string> user = await _securityService.GetCurrentUserIdAsync();
+
+            if (!user.IsSuccess || string.IsNullOrEmpty(user.Data))
+            {
+                return Result<DmxSceneStep>.Fail("Couldn't work out who you are. Sign in again and retry.");
+            }
+
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+
+            DmxSceneStep? source = await context.DmxSceneSteps
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Include(s => s.ChannelValues)
+                .FirstOrDefaultAsync(s => s.Id == stepId && s.Scene!.IsActive);
+
+            if (source == null)
+            {
+                return Result<DmxSceneStep>.Fail("Scene step not found.");
+            }
+
+            List<DmxSceneStep> later = await context.DmxSceneSteps
+                .TagWithCallSite()
+                .Where(s => s.SceneId == source.SceneId && s.StepNumber > source.StepNumber)
+                .ToListAsync();
+
+            foreach (DmxSceneStep step in later)
+            {
+                step.StepNumber++;
+            }
+
+            DateTime now = DateTime.UtcNow;
+            Guid copyId = Guid.NewGuid();
+
+            DmxSceneStep copy = new()
+            {
+                Id = copyId,
+                SceneId = source.SceneId,
+                StepNumber = source.StepNumber + 1,
+                Name = Truncate($"{source.Name} copy", MaxStepNameLength),
+                Duration = source.Duration,
+                Beats = source.Beats,
+                CreateByUserId = user.Data,
+                CreateDate = now,
+                ChannelValues = source.ChannelValues
+                    .Select(v => new DmxSceneStepChannelValue
+                    {
+                        SceneStepId = copyId,
+                        ChannelNumber = v.ChannelNumber,
+                        Value = v.Value,
+                        CreateByUserId = user.Data,
+                        CreateDate = now
+                    })
+                    .ToList()
+            };
+
+            context.DmxSceneSteps.Add(copy);
+            await context.SaveChangesAsync();
+
+            _sceneRunner.StopScene(source.SceneId);
+
+            return Result<DmxSceneStep>.Ok(copy);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error duplicating DMX scene step {StepId}", stepId);
+            return Result<DmxSceneStep>.Fail("An error occurred while duplicating the step.");
+        }
+    }
+
+    public async Task<Result<bool>> ReorderStepsAsync(Guid sceneId, IReadOnlyList<Guid> orderedStepIds)
+    {
+        try
+        {
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+
+            List<DmxSceneStep> steps = await context.DmxSceneSteps
+                .TagWithCallSite()
+                .Where(s => s.SceneId == sceneId && s.Scene!.IsActive)
+                .ToListAsync();
+
+            if (steps.Count == 0)
+            {
+                return Result<bool>.Fail("Scene not found.");
+            }
+
+            // Every step exactly once: a stale page mustn't drop or duplicate steps.
+            if (orderedStepIds.Count != steps.Count || orderedStepIds.Distinct().Count() != steps.Count
+                || orderedStepIds.Any(id => steps.All(s => s.Id != id)))
+            {
+                return Result<bool>.Fail("The steps have changed since the page loaded. Reload and try again.");
+            }
+
+            Dictionary<Guid, DmxSceneStep> byId = steps.ToDictionary(s => s.Id);
+
+            for (int i = 0; i < orderedStepIds.Count; i++)
+            {
+                byId[orderedStepIds[i]].StepNumber = i + 1;
+            }
+
+            await context.SaveChangesAsync();
+
+            _sceneRunner.StopScene(sceneId);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reordering steps of DMX scene {SceneId}", sceneId);
+            return Result<bool>.Fail("An error occurred while reordering the steps.");
+        }
+    }
+
+    public async Task<Result<bool>> ReplaceStepChannelValuesAsync(Guid stepId, IReadOnlyList<DmxChannel> values)
+    {
+        if (values.Any(v => v.Address is < 1 or > DmxService.UniverseSize))
+        {
+            return Result<bool>.Fail("DMX channels are numbered 1 to 512.");
+        }
+
+        try
+        {
+            Result<string> user = await _securityService.GetCurrentUserIdAsync();
+
+            if (!user.IsSuccess || string.IsNullOrEmpty(user.Data))
+            {
+                return Result<bool>.Fail("Couldn't work out who you are. Sign in again and retry.");
+            }
+
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+
+            DmxSceneStep? step = await context.DmxSceneSteps
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(s => s.Id == stepId && s.Scene!.IsActive);
+
+            if (step == null)
+            {
+                return Result<bool>.Fail("Scene step not found.");
+            }
+
+            List<DmxSceneStepChannelValue> existing = await context.DmxSceneStepChannelValues
+                .TagWithCallSite()
+                .Where(v => v.SceneStepId == stepId)
+                .ToListAsync();
+
+            context.DmxSceneStepChannelValues.RemoveRange(existing);
+
+            DateTime now = DateTime.UtcNow;
+
+            foreach (DmxChannel value in values.GroupBy(v => v.Address).Select(g => g.Last()))
+            {
+                context.DmxSceneStepChannelValues.Add(new DmxSceneStepChannelValue
+                {
+                    SceneStepId = stepId,
+                    ChannelNumber = value.Address,
+                    Value = value.Value,
+                    CreateByUserId = user.Data,
+                    CreateDate = now
+                });
+            }
+
+            await context.SaveChangesAsync();
+
+            _sceneRunner.StopScene(step.SceneId);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error replacing channel values of DMX scene step {StepId}", stepId);
+            return Result<bool>.Fail("An error occurred while saving the step.");
+        }
+    }
+
+    public async Task<Result<bool>> ClearStepChannelAsync(Guid stepId, int channelNumber)
+    {
+        try
+        {
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+
+            // Loaded through the tenant filter (via the step's scene), so only this company's rows.
+            DmxSceneStepChannelValue? value = await context.DmxSceneStepChannelValues
+                .TagWithCallSite()
+                .Include(v => v.SceneStep)
+                .FirstOrDefaultAsync(v => v.SceneStepId == stepId && v.ChannelNumber == channelNumber && v.SceneStep!.Scene!.IsActive);
+
+            if (value == null)
+            {
+                return Result<bool>.Ok(true);
+            }
+
+            Guid sceneId = value.SceneStep!.SceneId;
+
+            context.DmxSceneStepChannelValues.Remove(value);
+            await context.SaveChangesAsync();
+
+            _sceneRunner.StopScene(sceneId);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error clearing channel {ChannelNumber} from DMX scene step {StepId}", channelNumber, stepId);
+            return Result<bool>.Fail("An error occurred while clearing the channel.");
+        }
+    }
+
+    public async Task<Result<IReadOnlyList<string>>> GetAutomationRulesUsingSceneAsync(Guid sceneId)
+    {
+        try
+        {
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+
+            string id = sceneId.ToString();
+
+            // Cheap text filter in SQL, then an exact read of each candidate's parameters.
+            var candidates = await context.AutomationRuleActions
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(a => a.IsActive && a.ActionType == AutomationActionTypes.DmxSceneControl
+                    && a.AutomationRule!.IsActive && a.ParametersJson.Contains(id))
+                .Select(a => new { a.ParametersJson, RuleName = a.AutomationRule!.Name })
+                .ToListAsync();
+
+            List<string> names = candidates
+                .Where(c => DmxSceneControlActionExecutor.TryReadTargets(c.ParametersJson, out _, out Guid? scene) && scene == sceneId)
+                .Select(c => c.RuleName)
+                .Distinct()
+                .OrderBy(n => n)
+                .ToList();
+
+            return Result<IReadOnlyList<string>>.Ok(names);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error finding automation rules that use DMX scene {SceneId}", sceneId);
+            return Result<IReadOnlyList<string>>.Fail("An error occurred while checking automation rules.");
+        }
+    }
+
+    private static string Truncate(string value, int length) => value.Length <= length ? value : value[..length];
 
     private static string? ValidateName(string? name)
     {

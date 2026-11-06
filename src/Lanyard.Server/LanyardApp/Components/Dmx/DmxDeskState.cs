@@ -65,6 +65,16 @@ public sealed class DmxDeskState(
 
     public bool IsEditingStep => EditingStep != null;
 
+    /// <summary>Step edits waiting to be saved (they save ~300 ms after the faders settle).</summary>
+    public bool IsSaving => _pendingStepSaves.Count > 0 || _saving;
+
+    private bool _saving;
+
+    // Channels the step being edited sets. Others are left alone when it plays.
+    private HashSet<int> _stepChannels = [];
+
+    public bool IsInStep(int address) => _stepChannels.Contains(address);
+
     public int Version { get; private set; }
 
     public event Action? Changed;
@@ -258,6 +268,7 @@ public sealed class DmxDeskState(
             foreach (DmxChannel channel in channels)
             {
                 SyncStepValue(step, channel.Address, channel.Value);
+                _stepChannels.Add(channel.Address);
             }
 
             QueueStepSave(step.Id, channels);
@@ -320,7 +331,10 @@ public sealed class DmxDeskState(
             return;
         }
 
+        // A step only sends the channels it sets; it leaves the rest alone when it plays, so the
+        // preview must too.
         List<DmxChannel> batch = Enumerable.Range(1, UniverseSize)
+            .Where(a => !IsEditingStep || _stepChannels.Contains(a))
             .Select(a => new DmxChannel { Address = a, Value = Values[a] })
             .ToList();
 
@@ -385,12 +399,15 @@ public sealed class DmxDeskState(
     /// Binds the desk to a scene step: the faders show and save the step. Starts Blind, so editing
     /// doesn't change the lights until the operator chooses Live.
     /// </summary>
-    public async Task EditStepAsync(DmxScene? scene, DmxSceneStep? step)
+    public async Task EditStepAsync(DmxScene? scene, DmxSceneStep? step, bool keepOutput = false)
     {
+        DmxDeskOutput previous = Output;
+
         await FlushStepSavesAsync();
 
         EditingScene = step == null ? null : scene;
         EditingStep = step;
+        _stepChannels = step == null ? [] : [.. step.ChannelValues.Select(v => v.ChannelNumber)];
 
         if (step != null)
         {
@@ -405,11 +422,17 @@ public sealed class DmxDeskState(
             }
 
             ReplaceValues(values);
-            Output = DmxDeskOutput.Blind;
+            Output = keepOutput ? previous : DmxDeskOutput.Blind;
+
+            if (Output == DmxDeskOutput.Live)
+            {
+                // Previewing on the lights: they follow the editor from step to step.
+                await SendBufferAsync();
+            }
         }
         else
         {
-            Output = DmxDeskOutput.Live;
+            Output = keepOutput ? previous : DmxDeskOutput.Live;
             await ReloadLiveAsync();
         }
 
@@ -471,6 +494,86 @@ public sealed class DmxDeskState(
         await dispatch(FlushStepSavesAsync);
     }
 
+    /// <summary>
+    /// Takes a channel out of the step being edited: it's removed from the step (not set to 0), so
+    /// the step leaves that channel as it is when it plays.
+    /// </summary>
+    public async Task ClearStepChannelAsync(int address)
+    {
+        if (EditingStep is not DmxSceneStep step || IsLocked)
+        {
+            return;
+        }
+
+        foreach (Dictionary<int, byte> pending in _pendingStepSaves.Values)
+        {
+            pending.Remove(address);
+        }
+
+        step.ChannelValues = step.ChannelValues.Where(v => v.ChannelNumber != address).ToList();
+        _stepChannels.Remove(address);
+        Values[address] = 0;
+        Touch();
+
+        Result<bool> result = await sceneService.ClearStepChannelAsync(step.Id, address);
+
+        if (!result.IsSuccess)
+        {
+            showError($"Couldn't take channel {address} out of the step: {result.Error}");
+        }
+    }
+
+    /// <summary>
+    /// Makes the step being edited reproduce what the lights show now: every patched channel and
+    /// every channel above zero, read from the kiosk. Anything else the step had is removed.
+    /// </summary>
+    public async Task<bool> CaptureLiveIntoStepAsync()
+    {
+        if (ClientId is not Guid id || EditingStep is not DmxSceneStep step || IsLocked)
+        {
+            return false;
+        }
+
+        Result<IReadOnlyList<DmxChannel>> live = await desk.GetChannelsAsync(id);
+
+        if (!live.IsSuccess || live.Data == null)
+        {
+            showError($"Couldn't read the lights: {live.Error}");
+            return false;
+        }
+
+        List<DmxChannel> captured = live.Data
+            .Where(c => c.Value > 0 || Patches.ContainsKey(c.Address))
+            .ToList();
+
+        _pendingStepSaves.Remove(step.Id);
+
+        Result<bool> result = await sceneService.ReplaceStepChannelValuesAsync(step.Id, captured);
+
+        if (!result.IsSuccess)
+        {
+            showError($"Couldn't capture the lights into the step: {result.Error}");
+            return false;
+        }
+
+        step.ChannelValues = captured
+            .Select(c => new DmxSceneStepChannelValue { SceneStepId = step.Id, ChannelNumber = c.Address, Value = c.Value, CreateByUserId = string.Empty })
+            .ToList();
+        _stepChannels = [.. captured.Select(c => c.Address)];
+
+        byte[] values = new byte[UniverseSize + 1];
+
+        foreach (DmxChannel channel in captured)
+        {
+            values[channel.Address] = channel.Value;
+        }
+
+        ReplaceValues(values);
+        Touch();
+
+        return true;
+    }
+
     /// <summary>Saves every pending step edit now (also done on leaving a step and on dispose).</summary>
     public async Task FlushStepSavesAsync()
     {
@@ -481,6 +584,8 @@ public sealed class DmxDeskState(
 
         List<KeyValuePair<Guid, Dictionary<int, byte>>> batches = [.. _pendingStepSaves];
         _pendingStepSaves.Clear();
+        _saving = true;
+        Touch();
 
         foreach ((Guid stepId, Dictionary<int, byte> values) in batches)
         {
@@ -493,6 +598,9 @@ public sealed class DmxDeskState(
                 showError($"Failed to save {batch.Count} channel(s) of the step: {result.Error}");
             }
         }
+
+        _saving = false;
+        Touch();
     }
 
     public async ValueTask DisposeAsync()

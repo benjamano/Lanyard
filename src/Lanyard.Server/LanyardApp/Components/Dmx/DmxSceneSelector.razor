@@ -52,10 +52,9 @@
             @foreach (DmxSceneDTO scene in scenes)
             {
                 bool isRunning = runningSceneIds.Contains(scene.Id);
-                bool isOpen = CurrentlyOpenSceneId == scene.Id;
                 int progress = GetSceneProgress(scene);
 
-                <li @key="scene.Id" class="dmx-scene @(isRunning ? "is-running" : null) @(isOpen ? "is-open" : null)">
+                <li @key="scene.Id" class="dmx-scene @(isRunning ? "is-running" : null)">
                     <div class="dmx-scene-main">
                         <span class="dmx-scene-name">@scene.Name</span>
                         <span class="dmx-scene-meta">
@@ -129,22 +128,11 @@
     [Parameter]
     public bool IsLocked { get; set; }
 
-    [Parameter]
-    public Guid? DeletedSceneId { get; set; }
 
     [Parameter]
     public EventCallback<DmxScene> OnOpenScene { get; set; }
 
-    [Parameter]
-    public Guid? CurrentlyOpenSceneId { get; set; }
 
-    [Parameter]
-    public Guid? EditedSceneId { get; set; }
-
-    // Bumped by the page on every save, so a second edit of the same scene still refreshes it
-    // (and an unchanged value doesn't re-query on every parent render, as it used to).
-    [Parameter]
-    public int EditedSceneVersion { get; set; }
 
     private List<DmxSceneDTO> scenes = [];
     private bool isLoading;
@@ -160,8 +148,6 @@
     private readonly Dictionary<Guid, string> failures = [];
 
     private Guid? previousClientId;
-    private Guid? previousDeletedSceneId;
-    private int previousEditedSceneVersion;
 
     private IDisposable? _sceneSubscription;
 
@@ -205,39 +191,6 @@
             }
 
             scenesChanged = true;
-        }
-
-        if (DeletedSceneId != null && DeletedSceneId != previousDeletedSceneId)
-        {
-            previousDeletedSceneId = DeletedSceneId;
-
-            scenes.RemoveAll(scene => scene.Id == DeletedSceneId.Value);
-            runningSceneIds.Remove(DeletedSceneId.Value);
-
-            scenesChanged = true;
-        }
-
-        if (EditedSceneId != null && EditedSceneVersion != previousEditedSceneVersion)
-        {
-            previousEditedSceneVersion = EditedSceneVersion;
-
-            int index = scenes.FindIndex(scene => scene.Id == EditedSceneId.Value);
-
-            if (index >= 0)
-            {
-                Result<DmxSceneDTO>? result = await _dmxSceneService.GetSceneByIdAsync(EditedSceneId.Value);
-
-                if (result.IsSuccess && result.Data != null)
-                {
-                    scenes[index] = result.Data;
-
-                    scenesChanged = true;
-                }
-                else
-                {
-                    _toastService.ShowError($"Failed to load updated scene: {result.Error}");
-                }
-            }
         }
 
         if (scenesChanged)
@@ -517,25 +470,8 @@
 
             if (createResult.IsSuccess && createResult.Data != null)
             {
-                _toastService.ShowSuccess($"Scene '{sceneName}' created successfully.");
-
-                DmxScene created = createResult.Data;
-
-                scenes.Add(new DmxSceneDTO
-                {
-                    Id = created.Id,
-                    Name = created.Name,
-                    ClientId = created.ClientId,
-                    Loop = created.Loop,
-                    IsMomentary = created.IsMomentary,
-                    KeyBindings = created.KeyBindings,
-                    CreateByUserId = created.CreateByUserId,
-                    CreateDate = created.CreateDate,
-                    IsRunning = false,
-                    StepCount = 0
-                });
-
-                await InvokeAsync(StateHasChanged);
+                // Straight to its editor: a new scene has no steps yet.
+                _navigationManager.NavigateTo($"/dmx/scenes/{createResult.Data.Id}");
             }
             else
             {

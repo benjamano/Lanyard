@@ -92,3 +92,17 @@
         height: 180px;
     }
 }
+
+/* A scene step doesn't set this channel: it's left as it is when the step plays. */
+.dmx-fader--unset {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--colorNeutralStroke2);
+}
+
+.dmx-fader--unset .dmx-fader-input {
+    opacity: 0.4;
+}
+
+.dmx-fader--unset .dmx-fader-value {
+    color: var(--colorNeutralForeground4);
+}
