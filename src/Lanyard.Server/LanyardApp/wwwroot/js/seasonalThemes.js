@@ -70,10 +70,80 @@ export function apply(season) {
 // --- Christmas ---------------------------------------------------------------------------------
 
 function buildChristmas(root, animate) {
+    // The snow caps are pure CSS; the lights need to know which card is highest, so they're
+    // tracked here and stay on (without twinkling) under reduced motion.
+    const stopLights = trackHighestCard("season-lights");
+
     if (!animate) {
-        // The snow caps on cards are pure CSS and stay; only the falling snow needs motion.
-        return null;
+        return stopLights;
     }
+
+    const stopSnow = buildSnow(root);
+
+    return () => {
+        stopLights();
+        stopSnow();
+    };
+}
+
+// Keeps `className` on the top-most card in the page content (left-most on a tie), moving it when
+// the page changes: Blazor navigation, cards loading in, or a resize restacking the layout.
+// Checks are batched to one per animation frame however many DOM changes arrive.
+function trackHighestCard(className) {
+    let current = null;
+    let frame = 0;
+
+    function pick() {
+        frame = 0;
+        const area = document.querySelector('.fluent-layout-item[area="content"]');
+        let best = null;
+        let bestTop = Infinity;
+        let bestLeft = Infinity;
+
+        for (const card of area?.querySelectorAll(".fluent-card") ?? []) {
+            // A card inside another card isn't "on the page"; its outer card is.
+            if (card.parentElement?.closest(".fluent-card")) continue;
+
+            const rect = card.getBoundingClientRect();
+            if (rect.width < 80 || rect.height < 24) continue;
+
+            if (rect.top < bestTop - 2 || (Math.abs(rect.top - bestTop) <= 2 && rect.left < bestLeft)) {
+                best = card;
+                bestTop = rect.top;
+                bestLeft = rect.left;
+            }
+        }
+
+        if (best !== current) {
+            current?.classList.remove(className);
+            current = best;
+        }
+
+        // Only when missing: adding it again would itself be a class change and re-trigger this.
+        if (current && !current.classList.contains(className)) {
+            current.classList.add(className);
+        }
+    }
+
+    function schedule() {
+        if (!frame) frame = requestAnimationFrame(pick);
+    }
+
+    // Class changes count too, since a Blazor re-render can rewrite a card's class attribute.
+    const observer = new MutationObserver(schedule);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+    window.addEventListener("resize", schedule);
+    pick();
+
+    return () => {
+        observer.disconnect();
+        window.removeEventListener("resize", schedule);
+        cancelAnimationFrame(frame);
+        current?.classList.remove(className);
+    };
+}
+
+function buildSnow(root) {
 
     const canvas = document.createElement("canvas");
     canvas.className = "season-snow";
