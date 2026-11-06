@@ -175,4 +175,87 @@ public class TemplateLearningServiceTests
         Assert.IsFalse((await GetService(w.Options).LearnAsync(w.Scope, w.Location.Id, 1)).IsSuccess);
         Assert.IsFalse((await GetService(w.Options).LearnAsync(w.Scope, w.Location.Id, 60)).IsSuccess);
     }
+
+    // --- Monthly suggestions ---
+
+    [TestMethod]
+    public async Task RunMonthlyAsync_NoTemplatesButARotaBuiltByHand_OffersFirstSetup()
+    {
+        World w = await SeedAsync();
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            TemplateSuggestionRun? run = await GetService(w.Options).RunMonthlyAsync(ctx, w.Location, Now);
+
+            Assert.IsNotNull(run);
+            Assert.IsTrue(run.FirstSetup);
+            Assert.AreEqual(5, run.Suggestions, "four templates and the hire staffing");
+            Assert.AreEqual(100, run.MatchPercent);
+        }
+
+        TemplateSuggestionRun? open = (await GetService(w.Options).GetOpenSuggestionsAsync(w.Scope, w.Location.Id)).Data;
+        Assert.IsTrue(open is { FirstSetup: true });
+    }
+
+    [TestMethod]
+    public async Task RunMonthlyAsync_NoTemplatesAndTooLittleRota_NothingYet()
+    {
+        World w = await SeedAsync();
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            // Keep only the last three weeks of the rota.
+            DateTime cutoff = RotaTime.StartOfDayUtc(new DateOnly(2026, 11, 9));
+            ctx.Shifts.RemoveRange(await ctx.Shifts.Where(x => x.StartUtc < cutoff).ToListAsync());
+            await ctx.SaveChangesAsync();
+        }
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            Assert.IsNull(await GetService(w.Options).RunMonthlyAsync(ctx, w.Location, Now));
+            Assert.AreEqual(0, await ctx.TemplateSuggestionRuns.CountAsync());
+        }
+    }
+
+    [TestMethod]
+    public async Task RunMonthlyAsync_TemplatesDifferFromTheRota_OpenSuggestionsUntilDismissed()
+    {
+        World w = await SeedAsync();
+        TemplateLearningService service = GetService(w.Options);
+        TemplateLearningResult learned = (await service.LearnAsync(w.Scope, w.Location.Id, 8)).Data!;
+
+        // Only the early CSA template is set up, so the rest are suggested.
+        await service.ApplyAsync(w.Scope, w.Location.Id, learned.Templates.Where(x => x.StartTime == new TimeOnly(9, 0)).ToList(), [], ManagerId);
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            TemplateSuggestionRun? run = await service.RunMonthlyAsync(ctx, w.Location, Now);
+            Assert.AreEqual(4, run!.Suggestions, "two templates, the hire-only one and its hire staffing");
+            Assert.IsFalse(run.FirstSetup);
+            Assert.IsNull(run.MatchPercent);
+        }
+
+        TemplateSuggestionRun? open = (await service.GetOpenSuggestionsAsync(w.Scope, w.Location.Id)).Data;
+        Assert.IsNotNull(open);
+        Assert.AreEqual(new DateOnly(2026, 10, 5), open.From);
+
+        Assert.IsTrue((await service.DismissSuggestionsAsync(w.Scope, w.Location.Id, ManagerId)).IsSuccess);
+        Assert.IsNull((await service.GetOpenSuggestionsAsync(w.Scope, w.Location.Id)).Data);
+    }
+
+    [TestMethod]
+    public async Task RunMonthlyAsync_TemplatesMatchTheRota_NoBanner()
+    {
+        World w = await SeedAsync();
+        TemplateLearningService service = GetService(w.Options);
+        TemplateLearningResult learned = (await service.LearnAsync(w.Scope, w.Location.Id, 8)).Data!;
+        await service.ApplyAsync(w.Scope, w.Location.Id, learned.Templates, learned.HireStaffing, ManagerId);
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            Assert.AreEqual(0, (await service.RunMonthlyAsync(ctx, w.Location, Now))!.Suggestions);
+        }
+
+        Assert.IsNull((await service.GetOpenSuggestionsAsync(w.Scope, w.Location.Id)).Data);
+    }
 }

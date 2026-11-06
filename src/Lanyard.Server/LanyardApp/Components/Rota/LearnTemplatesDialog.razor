@@ -168,11 +168,14 @@
     [Parameter, EditorRequired]
     public required int LocationId { get; set; }
 
+    [Parameter]
+    public int Weeks { get; set; } = 8;
+
     private record WeeksOption(int Weeks, string Label);
 
     private readonly List<WeeksOption> weekOptions = [new(4, "The last 4 weeks"), new(8, "The last 8 weeks"), new(12, "The last 12 weeks"), new(26, "The last 6 months")];
 
-    private int weeks = 8;
+    private int weeks;
     private TemplateLearningResult? result;
     private HashSet<string> chosenTemplates = [];
     private HashSet<string> chosenStaffing = [];
@@ -195,6 +198,7 @@
         }
 
         scope = scopeResult.Data;
+        weeks = weekOptions.Any(x => x.Weeks == Weeks) ? Weeks : 8;
         await LearnAsync();
     }
 

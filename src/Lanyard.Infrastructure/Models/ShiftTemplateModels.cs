@@ -90,4 +90,37 @@ namespace Lanyard.Infrastructure.Models
 
         public int SortOrder { get; set; }
     }
+
+    // The monthly look at a location's published rota (TemplateSuggestionHostedService): how many
+    // template or hire staffing changes it suggested. FirstSetup runs are for a location with no
+    // templates yet that has been building its rota by hand: the suggestions are its first templates,
+    // and MatchPercent is how much of that rota Auto-build with them would have made the same. Shift Templates shows a banner while the latest
+    // run has suggestions and nobody has reviewed or dismissed it; the suggestions themselves are
+    // worked out again when someone opens them, so they're never stale.
+    public class TemplateSuggestionRun : ICompanyOwned
+    {
+        public Guid Id { get; set; }
+
+        public required int CompanyId { get; set; }
+        public Company? Company { get; set; }
+
+        public required int LocationId { get; set; }
+        public Location? Location { get; set; }
+
+        public DateTime RunUtc { get; set; }
+
+        public DateOnly From { get; set; }
+        public DateOnly To { get; set; }
+
+        public int Suggestions { get; set; }
+
+        public bool FirstSetup { get; set; }
+
+        public int? MatchPercent { get; set; }
+
+        public DateTime? DismissedUtc { get; set; }
+        public string? DismissedByUserId { get; set; }
+
+        public bool IsOpen => Suggestions > 0 && DismissedUtc is null;
+    }
 }

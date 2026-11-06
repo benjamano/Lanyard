@@ -8,6 +8,7 @@
 
 @inject IShiftTemplateService _templateService
 @inject IStaffPositionService _staffPositionService
+@inject ITemplateLearningService _learningService
 
 <PageTitle>Shift Templates</PageTitle>
 
@@ -36,10 +37,35 @@
             New shift template
         </FluentButton>
         <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.LightbulbFilament())"
-                      Disabled="@(templates is null)" OnClick="@LearnAsync">
+                      Disabled="@(templates is null)" OnClick="@(() => LearnAsync(8))">
             Learn from past rota
         </FluentButton>
     </div>
+
+    @if (openSuggestions is TemplateSuggestionRun run)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false" Class="templates-suggestions">
+            @if (run.FirstSetup)
+            {
+                <text>
+                    Lanyard has learned @run.Suggestions @(run.Suggestions == 1 ? "template" : "templates") from the rota you published
+                    from @RotaDisplayExtensions.RangeLabel(run.From, run.To)@(run.MatchPercent is int match ? $". With them, Auto-build would have made {match}% of that rota the same" : string.Empty).
+                    Review them to set up Auto-build.
+                </text>
+            }
+            else
+            {
+                <text>
+                    The rota you published from @RotaDisplayExtensions.RangeLabel(run.From, run.To) suggests
+                    @run.Suggestions @(run.Suggestions == 1 ? "change" : "changes") to these templates.
+                </text>
+            }
+            <div class="templates-suggestions-actions">
+                <FluentButton Appearance="ButtonAppearance.Primary" Size="ButtonSize.Small" OnClick="@(() => LearnAsync(ITemplateLearningService.MonthlyWeeks))">@(run.FirstSetup ? "Set up Auto-build" : "Review")</FluentButton>
+                <FluentButton Size="ButtonSize.Small" Disabled="@isBusy" OnClick="@DismissSuggestionsAsync">Dismiss</FluentButton>
+            </div>
+        </FluentMessageBar>
+    }
 
     @if (loadError is not null)
     {
@@ -151,6 +177,7 @@
     private List<ShiftTemplate>? templates;
     private List<StaffPosition> positions = [];
     private List<RegularCandidate> candidates = [];
+    private TemplateSuggestionRun? openSuggestions;
     private string? loadError;
     private bool isBusy;
 
@@ -227,6 +254,9 @@
 
         Result<List<RegularCandidate>> candidatesResult = await _templateService.GetRegularCandidatesAsync(scope, location);
         candidates = candidatesResult.Data ?? [];
+
+        Result<TemplateSuggestionRun?> suggestions = await _learningService.GetOpenSuggestionsAsync(scope, location);
+        openSuggestions = suggestions.Data;
     }
 
     private async Task OnLocationChanged(string? value)
@@ -269,7 +299,7 @@
         }
     }
 
-    private async Task LearnAsync()
+    private async Task LearnAsync(int weeks)
     {
         if (locationId is not int location)
         {
@@ -281,12 +311,46 @@
             options.Width = "680px";
             options.Modal = true;
             options.Parameters.Add(nameof(LearnTemplatesDialog.LocationId), location);
+            options.Parameters.Add(nameof(LearnTemplatesDialog.Weeks), weeks);
         });
 
         if (result.Value is true)
         {
+            // Saving suggestions deals with the month's banner too.
+            if (openSuggestions is not null)
+            {
+                await DismissSuggestionsAsync();
+            }
+
             await LoadAsync();
         }
+    }
+
+    private async Task DismissSuggestionsAsync()
+    {
+        if (scope is null || locationId is not int location)
+        {
+            return;
+        }
+
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            return;
+        }
+
+        isBusy = true;
+        Result<bool> result = await _learningService.DismissSuggestionsAsync(scope, location, actingUser.Data);
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't dismiss the suggestions.");
+            return;
+        }
+
+        openSuggestions = null;
     }
 
     private async Task SetArchivedAsync(ShiftTemplate template, bool archived)

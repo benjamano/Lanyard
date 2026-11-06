@@ -11,6 +11,7 @@
 
 @inject IRotaService _rotaService
 @inject IShiftClaimService _shiftClaimService
+@inject ITemplateLearningService _learningService
 @inject IJSRuntime JS
 
 <PageTitle>Rota</PageTitle>
@@ -73,6 +74,22 @@
                     <span>@view.UnpublishedChangeCount unpublished @(view.UnpublishedChangeCount == 1 ? "change" : "changes") @WhoIsAffected(view.PeopleWithUnpublishedChanges, view.UnpublishedOpenShiftCount).</span>
                 }
             </FluentText>
+
+            @if (templateSuggestions is TemplateSuggestionRun suggestionRun)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                    @if (suggestionRun.FirstSetup)
+                    {
+                        <text>Lanyard has learned your shift templates from the rota you've been building@(suggestionRun.MatchPercent is int match ? $" ({match}% match)" : string.Empty), so Auto-build can do it for you.</text>
+                        <a href="@($"/manage/rota/templates?location={locationId}")">Set up Auto-build</a>
+                    }
+                    else
+                    {
+                        <text>Last month's rota suggests @suggestionRun.Suggestions @(suggestionRun.Suggestions == 1 ? "change" : "changes") to your shift templates.</text>
+                        <a href="@($"/manage/rota/templates?location={locationId}")">Review @(suggestionRun.Suggestions == 1 ? "it" : "them")</a>
+                    }
+                </FluentMessageBar>
+            }
 
             @if (pendingRequests > 0 && scope?.LocationId == locationId)
             {
@@ -158,6 +175,7 @@
     private RotaRangeView? view;
     private string? loadError;
     private int pendingRequests;
+    private TemplateSuggestionRun? templateSuggestions;
     private bool isBusy;
     private string? loadedKey;
 
@@ -271,6 +289,9 @@
         Result<string> viewer = await _securityService.GetCurrentUserIdAsync();
         Result<int> requests = await _shiftClaimService.CountPendingForNavAsync(scope, viewer.Data);
         pendingRequests = requests.Data;
+
+        Result<TemplateSuggestionRun?> suggestions = await _learningService.GetOpenSuggestionsAsync(scope, location);
+        templateSuggestions = suggestions.Data;
     }
 
     // All navigation goes through the URL so the page is linkable and back/forward work;

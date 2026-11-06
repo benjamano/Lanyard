@@ -191,6 +191,7 @@ builder.Services.AddScoped<IChatModerationService, ChatModerationService>();
 builder.Services.AddScoped<IFeedbackService, FeedbackService>();
 builder.Services.AddHostedService<ChatDigestHostedService>();
 builder.Services.AddHostedService<ChatRetentionHostedService>();
+builder.Services.AddHostedService<TemplateSuggestionHostedService>();
 builder.Services.AddScoped<ChatUnreadTracker>();
 builder.Services.AddScoped<IClockInTerminalService, ClockInTerminalService>();
 builder.Services.AddScoped<ICalendarFeedService, CalendarFeedService>();

@@ -358,6 +358,15 @@ public class GdprService : IGdprService
                 rule.UpdatedByUserId = null;
             }
 
+            List<TemplateSuggestionRun> runsDismissedByUser = await ctx.TemplateSuggestionRuns
+                .Where(x => x.DismissedByUserId == userId)
+                .ToListAsync();
+
+            foreach (TemplateSuggestionRun run in runsDismissedByUser)
+            {
+                run.DismissedByUserId = null;
+            }
+
             List<ShiftTemplate> templatesTouchedByUser = await ctx.ShiftTemplates
                 .Where(x => x.CreateByUserId == userId || x.UpdateByUserId == userId)
                 .ToListAsync();

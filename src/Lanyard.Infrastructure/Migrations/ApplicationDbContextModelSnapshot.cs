@@ -4074,6 +4074,51 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("StaffWorkPreferences");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.TemplateSuggestionRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DismissedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DismissedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("FirstSetup")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateOnly>("From")
+                        .HasColumnType("date");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MatchPercent")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("RunUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Suggestions")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("To")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("LocationId", "RunUtc");
+
+                    b.ToTable("TemplateSuggestionRuns");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.TimeEntry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6556,6 +6601,25 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("Company");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.TemplateSuggestionRun", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Location");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.TimeEntry", b =>
