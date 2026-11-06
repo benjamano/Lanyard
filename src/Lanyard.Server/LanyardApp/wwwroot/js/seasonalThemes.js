@@ -172,6 +172,69 @@ function buildChristmas(root, animate) {
     };
 }
 
+// --- Halloween ---------------------------------------------------------------------------------
+
+// Original artwork: a squat pumpkin with a carved face. The face is a separate group so CSS can
+// make the candle inside flicker.
+const PUMPKIN_SVG = `
+<svg viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg" focusable="false">
+  <path d="M58 18 C57 10 60 4 67 2 L69 6 C64 8 63 12 64 18 Z" fill="#5b7a2e"/>
+  <ellipse cx="34" cy="58" rx="28" ry="36" fill="#e46f12"/>
+  <ellipse cx="86" cy="58" rx="28" ry="36" fill="#e46f12"/>
+  <ellipse cx="60" cy="58" rx="30" ry="40" fill="#f2861d"/>
+  <path d="M60 19 C52 40 52 78 60 97 M60 19 C68 40 68 78 60 97" stroke="#c95c0b" stroke-width="2" fill="none" opacity="0.6"/>
+  <g class="season-pumpkin-face">
+    <path d="M30 46 L44 34 L48 52 Z"/>
+    <path d="M90 46 L76 34 L72 52 Z"/>
+    <path d="M56 56 L60 48 L64 56 Z"/>
+    <path d="M26 66 C40 86 80 86 94 66 L86 70 L80 64 L72 72 L64 66 L56 72 L48 66 L40 72 L34 64 Z"/>
+  </g>
+</svg>`;
+
+const BAT_SVG = `
+<svg viewBox="0 0 100 40" xmlns="http://www.w3.org/2000/svg" focusable="false">
+  <path d="M50 14 C46 14 45 10 46 7 L48 10 L52 10 L54 7 C55 10 54 14 50 14 Z
+           M47 14 C40 10 30 6 18 8 C24 12 24 18 20 22 C26 20 32 22 34 28 C38 22 44 20 47 22 Z
+           M53 14 C60 10 70 6 82 8 C76 12 76 18 80 22 C74 20 68 22 66 28 C62 22 56 20 53 22 Z
+           M47 14 L53 14 L53 24 C51 27 49 27 47 24 Z"/>
+</svg>`;
+
+function buildHalloween(root, animate) {
+    const patch = document.createElement("div");
+    patch.className = "season-pumpkins";
+    patch.innerHTML =
+        `<span class="season-pumpkin season-pumpkin-small">${PUMPKIN_SVG}</span>` +
+        `<span class="season-pumpkin">${PUMPKIN_SVG}</span>`;
+    root.appendChild(patch);
+
+    if (!animate) {
+        return null;
+    }
+
+    let timer = 0;
+
+    function launchBat() {
+        if (!document.hidden) {
+            const bat = document.createElement("span");
+            bat.className = "season-bat";
+            bat.innerHTML = BAT_SVG;
+            bat.style.top = `${60 + Math.random() * 140}px`;
+            bat.style.animationDuration = `${7 + Math.random() * 4}s`;
+            if (Math.random() < 0.5) bat.classList.add("season-bat-reverse");
+            bat.addEventListener("animationend", () => bat.remove(), { once: true });
+            root.appendChild(bat);
+        }
+
+        timer = window.setTimeout(launchBat, 20000 + Math.random() * 20000);
+    }
+
+    // The first bat comes quickly so a preview shows one; then every 20-40s.
+    timer = window.setTimeout(launchBat, 2500);
+
+    return () => window.clearTimeout(timer);
+}
+
 const builders = {
     christmas: buildChristmas,
+    halloween: buildHalloween,
 };

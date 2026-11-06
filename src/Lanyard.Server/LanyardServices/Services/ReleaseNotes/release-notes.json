@@ -858,12 +858,13 @@
   {
     "version": "1.4.21",
     "releaseDate": "2026-11-06",
-    "summary": "Seasonal themes: snow at Christmas.",
+    "summary": "Seasonal themes: snow at Christmas, pumpkins at Halloween.",
     "details": [
       "From 1 to 26 December, snow falls across Lanyard and cards get a layer of snow on top.",
+      "From 24 to 31 October, jack-o'-lanterns glow in the bottom corner, a bat flies past now and then, and cards get a cobweb in the corner.",
       "Admins choose Seasonal themes for their company on Companies & Locations: Automatic (follow the calendar), Off, or a season shown straight away for previewing.",
       "Anyone can turn seasonal themes off for themselves under Seasonal Themes on their account page.",
-      "Kiosk screens, the clock-in terminal and the login page are never decorated, and the snow stops falling when reduced motion is on."
+      "Kiosk screens, the clock-in terminal and the login page are never decorated, and nothing moves when reduced motion is on."
     ]
   }
 ]
