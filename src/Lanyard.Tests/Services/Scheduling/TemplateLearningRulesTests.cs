@@ -251,4 +251,23 @@ public class TemplateLearningRulesTests
         Assert.AreEqual("ryan", template.Slots.Single().Regulars.Single().UserId);
         Assert.IsNull(ShiftTemplateRules.Validate(template));
     }
+
+    [TestMethod]
+    public void Learn_ExistingTemplateAFewMinutesOut_IsAnUpdateNotANewOne()
+    {
+        (List<Shift> shifts, List<PartyBooking> hires) = BensSaturdays();
+        ShiftTemplate early = new()
+        {
+            Id = Guid.NewGuid(), CompanyId = 1, LocationId = 1, Name = "Early CSA", DayOfWeek = DayOfWeek.Saturday,
+            StartTime = new TimeOnly(9, 5), EndTime = new TimeOnly(11, 0),
+            Slots = [new ShiftTemplateSlot { ShiftTemplateId = Guid.Empty, StaffPositionId = Csa, Headcount = 1,
+                Regulars = [new ShiftTemplateSlotRegular { ShiftTemplateSlotId = Guid.Empty, UserId = "ben" }] }]
+        };
+
+        LearnedTemplate learned = Find(Learn(shifts, hires, [early]), "09:00", "11:00");
+
+        Assert.AreEqual(LearnedStatus.Changed, learned.Status);
+        Assert.AreEqual(early.Id, learned.ExistingTemplateId);
+        Assert.AreEqual("Times: 09:05–11:00 → 09:00–11:00", learned.Changes.Single());
+    }
 }

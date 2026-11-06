@@ -196,8 +196,11 @@ public static class TemplateLearningRules
     private static LearnedTemplate Compare(LearnedTemplate learned, IReadOnlyCollection<ShiftTemplate> existing,
         IReadOnlyDictionary<Guid, string> positionNames, IReadOnlyDictionary<string, string> names)
     {
-        ShiftTemplate? match = existing.FirstOrDefault(x => x.IsActive && x.DayOfWeek == learned.DayOfWeek
-            && x.StartTime == learned.StartTime && x.EndTime == learned.EndTime);
+        // Within 15 minutes, like the learning: a 09:00 template is the 09:05 shift, not a new one.
+        ShiftTemplate? match = existing
+            .Where(x => x.IsActive && x.DayOfWeek == learned.DayOfWeek && Near(x.StartTime, learned.StartTime) && Near(x.EndTime, learned.EndTime))
+            .OrderBy(x => Math.Abs((x.StartTime - learned.StartTime).TotalMinutes) + Math.Abs((x.EndTime - learned.EndTime).TotalMinutes))
+            .FirstOrDefault();
 
         if (match is null)
         {
@@ -239,6 +242,11 @@ public static class TemplateLearningRules
         if (match.BreakMinutes != learned.BreakMinutes)
         {
             changes.Add($"Break: {match.BreakMinutes} → {learned.BreakMinutes} min");
+        }
+
+        if (match.StartTime != learned.StartTime || match.EndTime != learned.EndTime)
+        {
+            changes.Add($"Times: {match.StartTime:HH\\:mm}–{match.EndTime:HH\\:mm} → {learned.StartTime:HH\\:mm}–{learned.EndTime:HH\\:mm}");
         }
 
         return learned with
