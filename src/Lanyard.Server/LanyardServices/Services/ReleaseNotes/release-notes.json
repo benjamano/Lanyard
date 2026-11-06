@@ -854,5 +854,16 @@
       "The CanManagePlaylists role now exists, so it can be given to people who should look after playlists without being Admins.",
       "With kiosk version 1.0.45, a kiosk responds to pause, stop and other commands straight away even while it's still downloading a song, and skipping quickly through songs no longer queues up downloads."
     ]
+  },
+  {
+    "version": "1.4.21",
+    "releaseDate": "2026-11-06",
+    "summary": "Seasonal themes: snow at Christmas.",
+    "details": [
+      "From 1 to 26 December, snow falls across Lanyard and cards get a layer of snow on top.",
+      "Admins choose Seasonal themes for their company on Companies & Locations: Automatic (follow the calendar), Off, or a season shown straight away for previewing.",
+      "Anyone can turn seasonal themes off for themselves under Seasonal Themes on their account page.",
+      "Kiosk screens, the clock-in terminal and the login page are never decorated, and the snow stops falling when reduced motion is on."
+    ]
   }
 ]

@@ -1588,6 +1588,9 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("SeasonalThemeSetting")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ThemeColorHex")
                         .HasColumnType("text");
 
@@ -4312,6 +4315,9 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.Property<bool>("ShowMessagePreviews")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ShowSeasonalThemes")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("TwoFactorEnabled")

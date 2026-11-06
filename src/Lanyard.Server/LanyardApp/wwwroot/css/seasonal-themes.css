@@ -1,0 +1,58 @@
+/* Seasonal decorations. Loaded on demand by js/seasonalThemes.js and keyed off body[data-season],
+   which is set only inside MainLayout (never kiosk, video publisher, rota terminal or login).
+   Global on purpose: scoped .razor.css can't reach Fluent component roots or body attributes. */
+
+#lanyard-season {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    /* Just above the page content, under the header, menus, dialog backdrops, popovers and toasts,
+       so a dialog never has snow falling across it. */
+    z-index: 1;
+    overflow: hidden;
+}
+
+#lanyard-season canvas {
+    position: absolute;
+    inset: 0;
+}
+
+/* --- Christmas: snow caps on cards ------------------------------------------------------------ */
+/* Only cards in the page content: the menu and the footer are cards too, and capping those
+   just draws a white bar across the chrome. */
+
+body[data-season="christmas"] .fluent-layout-item[area="content"] .fluent-card {
+    position: relative;
+}
+
+body[data-season="christmas"] .fluent-layout-item[area="content"] .fluent-card::before {
+    --snow: #ffffff;
+    --snow-edge: rgba(80, 120, 170, 0.55);
+    content: "";
+    position: absolute;
+    top: -6px;
+    left: -3px;
+    right: -3px;
+    height: 17px;
+    pointer-events: none;
+    z-index: 2;
+    border-radius: 10px 10px 0 0;
+    /* A thin band along the top edge with two rows of drifts of different sizes hanging below it,
+       so the edge looks lumpy rather than like a ruler. */
+    background:
+        linear-gradient(var(--snow), var(--snow)) top / 100% 6px no-repeat,
+        radial-gradient(circle at 50% 2px, var(--snow) 8px, transparent 8.6px) 0 0 / 26px 17px repeat-x,
+        radial-gradient(circle at 50% 2px, var(--snow) 6px, transparent 6.6px) 13px 0 / 41px 17px repeat-x;
+    /* The outline is what makes white snow readable on a white card in light mode. */
+    filter: drop-shadow(0 1px 0 var(--snow-edge)) drop-shadow(0 2px 2px rgba(60, 90, 130, 0.18));
+}
+
+/* A card inside a card would otherwise get a second cap halfway down the first one. */
+body[data-season="christmas"] .fluent-layout-item[area="content"] .fluent-card .fluent-card::before {
+    content: none;
+}
+
+body[data-season="christmas"][data-theme="dark"] .fluent-layout-item[area="content"] .fluent-card::before {
+    --snow: #e8f0f8;
+    --snow-edge: rgba(0, 0, 0, 0.5);
+}

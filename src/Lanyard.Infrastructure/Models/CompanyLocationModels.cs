@@ -23,6 +23,10 @@ namespace Lanyard.Infrastructure.Models
         public DateTime? TwoFactorRequiredSince { get; set; }
         public string? TwoFactorRequiredByUserId { get; set; }
 
+        // Seasonal decorations (Christmas snow, Halloween pumpkins) in the staff app. Automatic
+        // follows the calendar; a named season forces it on, which managers use to preview.
+        public Lanyard.Infrastructure.Enum.SeasonalThemeSetting SeasonalThemeSetting { get; set; } = Lanyard.Infrastructure.Enum.SeasonalThemeSetting.Automatic;
+
         public virtual List<Location> Locations { get; set; } = [];
     }
 
