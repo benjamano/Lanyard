@@ -60,22 +60,23 @@
                         </div>
                     }
 
-                    <div class="auto-build-summary" role="status">
-                        <div class="auto-build-stat">
-                            <span class="auto-build-number">@preview.Assigned</span>
-                            <span>@(preview.Assigned == 1 ? "shift" : "shifts") for @preview.PeopleCount @(preview.PeopleCount == 1 ? "person" : "people")</span>
+                    @if (preview.Lines.Count > 0)
+                    {
+                        <div class="auto-build-summary" role="status">
+                            <div class="auto-build-stat">
+                                <span class="auto-build-number">@preview.Assigned</span>
+                                <span>@(preview.Assigned == 1 ? "shift" : "shifts") for @preview.PeopleCount @(preview.PeopleCount == 1 ? "person" : "people")</span>
+                            </div>
+                            <div class="auto-build-stat @(preview.Open > 0 ? "auto-build-stat-open" : "")">
+                                <span class="auto-build-number">@preview.Open</span>
+                                <span>left as open @(preview.Open == 1 ? "shift" : "shifts")</span>
+                            </div>
                         </div>
-                        <div class="auto-build-stat @(preview.Open > 0 ? "auto-build-stat-open" : "")">
-                            <span class="auto-build-number">@preview.Open</span>
-                            <span>left as open @(preview.Open == 1 ? "shift" : "shifts")</span>
-                        </div>
-                    </div>
 
-                    <FluentText Class="auto-build-note">
-                        Shifts are added as drafts, so nobody sees them until you publish. Shifts already on the rota are kept
-                        @(preview.AlreadyCovered > 0 ? $"({preview.AlreadyCovered} of the template shifts are there already)" : string.Empty),
-                        and days already over are skipped.
-                    </FluentText>
+                        <FluentText Class="auto-build-note">
+                            @Note(preview)
+                        </FluentText>
+                    }
 
                     <div class="auto-build-days">
                         @foreach (IGrouping<DateOnly, AutoBuildLine> day in preview.Lines.GroupBy(x => x.Day))
@@ -148,6 +149,11 @@
     private string? errorMessage;
     private bool isBusy;
     private LocationScope? scope;
+
+    private static string Note(AutoBuildResult result) =>
+        "Shifts are added as drafts, so nobody sees them until you publish. Shifts already on the rota are kept"
+        + (result.AlreadyCovered > 0 ? $" ({result.AlreadyCovered} of the shifts needed are there already)" : string.Empty)
+        + ", and days already over are skipped.";
 
     private static string ApplyLabel(AutoBuildResult result) => result.Lines.Count > 0
         ? $"Add {result.Lines.Count} draft {(result.Lines.Count == 1 ? "shift" : "shifts")}"
