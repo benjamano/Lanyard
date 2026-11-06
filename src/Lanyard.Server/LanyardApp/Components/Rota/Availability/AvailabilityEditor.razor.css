@@ -108,3 +108,8 @@
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     }
 }
+
+.availability-wish-fields ::deep fluent-field {
+    margin-top: 0;
+    margin-bottom: 0;
+}
