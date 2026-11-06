@@ -1,27 +1,44 @@
 <HelpTab>
     <FluentText>
         The <a href="/dmx">DMX Desk</a> controls the venue's lighting through a kiosk's DMX output. It needs the
-        Admin or CanManageDmxSystems role. Start by choosing the kiosk (client) whose lights you want to control.
+        Admin or CanManageDmxSystems role. Choose the kiosk at the top left. Kiosks that are switched off show as
+        <strong>(offline)</strong>: you can still set up their fixtures and scenes, and the desk remembers the kiosk
+        you used last.
     </FluentText>
 
-    <HelpSection Title="The desk">
+    <HelpSection Title="Fixtures and Channels">
         <ul>
-            <li>Each slider is one DMX channel. Turn on <strong>Edit Mode</strong> to move them.</li>
-            <li>With Edit Mode off the desk just watches: the sliders follow the lights as scenes run or someone
-                else changes them.</li>
-            <li><strong>Group by Fixture</strong> groups the sliders by light. <strong>Show all channels</strong> lists them
-                in order, with unpatched channels (ones no fixture uses) at the end.</li>
-            <li><strong>Fixture Preview</strong> shows each light as a coloured light on screen, so you can see a scene
-                without being in the room.</li>
+            <li><strong>Fixtures</strong> shows each light as a card: a circle in the light's current colour, a
+                <strong>Brightness</strong> slider, a <strong>Colour</strong> picker with quick colours, and
+                <strong>Pan</strong> and <strong>Tilt</strong> for moving heads. <strong>Off</strong> and
+                <strong>Full</strong> set the brightness at once, and <strong>Channels</strong> opens that light's raw faders.</li>
+            <li><strong>Channels</strong> shows raw faders 32 at a time. Use the arrows or the list to change bank, or
+                <strong>By fixture</strong> to see one light's channels together. The tag above a fader says what it
+                controls; an amber <strong>2×</strong> means two fixtures share that channel.</li>
+            <li>The desk always follows the lights, so you see a running scene or someone else's changes as they happen.</li>
         </ul>
     </HelpSection>
 
-    <HelpSection Title="Blind editing">
-        <FluentText>
-            With <strong>Blind Editing Mode</strong> on, you can change a scene without the real lights following.
-            Turning it off makes the desk drive the lights live, and stops any scenes running on that kiosk so
-            they don't fight you for the channels.
-        </FluentText>
+    <HelpSection Title="Live and Blind">
+        <ul>
+            <li><strong>Live</strong>: the faders drive the lights straight away.</li>
+            <li><strong>Blind</strong>: change the desk without the lights following. An amber bar reminds you.
+                Press <strong>Send to lights</strong> when you're ready, or <strong>Discard changes</strong> to go back
+                to what the lights are showing. Going back to Live with unsent changes asks whether to send them.</li>
+        </ul>
+    </HelpSection>
+
+    <HelpSection Title="Master, Blackout and Lock">
+        <ul>
+            <li><strong>Master</strong> dims every light together. It only changes brightness: moving heads don't
+                move and colours don't change. The faders keep their own levels.</li>
+            <li><strong>Blackout</strong> turns every light off at once. Press <strong>Bring lights back</strong> to
+                return exactly to how they were, including anything you changed while it was on.</li>
+            <li><strong>Lock</strong> stops the faders and buttons being moved by accident. The desk starts locked on
+                phones and tablets. Blackout and stopping scenes still work while locked.</li>
+            <li>Lanyard remembers each kiosk's lights, master and blackout. If the kiosk or Lanyard restarts, the
+                lights come back as they were.</li>
+        </ul>
     </HelpSection>
 
     <HelpSection Title="Which output the kiosk uses">

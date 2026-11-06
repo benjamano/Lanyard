@@ -865,7 +865,13 @@
       "With kiosk version 1.0.46, a kiosk's DMX lights keep working after it reconnects to Lanyard. Before, a reconnect could leave the DMX interface stuck closed until the kiosk was restarted.",
       "With kiosk version 1.0.46, unplugging and replugging the DMX USB interface brings the lights back within a few seconds, and an interface plugged in after the kiosk started is picked up on its own.",
       "With kiosk version 1.0.46, a kiosk sends DMX at a steady 40 frames a second, even while scenes and faders send it lots of changes.",
-      "Lanyard now remembers each kiosk's DMX lights, so if Lanyard itself restarts, every kiosk's lights come back as they were when it reconnects."
+      "Lanyard now remembers each kiosk's DMX lights, so if Lanyard itself restarts, every kiosk's lights come back as they were when it reconnects.",
+      "A redesigned DMX desk. Each light now has its own card with a Brightness slider, a Colour picker with quick colours, and Pan and Tilt for moving heads, so you don't need to know which channel does what.",
+      "Raw faders move to the Channels tab, 32 at a time or one light at a time with By fixture. The desk is much quicker, especially on phones.",
+      "Edit Mode and Blind Editing Mode are replaced by a simple Live / Blind switch. In Blind, an amber bar reminds you the lights aren't following, with Send to lights and Discard changes.",
+      "New on the DMX desk: a Master slider that dims every light together without moving heads or changing colours, a Blackout button, and a Lock that stops faders being moved by accident (on by default on phones).",
+      "Scenes show Run, Stop and Hold buttons, their keybinds, how far through a running scene is, and why a scene stopped if something went wrong. Stop all stops every scene on the kiosk.",
+      "The DMX desk lists every kiosk, including ones that are switched off (marked offline), and remembers the one you used last."
     ]
   },
   {

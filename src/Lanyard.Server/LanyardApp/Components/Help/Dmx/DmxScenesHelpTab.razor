@@ -6,10 +6,14 @@
 
     <HelpSection Title="Making a scene">
         <ol>
-            <li>Create a new scene and give it a <strong>Scene name</strong>.</li>
-            <li>Turn on edit mode, then add steps. Set the sliders for each step and its <strong>Duration</strong> (hh:mm:ss).</li>
-            <li>Use the save button to keep the step, or cancel to undo it.</li>
+            <li>Press <strong>New scene</strong> and give it a <strong>Scene name</strong>.</li>
+            <li>Press the pencil next to the scene to edit it, then add steps.</li>
+            <li>Click a step to edit it. The desk switches to that step and shows a blue bar: whatever you set on the
+                fixtures or faders is saved to the step as you go. It starts in <strong>Blind</strong>; choose
+                <strong>Live</strong> to see the step on the lights while you work.</li>
+            <li>Set each step's <strong>Duration</strong> (hh:mm:ss). Press <strong>Done editing</strong> when finished.</li>
         </ol>
+        <FluentText>The play button in the editor previews the scene on screen only; the lights don't change.</FluentText>
     </HelpSection>
 
     <HelpSection Title="Scene settings">
@@ -24,8 +28,12 @@
 
     <HelpSection Title="Running scenes">
         <FluentText>
-            Run a scene from the desk, from an automation rule's <strong>DMX Scene Control</strong> action (for
-            example a team's colours when it wins), or with its keybind.
+            Press <strong>Run</strong> (or <strong>Stop</strong>) next to a scene. A momentary scene has a
+            <strong>Hold</strong> button instead: it runs while you hold it. A bar shows how far through a running
+            scene is, and if a scene stops because of a problem the reason shows under its name.
+            <strong>Stop all</strong> stops every scene on the kiosk. Scenes also run from an automation rule's
+            <strong>DMX Scene Control</strong> action (for example a team's colours when it wins), or with their
+            keybind, shown on the scene as a key.
         </FluentText>
     </HelpSection>
 </HelpTab>

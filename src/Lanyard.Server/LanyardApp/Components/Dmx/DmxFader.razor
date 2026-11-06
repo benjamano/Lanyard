@@ -1,0 +1,86 @@
+@* One desk channel as a plain native range input. A FluentCard + FluentSlider + FluentButton per
+   channel made 512 web components that all re-rendered on every live update; this is plain HTML and
+   only re-renders when its own value, lock or label changes. *@
+<div class="dmx-fader @(Patches.Count > 1 ? "dmx-fader--clash" : null)" title="@TagTitle">
+    <span class="dmx-fader-tag @(Patches.Count == 0 ? "dmx-fader-tag--empty" : null)">@TagText</span>
+    <span class="dmx-fader-value" aria-hidden="true">@Value</span>
+    <input type="range"
+           class="dmx-fader-input"
+           min="0" max="255" step="1"
+           value="@Value"
+           disabled="@Disabled"
+           aria-label="@($"Channel {Address}")"
+           aria-valuetext="@($"Channel {Address}: {Value}")"
+           @oninput="OnInput" />
+    <span class="dmx-fader-address">@Address</span>
+    <button type="button" class="dmx-fader-zero" disabled="@Disabled" title="@($"Set channel {Address} to 0")" @onclick="Zero">0</button>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public int Address { get; set; }
+
+    [Parameter]
+    public byte Value { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    // Every fixture patched on this channel (usually one; more when double-patched).
+    [Parameter]
+    public IReadOnlyList<DmxChannelPatch> Patches { get; set; } = [];
+
+    [Parameter]
+    public EventCallback<DmxFaderChange> OnChange { get; set; }
+
+    private byte _renderedValue;
+    private bool _renderedDisabled;
+    private IReadOnlyList<DmxChannelPatch>? _renderedPatches;
+    private bool _hasRendered;
+
+    // The parent re-renders a whole bank at once; only faders whose own inputs changed redraw.
+    protected override bool ShouldRender()
+    {
+        bool changed = !_hasRendered
+            || _renderedValue != Value
+            || _renderedDisabled != Disabled
+            || !ReferenceEquals(_renderedPatches, Patches);
+
+        _hasRendered = true;
+        _renderedValue = Value;
+        _renderedDisabled = Disabled;
+        _renderedPatches = Patches;
+
+        return changed;
+    }
+
+    private Task OnInput(ChangeEventArgs e)
+    {
+        if (Disabled || !int.TryParse(e.Value?.ToString(), out int parsed))
+        {
+            return Task.CompletedTask;
+        }
+
+        byte value = (byte)Math.Clamp(parsed, 0, 255);
+        Value = value;
+
+        return OnChange.InvokeAsync(new DmxFaderChange(Address, value));
+    }
+
+    private Task Zero()
+    {
+        Value = 0;
+        return OnChange.InvokeAsync(new DmxFaderChange(Address, 0));
+    }
+
+    private string TagText => Patches.Count switch
+    {
+        0 => "·",
+        1 => DmxChannelRoleText.Tag(Patches[0].Role) + (Patches[0].IsFine ? "·f" : string.Empty),
+        _ => "2×",
+    };
+
+    private string TagTitle => Patches.Count == 0
+        ? $"Channel {Address}: no fixture"
+        : $"Channel {Address}: " + string.Join("; ", Patches.Select(p => $"{p.FixtureName} · {p.Label}"));
+}

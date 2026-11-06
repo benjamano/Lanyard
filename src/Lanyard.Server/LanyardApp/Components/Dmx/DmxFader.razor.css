@@ -1,0 +1,94 @@
+.dmx-fader {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    width: 44px;
+    padding: 6px 2px;
+    border-radius: var(--borderRadiusMedium);
+    background: var(--colorNeutralBackground2);
+    box-sizing: border-box;
+}
+
+.dmx-fader--clash {
+    box-shadow: inset 0 0 0 1px var(--colorStatusWarningBorder2, var(--colorStatusWarningForeground2));
+}
+
+.dmx-fader-tag {
+    min-width: 30px;
+    padding: 1px 3px;
+    border-radius: var(--borderRadiusMedium);
+    background: var(--colorBrandBackground2);
+    color: var(--colorBrandForeground2);
+    font-size: var(--fontSizeBase100);
+    font-weight: 600;
+    line-height: 16px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 40px;
+}
+
+.dmx-fader--clash .dmx-fader-tag {
+    background: var(--colorStatusWarningBackground2);
+    color: var(--colorStatusWarningForeground2);
+}
+
+.dmx-fader-tag--empty {
+    background: transparent;
+    color: var(--colorNeutralForeground4);
+}
+
+.dmx-fader-value {
+    font-variant-numeric: tabular-nums;
+    font-size: var(--fontSizeBase200);
+    font-weight: 600;
+    color: var(--colorNeutralForeground1);
+}
+
+/* A native range turned upright: bottom = 0, top = 255. */
+.dmx-fader-input {
+    writing-mode: vertical-lr;
+    direction: rtl;
+    height: 200px;
+    width: 32px;
+    margin: 0;
+    accent-color: var(--colorBrandBackground);
+    cursor: pointer;
+    touch-action: none;
+}
+
+.dmx-fader-input:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.dmx-fader-address {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+    font-variant-numeric: tabular-nums;
+}
+
+.dmx-fader-zero {
+    width: 32px;
+    height: 24px;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: var(--borderRadiusMedium);
+    background: var(--colorNeutralBackground1);
+    color: var(--colorNeutralForeground2);
+    font: inherit;
+    font-size: var(--fontSizeBase200);
+    cursor: pointer;
+}
+
+.dmx-fader-zero:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+@media (max-width: 600px) {
+    .dmx-fader-input {
+        height: 180px;
+    }
+}

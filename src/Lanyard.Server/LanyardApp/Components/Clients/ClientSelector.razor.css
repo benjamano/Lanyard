@@ -1,9 +1,38 @@
-::deep .client-selector-stack {
-    width: 100%;
+.client-selector {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     min-width: 0;
 }
 
-::deep .client-selector-select {
-    flex: 1 1 180px;
+.client-selector-select {
+    flex: 1 1 200px;
     min-width: 0;
+    max-width: 280px;
+    height: 32px;
+    padding: 0 8px;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: var(--borderRadiusMedium);
+    background: var(--colorNeutralBackground1);
+    color: var(--colorNeutralForeground1);
+    font: inherit;
+    font-size: var(--fontSizeBase300);
+}
+
+.client-selector-status {
+    flex: 0 0 auto;
+    padding: 2px 8px;
+    border-radius: var(--borderRadiusCircular);
+    font-size: var(--fontSizeBase200);
+    font-weight: 600;
+}
+
+.client-selector-status.is-online {
+    background: var(--colorStatusSuccessBackground2);
+    color: var(--colorStatusSuccessForeground2);
+}
+
+.client-selector-status.is-offline {
+    background: var(--colorNeutralBackground3);
+    color: var(--colorNeutralForeground3);
 }
