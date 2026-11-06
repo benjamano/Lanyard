@@ -1,32 +1,26 @@
 using Lanyard.Application.Services.Authentication;
-using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Dmx;
-using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.Models.Dmx;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 
 namespace Lanyard.Application.Services;
 
+// Scoped, on the tenant-filtered factory: every scene, step and kiosk it can see belongs to the
+// caller's company, so loading a row through it is the ownership check.
 public class DmxSceneService(
     IDbContextFactory<ApplicationDbContext> factory,
-    IHubContext<SignalRControlHub> hubContext,
     ILogger<DmxSceneService> logger,
-    IMemoryCache cache,
-    IDmxService dmxService,
     IDmxSceneRunnerService sceneRunner,
     ISecurityService securityService) : IDmxSceneService
 {
+    public const int MaxSceneNameLength = 100;
+    public static readonly TimeSpan MaxStepDuration = TimeSpan.FromHours(1);
+
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
-    private readonly IHubContext<SignalRControlHub> _hubContext = hubContext;
     private readonly ILogger<DmxSceneService> _logger = logger;
-    private readonly IMemoryCache _cache = cache;
-    private readonly IDmxService _dmxService = dmxService;
     private readonly IDmxSceneRunnerService _sceneRunner = sceneRunner;
     private readonly ISecurityService _securityService = securityService;
 
@@ -34,22 +28,24 @@ public class DmxSceneService(
     {
         try
         {
-            using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
 
-            List<Guid> runningSceneIds = (await GetRunningSceneIdsForClientAsync(clientId)).Data ?? [];
+            List<Guid> runningSceneIds = _sceneRunner.GetRunningSceneIds(clientId);
 
             // List callers (scene selector, automation rule dialog) only read StepCount, so
             // the steps themselves are counted in SQL rather than loaded (and tracked) per scene.
-            IEnumerable<DmxSceneDTO> scenes = await context.DmxScenes
+            List<DmxSceneDTO> scenes = await context.DmxScenes
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(s => s.ClientId == clientId)
-                .Where(x=> x.IsActive == true)
+                .Where(s => s.ClientId == clientId && s.IsActive)
+                .OrderBy(s => s.Name)
+                .ThenBy(s => s.CreateDate)
                 .Select(s => new DmxSceneDTO
                 {
                     Id = s.Id,
                     Name = s.Name,
                     ClientId = s.ClientId,
+                    CompanyId = s.CompanyId,
                     Loop = s.Loop,
                     IsMomentary = s.IsMomentary,
                     BpmSyncEnabled = s.BpmSyncEnabled,
@@ -57,10 +53,14 @@ public class DmxSceneService(
                     IsActive = s.IsActive,
                     CreateByUserId = s.CreateByUserId,
                     CreateDate = s.CreateDate,
-                    IsRunning = runningSceneIds.Contains(s.Id),
                     StepCount = s.Steps.Count
                 })
                 .ToListAsync();
+
+            foreach (DmxSceneDTO scene in scenes)
+            {
+                scene.IsRunning = runningSceneIds.Contains(scene.Id);
+            }
 
             return Result<IEnumerable<DmxSceneDTO>>.Ok(scenes);
         }
@@ -71,38 +71,43 @@ public class DmxSceneService(
         }
     }
 
-    private Task<Result<List<Guid>>> GetRunningSceneIdsForClientAsync(Guid clientId)
-    {
-        try
-        {
-            return Task.FromResult(Result<List<Guid>>.Ok(_sceneRunner.GetRunningSceneIds(clientId)));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving running DMX scene IDs for client {ClientId}", clientId);
-            return Task.FromResult(Result<List<Guid>>.Fail("An error occurred while retrieving running DMX scene IDs."));
-        }
-    }
-
     public async Task<Result<DmxScene>> CreateSceneAsync(Guid clientId, string name)
     {
-        if (string.IsNullOrWhiteSpace(name))
+        string? nameError = ValidateName(name);
+
+        if (nameError != null)
         {
-            return Result<DmxScene>.Fail("Scene name cannot be empty.");
+            return Result<DmxScene>.Fail(nameError);
         }
 
-        string currentUserId = await _securityService.GetCurrentUserIdAsync().ContinueWith(x => x.Result.Data!);
-        
         try
         {
-            using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+            Result<string> user = await _securityService.GetCurrentUserIdAsync();
+
+            if (!user.IsSuccess || string.IsNullOrEmpty(user.Data))
+            {
+                return Result<DmxScene>.Fail("Couldn't work out who you are. Sign in again and retry.");
+            }
+
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+
+            // Tenant-filtered: a kiosk from another company is simply not found.
+            bool clientVisible = await context.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
+                .AnyAsync(c => c.Id == clientId);
+
+            if (!clientVisible)
+            {
+                return Result<DmxScene>.Fail("Kiosk not found.");
+            }
 
             DmxScene newScene = new()
             {
-                Name = name,
+                Name = name.Trim(),
                 ClientId = clientId,
                 IsActive = true,
-                CreateByUserId = currentUserId!,
+                CreateByUserId = user.Data,
                 CreateDate = DateTime.UtcNow,
             };
 
@@ -124,9 +129,7 @@ public class DmxSceneService(
     {
         try
         {
-            using ApplicationDbContext context = await _factory.CreateDbContextAsync();
-
-            List<Guid> runningSceneIds = (await GetRunningSceneIdsForClientAsync(clientId ?? Guid.Empty)).Data ?? [];
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
 
             DmxSceneDTO? scene = await context.DmxScenes
                 .AsNoTracking()
@@ -137,15 +140,14 @@ public class DmxSceneService(
                     Id = s.Id,
                     Name = s.Name,
                     ClientId = s.ClientId,
+                    CompanyId = s.CompanyId,
                     Loop = s.Loop,
                     IsMomentary = s.IsMomentary,
                     BpmSyncEnabled = s.BpmSyncEnabled,
                     KeyBindings = s.KeyBindings,
-                    Steps = s.Steps,
                     IsActive = s.IsActive,
                     CreateByUserId = s.CreateByUserId,
                     CreateDate = s.CreateDate,
-                    IsRunning = runningSceneIds.Contains(s.Id),
                     StepCount = s.Steps.Count
                 })
                 .FirstOrDefaultAsync();
@@ -154,6 +156,9 @@ public class DmxSceneService(
             {
                 return Result<DmxSceneDTO>.Fail("Scene not found.");
             }
+
+            // The scene knows its own kiosk, so callers no longer need to pass one for this.
+            scene.IsRunning = _sceneRunner.GetRunningSceneIds(clientId ?? scene.ClientId).Contains(scene.Id);
 
             return Result<DmxSceneDTO>.Ok(scene);
         }
@@ -166,9 +171,18 @@ public class DmxSceneService(
 
     public async Task<Result<bool>> UpdateSceneAsync(DmxScene scene)
     {
+        string? nameError = ValidateName(scene.Name);
+
+        if (nameError != null)
+        {
+            return Result<bool>.Fail(nameError);
+        }
+
         try
         {
-            using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+            Result<string> user = await _securityService.GetCurrentUserIdAsync();
+
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
 
             DmxScene? existingScene = await context.DmxScenes
                 .TagWithCallSite()
@@ -180,13 +194,26 @@ public class DmxSceneService(
                 return Result<bool>.Fail("Scene not found.");
             }
 
-            existingScene.Name = scene.Name;
+            // Loop/momentary are baked into a run at start, so a running scene would keep the
+            // old behaviour; stop it like any other edit. Renaming or rebinding keys doesn't.
+            bool playbackChanged = existingScene.Loop != scene.Loop
+                || existingScene.IsMomentary != scene.IsMomentary
+                || existingScene.BpmSyncEnabled != scene.BpmSyncEnabled;
+
+            existingScene.Name = scene.Name.Trim();
             existingScene.Loop = scene.Loop;
             existingScene.IsMomentary = scene.IsMomentary;
             existingScene.BpmSyncEnabled = scene.BpmSyncEnabled;
             existingScene.KeyBindings = scene.KeyBindings;
+            existingScene.UpdateByUserId = user.IsSuccess ? user.Data : null;
+            existingScene.UpdateDate = DateTime.UtcNow;
 
             await context.SaveChangesAsync();
+
+            if (playbackChanged)
+            {
+                _sceneRunner.StopScene(existingScene.Id);
+            }
 
             return Result<bool>.Ok(true);
         }
@@ -201,10 +228,7 @@ public class DmxSceneService(
     {
         try
         {
-            // A deleted scene must not keep playing.
-            _sceneRunner.StopScene(sceneId);
-
-            using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
 
             DmxScene? scene = await context.DmxScenes
                 .TagWithCallSite()
@@ -219,6 +243,9 @@ public class DmxSceneService(
             scene.IsActive = false;
             await context.SaveChangesAsync();
 
+            // Only once we know it's this company's scene. A deleted scene must not keep playing.
+            _sceneRunner.StopScene(sceneId);
+
             return Result<bool>.Ok(true);
         }
         catch (Exception ex)
@@ -232,11 +259,12 @@ public class DmxSceneService(
     {
         try
         {
-            using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
 
             List<DmxSceneStep> steps = await context.DmxSceneSteps
+                .AsNoTracking()
                 .TagWithCallSite()
-                .Where(s => s.SceneId == sceneId)
+                .Where(s => s.SceneId == sceneId && s.Scene!.IsActive)
                 .OrderBy(s => s.StepNumber)
                 .Include(s => s.ChannelValues)
                 .ToListAsync();
@@ -254,7 +282,7 @@ public class DmxSceneService(
     {
         try
         {
-            using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
 
             DmxSceneStep? step = await context.DmxSceneSteps
                 .TagWithCallSite()
@@ -266,13 +294,26 @@ public class DmxSceneService(
                 return Result<bool>.Fail("Scene step not found.");
             }
 
-            // The runner snapshots steps at start, so stop the scene rather than let
-            // it keep playing a stale definition; the operator restarts to pick up the change.
-            _sceneRunner.StopScene(step.SceneId);
+            // Steps are child rows of the scene (the scene itself is soft-deleted), so a removed
+            // step goes for good. The rest close up behind it, keeping numbers 1..N with no gaps:
+            // progress is shown as number / count, which used to pass 100% after a delete.
+            List<DmxSceneStep> later = await context.DmxSceneSteps
+                .TagWithCallSite()
+                .Where(s => s.SceneId == step.SceneId && s.StepNumber > step.StepNumber)
+                .ToListAsync();
 
             context.DmxSceneSteps.Remove(step);
 
+            foreach (DmxSceneStep laterStep in later)
+            {
+                laterStep.StepNumber--;
+            }
+
             await context.SaveChangesAsync();
+
+            // The runner snapshots steps at start, so stop the scene rather than let
+            // it keep playing a stale definition; the operator restarts to pick up the change.
+            _sceneRunner.StopScene(step.SceneId);
 
             return Result<bool>.Ok(true);
         }
@@ -287,18 +328,21 @@ public class DmxSceneService(
     {
         try
         {
-            // The runner snapshots steps at start, so stop the scene rather than let
-            // it keep playing a stale definition; the operator restarts to pick up the change.
-            _sceneRunner.StopScene(sceneId);
+            Result<string> user = await _securityService.GetCurrentUserIdAsync();
 
-            using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+            if (!user.IsSuccess || string.IsNullOrEmpty(user.Data))
+            {
+                return Result<DmxSceneStep>.Fail("Couldn't work out who you are. Sign in again and retry.");
+            }
 
-            DmxScene? scene = await context.DmxScenes
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+
+            bool sceneVisible = await context.DmxScenes
+                .AsNoTracking()
                 .TagWithCallSite()
-                .Where(s => s.Id == sceneId && s.IsActive)
-                .FirstOrDefaultAsync();
+                .AnyAsync(s => s.Id == sceneId && s.IsActive);
 
-            if (scene == null)
+            if (!sceneVisible)
             {
                 return Result<DmxSceneStep>.Fail("Scene not found.");
             }
@@ -315,12 +359,14 @@ public class DmxSceneService(
                 Name = $"Step {nextStepNumber + 1}",
                 Duration = TimeSpan.FromSeconds(5),
                 Beats = 1,
-                CreateByUserId = await _securityService.GetCurrentUserIdAsync().ContinueWith(x => x.Result.Data!),
+                CreateByUserId = user.Data,
                 CreateDate = DateTime.UtcNow
             };
 
             context.DmxSceneSteps.Add(newStep);
             await context.SaveChangesAsync();
+
+            _sceneRunner.StopScene(sceneId);
 
             return Result<DmxSceneStep>.Ok(newStep);
         }
@@ -333,48 +379,38 @@ public class DmxSceneService(
 
     public async Task<Result<bool>> UpdateSceneStepDurationAsync(Guid stepId, TimeSpan newDuration)
     {
-        try
+        // A zero step on a looping scene used to spin the runner as fast as it could go.
+        if (newDuration <= TimeSpan.Zero || newDuration > MaxStepDuration)
         {
-            using ApplicationDbContext context = await _factory.CreateDbContextAsync();
-
-            DmxSceneStep? step = await context.DmxSceneSteps
-                .TagWithCallSite()
-                .Where(s => s.Id == stepId)
-                .FirstOrDefaultAsync();
-
-            if (step == null)
-            {
-                return Result<bool>.Fail("Scene step not found.");
-            }
-
-            step.Duration = newDuration;
-            await context.SaveChangesAsync();
-
-            return Result<bool>.Ok(true);
+            return Result<bool>.Fail("A step must last more than 0 seconds and no more than an hour.");
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating duration for DMX scene step {StepId}", stepId);
-            return Result<bool>.Fail("An error occurred while updating the DMX scene step duration.");
-        }
+
+        return await UpdateStepAsync(stepId, step => step.Duration = newDuration, "duration");
     }
 
     public async Task<Result<bool>> UpdateSceneStepBeatsAsync(Guid stepId, double beats)
     {
         // Same clamp as the editor UI: fractions give sub-beat chases, 64 covers
         // any realistic multi-bar hold.
-        if (beats is < 0.25 or > 64)
+        if (double.IsNaN(beats) || beats is < 0.25 or > 64)
         {
             return Result<bool>.Fail("Beats must be between 0.25 and 64.");
         }
 
+        return await UpdateStepAsync(stepId, step => step.Beats = beats, "beats");
+    }
+
+    private async Task<Result<bool>> UpdateStepAsync(Guid stepId, Action<DmxSceneStep> apply, string what)
+    {
         try
         {
-            using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+            Result<string> user = await _securityService.GetCurrentUserIdAsync();
+
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
 
             DmxSceneStep? step = await context.DmxSceneSteps
                 .TagWithCallSite()
-                .Where(s => s.Id == stepId)
+                .Where(s => s.Id == stepId && s.Scene!.IsActive)
                 .FirstOrDefaultAsync();
 
             if (step == null)
@@ -382,64 +418,159 @@ public class DmxSceneService(
                 return Result<bool>.Fail("Scene step not found.");
             }
 
-            step.Beats = beats;
+            apply(step);
+            step.UpdateByUserId = user.IsSuccess ? user.Data : null;
+            step.UpdateDate = DateTime.UtcNow;
+
             await context.SaveChangesAsync();
+
+            _sceneRunner.StopScene(step.SceneId);
 
             return Result<bool>.Ok(true);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating beats for DMX scene step {StepId}", stepId);
-            return Result<bool>.Fail("An error occurred while updating the DMX scene step beats.");
+            _logger.LogError(ex, "Error updating {What} for DMX scene step {StepId}", what, stepId);
+            return Result<bool>.Fail($"An error occurred while updating the DMX scene step {what}.");
         }
     }
 
-    public async Task<Result<bool>> SaveSceneStepChannelValueAsync(Guid stepId, int channelNumber, byte value)
+    public Task<Result<bool>> SaveSceneStepChannelValueAsync(Guid stepId, int channelNumber, byte value)
     {
+        return SaveSceneStepChannelValuesAsync(stepId, [new DmxChannel { Address = channelNumber, Value = value }]);
+    }
+
+    public async Task<Result<bool>> SaveSceneStepChannelValuesAsync(Guid stepId, IReadOnlyList<DmxChannel> values)
+    {
+        if (values.Count == 0)
+        {
+            return Result<bool>.Ok(true);
+        }
+
+        if (values.Any(v => v.Address is < 1 or > DmxService.UniverseSize))
+        {
+            return Result<bool>.Fail("DMX channels are numbered 1 to 512.");
+        }
+
         try
         {
-            string currentUserId = await _securityService.GetCurrentUserIdAsync().ContinueWith(x => x.Result.Data!);
+            Result<string> user = await _securityService.GetCurrentUserIdAsync();
+
+            if (!user.IsSuccess || string.IsNullOrEmpty(user.Data))
+            {
+                return Result<bool>.Fail("Couldn't work out who you are. Sign in again and retry.");
+            }
 
             await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
 
-            DmxSceneStepChannelValue? existing = await context.DmxSceneStepChannelValues
+            // Loaded through the tenant filter. The value rows aren't company-owned themselves,
+            // so without this a step id from another company could be written to.
+            DmxSceneStep? step = await context.DmxSceneSteps
+                .AsNoTracking()
                 .TagWithCallSite()
-                .Where(c => c.SceneStepId == stepId && c.ChannelNumber == channelNumber)
+                .Where(s => s.Id == stepId && s.Scene!.IsActive)
                 .FirstOrDefaultAsync();
 
-            if (existing == null)
+            if (step == null)
             {
-                DmxSceneStepChannelValue newChannelValue = new()
-                {
-                    SceneStepId = stepId,
-                    ChannelNumber = channelNumber,
-                    Value = value,
-                    CreateByUserId = currentUserId,
-                    CreateDate = DateTime.UtcNow
-                };
-
-                context.DmxSceneStepChannelValues.Add(newChannelValue);
+                return Result<bool>.Fail("Scene step not found.");
             }
-            else
+
+            // Latest value wins if the same channel appears twice in one batch.
+            Dictionary<int, byte> wanted = [];
+
+            foreach (DmxChannel value in values)
             {
-                existing.Value = value;
-                existing.UpdateByUserId = currentUserId;
-                existing.UpdateDate = DateTime.UtcNow;
+                wanted[value.Address] = value.Value;
+            }
+
+            List<int> channels = [.. wanted.Keys];
+
+            Dictionary<int, DmxSceneStepChannelValue> existing = await context.DmxSceneStepChannelValues
+                .TagWithCallSite()
+                .Where(c => c.SceneStepId == stepId && channels.Contains(c.ChannelNumber))
+                .ToDictionaryAsync(c => c.ChannelNumber);
+
+            DateTime now = DateTime.UtcNow;
+
+            foreach ((int channel, byte value) in wanted)
+            {
+                if (existing.TryGetValue(channel, out DmxSceneStepChannelValue? row))
+                {
+                    if (row.Value != value)
+                    {
+                        row.Value = value;
+                        row.UpdateByUserId = user.Data;
+                        row.UpdateDate = now;
+                    }
+                }
+                else
+                {
+                    context.DmxSceneStepChannelValues.Add(new DmxSceneStepChannelValue
+                    {
+                        SceneStepId = stepId,
+                        ChannelNumber = channel,
+                        Value = value,
+                        CreateByUserId = user.Data,
+                        CreateDate = now
+                    });
+                }
             }
 
             await context.SaveChangesAsync();
 
+            _sceneRunner.StopScene(step.SceneId);
+
             return Result<bool>.Ok(true);
+        }
+        catch (DbUpdateException ex)
+        {
+            // The unique (step, channel) index caught two saves racing to insert the same channel.
+            // The other one landed; the operator's next nudge of the fader will update it.
+            _logger.LogWarning(ex, "Concurrent save of DMX scene step {StepId} channel values; keeping the one that landed first", stepId);
+            return Result<bool>.Fail("Another save of this step landed at the same time. Move the fader again to update it.");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error saving DMX scene step channel value for step {StepId}, channel {ChannelNumber}", stepId, channelNumber);
-            return Result<bool>.Fail("An error occurred while saving the DMX scene step channel value.");
+            _logger.LogError(ex, "Error saving {ChannelCount} DMX scene step channel values for step {StepId}", values.Count, stepId);
+            return Result<bool>.Fail("An error occurred while saving the DMX scene step channel values.");
         }
     }
 
-    public Task<Result<bool>> StopAllScenesForClientAsync(Guid clientId)
+    public async Task<Result<bool>> StopAllScenesForClientAsync(Guid clientId)
     {
-        return Task.FromResult(_sceneRunner.StopAllScenesForClient(clientId));
+        try
+        {
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+
+            bool clientVisible = await context.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
+                .AnyAsync(c => c.Id == clientId);
+
+            if (!clientVisible)
+            {
+                return Result<bool>.Fail("Kiosk not found.");
+            }
+
+            return _sceneRunner.StopAllScenesForClient(clientId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error stopping all DMX scenes for client {ClientId}", clientId);
+            return Result<bool>.Fail("An error occurred while stopping DMX scenes.");
+        }
+    }
+
+    private static string? ValidateName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return "Scene name cannot be empty.";
+        }
+
+        return name.Trim().Length > MaxSceneNameLength
+            ? $"Scene names can be at most {MaxSceneNameLength} characters."
+            : null;
     }
 }

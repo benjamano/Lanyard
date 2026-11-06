@@ -852,7 +852,16 @@
       "The Music page is now only for Admins, Managers and people with the CanControlMusic or CanManagePlaylists role. It used to open for anyone signed in.",
       "Music has its own item in the menu (it was tucked under Clients and only shown to Admins).",
       "The CanManagePlaylists role now exists, so it can be given to people who should look after playlists without being Admins.",
-      "With kiosk version 1.0.45, a kiosk responds to pause, stop and other commands straight away even while it's still downloading a song, and skipping quickly through songs no longer queues up downloads."
+      "With kiosk version 1.0.45, a kiosk responds to pause, stop and other commands straight away even while it's still downloading a song, and skipping quickly through songs no longer queues up downloads.",
+      "The DMX desk now follows the lights while Edit Mode is off, including while a scene runs, instead of showing the levels from when the page opened.",
+      "A flash (hold) scene no longer stays on after a very quick tap or key press. Holding two flash buttons at once stops each one as you let go, and leaving the page or switching kiosk lets go of anything still held.",
+      "Restarting a flash scene that's already running no longer blacks its lights out for a moment.",
+      "Fader moves made while editing a scene step are saved together, and the last ones are no longer lost if you leave the page straight away.",
+      "Switching kiosk on the DMX desk closes the open scene, so its steps can't be sent to the other kiosk's lights.",
+      "Dragging a DMX fader sends to the kiosk at most about 40 times a second, so the lights keep up instead of lagging behind your finger.",
+      "A kiosk that restarts gets back the lights Lanyard was last sending it, instead of starting dark.",
+      "Scenes are listed in name order. A scene that stops because of a fault now says why.",
+      "Deleting a scene step renumbers the steps after it, so a running scene's progress bar no longer runs past the end. Steps must now last longer than 0 seconds."
     ]
   },
   {
