@@ -65,6 +65,8 @@
                 </div>
             </section>
 
+            <PartyStaffingSection Scope="@scope" LocationId="@location" CompanyId="@locationOptions.First(l => l.Id == location).CompanyId" />
+
             <section class="settings-card">
                 <h2>Hot food menu</h2>
                 <p class="settings-intro">Printed on the hot food sheet: each meal with its allergens, and a row per side to tally.</p>
@@ -98,7 +100,7 @@
     [SupplyParameterFromQuery(Name = "location")]
     public int? LocationQuery { get; set; }
 
-    private record LocationOption(int Id, string Name);
+    private record LocationOption(int Id, string Name, int CompanyId);
 
     private LocationScope? scope;
     private List<LocationOption> locationOptions = [];
@@ -158,12 +160,12 @@
             Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsAsync();
 
             locationOptions = locationsResult.IsSuccess && locationsResult.Data is not null
-                ? locationsResult.Data.OrderBy(l => l.GetDisplayName()).Select(l => new LocationOption(l.Id, l.GetDisplayName())).ToList()
+                ? locationsResult.Data.OrderBy(l => l.GetDisplayName()).Select(l => new LocationOption(l.Id, l.GetDisplayName(), l.CompanyId)).ToList()
                 : [];
         }
-        else if (scope.LocationId is int scopeLocationId)
+        else if (scope.LocationId is int scopeLocationId && scope.CompanyId is int scopeCompanyId)
         {
-            locationOptions = [new LocationOption(scopeLocationId, scope.LocationDisplayName ?? "Your location")];
+            locationOptions = [new LocationOption(scopeLocationId, scope.LocationDisplayName ?? "Your location", scopeCompanyId)];
         }
     }
 

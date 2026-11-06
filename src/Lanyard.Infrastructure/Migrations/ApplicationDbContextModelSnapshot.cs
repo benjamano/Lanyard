@@ -3277,6 +3277,47 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("PartyMenuItems");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.PartyStaffingRule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PartyType")
+                        .HasColumnType("text");
+
+                    b.Property<int>("StaffCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("StaffPositionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("LocationId");
+
+                    b.HasIndex("StaffPositionId");
+
+                    b.ToTable("PartyStaffingRules");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Playlist", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3517,6 +3558,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<string>("Notes")
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("PartyBookingId")
+                        .HasColumnType("uuid");
+
                     b.Property<int?>("PublishedBreakMinutes")
                         .HasColumnType("integer");
 
@@ -3557,6 +3601,8 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PartyBookingId");
 
                     b.HasIndex("StaffPositionId");
 
@@ -6093,6 +6139,33 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("Location");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.PartyStaffingRule", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.StaffPosition", "StaffPosition")
+                        .WithMany()
+                        .HasForeignKey("StaffPositionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Location");
+
+                    b.Navigation("StaffPosition");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Playlist", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.Company", null)
@@ -6211,6 +6284,11 @@ namespace Lanyard.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Lanyard.Infrastructure.Models.PartyBooking", "PartyBooking")
+                        .WithMany()
+                        .HasForeignKey("PartyBookingId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Lanyard.Infrastructure.Models.StaffPosition", "StaffPosition")
                         .WithMany()
                         .HasForeignKey("StaffPositionId")
@@ -6222,6 +6300,8 @@ namespace Lanyard.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Location");
+
+                    b.Navigation("PartyBooking");
 
                     b.Navigation("StaffPosition");
 

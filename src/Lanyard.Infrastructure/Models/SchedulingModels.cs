@@ -282,6 +282,11 @@ namespace Lanyard.Infrastructure.Models
 
         public string? Notes { get; set; }
 
+        // Set when Auto-build added the shift to staff a booked party (PartyStaffingRule), so running
+        // it again doesn't add the party's staff twice and a cancelled party's shifts can be found.
+        public Guid? PartyBookingId { get; set; }
+        public PartyBooking? PartyBooking { get; set; }
+
         public DateTime? PublishedDateUtc { get; set; }
         public string? PublishedByUserId { get; set; }
 

@@ -104,3 +104,15 @@
         text-align: left;
     }
 }
+
+.auto-build-removed {
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--colorNeutralBackground3);
+    font-size: 0.9rem;
+}
+
+.auto-build-removed ul {
+    margin: 6px 0 0;
+    padding-left: 18px;
+}

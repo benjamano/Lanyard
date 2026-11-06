@@ -77,6 +77,50 @@ namespace Lanyard.Infrastructure.Models
             : TotalPrice is decimal total ? Math.Max(0m, total - (DepositPaidUtc is not null ? DepositAmount ?? 0m : 0m)) : null;
     }
 
+    // How many extra staff a kind of party needs on the rota: "a Lazer + Play party needs 2 more
+    // Party Hosts". They work the whole template shift the party falls in (09:00-14:00 for a 10:00
+    // party) and do the party as part of it; Auto-build adds them for every booked party. PartyType is matched to the booking's free-text type
+    // ignoring case and spaces at either end; null is the rule for any type that has no rules of
+    // its own. A type can have several rules, one per position. Archived (IsActive = false) rather
+    // than deleted, like the rest of the rota setup.
+    public class PartyStaffingRule : ICompanyOwned
+    {
+        public Guid Id { get; set; }
+
+        public required int CompanyId { get; set; }
+        public Company? Company { get; set; }
+
+        public required int LocationId { get; set; }
+        public Location? Location { get; set; }
+
+        public string? PartyType { get; set; }
+
+        public required Guid StaffPositionId { get; set; }
+        public StaffPosition? StaffPosition { get; set; }
+
+        public int StaffCount { get; set; } = 1;
+
+        public bool IsActive { get; set; } = true;
+
+        public DateTime UpdateDate { get; set; }
+        public string? UpdatedByUserId { get; set; }
+
+        public bool Matches(string? partyType) =>
+            string.Equals(Normalise(PartyType), Normalise(partyType), StringComparison.OrdinalIgnoreCase);
+
+        public static string? Normalise(string? partyType) =>
+            string.IsNullOrWhiteSpace(partyType) ? null : partyType.Trim();
+
+        // The rules that apply to a party of this type: its own, or the default ones if it has none.
+        public static List<PartyStaffingRule> For(IEnumerable<PartyStaffingRule> rules, string? partyType)
+        {
+            List<PartyStaffingRule> active = rules.Where(x => x.IsActive).ToList();
+            List<PartyStaffingRule> own = Normalise(partyType) is null ? [] : active.Where(x => x.PartyType is not null && x.Matches(partyType)).ToList();
+
+            return own.Count > 0 ? own : active.Where(x => x.PartyType is null).ToList();
+        }
+    }
+
     // Per-location party rules. One row per location, created on first save; no row = the defaults.
     public class PartyLocationSettings
     {

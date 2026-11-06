@@ -171,6 +171,7 @@ builder.Services.AddScoped<IShiftTemplateService, ShiftTemplateService>();
 builder.Services.AddScoped<IRotaAutoBuildService, RotaAutoBuildService>();
 builder.Services.AddScoped<IPartyBookingService, PartyBookingService>();
 builder.Services.AddScoped<IPartySettingsService, PartySettingsService>();
+builder.Services.AddScoped<IPartyStaffingService, PartyStaffingService>();
 builder.Services.AddScoped<IPartyTemplateService, PartyTemplateService>();
 builder.Services.AddScoped<IPartyDocumentService, PartyDocumentService>();
 builder.Services.TryAddSingleton(TimeProvider.System);

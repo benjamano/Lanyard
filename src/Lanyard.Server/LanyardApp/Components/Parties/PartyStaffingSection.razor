@@ -1,0 +1,188 @@
+@using Lanyard.Application.Services.Parties
+@using Lanyard.Application.Services.Scheduling
+
+@inject IPartyStaffingService _partyStaffingService
+@inject IPartyBookingService _partyBookingService
+@inject IStaffPositionService _staffPositionService
+@inject ICompanyFeatureService _companyFeatureService
+
+@* The extra staff each kind of party needs. Auto-build on the rota reads these. *@
+<section class="staffing-card" aria-labelledby="party-staffing-title">
+    <h2 id="party-staffing-title">Party staffing</h2>
+    <p class="staffing-intro">
+        How many extra staff each type of party needs. <strong>Auto-build</strong> on the
+        <a href="@RotaLink">rota</a> adds them to the shift each booked party falls in, on top of what the shift template
+        needs. They work the whole shift and do the party as part of it.
+    </p>
+
+    @if (!schedulingEnabled)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+            Party staffing needs Staff Scheduling, which is switched off for this company.
+        </FluentMessageBar>
+    }
+    else if (rules is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" HorizontalGap="8px">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else
+    {
+        @if (positions.Count == 0)
+        {
+            <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                Add some <a href="/manage/rota/positions">positions</a> first, such as Party Host.
+            </FluentMessageBar>
+        }
+
+        @if (rules.Count == 0)
+        {
+            <p class="staffing-empty">No party staffing yet, so Auto-build won't add anyone for parties.</p>
+        }
+        else
+        {
+            @foreach (IGrouping<string?, PartyStaffingRule> group in rules.GroupBy(x => x.PartyType))
+            {
+                <div class="staffing-group">
+                    <div class="staffing-type">@(group.Key is string type ? $"{type} parties" : "Any other party")</div>
+                    <ul>
+                        @foreach (PartyStaffingRule rule in group)
+                        {
+                            <li>
+                                <span class="staffing-rule">
+                                    <strong>+@rule.StaffCount @(rule.StaffPosition?.Name ?? "Position")</strong>
+                                    <span class="staffing-when">for the whole shift the party is in</span>
+                                </span>
+                                <span class="staffing-actions">
+                                    @if (confirmingRemoveId == rule.Id)
+                                    {
+                                        <FluentButton Appearance="ButtonAppearance.Primary" Color="Color.Error" Size="ButtonSize.Small" Disabled="@isBusy" OnClick="@(() => RemoveAsync(rule))">Remove</FluentButton>
+                                        <FluentButton Size="ButtonSize.Small" Disabled="@isBusy" OnClick="@(() => confirmingRemoveId = null)">Keep</FluentButton>
+                                    }
+                                    else
+                                    {
+                                        <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="@(new Icons.Regular.Size20.Edit())"
+                                                      Title="@($"Edit {rule.StaffPosition?.Name}")" OnClick="@(() => OpenAsync(rule))" />
+                                        <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="@(new Icons.Regular.Size20.Delete())"
+                                                      Title="@($"Remove {rule.StaffPosition?.Name}")" OnClick="@(() => confirmingRemoveId = rule.Id)" />
+                                    }
+                                </span>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            }
+        }
+
+        <div>
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Add())"
+                          Disabled="@(positions.Count == 0)" OnClick="@(() => OpenAsync(null))">
+                Add party staffing
+            </FluentButton>
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public required LocationScope Scope { get; set; }
+
+    [Parameter, EditorRequired]
+    public required int LocationId { get; set; }
+
+    [Parameter, EditorRequired]
+    public required int CompanyId { get; set; }
+
+    private List<PartyStaffingRule>? rules;
+    private List<StaffPosition> positions = [];
+    private List<string> partyTypes = [];
+    private bool schedulingEnabled = true;
+    private Guid? confirmingRemoveId;
+    private bool isBusy;
+    private int? loadedFor;
+
+    private string RotaLink => $"/manage/rota?location={LocationId}";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (loadedFor == LocationId)
+        {
+            return;
+        }
+
+        loadedFor = LocationId;
+        schedulingEnabled = await _companyFeatureService.IsEnabledForCompanyAsync(CompanyId, CompanyFeature.StaffScheduling);
+
+        if (!schedulingEnabled)
+        {
+            return;
+        }
+
+        Result<List<StaffPosition>> positionsResult = await _staffPositionService.GetPositionsAsync(CompanyId);
+        positions = positionsResult.Data ?? [];
+
+        Result<List<string>> types = await _partyBookingService.GetPartyTypeSuggestionsAsync(Scope, LocationId);
+        partyTypes = types.Data ?? [];
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        Result<List<PartyStaffingRule>> result = await _partyStaffingService.GetRulesAsync(Scope, LocationId);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't load party staffing.");
+            rules = [];
+            return;
+        }
+
+        rules = result.Data;
+    }
+
+    private async Task OpenAsync(PartyStaffingRule? existing)
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<PartyStaffingRuleDialog>(options =>
+        {
+            options.Width = "460px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(PartyStaffingRuleDialog.Scope), Scope);
+            options.Parameters.Add(nameof(PartyStaffingRuleDialog.LocationId), LocationId);
+            options.Parameters.Add(nameof(PartyStaffingRuleDialog.Positions), positions);
+            options.Parameters.Add(nameof(PartyStaffingRuleDialog.PartyTypes), partyTypes);
+            options.Parameters.Add(nameof(PartyStaffingRuleDialog.Existing), existing);
+        });
+
+        if (result.Value is true)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task RemoveAsync(PartyStaffingRule rule)
+    {
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            _toastService.ShowError("Couldn't confirm who you are - try reloading the page.");
+            return;
+        }
+
+        isBusy = true;
+        Result<bool> result = await _partyStaffingService.RemoveRuleAsync(Scope, rule.Id, actingUser.Data);
+        isBusy = false;
+        confirmingRemoveId = null;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't remove it.");
+            return;
+        }
+
+        await LoadAsync();
+    }
+}

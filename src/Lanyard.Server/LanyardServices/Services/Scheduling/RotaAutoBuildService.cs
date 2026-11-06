@@ -1,4 +1,6 @@
+using Lanyard.Application.Services.Features;
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Parties;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Scheduling;
@@ -75,29 +77,124 @@ public class RotaAutoBuildService(
                 template.Slots = template.Slots.Where(x => x.StaffPosition is { IsActive: true }).ToList();
             }
 
-            if (firstDay > to || templates.Count == 0)
+            if (firstDay > to)
             {
                 return Result<AutoBuildResult>.Ok(new AutoBuildResult(location.GetDisplayName(), from, to, templates.Count, 0, []));
             }
 
-            List<DemandSlot> demand = RotaAutoBuildRules.ExpandTemplates(templates, firstDay, to)
+            DateTime windowStartUtc = RotaTime.StartOfDayUtc(firstDay);
+            DateTime windowEndUtc = RotaTime.StartOfDayUtc(to.AddDays(1));
+
+            // Booked parties add their type's staff, when the company uses both modules.
+            List<PartyBooking> parties = [];
+            List<PartyStaffingRule> partyRules = [];
+
+            if (await CompanyFeatureQueries.IsEnabledForCompanyAsync(ctx, location.CompanyId, CompanyFeature.Parties))
+            {
+                partyRules = (await PartyStaffingService.ForLocation(ctx, locationId).ToListAsync())
+                    .Where(x => x.StaffPosition is { IsActive: true })
+                    .ToList();
+
+                if (partyRules.Count > 0)
+                {
+                    parties = await ctx.PartyBookings
+                        .AsNoTracking()
+                        .TagWithCallSite()
+                        .Where(x => x.LocationId == locationId && x.Status == PartyBookingStatus.Booked
+                            && x.StartUtc >= windowStartUtc && x.StartUtc < windowEndUtc)
+                        .ToListAsync();
+                }
+            }
+
+            // Parties are matched to every template shift those days, including any already started,
+            // so a party during a shift that's under way isn't reported as having no shift.
+            List<DemandSlot> templateDemand = RotaAutoBuildRules.ExpandTemplates(templates, firstDay, to);
+            (List<DemandSlot> partyDemand, List<PartyBooking> uncovered) = RotaAutoBuildRules.ExpandParties(parties, partyRules, templateDemand);
+
+            List<DemandSlot> demand = templateDemand
+                .Concat(partyDemand)
                 .Where(x => x.StartUtc > nowUtc)
                 .ToList();
 
-            DateTime windowStartUtc = RotaTime.StartOfDayUtc(firstDay);
-            DateTime windowEndUtc = RotaTime.StartOfDayUtc(to.AddDays(2));
-
+            // Shifts that could count towards the demand, plus every party shift Auto-build made in
+            // the window (whatever happened to the party since).
             List<Shift> existing = await ctx.Shifts
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(x => x.LocationId == locationId && x.IsActive && x.StartUtc >= windowStartUtc && x.StartUtc < windowEndUtc)
+                .Where(x => x.LocationId == locationId && x.IsActive
+                    && x.StartUtc >= windowStartUtc.AddHours(-6) && x.StartUtc < windowEndUtc.AddDays(1))
                 .ToListAsync();
 
-            (List<DemandSlot> remaining, int covered) = RotaAutoBuildRules.SubtractCovered(demand, existing);
+            (List<DemandSlot> remaining, int covered, List<Shift> unmatched) = RotaAutoBuildRules.Match(demand, existing);
 
-            if (remaining.Count == 0)
+            // Party shifts that no longer match their party (cancelled, moved, or its rules changed).
+            // Drafts are taken off; a published one stays for the manager to sort out, and still
+            // counts towards its party's staff if the party is on, so it isn't doubled up.
+            List<Shift> stale = unmatched
+                .Where(x => x.PartyBookingId is not null && x.StartUtc > nowUtc && x.StartUtc >= windowStartUtc && x.StartUtc < windowEndUtc)
+                .ToList();
+
+            Dictionary<string, string> names = stale.Any(x => x.UserId is not null)
+                ? await ctx.Users
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .Where(u => stale.Select(x => x.UserId).Contains(u.Id))
+                    .ToDictionaryAsync(u => u.Id, u => RotaNames.For(u))
+                : [];
+
+            Dictionary<Guid, string> positionNames = await ctx.StaffPositions
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.CompanyId == location.CompanyId)
+                .ToDictionaryAsync(x => x.Id, x => x.Name);
+
+            List<Shift> toRemove = [];
+            List<AutoBuildLine> removedLines = [];
+            List<string> warnings = [];
+
+            foreach (Shift shift in stale)
             {
-                return Result<AutoBuildResult>.Ok(new AutoBuildResult(location.GetDisplayName(), from, to, templates.Count, covered, []));
+                string who = shift.UserId is string id ? names.GetValueOrDefault(id, "Someone") : "Open shift";
+                string position = shift.StaffPositionId is Guid p ? positionNames.GetValueOrDefault(p, "Position") : "No position";
+                DateOnly day = RotaTime.LocalDate(shift.StartUtc);
+
+                if (shift.PublishedDateUtc is null)
+                {
+                    toRemove.Add(shift);
+                    removedLines.Add(new AutoBuildLine(shift.Notes ?? "Party", day, shift.StartUtc, shift.EndUtc, position,
+                        shift.UserId, shift.UserId is null ? null : who, null, "The party was cancelled or changed."));
+                    continue;
+                }
+
+                int index = remaining.FindIndex(x => x.PartyBookingId == shift.PartyBookingId && x.StaffPositionId == shift.StaffPositionId);
+
+                if (index >= 0)
+                {
+                    remaining[index] = remaining[index] with { Needed = remaining[index].Needed - 1 };
+                    remaining.RemoveAll(x => x.Needed <= 0);
+                    warnings.Add($"{who}'s {position} shift on {day.ToString("ddd d MMM", RotaFormat.Uk)} ({RotaFormat.TimeRange(shift.StartUtc, shift.EndUtc)}) no longer matches its party's times. It's published, so change it on the rota.");
+                }
+                else
+                {
+                    warnings.Add($"{who}'s {position} shift on {day.ToString("ddd d MMM", RotaFormat.Uk)} ({RotaFormat.TimeRange(shift.StartUtc, shift.EndUtc)}) is for a party that was cancelled or no longer needs it. It's published, so remove it on the rota if it isn't needed.");
+                }
+            }
+
+            foreach (PartyBooking party in uncovered.Where(x => x.StartUtc > nowUtc))
+            {
+                warnings.Add($"No shift template covers the {(PartyStaffingRule.Normalise(party.PartyType) is string type ? type + " party" : "party")} on "
+                    + $"{RotaTime.LocalDate(party.StartUtc).ToString("ddd d MMM", RotaFormat.Uk)} ({RotaFormat.TimeRange(party.StartUtc, party.EndUtc)}), "
+                    + "so nobody was added for it. Add a template for that time, or add its staff by hand.");
+            }
+
+            int partyCount = parties.Count(p => demand.Any(d => d.PartyBookingId == p.Id));
+
+            AutoBuildResult Build(List<AutoBuildLine> lines) =>
+                new(location.GetDisplayName(), from, to, templates.Count, covered, lines, partyCount, removedLines, warnings);
+
+            if (remaining.Count == 0 && toRemove.Count == 0)
+            {
+                return Result<AutoBuildResult>.Ok(Build([]));
             }
 
             SuggestionPool pool = await SuggestionPool.LoadAsync(ctx, _contractRequirementService, _logger, locationId, location.CompanyId, firstDay, to);
@@ -124,6 +221,7 @@ public class RotaAutoBuildService(
             Dictionary<Guid, StaffPosition> positions = templates
                 .SelectMany(x => x.Slots)
                 .Select(x => x.StaffPosition!)
+                .Concat(partyRules.Select(x => x.StaffPosition!))
                 .DistinctBy(x => x.Id)
                 .ToDictionary(x => x.Id);
 
@@ -136,7 +234,7 @@ public class RotaAutoBuildService(
                 nowUtc,
                 positions);
 
-            AutoBuildResult result = new(location.GetDisplayName(), from, to, templates.Count, covered, picks.Select(x => x.Line).ToList());
+            AutoBuildResult result = Build(picks.Select(x => x.Line).ToList());
 
             if (actingUserId is null)
             {
@@ -150,8 +248,19 @@ public class RotaAutoBuildService(
                 ctx.Shifts.Add(pick.Shift);
             }
 
+            foreach (Shift shift in toRemove)
+            {
+                // Never published, so nobody was told about it and there's nothing to tell them.
+                ctx.Shifts.Attach(shift);
+                shift.IsActive = false;
+                shift.RemovalPending = false;
+                shift.UpdateDate = nowUtc;
+                shift.UpdateByUserId = actingUserId;
+            }
+
             await ctx.SaveChangesAsync();
 
+            _logger.LogInformation("Auto-build removed {Removed} draft shifts for changed parties at {LocationId}", toRemove.Count, locationId);
             _logger.LogInformation("Auto-build added {Assigned} assigned and {Open} open draft shifts at {LocationId} for {From} to {To} by {ActingUserId}",
                 result.Assigned, result.Open, locationId, from, to, actingUserId);
 

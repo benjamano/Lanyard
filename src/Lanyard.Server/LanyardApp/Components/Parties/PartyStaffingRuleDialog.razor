@@ -1,0 +1,165 @@
+@using Lanyard.Application.Services.Parties
+
+@inject IPartyStaffingService _partyStaffingService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.PeopleTeam())" />
+            <FluentText As="@TextTag.H3">@(Existing is null ? "Add party staffing" : "Change party staffing")</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="staffing-dialog">
+            @if (errorMessage is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
+            }
+
+            <FluentSelect TOption="TypeOption" TValue="string" Items="@typeOptions" OptionText="@(x => x.Label)" OptionValue="@(x => x.Value)"
+                          @bind-Value="typeChoice" Label="For" Width="100%" />
+
+            @if (typeChoice == NewType)
+            {
+                <FluentTextInput @bind-Value="newType" Label="Party type" Placeholder="e.g. Lazer + Play" Width="100%" Maxlength="100" />
+            }
+
+            <div class="staffing-dialog-pair">
+                <FluentSelect TOption="StaffPosition" TValue="string" Items="@Positions" OptionText="@(x => x.Name)" OptionValue="@(x => x.Id.ToString())"
+                              @bind-Value="positionId" Label="Position" Width="100%" />
+                <FluentNumberInput TValue="int" @bind-Value="staffCount" Label="How many extra" Min="1" Max="20" Width="100%" />
+            </div>
+
+            <div class="staffing-dialog-hint">
+                They're added to the shift the party falls in and work the whole shift, doing the party as part of it.
+                Types are matched to the type on each booking, ignoring capitals. "Any other party" is used for every type without its own staffing.
+            </div>
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentStack HorizontalAlignment="HorizontalAlignment.End" HorizontalGap="8px">
+            <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" OnClick="@SaveAsync">@(isBusy ? "Saving..." : "Save")</FluentButton>
+            <FluentButton Disabled="@isBusy" OnClick="@(() => Dialog.CancelAsync())">Cancel</FluentButton>
+        </FluentStack>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    private const string AnyType = "__any";
+    private const string NewType = "__new";
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required LocationScope Scope { get; set; }
+
+    [Parameter, EditorRequired]
+    public required int LocationId { get; set; }
+
+    [Parameter, EditorRequired]
+    public required List<StaffPosition> Positions { get; set; }
+
+    // Types used on this location's bookings before.
+    [Parameter]
+    public List<string> PartyTypes { get; set; } = [];
+
+    [Parameter]
+    public PartyStaffingRule? Existing { get; set; }
+
+    private record TypeOption(string Value, string Label);
+
+    private List<TypeOption> typeOptions = [];
+    private string typeChoice = AnyType;
+    private string? newType;
+    private string? positionId;
+    private int staffCount = 1;
+    private string? errorMessage;
+    private bool isBusy;
+
+    protected override void OnInitialized()
+    {
+        List<string> types = PartyTypes
+            .Select(PartyStaffingRule.Normalise)
+            .OfType<string>()
+            .DistinctBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (Existing?.PartyType is string current && !types.Any(x => string.Equals(x, current, StringComparison.OrdinalIgnoreCase)))
+        {
+            types.Add(current);
+        }
+
+        typeOptions = [new(AnyType, "Any other party"), .. types.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).Select(x => new TypeOption(x, $"{x} parties")), new(NewType, "Another type...")];
+
+        if (Existing is PartyStaffingRule rule)
+        {
+            typeChoice = rule.PartyType is string type ? typeOptions.First(x => string.Equals(x.Value, type, StringComparison.OrdinalIgnoreCase)).Value : AnyType;
+            positionId = rule.StaffPositionId.ToString();
+            staffCount = rule.StaffCount;
+
+            if (rule.StaffPosition is StaffPosition position && Positions.All(x => x.Id != position.Id))
+            {
+                Positions = [.. Positions, position];
+            }
+        }
+        else
+        {
+            positionId = Positions.FirstOrDefault()?.Id.ToString();
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        errorMessage = null;
+
+        if (!Guid.TryParse(positionId, out Guid position))
+        {
+            errorMessage = "Choose a position.";
+            return;
+        }
+
+        string? partyType = typeChoice switch
+        {
+            AnyType => null,
+            NewType => PartyStaffingRule.Normalise(newType),
+            _ => typeChoice
+        };
+
+        if (typeChoice == NewType && partyType is null)
+        {
+            errorMessage = "Type the party type, as it's written on bookings.";
+            return;
+        }
+
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            errorMessage = "Couldn't confirm who you are - try reloading the page.";
+            return;
+        }
+
+        isBusy = true;
+
+        Result<PartyStaffingRule> result = await _partyStaffingService.SaveRuleAsync(Scope, new PartyStaffingRule
+        {
+            Id = Existing?.Id ?? Guid.Empty,
+            CompanyId = 0,
+            LocationId = LocationId,
+            PartyType = partyType,
+            StaffPositionId = position,
+            StaffCount = staffCount
+        }, actingUser.Data);
+
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            errorMessage = result.Error;
+            return;
+        }
+
+        await Dialog.CloseAsync(true);
+    }
+}
