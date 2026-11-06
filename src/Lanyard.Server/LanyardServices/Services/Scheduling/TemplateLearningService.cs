@@ -315,4 +315,104 @@ public class TemplateLearningService(
             return Result<int>.Fail($"Failed to save the templates: {ex.Message}");
         }
     }
+
+    public async Task<Result<TemplateSuggestionRun?>> GetOpenSuggestionsAsync(LocationScope scope, int locationId)
+    {
+        try
+        {
+            if (!SchedulingAccess.CanManageLocation(scope, locationId))
+            {
+                return Result<TemplateSuggestionRun?>.Ok(null);
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            TemplateSuggestionRun? latest = await ctx.TemplateSuggestionRuns
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.LocationId == locationId)
+                .OrderByDescending(x => x.RunUtc)
+                .FirstOrDefaultAsync();
+
+            return Result<TemplateSuggestionRun?>.Ok(latest is { IsOpen: true } ? latest : null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load template suggestions for {LocationId}", locationId);
+            return Result<TemplateSuggestionRun?>.Fail($"Failed to load template suggestions: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> DismissSuggestionsAsync(LocationScope scope, int locationId, string actingUserId)
+    {
+        try
+        {
+            if (!SchedulingAccess.CanManageLocation(scope, locationId))
+            {
+                return Result<bool>.Fail("You can only change shift templates for the location you manage.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            DateTime now = _time.GetUtcNow().UtcDateTime;
+            List<TemplateSuggestionRun> open = await ctx.TemplateSuggestionRuns
+                .Where(x => x.LocationId == locationId && x.DismissedUtc == null)
+                .ToListAsync();
+
+            foreach (TemplateSuggestionRun run in open)
+            {
+                run.DismissedUtc = now;
+                run.DismissedByUserId = actingUserId;
+            }
+
+            await ctx.SaveChangesAsync();
+
+            _logger.LogInformation("Template suggestions for {LocationId} dismissed by {ActingUserId}", locationId, actingUserId);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to dismiss template suggestions for {LocationId}", locationId);
+            return Result<bool>.Fail($"Failed to dismiss the suggestions: {ex.Message}");
+        }
+    }
+
+    // The monthly run for one location (no signed-in user): learns from the last MonthlyWeeks whole
+    // weeks and records how many changes it would suggest. Only locations that already use
+    // templates are looked at, so a site that builds its rota by hand isn't nagged.
+    public async Task<TemplateSuggestionRun?> RunMonthlyAsync(ApplicationDbContext ctx, Location location, DateTime nowUtc)
+    {
+        bool usesTemplates = await ctx.ShiftTemplates
+            .AsNoTracking()
+            .TagWithCallSite()
+            .AnyAsync(x => x.LocationId == location.Id && x.IsActive);
+
+        if (!usesTemplates)
+        {
+            return null;
+        }
+
+        DateOnly thisWeek = RotaTime.GetWeekStart(RotaTime.Today(nowUtc));
+        DateOnly from = thisWeek.AddDays(-7 * ITemplateLearningService.MonthlyWeeks);
+        DateOnly to = thisWeek.AddDays(-1);
+
+        TemplateLearningResult result = await LearnAsync(ctx, location.Id, from, to, withCheck: false);
+
+        TemplateSuggestionRun run = new()
+        {
+            Id = Guid.NewGuid(),
+            CompanyId = location.CompanyId,
+            LocationId = location.Id,
+            RunUtc = nowUtc,
+            From = from,
+            To = to,
+            Suggestions = result.Suggestions
+        };
+
+        ctx.TemplateSuggestionRuns.Add(run);
+        await ctx.SaveChangesAsync();
+
+        return run;
+    }
 }

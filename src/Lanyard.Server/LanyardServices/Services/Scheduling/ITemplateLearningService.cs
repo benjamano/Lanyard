@@ -1,6 +1,7 @@
 using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Scheduling;
+using Lanyard.Infrastructure.Models;
 
 namespace Lanyard.Application.Services.Scheduling;
 
@@ -12,6 +13,9 @@ public interface ITemplateLearningService
     public const int MinWeeks = 2;
     public const int MaxWeeks = 26;
 
+    // The monthly suggestions look back this many whole weeks.
+    public const int MonthlyWeeks = 8;
+
     // The last `weeks` whole weeks (Monday to Sunday) before this week.
     Task<Result<TemplateLearningResult>> LearnAsync(LocationScope scope, int locationId, int weeks);
 
@@ -19,4 +23,10 @@ public interface ITemplateLearningService
     // were saved; any that couldn't be are named in the error.
     Task<Result<int>> ApplyAsync(LocationScope scope, int locationId, IReadOnlyCollection<LearnedTemplate> templates,
         IReadOnlyCollection<LearnedHireStaffing> hireStaffing, string actingUserId);
+
+    // The latest monthly suggestions for the location if they haven't been reviewed or dismissed.
+    Task<Result<TemplateSuggestionRun?>> GetOpenSuggestionsAsync(LocationScope scope, int locationId);
+
+    // Marks the location's open monthly suggestions as dealt with (reviewed or dismissed).
+    Task<Result<bool>> DismissSuggestionsAsync(LocationScope scope, int locationId, string actingUserId);
 }

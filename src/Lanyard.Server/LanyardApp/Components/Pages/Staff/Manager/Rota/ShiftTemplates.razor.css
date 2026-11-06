@@ -134,3 +134,9 @@
 .template-regulars {
     color: var(--colorNeutralForeground3);
 }
+
+.templates-suggestions-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
