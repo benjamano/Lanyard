@@ -16,7 +16,8 @@ public sealed record AutoBuildWorker(
     ResolvedContract Contract,
     List<Shift> Shifts,
     IReadOnlyCollection<StaffAvailability> Availability,
-    IReadOnlyDictionary<DateOnly, string> PendingTimeOff);
+    IReadOnlyDictionary<DateOnly, string> PendingTimeOff,
+    StaffWorkPreference? Wish = null);
 
 // A shift Auto-build decided on: the Shift row to save (UserId null = open) and how to describe it.
 public sealed record AutoBuildPick(Shift Shift, AutoBuildLine Line);
@@ -149,7 +150,8 @@ public static class RotaAutoBuildRules
                 worker.PendingTimeOff.GetValueOrDefault(slot.Day),
                 false,
                 cantWork(worker, shift) ?? ClashWithPicked(worker, shift),
-                worker.Availability)).ToList();
+                worker.Availability,
+                worker.Wish)).ToList();
 
             ShiftSuggestions ranking = ShiftSuggestionRules.Rank(shift, candidates);
             ShiftSuggestion? best = ranking.Ranked.FirstOrDefault(x => !x.Reasons.Any(r => AutoBlocking.Contains(r.Kind)));

@@ -151,6 +151,33 @@ namespace Lanyard.Infrastructure.Models
         public bool IsAllDay => StartTime == EndTime;
     }
 
+    // How much someone would like to work each week: "at most 2 shifts" or "no more than 16 hours".
+    // A wish, not a contract - rota suggestions and Auto-build put people who'd go past it behind
+    // everyone who wouldn't, but they can still be picked; a contract maximum (ContractRequirement)
+    // is the hard limit. Null on both, or no row, means they haven't said. One row per person per
+    // company, the person's own record like StaffAvailability, so GDPR erasure deletes it.
+    public class StaffWorkPreference : ICompanyOwned
+    {
+        public Guid Id { get; set; }
+
+        public required int CompanyId { get; set; }
+        public Company? Company { get; set; }
+
+        public required string UserId { get; set; }
+        public UserProfile? User { get; set; }
+
+        public int? MaxShiftsPerWeek { get; set; }
+        public decimal? MaxHoursPerWeek { get; set; }
+
+        public DateTime UpdateDate { get; set; }
+
+        // Null when the person set it themselves (or whoever did has since been erased); otherwise
+        // the manager who did.
+        public string? UpdatedByUserId { get; set; }
+
+        public bool HasAnyValue => MaxShiftsPerWeek is not null || MaxHoursPerWeek is not null;
+    }
+
     // The PIN a staff member types on the clock-in terminal. The terminal identifies the person
     // by name first (they tap themselves on today's roster), so the PIN only has to verify that
     // one user - it never has to be unique or looked up, which is why a salted Identity

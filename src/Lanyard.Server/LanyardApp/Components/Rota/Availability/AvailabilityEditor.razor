@@ -32,6 +32,26 @@
             </FluentButton>
         </div>
 
+        <section class="availability-wish" aria-labelledby="availability-wish-title">
+            <div class="availability-wish-text">
+                <span id="availability-wish-title" class="availability-wish-title">@(ForManager ? "How much they'd like to work" : "How much I'd like to work")</span>
+                <span class="availability-wish-hint">
+                    @(ForManager
+                        ? "Optional. Suggestions and Auto-build put people who'd go past this behind everyone else, but they can still be picked. Their contract maximum still applies."
+                        : "Optional. Your managers try not to give you more than this each week, but it isn't a promise. Leave a box empty for no limit.")
+                </span>
+            </div>
+            <div class="availability-wish-fields">
+                <FluentNumberInput TValue="int?" @bind-Value="wishShifts" Label="At most shifts a week" Min="1" Max="14" Width="100%" />
+                <FluentNumberInput TValue="double?" @bind-Value="wishHours" Label="At most hours a week" Min="1" Max="100" Width="100%" />
+                <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@(isBusy || !WishChanged)" OnClick="@SaveWishAsync">Save</FluentButton>
+            </div>
+            @if (wishMessage is not null)
+            {
+                <FluentText Class="availability-wish-saved" role="status">@wishMessage</FluentText>
+            }
+        </section>
+
         @if (actionError is not null)
         {
             <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@actionError</FluentMessageBar>
@@ -97,6 +117,14 @@
     private LocationScope? scope;
     private string? actingUserId;
 
+    private int? wishShifts;
+    private double? wishHours;
+    private int? savedShifts;
+    private double? savedHours;
+    private string? wishMessage;
+
+    private bool WishChanged => wishShifts != savedShifts || wishHours != savedHours;
+
     protected override async Task OnParametersSetAsync()
     {
         Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
@@ -126,6 +154,36 @@
 
         loadError = null;
         rows = result.Data;
+
+        Result<StaffWorkPreference?> wish = await _availabilityService.GetPreferenceAsync(scope!, UserId, actingUserId!);
+
+        if (wish.IsSuccess)
+        {
+            savedShifts = wishShifts = wish.Data?.MaxShiftsPerWeek;
+            savedHours = wishHours = wish.Data?.MaxHoursPerWeek is decimal hours ? (double)hours : null;
+        }
+    }
+
+    private async Task SaveWishAsync()
+    {
+        actionError = null;
+        wishMessage = null;
+        isBusy = true;
+
+        Result<StaffWorkPreference?> result = await _availabilityService.SavePreferenceAsync(scope!, UserId,
+            wishShifts, wishHours is double hours ? (decimal)hours : null, actingUserId!);
+
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            actionError = result.Error;
+            return;
+        }
+
+        savedShifts = wishShifts = result.Data?.MaxShiftsPerWeek;
+        savedHours = wishHours = result.Data?.MaxHoursPerWeek is decimal saved ? (double)saved : null;
+        wishMessage = result.Data is null ? "Saved: no limit." : "Saved.";
     }
 
     private async Task OpenAsync(StaffAvailability? existing)

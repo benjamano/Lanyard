@@ -116,7 +116,8 @@ public class ShiftSuggestionService(
                     pool.PendingTimeOffOn(user.Id, day),
                     claimants.Contains(user.Id),
                     ShiftClaimRules.WhyCantWork(pool.CalendarFor(user.Id), shift, null, aboutViewer: false),
-                    pool.Availability[user.Id].ToList());
+                    pool.Availability[user.Id].ToList(),
+                    pool.Wishes.GetValueOrDefault(user.Id));
             }).ToList();
 
             return Result<ShiftSuggestions>.Ok(ShiftSuggestionRules.Rank(shift, candidates));
@@ -142,7 +143,8 @@ internal sealed record SuggestionPool(
     Dictionary<string, ResolvedContract> Contracts,
     ILookup<string, TimeOffRequest> PendingTimeOff,
     Dictionary<string, StaffPosition> PrimaryPositions,
-    ILookup<string, StaffAvailability> Availability)
+    ILookup<string, StaffAvailability> Availability,
+    Dictionary<string, StaffWorkPreference> Wishes)
 {
     public ResolvedContract ContractFor(string userId) => Contracts.GetValueOrDefault(userId) ?? ResolvedContract.Empty;
 
@@ -176,7 +178,7 @@ internal sealed record SuggestionPool(
         if (users.Count == 0)
         {
             return new SuggestionPool([], [], Array.Empty<Shift>().ToLookup(x => x.UserId!), [],
-                Array.Empty<TimeOffRequest>().ToLookup(x => x.UserId), [], Array.Empty<StaffAvailability>().ToLookup(x => x.UserId));
+                Array.Empty<TimeOffRequest>().ToLookup(x => x.UserId), [], Array.Empty<StaffAvailability>().ToLookup(x => x.UserId), []);
         }
 
         List<string> userIds = users.Select(x => x.Id).ToList();
@@ -234,6 +236,11 @@ internal sealed record SuggestionPool(
         ILookup<string, StaffAvailability> availabilityByUser =
             (await StaffAvailabilityService.ForUsers(ctx, userIds, companyId).ToListAsync()).ToLookup(x => x.UserId);
 
-        return new SuggestionPool(users, calendars, shiftsByUser, contracts, pendingTimeOff, primaryPositions, availabilityByUser);
+        Dictionary<string, StaffWorkPreference> wishes = (await StaffAvailabilityService.PreferencesForUsers(ctx, userIds, companyId).ToListAsync())
+            .Where(x => x.HasAnyValue)
+            .GroupBy(x => x.UserId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        return new SuggestionPool(users, calendars, shiftsByUser, contracts, pendingTimeOff, primaryPositions, availabilityByUser, wishes);
     }
 }

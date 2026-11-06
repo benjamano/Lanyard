@@ -117,7 +117,8 @@ public class RotaAutoBuildService(
                 }
 
                 return new AutoBuildWorker(user.Id, RotaNames.For(user), primary?.Id, primary?.Name, pool.ContractFor(user.Id),
-                    pool.ShiftsByUser[user.Id].ToList(), pool.Availability[user.Id].ToList(), pending);
+                    pool.ShiftsByUser[user.Id].ToList(), pool.Availability[user.Id].ToList(), pending,
+                    pool.Wishes.GetValueOrDefault(user.Id));
             }).ToList();
 
             Dictionary<Guid, StaffPosition> positions = templates
