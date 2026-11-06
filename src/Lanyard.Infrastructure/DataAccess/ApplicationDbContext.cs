@@ -97,6 +97,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<DmxSceneStep> DmxSceneSteps { get; set; }
         public DbSet<DmxSceneStepChannelValue> DmxSceneStepChannelValues { get; set; }
         public DbSet<DmxFixture> DmxFixtures { get; set; }
+        public DbSet<DmxClientOutputState> DmxClientOutputStates { get; set; }
         public DbSet<DmxFixtureDefinition> DmxFixtureDefinitions { get; set; }
         public DbSet<DmxFixtureMode> DmxFixtureModes { get; set; }
         public DbSet<DmxFixtureModeChannel> DmxFixtureModeChannels { get; set; }
@@ -1232,6 +1233,14 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<ClientAvailableVideoDevice>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableNetworkInterface>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableDmxDevice>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
+
+            modelBuilder.Entity<DmxClientOutputState>(entity =>
+            {
+                entity.HasKey(x => x.ClientId);
+                entity.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
+                entity.Property(x => x.GrandMaster).HasDefaultValue((byte)255);
+                entity.HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
+            });
             modelBuilder.Entity<ClientAvailableAudioDevice>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ZoneScoreboardSettings>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<PlaylistSongMember>().HasQueryFilter(x => TenantFilterDisabled || x.Playlist!.CompanyId == TenantCompanyId);
@@ -1244,6 +1253,12 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<AutomationRuleActionExecution>().HasQueryFilter(x => TenantFilterDisabled || x.AutomationRuleExecution!.AutomationRule!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<DmxSceneStep>().HasQueryFilter(x => TenantFilterDisabled || x.Scene!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<DmxSceneStepChannelValue>().HasQueryFilter(x => TenantFilterDisabled || x.SceneStep!.Scene!.CompanyId == TenantCompanyId);
+
+            // One value per channel per step. Without it, two saves racing on the same fader
+            // could both insert, leaving a step with two values for one channel.
+            modelBuilder.Entity<DmxSceneStepChannelValue>()
+                .HasIndex(x => new { x.SceneStepId, x.ChannelNumber })
+                .IsUnique();
 
             // Shared-or-owned: built-in definitions (CompanyId null) are visible to everyone, a
             // company's own imports and custom fixtures only to that company.

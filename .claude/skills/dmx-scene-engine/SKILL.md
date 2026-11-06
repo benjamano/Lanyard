@@ -9,6 +9,27 @@ description: How DmxService and DmxSceneRunnerService actually work in this repo
 
 `DmxService` and `DmxSceneRunnerService` are registered `AddSingleton` in `Program.cs`, not scoped — they hold in-memory `Dictionary<Guid, ...>` state (live channel values, currently-running scenes) across every request and every connected client, protected by a private `object _lock`. This is *why* they must use `IDbContextFactory<ApplicationDbContext>` rather than an injected `DbContext`: a singleton service outlives any single request, so a request-scoped `DbContext` injected into it would be shared across concurrent callers and blow up. If you're adding a new singleton service that needs DB access for periodic/background work, this is the pattern to copy — see the general rule in CLAUDE.md's `IDbContextFactory` section, but the *reason* it's non-negotiable here specifically is the singleton lifetime.
 
+## Who may call what: the desk facade
+
+`DmxService` (the output engine) and `DmxSceneRunnerService` are system-level singletons and never check the caller. Anything acting for a signed-in user goes through the **scoped** `IDmxDeskService` (`DmxDeskService`), which loads the kiosk (and, for scene start/stop, the scene) through the tenant-filtered factory first and caches the "yes" per scope. Components inject `IDmxDeskService`, never `IDmxService`/`IDmxSceneRunnerService`. The automation executor stays system-level but checks the rule's company against the kiosk, and that the scene is on that kiosk; `AutomationRuleService` checks the same when a rule is saved. `DmxSceneService` is scoped on the tenant factory, so loading a row through it is the ownership check.
+
+## Output engine: coalesced sends, per-kiosk subscriptions
+
+- `UpdateChannelValuesAsync` writes the kiosk's `byte[513]` universe and marks channels dirty. The first write after a quiet `CoalesceWindow` (25 ms) is sent inline; later ones are flushed by one background loop with the latest value per channel. So a fader dragged at 50 events/s costs at most ~40 kiosk messages/s, and nothing queues. Tests set `CoalesceWindow` and call `FlushPendingAsync()`.
+- Addresses outside 1-512 and `Guid.Empty` are ignored. `GetDmxChannelsAsync` copies inside the lock.
+- `SubscribeToClient(clientId, handler)` replaced the global `OnChannelValuesChanged` event: handlers hear only their kiosk, run on the writer's thread (Blazor must `InvokeAsync`), and each is isolated in try/catch so a throwing desk can't block the kiosk send.
+- The hub calls `RegisterConnectionAsync` on connect (after `ReceiveDmxSettings`) and `ForgetConnection` on disconnect, so sends need no DB lookup; an "offline" answer from the DB fallback is trusted for 5 s. If the engine already holds state for that kiosk (it's been driving it since this process started), connect re-sends the whole universe, so a kiosk that rebooted to zeros gets its lights back.
+
+## Grand master, blackout and the saved universe
+
+The engine's universe holds **programmed** levels; what goes to the kiosk is `DmxDimmableChannels.Output(programmed, dimmable, master, blackout)`. Desks (subscribers, `GetDmxChannelsAsync`) always see programmed levels, so faders don't move with the master. `DmxDimmableChannels.Build(fixtures)` decides what's dimmable: Intensity channels, the emitters of a fixture with no Intensity channel, and unpatched channels (dimmer packs); never pan/tilt/gobo/strobe/colour wheel, and a double-patched address only if every fixture agrees. The engine loads the patch per kiosk on first touch; `DmxFixtureService` calls `RefreshPatchAsync` after any fixture change. Master/blackout changes mark every dimmable channel dirty and raise the `onOutputChanged` subscription callback.
+
+`DmxClientOutputStates` (one row per kiosk, filtered through `Client.CompanyId`) holds the programmed universe, master and blackout. The engine loads it on first touch of a kiosk (only if nothing has written meanwhile) and `DmxOutputStatePersister` writes changed kiosks back every 2 s and on shutdown. On kiosk connect, any kiosk with a universe (this process's or saved) is re-sent it, so a server restart no longer leaves lights and Lanyard out of step. A database failure while loading is logged and the kiosk starts from zeros rather than refusing to play.
+
+## Kiosk output: DmxFrameOutput (Lanyard.Shared)
+
+The kiosk's frame buffer and send loop live in `Lanyard.Shared/Dmx/DmxFrameOutput.cs` so they're unit tested (`Lanyard.Tests/Shared/Dmx`); `OpenDmxDevice` in the WPF client is only an FTDI adapter (`IDmxPort`). One dedicated thread sends a frame every 25 ms with drift-free pacing; writers take the frame lock only to copy bytes, and all USB I/O is outside it. `Open` is idempotent for the same index (the server re-sends `ReceiveDmxSettings` on every reconnect, which used to re-open a handle that was already open and kill output). A failed open, or 10 failed frames in a row (an unplug), closes the port and retries every 2 s. Values always land in the frame even while closed. Out-of-range addresses are skipped, not thrown. Kiosks 1.0.46+ connect with `dmxFrame=1` and get the universe resync on connect as one `ReceiveDmxFrame` message (`byte[512]`, base64 on the wire); older ones get a 512-entry batch.
+
 ## DMX and projection programs both step server-side now — the difference is how the step reaches the screen
 
 This used to be the single biggest gotcha comparing the two systems, and it's worth getting right since old code comments and an earlier version of this skill both said the opposite: projection programs used to step client-side with no server visibility into progress. **That's no longer true** — `ProjectionProgramRunnerService` now owns the full step/hold/pause/skip loop server-side, the same shape as `DmxSceneRunnerService`. See the `projection-program-engine` skill for the full picture; the short version:
@@ -22,9 +43,17 @@ This used to be the single biggest gotcha comparing the two systems, and it's wo
 
 `DmxSceneRunnerService` re-derives each step's delay from `IBeatClockService.GetDelayUntilNextStepAsync` (current live playback position + a bounded correction) on every step, rather than accumulating a running total from a fixed duration. This is deliberate — it's heavily commented in the source but not documented outside it. **If you "simplify" this to a running-total accumulator, you will reintroduce timing drift** relative to the actual music playback position; that's the exact bug this design avoids.
 
+## Fades are inside the step, not added to it
+
+`DmxSceneStep.FadeTime` (default 0 = snap). For each step the runner works out its hold first (fixed `Duration`, or the beat-clock delay), records the step's start, fades over `DmxFade.Effective(fade, hold)` (never longer than the hold) writing a frame every 25 ms with only the channels that moved, then waits out `hold - elapsed`. Measuring from the step start keeps BPM steps on the grid however long the fade took. Fades start from the engine's current values (`GetDmxChannelsAsync`), so a fade from whatever another scene or the desk left behind works. The on-screen preview (`DmxScenePreview`) uses the same `DmxFade` helper; scrubbing jumps without fading.
+
 ## Momentary scenes and restart-by-`sceneId` semantics
 
 - Momentary scenes force their channels back to 0 in a `finally` block regardless of how playback ends (natural completion, cancellation, error) — so cleanup always happens.
+- A run is registered **before** `StartSceneAsync` awaits the database, so a `StopScene` that lands while the scene is still loading (a quick tap of a flash button) cancels it instead of finding nothing and leaving it on forever.
+- On a restart, the replaced run sees a newer run owns the slot and skips both its momentary zero-reset and `OnSceneStopped` (zeroing would black out the new run's first step). Each run owns and alone disposes its CTS.
+- Events are raised outside the lock, one subscriber at a time in try/catch. `OnSceneFailed(clientId, sceneId, reason)` fires before `OnSceneStopped` when playback faulted. `OnSceneStepAdvanced` carries the 1-based *position*, not `StepNumber`.
+- Every step waits at least `MinimumStepDelay` (25 ms), so a 0 s step can't spin the loop. `DmxSceneService` also refuses durations of 0 or over an hour, and renumbers steps 1..N after a delete.
 - Scenes are keyed by `sceneId`, not a per-run instance id. Starting an already-running scene **cancels and replaces** the existing run rather than running two instances — meaning two different clients/requests can never run the same scene concurrently.
 - Steps are snapshotted at the start of a run. Editing a scene's steps in the DB mid-playback doesn't affect the currently-running loop — changes only apply the next time the scene is (re)started.
 

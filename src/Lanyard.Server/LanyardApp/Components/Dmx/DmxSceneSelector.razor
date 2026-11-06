@@ -1,125 +1,159 @@
-﻿@using Lanyard.Infrastructure.DTO.Dmx
+@using Lanyard.Infrastructure.DTO.Dmx
 @using Lanyard.Infrastructure.Models.Dmx
 @using Microsoft.JSInterop
 @implements IAsyncDisposable
 
 @inject IDmxSceneService _dmxSceneService
-@inject IDmxSceneRunnerService _sceneRunner
+@inject IDmxDeskService _dmxDesk
 @inject IDialogService _dialogService
 @inject INotificationService _toastService
 @inject IJSRuntime JS
 
-<div>
-    <FluentCard Class="mt-2" Height="100%">
-        <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween"
-                     VerticalAlignment="VerticalAlignment.Center">
-            <FluentText Size="TextSize.Size600" Color="Color.Default">
-                Scenes
-            </FluentText>
-            <FluentButton IconStart="new Icons.Regular.Size20.AddCircle()" Appearance="ButtonAppearance.Primary"
-                          Disabled="@(ClientId == null || !IsEditModeEnabled)" OnClick="CreateNewScene" Class="ms-2">
-                Add Scene
+@* The scene launcher: run, stop and flash scenes on the selected kiosk. Viewing and running need no
+   mode; editing opens the scene editor. *@
+<section class="dmx-scenes" aria-label="Scenes">
+    <header class="dmx-scenes-head">
+        <FluentText Size="TextSize.Size500" Weight="TextWeight.Semibold">Scenes</FluentText>
+        <div class="dmx-scenes-tools">
+            <FluentButton Appearance="ButtonAppearance.Outline" Size="ButtonSize.Small"
+                          IconStart="new Icons.Filled.Size16.Stop()"
+                          Disabled="@(ClientId == null || runningSceneIds.Count == 0)"
+                          OnClick="StopAll">
+                Stop all
             </FluentButton>
-        </FluentStack>
-        <FluentDivider Class="my-3" />
-        <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Left" Wrap="true"
-                     Style="min-height: 50px;">
-            @if (ClientId == null)
-            {
-                <FluentText Size="TextSize.Size400">Select a client to view scenes.</FluentText>
-            }
-            else if (scenes == null)
-            {
-                <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center">
-                    Loading... <FluentSpinner Size="SpinnerSize.Tiny"></FluentSpinner>
-                </FluentStack>
-            }
-            else if (!scenes.Any())
-            {
-                <FluentText Size="TextSize.Size400">No scenes found for this client.</FluentText>
-            }
-            else
-            {
-                @foreach (DmxSceneDTO scene in scenes)
-                {
-                    bool isRunning = runningSceneIds.Contains(scene.Id);
-                    int progressValue = GetSceneProgress(scene);
+            <FluentButton Appearance="ButtonAppearance.Primary" Size="ButtonSize.Small"
+                          IconStart="new Icons.Regular.Size16.Add()"
+                          Disabled="@(ClientId == null || IsLocked)"
+                          OnClick="CreateNewScene">
+                New scene
+            </FluentButton>
+        </div>
+    </header>
 
-                    <div style="display: flex; align-items: center; gap: 2px;">
-                        <FluentButton Appearance="@ButtonAppearance.Default" Padding="@Padding.All0"
-                                      Disabled="@(!IsEditModeEnabled)"
-                                      Class="@($"{(isRunning ? "scene-running" : "")} {(CurrentlyOpenScene != null && CurrentlyOpenScene.Id == scene.Id ? "scene-open" : "")}")"
-                                      Style="width: 120px; height: 50px;" OnClick="@(() => OnOpenScene.InvokeAsync(scene))">
-                            <FluentStack Orientation="Orientation.Vertical"
-                                         HorizontalAlignment="HorizontalAlignment.SpaceBetween"
-                                         VerticalAlignment="VerticalAlignment.Center" Padding="@Padding.All0">
-                                <FluentText Padding="@Padding.All2">@scene.Name</FluentText>
+    @if (ClientId == null)
+    {
+        <p class="dmx-scenes-note">Choose a kiosk to see its scenes.</p>
+    }
+    else if (isLoading)
+    {
+        <div class="dmx-scenes-note"><FluentSpinner Size="SpinnerSize.Tiny" /> Loading scenes…</div>
+    }
+    else if (loadError != null)
+    {
+        <p class="dmx-scenes-note dmx-scenes-note--error">Couldn't load scenes: @loadError</p>
+    }
+    else if (!scenes.Any())
+    {
+        <p class="dmx-scenes-note">No scenes yet. A scene is a list of steps the kiosk plays, like a chase or a wash. Press <strong>New scene</strong> to make one.</p>
+    }
+    else
+    {
+        <ul class="dmx-scene-list">
+            @foreach (DmxSceneDTO scene in scenes)
+            {
+                bool isRunning = runningSceneIds.Contains(scene.Id);
+                int progress = GetSceneProgress(scene);
 
-                                @if (isRunning)
+                <li @key="scene.Id" class="dmx-scene @(isRunning ? "is-running" : null)">
+                    <div class="dmx-scene-main">
+                        <span class="dmx-scene-name">@scene.Name</span>
+                        <span class="dmx-scene-meta">
+                            @(scene.StepCount == 1 ? "1 step" : $"{scene.StepCount} steps")@(scene.IsMomentary ? " · hold to flash" : scene.Loop ? " · loops" : null)@(scene.BpmSyncEnabled ? " · BPM" : null)
+                        </span>
+                        @if (scene.KeyBindings.Count > 0)
+                        {
+                            <span class="dmx-scene-keys">
+                                @foreach (string key in scene.KeyBindings)
                                 {
-                                    <FluentProgressBar Min="0" Max="100" Value="@progressValue" Width="100%" />
+                                    <kbd>@KeyLabel(key)</kbd>
                                 }
-                            </FluentStack>
-                        </FluentButton>
+                            </span>
+                        }
+                        @if (isRunning)
+                        {
+                            <span class="dmx-scene-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@progress" aria-label="@($"{scene.Name} progress")">
+                                <span style="width: @(progress)%;"></span>
+                            </span>
+                        }
+                        @if (failures.TryGetValue(scene.Id, out string? failure))
+                        {
+                            <span class="dmx-scene-failure">Stopped: @failure</span>
+                        }
+                    </div>
+                    <div class="dmx-scene-actions">
                         @if (scene.IsMomentary)
                         {
                             @* Handlers sit on the wrapper, not the FluentButton: the web
                                component only surfaces OnClick. *@
-                            <div @onpointerdown="@((PointerEventArgs e) => StartMomentaryAsync(scene, e))"
+                            <div class="dmx-scene-flash"
+                                 @onpointerdown="@((PointerEventArgs e) => StartMomentaryAsync(scene, e))"
                                  @onpointerup="@(() => StopMomentary(scene))" @onpointerleave="@(() => StopMomentary(scene))"
-                                 @oncontextmenu:preventDefault="true" style="touch-action: none;">
+                                 @onpointercancel="@(() => StopMomentary(scene))"
+                                 @oncontextmenu:preventDefault="true">
                                 <FluentButton IconStart="@(new Icons.Regular.Size20.FlashPlay())"
-                                              Appearance="@(isRunning ? ButtonAppearance.Primary : ButtonAppearance.Transparent)"
-                                              Disabled="@(ClientId == null)" Tooltip="Hold to run scene" />
+                                              Appearance="@(isRunning ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                              Disabled="@(IsLocked || scene.StepCount == 0)"
+                                              Title="Hold to run" aria-label="@($"Hold to flash {scene.Name}")">
+                                    Hold
+                                </FluentButton>
                             </div>
                         }
                         else
                         {
-                            <FluentButton
-                            IconStart="@(isRunning ? new Icons.Filled.Size20.Stop() : new Icons.Regular.Size20.Play())"
-                            Appearance="ButtonAppearance.Transparent" Disabled="@(ClientId == null)"
-                            Tooltip="@(isRunning ? "Stop Scene" : "Run Scene")"
-                            OnClick="@(() => ToggleScene(scene, isRunning))" />
+                            <FluentButton IconStart="@(isRunning ? new Icons.Filled.Size20.Stop() : new Icons.Regular.Size20.Play())"
+                                          Appearance="@(isRunning ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                          Disabled="@((IsLocked && !isRunning) || scene.StepCount == 0)"
+                                          Title="@(scene.StepCount == 0 ? "Add a step first" : isRunning ? "Stop" : "Run")"
+                                          aria-label="@($"{(isRunning ? "Stop" : "Run")} {scene.Name}")"
+                                          OnClick="@(() => ToggleScene(scene, isRunning))">
+                                @(isRunning ? "Stop" : "Run")
+                            </FluentButton>
                         }
+                        <FluentButton IconStart="new Icons.Regular.Size20.Edit()" Appearance="ButtonAppearance.Subtle"
+                                      Disabled="@IsLocked"
+                                      Title="Edit scene" aria-label="@($"Edit {scene.Name}")"
+                                      OnClick="@(() => OnOpenScene.InvokeAsync(scene))" />
                     </div>
-                }
+                </li>
             }
-        </FluentStack>
-    </FluentCard>
-</div>
+        </ul>
+    }
+</section>
 
 @code {
     [Parameter]
     public Guid? ClientId { get; set; }
 
+    // Locked desk: scenes can still be stopped, not started or edited.
     [Parameter]
-    public bool IsEditModeEnabled { get; set; } = false;
+    public bool IsLocked { get; set; }
 
-    [Parameter]
-    public Guid? DeletedSceneId { get; set; }
 
     [Parameter]
     public EventCallback<DmxScene> OnOpenScene { get; set; }
 
-    [Parameter]
-    public DmxScene? CurrentlyOpenScene { get; set; }
 
-    [Parameter]
-    public Guid? EditedSceneId { get; set; }
 
     private List<DmxSceneDTO> scenes = [];
+    private bool isLoading;
+    private string? loadError;
 
-    private List<Guid> runningSceneIds = [];
+    // Only ever touched on the renderer's thread: runner events are marshalled in via InvokeAsync.
+    private readonly HashSet<Guid> runningSceneIds = [];
 
-    // Key: sceneId, Value: the step number playback last advanced to (drives the progress bar).
+    // Key: sceneId, Value: the 1-based step position playback last advanced to (drives the progress bar).
     private readonly Dictionary<Guid, int> sceneStepProgress = [];
+
+    // Why a scene last stopped on its own, until it's run again.
+    private readonly Dictionary<Guid, string> failures = [];
 
     private Guid? previousClientId;
 
-    private Guid? previousDeletedSceneId;
+    private IDisposable? _sceneSubscription;
 
-    // The scene currently held down on a momentary button, if any.
-    private Guid? momentaryHeldSceneId;
+    // Momentary scenes held down by pointer. A set, so holding two flash buttons with two fingers
+    // and releasing them in any order stops each one.
+    private readonly HashSet<Guid> _pointerHeldSceneIds = [];
 
     // Keyboard-trigger state, kept separate from the pointer path so mouse and
     // keyboard holds don't clobber each other.
@@ -129,69 +163,75 @@
     private readonly HashSet<string> _heldKeybindKeys = [];
     private readonly HashSet<Guid> _keyboardHeldSceneIds = [];
 
-    protected override void OnInitialized()
-    {
-        _sceneRunner.OnSceneStarted += HandleSceneStarted;
-        _sceneRunner.OnSceneStopped += HandleSceneStopped;
-        _sceneRunner.OnSceneStepAdvanced += HandleSceneStepAdvanced;
-    }
-
     protected override async Task OnParametersSetAsync()
     {
         bool scenesChanged = false;
 
         if (ClientId != previousClientId)
         {
+            // Anything held belongs to the kiosk we're leaving; release it there.
+            await ReleaseHeldScenesAsync(previousClientId);
+
             previousClientId = ClientId;
+
+            _sceneSubscription?.Dispose();
+            _sceneSubscription = null;
+            runningSceneIds.Clear();
+            sceneStepProgress.Clear();
 
             if (ClientId != null)
             {
+                await SubscribeAsync(ClientId.Value);
                 await LoadScenes(ClientId.Value);
             }
             else
             {
                 scenes = [];
-                runningSceneIds = [];
+                loadError = null;
             }
 
             scenesChanged = true;
-        }
-
-        if (DeletedSceneId != null && DeletedSceneId != previousDeletedSceneId)
-        {
-            previousDeletedSceneId = DeletedSceneId;
-
-            scenes.RemoveAll(scene => scene.Id == DeletedSceneId.Value);
-            runningSceneIds.Remove(DeletedSceneId.Value);
-
-            scenesChanged = true;
-        }
-
-        if (EditedSceneId != null)
-        {
-            DmxSceneDTO? editedScene = scenes.FirstOrDefault(scene => scene.Id == EditedSceneId.Value);
-
-            if (editedScene != null)
-            {
-                Result<DmxSceneDTO>? result = await _dmxSceneService.GetSceneByIdAsync(EditedSceneId.Value);
-
-                if (result.IsSuccess && result.Data != null)
-                {
-                    int index = scenes.FindIndex(scene => scene.Id == EditedSceneId.Value);
-                    scenes[index] = result.Data;
-
-                    scenesChanged = true;
-                }
-                else
-                {
-                    _toastService.ShowError($"Failed to load updated scene: {result.Error}");
-                }
-            }
         }
 
         if (scenesChanged)
         {
             await RefreshKeybindsAsync();
+        }
+    }
+
+    private async Task SubscribeAsync(Guid clientId)
+    {
+        Result<IDisposable> subscription = await _dmxDesk.SubscribeToScenesAsync(clientId, new DmxSceneEventHandlers(
+            Started: sceneId => _ = InvokeAsync(() =>
+            {
+                runningSceneIds.Add(sceneId);
+                failures.Remove(sceneId);
+                StateHasChanged();
+            }),
+            Stopped: sceneId => _ = InvokeAsync(() =>
+            {
+                runningSceneIds.Remove(sceneId);
+                sceneStepProgress.Remove(sceneId);
+                StateHasChanged();
+            }),
+            StepAdvanced: (sceneId, position) => _ = InvokeAsync(() =>
+            {
+                sceneStepProgress[sceneId] = position;
+                StateHasChanged();
+            }),
+            Failed: (sceneId, reason) => _ = InvokeAsync(() =>
+            {
+                failures[sceneId] = reason;
+                StateHasChanged();
+            })));
+
+        if (subscription.IsSuccess)
+        {
+            _sceneSubscription = subscription.Data;
+        }
+        else
+        {
+            _toastService.ShowError($"Couldn't follow scene playback: {subscription.Error}");
         }
     }
 
@@ -249,7 +289,7 @@
 
                 _keyboardHeldSceneIds.Add(scene.Id);
 
-                Result<bool> startResult = await _sceneRunner.StartSceneAsync(ClientId.Value, scene.Id);
+                Result<bool> startResult = await _dmxDesk.StartSceneAsync(ClientId.Value, scene.Id);
 
                 if (!startResult.IsSuccess)
                 {
@@ -266,84 +306,85 @@
     }
 
     [JSInvokable]
-    public void OnKeybindUp(string key)
+    public async Task OnKeybindUp(string key)
     {
         _heldKeybindKeys.Remove(key);
+
+        if (ClientId == null)
+        {
+            return;
+        }
 
         // Only momentary scenes react to release; normal scenes stay toggled.
         foreach (DmxSceneDTO scene in ScenesBoundTo(key))
         {
             if (scene.IsMomentary && _keyboardHeldSceneIds.Remove(scene.Id))
             {
-                _sceneRunner.StopScene(scene.Id);
+                await _dmxDesk.StopSceneAsync(ClientId.Value, scene.Id);
             }
         }
     }
 
     private IEnumerable<DmxSceneDTO> ScenesBoundTo(string key) =>
-        scenes.Where(scene => scene.KeyBindings.Any(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase)));
+        scenes.Where(scene => scene.KeyBindings.Any(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase))).ToList();
 
     private async Task LoadScenes(Guid clientId)
     {
+        isLoading = true;
+        loadError = null;
+
         Result<IEnumerable<DmxSceneDTO>>? scenesResult = await _dmxSceneService.GetScenesForClientAsync(clientId);
+
+        isLoading = false;
 
         if (scenesResult.IsSuccess && scenesResult.Data != null)
         {
             scenes = scenesResult.Data.ToList();
 
-            runningSceneIds = scenesResult.Data.Where(s => s.IsRunning).Select(s => s.Id).ToList();
+            foreach (DmxSceneDTO scene in scenes.Where(s => s.IsRunning))
+            {
+                runningSceneIds.Add(scene.Id);
+            }
         }
         else
         {
-            _toastService.ShowError($"Failed to load scenes: {scenesResult.Error}");
+            // Never leave the previous kiosk's scenes on screen under the new kiosk's name.
+            scenes = [];
+            loadError = scenesResult.Error;
         }
     }
 
-    private void HandleSceneStarted(Guid clientId, Guid sceneId)
+    private async Task StopAll()
     {
-        if (clientId != ClientId)
+        if (ClientId is not Guid clientId)
         {
             return;
         }
 
-        runningSceneIds.Add(sceneId);
+        Result<bool> result = await _dmxDesk.StopAllScenesAsync(clientId);
 
-        InvokeAsync(StateHasChanged);
-    }
-
-    private void HandleSceneStopped(Guid clientId, Guid sceneId)
-    {
-        if (clientId != ClientId)
+        if (!result.IsSuccess)
         {
-            return;
+            _toastService.ShowError($"Couldn't stop the scenes: {result.Error}");
         }
-
-        runningSceneIds.Remove(sceneId);
-        sceneStepProgress.Remove(sceneId);
-
-        InvokeAsync(StateHasChanged);
     }
 
-    private void HandleSceneStepAdvanced(Guid clientId, Guid sceneId, int stepNumber)
+    // How a saved keybind reads on its chip ("a" -> "A", " " -> "Space").
+    private static string KeyLabel(string key) => key switch
     {
-        if (clientId != ClientId)
-        {
-            return;
-        }
-
-        sceneStepProgress[sceneId] = stepNumber;
-
-        InvokeAsync(StateHasChanged);
-    }
+        " " => "Space",
+        _ when key.Length == 1 => key.ToUpperInvariant(),
+        _ => key
+    };
 
     private int GetSceneProgress(DmxSceneDTO scene)
     {
-        if (scene.StepCount <= 0 || !sceneStepProgress.TryGetValue(scene.Id, out int stepNumber))
+        if (scene.StepCount <= 0 || !sceneStepProgress.TryGetValue(scene.Id, out int position))
         {
             return 0;
         }
 
-        return (int)Math.Round(stepNumber / (double)scene.StepCount * 100);
+        return (int)Math.Round(Math.Clamp(position / (double)scene.StepCount, 0, 1) * 100);
     }
 
     private async Task ToggleScene(DmxSceneDTO scene, bool isRunning)
@@ -353,54 +394,67 @@
             return;
         }
 
-        if (isRunning)
+        Result<bool> result = isRunning
+            ? await _dmxDesk.StopSceneAsync(ClientId.Value, scene.Id)
+            : await _dmxDesk.StartSceneAsync(ClientId.Value, scene.Id);
+
+        if (!result.IsSuccess)
         {
-            _sceneRunner.StopScene(scene.Id);
-
-            return;
-        }
-
-        Result<bool> startResult = await _sceneRunner.StartSceneAsync(ClientId.Value, scene.Id);
-
-        if (!startResult.IsSuccess)
-        {
-            _toastService.ShowError($"Failed to start scene '{scene.Name}': {startResult.Error}");
+            _toastService.ShowError($"Failed to {(isRunning ? "stop" : "start")} scene '{scene.Name}': {result.Error}");
         }
     }
 
     private async Task StartMomentaryAsync(DmxSceneDTO scene, PointerEventArgs e)
     {
         // Button 0 is the left button. Without this, right-clicking fires the scene.
-        if (ClientId == null || e.Button != 0)
+        if (ClientId == null || e.Button != 0 || !_pointerHeldSceneIds.Add(scene.Id))
         {
             return;
         }
 
-        momentaryHeldSceneId = scene.Id;
-
-        Result<bool> startResult = await _sceneRunner.StartSceneAsync(ClientId.Value, scene.Id);
+        Result<bool> startResult = await _dmxDesk.StartSceneAsync(ClientId.Value, scene.Id);
 
         if (!startResult.IsSuccess)
         {
-            momentaryHeldSceneId = null;
+            _pointerHeldSceneIds.Remove(scene.Id);
 
             _toastService.ShowError($"Failed to start scene '{scene.Name}': {startResult.Error}");
         }
     }
 
-    private void StopMomentary(DmxSceneDTO scene)
+    private async Task StopMomentary(DmxSceneDTO scene)
     {
         // pointerup and pointerleave both fire on a normal release-then-exit, and stray
-        // leaves are common - without this guard the second call would stop whatever
-        // scene happened to be held next.
-        if (momentaryHeldSceneId != scene.Id)
+        // leaves are common - only the first one for a held scene stops it.
+        if (ClientId == null || !_pointerHeldSceneIds.Remove(scene.Id))
         {
             return;
         }
 
-        momentaryHeldSceneId = null;
+        // The runner registers a run before loading it, so a release that lands while the start
+        // is still in flight cancels it rather than leaving the scene stuck on.
+        await _dmxDesk.StopSceneAsync(ClientId.Value, scene.Id);
+    }
 
-        _sceneRunner.StopScene(scene.Id);
+    // A held flash scene must not outlive the hand holding it: leaving the page, losing the
+    // circuit or switching kiosk all count as letting go.
+    private async Task ReleaseHeldScenesAsync(Guid? clientId)
+    {
+        List<Guid> held = [.. _pointerHeldSceneIds, .. _keyboardHeldSceneIds];
+
+        _pointerHeldSceneIds.Clear();
+        _keyboardHeldSceneIds.Clear();
+        _heldKeybindKeys.Clear();
+
+        if (clientId == null)
+        {
+            return;
+        }
+
+        foreach (Guid sceneId in held.Distinct())
+        {
+            await _dmxDesk.StopSceneAsync(clientId.Value, sceneId);
+        }
     }
 
     public async Task CreateNewScene()
@@ -416,25 +470,8 @@
 
             if (createResult.IsSuccess && createResult.Data != null)
             {
-                _toastService.ShowSuccess($"Scene '{sceneName}' created successfully.");
-
-                DmxScene created = createResult.Data;
-
-                scenes.Add(new DmxSceneDTO
-                {
-                    Id = created.Id,
-                    Name = created.Name,
-                    ClientId = created.ClientId,
-                    Loop = created.Loop,
-                    IsMomentary = created.IsMomentary,
-                    KeyBindings = created.KeyBindings,
-                    CreateByUserId = created.CreateByUserId,
-                    CreateDate = created.CreateDate,
-                    IsRunning = false,
-                    StepCount = 0
-                });
-
-                await InvokeAsync(StateHasChanged);
+                // Straight to its editor: a new scene has no steps yet.
+                _navigationManager.NavigateTo($"/dmx/scenes/{createResult.Data.Id}");
             }
             else
             {
@@ -445,9 +482,16 @@
 
     public async ValueTask DisposeAsync()
     {
-        _sceneRunner.OnSceneStarted -= HandleSceneStarted;
-        _sceneRunner.OnSceneStopped -= HandleSceneStopped;
-        _sceneRunner.OnSceneStepAdvanced -= HandleSceneStepAdvanced;
+        _sceneSubscription?.Dispose();
+
+        try
+        {
+            await ReleaseHeldScenesAsync(ClientId);
+        }
+        catch
+        {
+            // The scope may already be going; the runner's own holdFor/stop paths still apply.
+        }
 
         try
         {

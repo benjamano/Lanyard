@@ -1,8 +1,9 @@
-﻿@using Lanyard.Infrastructure.Models.Dmx
+@using Lanyard.Infrastructure.Models.Dmx
 @using Microsoft.AspNetCore.Components.Web
 
 @inject IDmxSceneService _dmxSceneService
 @inject INotificationService _toastService
+@using Lanyard.App.Components.Dialogs
 
 <FluentCard>
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
@@ -10,21 +11,21 @@
             <FluentButton IconStart="@(OpenScene.Loop ? new Icons.Filled.Size20.ArrowRepeatAll(): new Icons.Regular.Size20.ArrowRepeatAll())"
                             Tooltip="Loop"
                             Appearance="@(OpenScene.Loop ? ButtonAppearance.Primary : ButtonAppearance.Default)"
-                            OnClick="@(() => ToggleLoop(OpenScene))"
+                            OnClick="@(() => ToggleLoop(OpenScene))" Disabled="@Disabled"
                             Style="width: 100%;">
                             Loop @(OpenScene.Loop ? "On" : "Off")
             </FluentButton>
             <FluentButton IconStart="@(OpenScene.IsMomentary ? new Icons.Filled.Size20.Flash() : new Icons.Regular.Size20.Flash())"
                             Tooltip="Momentary - hold the scene's play button to run it"
                             Appearance="@(OpenScene.IsMomentary ? ButtonAppearance.Primary : ButtonAppearance.Default)"
-                            OnClick="@(() => ToggleMomentary(OpenScene))"
+                            OnClick="@(() => ToggleMomentary(OpenScene))" Disabled="@Disabled"
                             Style="width: 100%;">
                             Momentary @(OpenScene.IsMomentary ? "On" : "Off")
             </FluentButton>
             <FluentButton IconStart="@(OpenScene.BpmSyncEnabled ? new Icons.Filled.Size20.MusicNote2() : new Icons.Regular.Size20.MusicNote2())"
                             Tooltip="Sync step changes to the beat of the playing song; steps use their fixed duration when nothing is playing"
                             Appearance="@(OpenScene.BpmSyncEnabled ? ButtonAppearance.Primary : ButtonAppearance.Default)"
-                            OnClick="@(() => ToggleBpmSync(OpenScene))"
+                            OnClick="@(() => ToggleBpmSync(OpenScene))" Disabled="@Disabled"
                             Style="width: 100%;">
                             BPM Sync @(OpenScene.BpmSyncEnabled ? "On" : "Off")
             </FluentButton>
@@ -39,6 +40,7 @@
                 <FluentButton Appearance="ButtonAppearance.Outline"
                                 IconEnd="new Icons.Regular.Size16.Dismiss()"
                                 Title="@($"Remove keybind '{DisplayKey(key)}'")"
+                                Disabled="@Disabled"
                                 OnClick="@(() => RemoveKeybind(key))">
                     @DisplayKey(key)
                 </FluentButton>
@@ -52,18 +54,28 @@
                      @onkeydown:stopPropagation="true"
                      @onblur="CancelCapture"
                      style="border: 1px dashed var(--accent-fill-rest); border-radius: 4px; padding: 5px 10px; cursor: text; outline: none; min-width: 90px; text-align: center;">
-                    Press a keyâ€¦
+                    Press a key…
                 </div>
             }
             else
             {
                 <FluentButton Appearance="ButtonAppearance.Primary"
                                 IconStart="new Icons.Regular.Size16.Add()"
+                                Disabled="@Disabled"
                                 OnClick="StartCapture">
                     Add keybind
                 </FluentButton>
             }
         </FluentStack>
+
+        @if (captureMessage != null)
+        {
+            <FluentText Size="TextSize.Size200" Style="color: var(--colorStatusWarningForeground1);">@captureMessage</FluentText>
+        }
+
+        <FluentText Size="TextSize.Size200" Style="color: var(--colorNeutralForeground3);">
+            Keybinds work on the DMX desk while it's open, as long as you're not typing in a box.
+        </FluentText>
     </FluentStack>
 </FluentCard>
 
@@ -73,6 +85,15 @@
 
     [Parameter]
     public EventCallback<DmxScene> OnSceneEdited { get; set; }
+
+    // Keys other scenes on the same kiosk use (key -> scene name), to warn about a clash.
+    [Parameter]
+    public IReadOnlyDictionary<string, string> OtherSceneKeys { get; set; } = new Dictionary<string, string>();
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    private string? captureMessage;
 
     private bool _capturing;
     private bool _focusCaptureField;
@@ -101,6 +122,7 @@
 
     private void StartCapture()
     {
+        captureMessage = null;
         _capturing = true;
         _focusCaptureField = true;
     }
@@ -136,7 +158,20 @@
             return;
         }
 
+        // Tab and Enter move around and press buttons on the page; binding them would fire a scene
+        // every time someone used the keyboard to get about.
+        if (e.Key is "Tab" or "Enter")
+        {
+            captureMessage = $"{e.Key} can't be a keybind: it's needed to move around the page.";
+            return;
+        }
+
         string key = e.Key.ToLowerInvariant();
+
+        // Allowed (two scenes on one key run together, which some venues want), but said out loud.
+        captureMessage = OtherSceneKeys.TryGetValue(key, out string? otherScene)
+            ? $"{DisplayKey(key)} also runs '{otherScene}'. Pressing it will run both."
+            : null;
 
         if (OpenScene.KeyBindings.Any(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase)))
         {
@@ -150,6 +185,20 @@
 
     private async Task RemoveKeybind(string key)
     {
+        DialogResult confirm = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Remove keybind";
+            options.Width = "min(420px, calc(100vw - 32px))";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message), $"Stop {DisplayKey(key)} running '{OpenScene.Name}'?");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Remove");
+        });
+
+        if (confirm.Cancelled)
+        {
+            return;
+        }
+
         int index = OpenScene.KeyBindings.FindIndex(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase));
 
         if (index < 0)

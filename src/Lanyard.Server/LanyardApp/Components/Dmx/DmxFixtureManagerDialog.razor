@@ -23,11 +23,11 @@
                 <FluentCard Appearance="CardAppearance.Subtle" Padding="@Padding.All3" Class="fixture-add-card">
                     <FluentStack Orientation="Orientation.Vertical" VerticalGap="12px">
                         <div class="fixture-form-row">
-                            <FluentTextInput Label="Name" Value="@newName" ValueChanged="@(v => newName = v)" Class="fixture-name-input" />
+                            <FluentTextInput Label="Name" Value="@newName" ValueChanged="@(v => newName = v)" Immediate="true" Class="fixture-name-input" />
                             <FluentNumberInput TValue="int" Label="Start Channel" Value="@newStartChannel" ValueChanged="@(v => newStartChannel = v)" Min="1" Max="512" Width="120px" />
                         </div>
 
-                        <FluentRadioGroup TValue="FixtureSource" Label="Fixture type" Orientation="Orientation.Horizontal" @bind-Value="newSource" Class="fixture-source">
+                        <FluentRadioGroup TValue="FixtureSource" Label="Fixture type" Orientation="Orientation.Horizontal" Value="@newSource" ValueChanged="@((FixtureSource source) => OnSourceChanged(source))" Class="fixture-source">
                             <FluentRadio Value="FixtureSource.Saved" Label="Saved types" />
                             <FluentRadio Value="FixtureSource.Library" Label="Open Fixture Library" />
                             <FluentRadio Value="FixtureSource.File" Label="Import a file" />
@@ -139,7 +139,7 @@
                                 {
                                     <div class="fixture-list-body">
                                         <div class="fixture-form-row">
-                                            <FluentTextInput Label="Name" Value="@editName" ValueChanged="@(v => editName = v)" Class="fixture-name-input" />
+                                            <FluentTextInput Label="Name" Value="@editName" ValueChanged="@(v => editName = v)" Immediate="true" Class="fixture-name-input" />
                                             <FluentNumberInput TValue="int" Label="Start Channel" Value="@editStartChannel" ValueChanged="@(v => editStartChannel = v)" Min="1" Max="512" Width="120px" />
                                             <FluentSelect TOption="Guid" TValue="Guid" Label="Type" @bind-Value="editModeId" Class="fixture-type-select">
                                                 @foreach (DmxFixtureMode mode in ModeChoicesFor(fixture))
@@ -245,7 +245,23 @@
         _ => null
     };
 
-    private int EditChannelCount => FindMode(editModeId)?.ChannelCount ?? 1;
+    // The fixture's own footprint when its mode isn't in the saved list (it used to fall back to 1,
+    // so the overlap and past-512 checks looked at a one-channel fixture).
+    private int editFixtureChannelCount = 1;
+
+    private int EditChannelCount => FindMode(editModeId)?.ChannelCount ?? editFixtureChannelCount;
+
+    // Switching away from the library and back recreates an empty picker; a selection kept from
+    // before would leave Add enabled for a fixture the picker no longer shows.
+    private void OnSourceChanged(FixtureSource source)
+    {
+        if (source != newSource)
+        {
+            librarySelection = null;
+        }
+
+        newSource = source;
+    }
 
     private async Task LoadSavedModes()
     {
@@ -475,6 +491,7 @@
         editName = fixture.Name;
         editStartChannel = fixture.StartChannel;
         editModeId = fixture.FixtureModeId;
+        editFixtureChannelCount = fixture.FixtureMode?.ChannelCount ?? 1;
     }
 
     private async Task SaveEditingFixture()

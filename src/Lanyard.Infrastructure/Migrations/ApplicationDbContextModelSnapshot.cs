@@ -1588,6 +1588,9 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("SeasonalThemeSetting")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ThemeColorHex")
                         .HasColumnType("text");
 
@@ -2183,6 +2186,31 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("ClientAvailableDmxDevices");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxClientOutputState", b =>
+                {
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte>("GrandMaster")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((byte)255);
+
+                    b.Property<bool>("IsBlackout")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("UpdatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<byte[]>("Values")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.HasKey("ClientId");
+
+                    b.ToTable("DmxClientOutputStates");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxFixture", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2599,6 +2627,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<TimeSpan>("Duration")
                         .HasColumnType("interval");
 
+                    b.Property<TimeSpan>("FadeTime")
+                        .HasColumnType("interval");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -2658,9 +2689,10 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.HasIndex("CreateByUserId");
 
-                    b.HasIndex("SceneStepId");
-
                     b.HasIndex("UpdateByUserId");
+
+                    b.HasIndex("SceneStepId", "ChannelNumber")
+                        .IsUnique();
 
                     b.ToTable("DmxSceneStepChannelValues");
                 });
@@ -4485,6 +4517,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<bool>("ShowMessagePreviews")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("ShowSeasonalThemes")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("boolean");
 
@@ -5733,6 +5768,17 @@ namespace Lanyard.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.ClientAvailableDmxDevice", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxClientOutputState", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
                         .WithMany()

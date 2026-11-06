@@ -5,6 +5,7 @@ using Lanyard.App;
 using Lanyard.App.Components;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.Feedback;
+using Lanyard.Application.Services.Themes;
 using Lanyard.Application.Services.Announcements;
 using Lanyard.Application.Services.AudioClips;
 using Lanyard.Application.Services.MusicScheduling;
@@ -212,6 +213,8 @@ builder.Services.AddHttpClient(WebPushSender.HttpClientName, client => client.Ti
 builder.Services.AddScoped<IPushSender, WebPushSender>();
 builder.Services.AddScoped<IPushSubscriptionService, PushSubscriptionService>();
 builder.Services.AddScoped<INotificationPreferenceService, NotificationPreferenceService>();
+builder.Services.AddScoped<ISeasonalThemeService, SeasonalThemeService>();
+builder.Services.AddScoped<SeasonalThemeState>();
 builder.Services.AddScoped<IAppInstallationService, AppInstallationService>();
 builder.Services.AddHostedService<PushDeviceCleanupHostedService>();
 builder.Services.AddHostedService<NotificationDeliveryHostedService>();
@@ -222,6 +225,7 @@ builder.Services.AddScoped<ITimeService, TimeService>();
 builder.Services.AddScoped<IDmxSceneService, DmxSceneService>();
 builder.Services.AddScoped<IDmxFixtureService, DmxFixtureService>();
 builder.Services.AddScoped<IDmxFixtureDefinitionService, DmxFixtureDefinitionService>();
+builder.Services.AddScoped<IDmxDeskService, DmxDeskService>();
 // The Open Fixture Library snapshot is read-only and the same for everyone: load and index it once.
 builder.Services.AddSingleton<IOflFixtureParser, OflFixtureParser>();
 builder.Services.AddSingleton<IOflCatalogueService, OflCatalogueService>();
@@ -243,6 +247,7 @@ builder.Services.AddSingleton<DmxService>();
 builder.Services.AddSingleton<IDmxService>(sp => sp.GetRequiredService<DmxService>());
 builder.Services.AddSingleton<IDmxClientService>(sp => sp.GetRequiredService<DmxService>());
 builder.Services.AddSingleton<IDmxSceneRunnerService, DmxSceneRunnerService>();
+builder.Services.AddHostedService<DmxOutputStatePersister>();
 
 // Data sources a projection parameter can be bound to. Every key in ProjectionBindingCatalogue needs
 // one here, or that binding silently shows its fallback forever (a test checks the two match).
