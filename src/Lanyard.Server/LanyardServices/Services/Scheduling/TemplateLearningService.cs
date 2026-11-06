@@ -105,6 +105,14 @@ public class TemplateLearningService(
             .Select(x => x.UserId)
             .ToListAsync()).ToHashSet();
 
+        // Start from the first week that has a rota: weeks before the location used Lanyard for
+        // its rota would only make the check try Auto-build on weeks nobody worked.
+        if (shifts.Count > 0)
+        {
+            DateOnly firstWeek = RotaTime.GetWeekStart(RotaTime.LocalDate(shifts.Min(x => x.StartUtc)));
+            from = firstWeek > from ? firstWeek : from;
+        }
+
         TemplateLearningResult result = TemplateLearningRules.Learn(from, to,
             shifts.Where(x => x.StaffPositionId is Guid p && positions.TryGetValue(p, out StaffPosition? position) && position.IsActive).ToList(),
             bookings, names, positionNames, existing, rules);
