@@ -10,8 +10,8 @@
 <section class="staffing-card" aria-labelledby="party-staffing-title">
     <h2 id="party-staffing-title">Party staffing</h2>
     <p class="staffing-intro">
-        How many extra staff each type of party needs. <strong>Auto-build</strong> on the
-        <a href="@RotaLink">rota</a> adds them to the shift each booked party falls in, on top of what the shift template
+        How many extra staff each type of party and private hire needs. <strong>Auto-build</strong> on the
+        <a href="@RotaLink">rota</a> adds them to the shift each booking falls in, on top of what the shift template
         needs. They work the whole shift and do the party as part of it.
     </p>
 
@@ -43,17 +43,17 @@
         }
         else
         {
-            @foreach (IGrouping<string?, PartyStaffingRule> group in rules.GroupBy(x => x.PartyType))
+            @foreach (IGrouping<(PrivateHireKind? Hire, string? Type), PartyStaffingRule> group in rules.GroupBy(x => (x.HireKind, x.PartyType)))
             {
                 <div class="staffing-group">
-                    <div class="staffing-type">@(group.Key is string type ? $"{type} parties" : "Any other party")</div>
+                    <div class="staffing-type">@GroupLabel(group.Key.Hire, group.Key.Type)</div>
                     <ul>
                         @foreach (PartyStaffingRule rule in group)
                         {
                             <li>
                                 <span class="staffing-rule">
                                     <strong>+@rule.StaffCount @(rule.StaffPosition?.Name ?? "Position")</strong>
-                                    <span class="staffing-when">for the whole shift the party is in</span>
+                                    <span class="staffing-when">for the whole shift the @(rule.HireKind is null ? "party" : "hire") is in</span>
                                 </span>
                                 <span class="staffing-actions">
                                     @if (confirmingRemoveId == rule.Id)
@@ -185,4 +185,9 @@
 
         await LoadAsync();
     }
+
+    private static string GroupLabel(PrivateHireKind? hire, string? type) =>
+        hire is PrivateHireKind kind ? $"Private hire: {kind.Label()}"
+        : type is string partyType ? $"{partyType} parties"
+        : "Any other party";
 }

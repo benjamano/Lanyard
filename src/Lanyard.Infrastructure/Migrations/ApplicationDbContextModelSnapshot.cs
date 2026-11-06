@@ -3102,6 +3102,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<int>("ExpectedChildren")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("HireKind")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime?>("LaserTagTimeUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -3284,6 +3287,9 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("HireKind")
                         .HasColumnType("integer");
 
                     b.Property<bool>("IsActive")

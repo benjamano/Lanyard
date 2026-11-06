@@ -182,7 +182,7 @@ public class RotaAutoBuildService(
 
             foreach (PartyBooking party in uncovered.Where(x => x.StartUtc > nowUtc))
             {
-                warnings.Add($"No shift template covers the {(PartyStaffingRule.Normalise(party.PartyType) is string type ? type + " party" : "party")} on "
+                warnings.Add($"No shift template covers the {Describe(party)} on "
                     + $"{RotaTime.LocalDate(party.StartUtc).ToString("ddd d MMM", RotaFormat.Uk)} ({RotaFormat.TimeRange(party.StartUtc, party.EndUtc)}), "
                     + "so nobody was added for it. Add a template for that time, or add its staff by hand.");
             }
@@ -272,4 +272,9 @@ public class RotaAutoBuildService(
             return Result<AutoBuildResult>.Fail($"Auto-build failed: {ex.Message}");
         }
     }
+
+    // "Lazer + Play party", "party", "Laser tag + Play private hire".
+    private static string Describe(PartyBooking booking) =>
+        booking.HireKind is PrivateHireKind kind ? $"{kind.Label()} private hire"
+        : PartyStaffingRule.Normalise(booking.PartyType) is string type ? $"{type} party" : "party";
 }

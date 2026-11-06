@@ -73,8 +73,8 @@
                            href="@($"/manage/parties/{party.Id}")">
                             <div class="party-card-top">
                                 <div>
-                                    <div class="party-child">@party.ChildLabel()</div>
-                                    <div class="party-when">@party.TimeRange()@(party.PartyType.Length > 0 ? $" · {party.PartyType}" : string.Empty)</div>
+                                    <div class="party-child">@(party.IsPrivateHire ? $"Private hire · {party.ContactName}" : party.ChildLabel())</div>
+                                    <div class="party-when">@party.TimeRange()@(party.HireKind is PrivateHireKind kind ? $" · {kind.Label()}" : party.PartyType.Length > 0 ? $" · {party.PartyType}" : string.Empty)</div>
                                 </div>
                                 @if (party.Status == PartyBookingStatus.Cancelled)
                                 {
@@ -87,12 +87,15 @@
                             </div>
 
                             <div class="party-facts">
-                                <span>@party.ExpectedChildren @(party.ExpectedChildren == 1 ? "child" : "children")@(party.ExpectedAdults is int adults ? $" · {adults} {(adults == 1 ? "adult" : "adults")}" : string.Empty)</span>
+                                <span>@party.ExpectedChildren @(party.IsPrivateHire ? (party.ExpectedChildren == 1 ? "guest" : "guests") : party.ExpectedChildren == 1 ? "child" : "children")@(party.ExpectedAdults is int adults ? $" · {adults} {(adults == 1 ? "adult" : "adults")}" : string.Empty)</span>
                                 @if (party.Room is not null)
                                 {
                                     <span>@party.Room</span>
                                 }
-                                <span>@party.MenuType.Label()@(party.EatTimeUtc is DateTime eat ? $" at {RotaFormat.LocalTime(eat)}" : string.Empty)</span>
+                                @if (!party.IsPrivateHire)
+                                {
+                                    <span>@party.MenuType.Label()@(party.EatTimeUtc is DateTime eat ? $" at {RotaFormat.LocalTime(eat)}" : string.Empty)</span>
+                                }
                                 @if (party.LaserTagTimeUtc is DateTime laser)
                                 {
                                     <span>Laser tag at @RotaFormat.LocalTime(laser)</span>

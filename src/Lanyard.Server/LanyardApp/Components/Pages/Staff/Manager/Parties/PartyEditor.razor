@@ -9,7 +9,7 @@
 @inject IPartyBookingService _partyBookingService
 @inject IPartySettingsService _partySettingsService
 
-<PageTitle>@(IsNew ? "Book a Party" : "Party")</PageTitle>
+<PageTitle>@(IsNew ? "Book a Party" : Hire ? "Private Hire" : "Party")</PageTitle>
 
 <div class="party-editor">
     <div class="party-editor-header">
@@ -56,7 +56,7 @@
             </FluentMessageBar>
         }
 
-        @if (existing is not null)
+        @if (existing is not null && !existing.IsPrivateHire)
         {
             <section class="party-section party-print-card">
                 <h2>Print</h2>
@@ -81,16 +81,45 @@
         <div class="party-sections">
             <div class="party-column">
                 <section class="party-section">
-                    <h2>Birthday child</h2>
+                    <h2>Booking</h2>
 
-                    <div class="party-pair party-pair-wide">
-                        <FluentTextInput @bind-Value="booking.ChildName" Label="Name" Required="true" Maxlength="100" Class="party-full" />
-                        <FluentNumberInput TValue="int?" @bind-Value="booking.ChildAgeTurning" Label="Turning" Min="0" Max="99" Width="100%" />
+                    <div class="party-toggle" role="group" aria-label="What's booked">
+                        <FluentButton Appearance="@(Hire ? ButtonAppearance.Outline : ButtonAppearance.Primary)"
+                                      OnClick="@(() => booking.HireKind = null)">Kids' party</FluentButton>
+                        <FluentButton Appearance="@(Hire ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                      OnClick="@(() => booking.HireKind ??= PrivateHireKind.LaserTagAndPlay)">Private hire</FluentButton>
                     </div>
+
+                    @if (booking.HireKind is PrivateHireKind hireKind)
+                    {
+                        <div class="party-field">
+                            <span class="party-label">Hire for</span>
+                            <div class="party-toggle" role="group" aria-label="Hire for">
+                                @foreach (PrivateHireKind kind in PrivateHireKindExtensions.All)
+                                {
+                                    PrivateHireKind option = kind;
+                                    <FluentButton Appearance="@(hireKind == option ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                                  OnClick="@(() => booking.HireKind = option)">@option.Label()</FluentButton>
+                                }
+                            </div>
+                        </div>
+                    }
                 </section>
 
+                @if (!Hire)
+                {
+                    <section class="party-section">
+                        <h2>Birthday child</h2>
+
+                        <div class="party-pair party-pair-wide">
+                            <FluentTextInput @bind-Value="booking.ChildName" Label="Name" Required="true" Maxlength="100" Class="party-full" />
+                            <FluentNumberInput TValue="int?" @bind-Value="booking.ChildAgeTurning" Label="Turning" Min="0" Max="99" Width="100%" />
+                        </div>
+                    </section>
+                }
+
                 <section class="party-section">
-                    <h2>Party</h2>
+                    <h2>@(Hire ? "Hire" : "Party")</h2>
 
                     @if (locationOptions.Count > 1)
                     {
@@ -106,38 +135,44 @@
                         <AnyTimePicker TValue="TimeOnly" @bind-Value="endTime" @bind-Value:after="@(() => endTouched = true)" Label="Finish" Required="true" />
                     </div>
 
-                    <div class="party-pair">
-                        <AnyTimePicker TValue="TimeOnly?" @bind-Value="eatTime" @bind-Value:after="@(() => eatTouched = true)" Label="Eating time" />
-                        <AnyTimePicker TValue="TimeOnly?" @bind-Value="laserTagTime" @bind-Value:after="@(() => laserTouched = true)" Label="Laser tag time (if any)" />
-                    </div>
-
-                    <FluentTextInput @bind-Value="booking.PartyType" Label="Party type" Placeholder="e.g. Lazer + Play" Class="party-full" Maxlength="100" />
-
-                    @if (PartyTypeChips.Count > 0)
+                    @if (!Hire)
                     {
-                        <div class="party-chips" role="group" aria-label="Party types used before">
-                            @foreach (string type in PartyTypeChips)
-                            {
-                                <FluentButton Size="ButtonSize.Small" Appearance="@(booking.PartyType == type ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
-                                              OnClick="@(() => booking.PartyType = type)">@type</FluentButton>
-                            }
+                        <div class="party-pair">
+                            <AnyTimePicker TValue="TimeOnly?" @bind-Value="eatTime" @bind-Value:after="@(() => eatTouched = true)" Label="Eating time" />
+                            <AnyTimePicker TValue="TimeOnly?" @bind-Value="laserTagTime" @bind-Value:after="@(() => laserTouched = true)" Label="Laser tag time (if any)" />
                         </div>
+
+                        <FluentTextInput @bind-Value="booking.PartyType" Label="Party type" Placeholder="e.g. Lazer + Play" Class="party-full" Maxlength="100" />
+
+                        @if (PartyTypeChips.Count > 0)
+                        {
+                            <div class="party-chips" role="group" aria-label="Party types used before">
+                                @foreach (string type in PartyTypeChips)
+                                {
+                                    <FluentButton Size="ButtonSize.Small" Appearance="@(booking.PartyType == type ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                                  OnClick="@(() => booking.PartyType = type)">@type</FluentButton>
+                                }
+                            </div>
+                        }
                     }
 
                     <FluentTextInput @bind-Value="booking.Room" Label="Room or table" Placeholder="e.g. Party room 1" Class="party-full" Maxlength="100" />
 
-                    <div class="party-field">
-                        <span class="party-label">Food</span>
-                        <div class="party-toggle" role="group" aria-label="Food">
-                            <FluentButton Appearance="@(booking.MenuType == PartyMenuType.Hot ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
-                                          OnClick="@(() => booking.MenuType = PartyMenuType.Hot)">Hot food</FluentButton>
-                            <FluentButton Appearance="@(booking.MenuType == PartyMenuType.Cold ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
-                                          OnClick="@(() => booking.MenuType = PartyMenuType.Cold)">Cold food</FluentButton>
+                    @if (!Hire)
+                    {
+                        <div class="party-field">
+                            <span class="party-label">Food</span>
+                            <div class="party-toggle" role="group" aria-label="Food">
+                                <FluentButton Appearance="@(booking.MenuType == PartyMenuType.Hot ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                              OnClick="@(() => booking.MenuType = PartyMenuType.Hot)">Hot food</FluentButton>
+                                <FluentButton Appearance="@(booking.MenuType == PartyMenuType.Cold ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                              OnClick="@(() => booking.MenuType = PartyMenuType.Cold)">Cold food</FluentButton>
+                            </div>
                         </div>
-                    </div>
+                    }
 
                     <FluentSelect TOption="HostOption" TValue="string" Items="@hostOptions" OptionText="@(x => x.Name)" OptionValue="@(x => x.UserId)"
-                                  @bind-Value="hostUserId" Label="Party host" Width="100%" />
+                                  @bind-Value="hostUserId" Label="@(Hire ? "Host" : "Party host")" Width="100%" />
                 </section>
             </div>
 
@@ -145,7 +180,7 @@
                 <section class="party-section">
                     <h2>Contact</h2>
 
-                    <FluentTextInput @bind-Value="booking.ContactName" Label="Parent or guardian" Required="true" Maxlength="100" Class="party-full" />
+                    <FluentTextInput @bind-Value="booking.ContactName" Label="@(Hire ? "Booked by" : "Parent or guardian")" Required="true" Maxlength="100" Class="party-full" />
                     <FluentTextInput @bind-Value="booking.ContactPhone" Label="Phone" Required="true" TextInputType="TextInputType.Telephone" Maxlength="40" Class="party-full" />
                     <FluentTextInput @bind-Value="booking.ContactEmail" Label="Email (optional)" TextInputType="TextInputType.Email" Maxlength="200" Class="party-full" />
                 </section>
@@ -154,11 +189,14 @@
                     <h2>Guests</h2>
 
                     <div class="party-pair">
-                        <FluentNumberInput TValue="int" @bind-Value="booking.ExpectedChildren" Label="Children coming" Min="1" Max="500" Width="100%" Required="true" />
+                        <FluentNumberInput TValue="int" @bind-Value="booking.ExpectedChildren" Label="@(Hire ? "Guests coming" : "Children coming")" Min="1" Max="500" Width="100%" Required="true" />
                         <FluentNumberInput TValue="int?" @bind-Value="booking.ExpectedAdults" Label="Adults" Min="0" Max="500" Width="100%" />
                     </div>
 
-                    <FluentTextArea @bind-Value="booking.AllergyNotes" Label="Allergies or dietary needs" Rows="2" Maxlength="1000" Class="party-full" />
+                    @if (!Hire)
+                    {
+                        <FluentTextArea @bind-Value="booking.AllergyNotes" Label="Allergies or dietary needs" Rows="2" Maxlength="1000" Class="party-full" />
+                    }
                     <FluentTextArea @bind-Value="booking.Notes" Label="Other notes" Rows="3" Maxlength="2000" Class="party-full" />
                 </section>
 
@@ -217,20 +255,20 @@
                 }
                 else if (confirmingCancel)
                 {
-                    <FluentText>Cancel @existing.ChildName's party?</FluentText>
+                    <FluentText>Cancel @(existing.IsPrivateHire ? "this private hire" : $"{existing.ChildName}'s party")?</FluentText>
                     <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" OnClick="@(() => SetCancelledAsync(true))">Yes, cancel it</FluentButton>
                     <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => confirmingCancel = false)">Keep it</FluentButton>
                 }
                 else
                 {
                     <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Dismiss())"
-                                  Disabled="@isBusy" OnClick="@(() => confirmingCancel = true)">Cancel party</FluentButton>
+                                  Disabled="@isBusy" OnClick="@(() => confirmingCancel = true)">@(existing.IsPrivateHire ? "Cancel hire" : "Cancel party")</FluentButton>
                 }
             }
 
             <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())" Class="party-save"
                           Disabled="@isBusy" Loading="@isBusy" OnClick="@SaveAsync">
-                @(IsNew ? "Book party" : "Save changes")
+                @(IsNew ? (Hire ? "Book hire" : "Book party") : "Save changes")
             </FluentButton>
         </div>
     }
@@ -282,7 +320,9 @@
 
     private bool IsNew => BookingId is null;
 
-    private string Title => IsNew ? "Book a party" : $"{existing?.ChildName}'s party";
+    private bool Hire => booking.HireKind is not null;
+
+    private string Title => IsNew ? (Hire ? "Book a private hire" : "Book a party") : existing?.DisplayName ?? "Party";
 
     private string DocumentHref(string document) => $"/api/parties/{existing?.Id}/documents/{document}";
 
@@ -400,6 +440,7 @@
             CompanyId = saved.CompanyId,
             LocationId = saved.LocationId,
             PartyType = saved.PartyType,
+            HireKind = saved.HireKind,
             ChildName = saved.ChildName,
             ChildAgeTurning = saved.ChildAgeTurning,
             ContactName = saved.ContactName,

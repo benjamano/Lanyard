@@ -70,33 +70,35 @@ public static class RotaAutoBuildRules
         return slots.OrderBy(x => x.StartUtc).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
-    // The extra people booked parties need. Party staff work the whole template shift the party
-    // falls in - a 09:00-14:00 shift with a party at 10:00 - and do the party as part of it, so each
-    // of the party type's PartyStaffingRules (or the default rules) adds its StaffCount of that
-    // position to every template shift the party overlaps. Two parties in one shift add up. Shifts
-    // are the template ones from ExpandTemplates (the same days); a party no template shift
-    // overlaps is returned in Uncovered, for a warning, and adds nobody.
+    // The extra people booked parties and private hires need. They work the whole template shift the
+    // booking falls in - a 09:00-14:00 shift with a party at 10:00 - and do the party as part of
+    // it, so each of the booking's PartyStaffingRules adds its StaffCount of that position to one
+    // template shift: the one overlapping the booking that already lists that position (so a hire's
+    // extra Manager joins the late Manager shift, not the CSA evening shift), else any overlapping
+    // shift; of those, the one covering most of the booking, then the earliest. Two bookings in one
+    // shift add up. Shifts are the template ones from ExpandTemplates for the same days; a booking
+    // no template shift overlaps is returned in Uncovered, for a warning, and adds nobody.
     public static (List<DemandSlot> Slots, List<PartyBooking> Uncovered) ExpandParties(
         IEnumerable<PartyBooking> parties, IReadOnlyCollection<PartyStaffingRule> rules, IEnumerable<DemandSlot> templateSlots)
     {
-        List<DemandSlot> shifts = templateSlots
-            .Where(x => x.PartyBookingId is null)
-            .DistinctBy(x => (x.TemplateId, x.StartUtc, x.EndUtc))
-            .ToList();
+        List<DemandSlot> positions = templateSlots.Where(x => x.PartyBookingId is null).ToList();
+        List<DemandSlot> shifts = positions.DistinctBy(x => (x.TemplateId, x.StartUtc, x.EndUtc)).ToList();
 
         List<DemandSlot> slots = [];
         List<PartyBooking> uncovered = [];
 
         foreach (PartyBooking party in parties.Where(x => x.Status == PartyBookingStatus.Booked))
         {
-            List<PartyStaffingRule> partyRules = PartyStaffingRule.For(rules, party.PartyType).Where(x => x.StaffCount > 0).ToList();
+            List<PartyStaffingRule> partyRules = PartyStaffingRule.For(rules, party).Where(x => x.StaffCount > 0).ToList();
 
             if (partyRules.Count == 0)
             {
                 continue;
             }
 
-            List<DemandSlot> during = shifts.Where(x => x.StartUtc < party.EndUtc && x.EndUtc > party.StartUtc).ToList();
+            bool Overlaps(DemandSlot shift) => shift.StartUtc < party.EndUtc && shift.EndUtc > party.StartUtc;
+
+            List<DemandSlot> during = shifts.Where(Overlaps).ToList();
 
             if (during.Count == 0)
             {
@@ -104,29 +106,38 @@ public static class RotaAutoBuildRules
                 continue;
             }
 
-            foreach (DemandSlot shift in during)
+            foreach (PartyStaffingRule rule in partyRules)
             {
-                foreach (PartyStaffingRule rule in partyRules)
+                List<DemandSlot> withPosition = positions.Where(x => x.StaffPositionId == rule.StaffPositionId && Overlaps(x)).ToList();
+
+                DemandSlot shift = (withPosition.Count > 0 ? withPosition : during)
+                    .OrderByDescending(x => Overlap(x, party))
+                    .ThenBy(x => x.StartUtc)
+                    .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+                    .First();
+
+                slots.Add(shift with
                 {
-                    slots.Add(shift with
-                    {
-                        Name = $"{shift.Name} · {PartyName(party)}",
-                        StaffPositionId = rule.StaffPositionId,
-                        PositionName = rule.StaffPosition?.Name ?? "Position",
-                        Needed = rule.StaffCount,
-                        PartyBookingId = party.Id
-                    });
-                }
+                    Name = $"{shift.Name} · {PartyName(party)}",
+                    StaffPositionId = rule.StaffPositionId,
+                    PositionName = rule.StaffPosition?.Name ?? "Position",
+                    Needed = rule.StaffCount,
+                    PartyBookingId = party.Id
+                });
             }
         }
 
         return (slots.OrderBy(x => x.StartUtc).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList(), uncovered);
     }
 
+    private static TimeSpan Overlap(DemandSlot shift, PartyBooking party) =>
+        (shift.EndUtc < party.EndUtc ? shift.EndUtc : party.EndUtc) - (shift.StartUtc > party.StartUtc ? shift.StartUtc : party.StartUtc);
+
     // How a party is named on the rota. The type, not the child's name: the shift is shown to the
     // staff member and stays on their record after the party.
     public static string PartyName(PartyBooking party) =>
-        PartyStaffingRule.Normalise(party.PartyType) is string type ? $"Party: {type}" : "Party";
+        party.HireKind is PrivateHireKind kind ? $"Private hire: {kind.Label()}"
+        : PartyStaffingRule.Normalise(party.PartyType) is string type ? $"Party: {type}" : "Party";
 
     // Takes off what the rota already has: each active shift at the location with the same
     // position, start and end as a slot (assigned or open, draft or published) counts once towards

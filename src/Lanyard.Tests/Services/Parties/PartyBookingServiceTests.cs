@@ -409,4 +409,43 @@ public class PartyBookingServiceTests
 
         CollectionAssert.AreEqual(new[] { "Lazer + Play", "Play" }, result.Data!.ToArray());
     }
+
+    // --- Private hire ---
+
+    [TestMethod]
+    public async Task SaveBookingAsync_PrivateHire_NeedsNoChildAndDropsPartyOnlyFields()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (_, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+
+        Result<PartyBooking> result = await GetService(options).SaveBookingAsync(SchedulingTestHelpers.AdminScope, NewBooking(location, b =>
+        {
+            b.HireKind = PrivateHireKind.LaserTagOnly;
+            b.ChildName = "";
+            b.AllergyNotes = "Nuts";
+        }), ActingUser);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        PartyBooking saved = await ctx.PartyBookings.SingleAsync();
+        Assert.AreEqual(PrivateHireKind.LaserTagOnly, saved.HireKind);
+        Assert.AreEqual(string.Empty, saved.ChildName);
+        Assert.AreEqual(string.Empty, saved.PartyType);
+        Assert.IsNull(saved.EatTimeUtc);
+        Assert.IsNull(saved.ChildAgeTurning);
+        Assert.AreEqual("Private hire: Laser tag only", saved.DisplayName);
+    }
+
+    [TestMethod]
+    public async Task SaveBookingAsync_KidsPartyStillNeedsAChild()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (_, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+
+        Result<PartyBooking> result = await GetService(options).SaveBookingAsync(SchedulingTestHelpers.AdminScope, NewBooking(location, b => b.ChildName = ""), ActingUser);
+
+        Assert.IsFalse(result.IsSuccess);
+        StringAssert.Contains(result.Error, "child");
+    }
 }

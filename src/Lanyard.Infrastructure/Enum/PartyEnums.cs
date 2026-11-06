@@ -7,6 +7,28 @@ public enum PartyBookingStatus
     Cancelled = 1
 }
 
+// What a private hire is for. A booking with no hire kind is a kids' party. Stored as ints - never
+// renumber.
+public enum PrivateHireKind
+{
+    PlayOnly = 0,
+    LaserTagAndPlay = 1,
+    LaserTagOnly = 2
+}
+
+public static class PrivateHireKindExtensions
+{
+    public static string Label(this PrivateHireKind kind) => kind switch
+    {
+        PrivateHireKind.PlayOnly => "Play only",
+        PrivateHireKind.LaserTagAndPlay => "Laser tag + Play",
+        PrivateHireKind.LaserTagOnly => "Laser tag only",
+        _ => kind.ToString()
+    };
+
+    public static IReadOnlyList<PrivateHireKind> All { get; } = [PrivateHireKind.PlayOnly, PrivateHireKind.LaserTagAndPlay, PrivateHireKind.LaserTagOnly];
+}
+
 // Which food sheet the party gets: the hot meal tally sheet or the cold sandwich sheet.
 public enum PartyMenuType
 {
