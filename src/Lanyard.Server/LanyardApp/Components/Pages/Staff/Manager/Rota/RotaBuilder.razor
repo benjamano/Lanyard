@@ -45,6 +45,10 @@
 
             <div class="rota-actions">
                 <HelpButton AreaKey="@HelpRegistry.Rota" Topic="building" />
+                <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Sparkle())"
+                              Disabled="@(view is null || isBusy)" OnClick="@AutoBuildAsync">
+                    Auto-build
+                </FluentButton>
                 <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Copy())"
                               Disabled="@(view is null || isBusy)" OnClick="@CopyAsync">
                     @(monthView ? "Copy from 4 weeks earlier" : "Copy last week")
@@ -415,6 +419,35 @@
             string more = result.Data.Skipped.Count > 3 ? $" ...and {result.Data.Skipped.Count - 3} more." : string.Empty;
             _toastService.ShowWarning($"Skipped {result.Data.Skipped.Count}: {shown}{more}");
         }
+
+        await LoadAsync();
+    }
+
+    private async Task AutoBuildAsync()
+    {
+        if (view is null || locationId is not int location)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<AutoBuildDialog>(options =>
+        {
+            options.Width = "640px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(AutoBuildDialog.LocationId), location);
+            options.Parameters.Add(nameof(AutoBuildDialog.From), From);
+            options.Parameters.Add(nameof(AutoBuildDialog.To), To);
+            options.Parameters.Add(nameof(AutoBuildDialog.RangeLabel), RangeLabel);
+        });
+
+        if (result.Value is not AutoBuildResult built)
+        {
+            return;
+        }
+
+        string assigned = $"{built.Assigned} {(built.Assigned == 1 ? "shift" : "shifts")}";
+        string open = built.Open > 0 ? $" and {built.Open} open {(built.Open == 1 ? "shift" : "shifts")}" : string.Empty;
+        _toastService.ShowSuccess($"Added {assigned}{open} as drafts. Check them, then publish.");
 
         await LoadAsync();
     }
