@@ -349,6 +349,15 @@ public class GdprService : IGdprService
                 preference.UpdatedByUserId = null;
             }
 
+            List<PartyStaffingRule> staffingRulesSetByUser = await ctx.PartyStaffingRules
+                .Where(x => x.UpdatedByUserId == userId)
+                .ToListAsync();
+
+            foreach (PartyStaffingRule rule in staffingRulesSetByUser)
+            {
+                rule.UpdatedByUserId = null;
+            }
+
             List<ShiftTemplate> templatesTouchedByUser = await ctx.ShiftTemplates
                 .Where(x => x.CreateByUserId == userId || x.UpdateByUserId == userId)
                 .ToListAsync();

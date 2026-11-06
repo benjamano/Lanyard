@@ -26,21 +26,40 @@
             }
             else if (preview is not null)
             {
-                @if (preview.TemplateCount == 0)
+                @foreach (string warning in preview.WarningLines)
+                {
+                    <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">@warning</FluentMessageBar>
+                }
+
+                @if (preview.TemplateCount == 0 && preview.PartyCount == 0 && !preview.HasChanges)
                 {
                     <FluentText>
-                        Auto-build fills the rota from this location's shift templates, and there aren't any yet.
+                        Auto-build fills the rota from this location's shift templates and party staffing, and there's nothing set up yet.
                         Add the shifts you need every week on <a href="@TemplatesLink">Shift Templates</a> first.
                     </FluentText>
                 }
-                else if (preview.Lines.Count == 0)
+                else if (!preview.HasChanges)
                 {
                     <FluentText>
-                        Nothing to add: every template shift from today to the end of @RangeLabel is already on the rota.
+                        Nothing to add: every template and party shift from today to the end of @RangeLabel is already on the rota.
                     </FluentText>
                 }
                 else
                 {
+                    @if (preview.RemovedLines.Count > 0)
+                    {
+                        <div class="auto-build-removed">
+                            <strong>@preview.RemovedLines.Count draft @(preview.RemovedLines.Count == 1 ? "shift" : "shifts") will be taken off</strong>
+                            because @(preview.RemovedLines.Count == 1 ? "its party was" : "their parties were") cancelled or changed:
+                            <ul>
+                                @foreach (AutoBuildLine line in preview.RemovedLines)
+                                {
+                                    <li>@line.Day.DayLabel() @RotaFormat.TimeRange(line.StartUtc, line.EndUtc) · @line.PositionName · @(line.DisplayName ?? "Open shift")</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+
                     <div class="auto-build-summary" role="status">
                         <div class="auto-build-stat">
                             <span class="auto-build-number">@preview.Assigned</span>
@@ -98,13 +117,13 @@
     </ChildContent>
     <ActionTemplate>
         <FluentStack HorizontalAlignment="HorizontalAlignment.End" HorizontalGap="8px">
-            @if (preview is { Lines.Count: > 0 })
+            @if (preview is { HasChanges: true })
             {
                 <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" OnClick="@ApplyAsync">
-                    @(isBusy ? "Building..." : $"Add {preview.Lines.Count} draft {(preview.Lines.Count == 1 ? "shift" : "shifts")}")
+                    @(isBusy ? "Building..." : ApplyLabel(preview))
                 </FluentButton>
             }
-            <FluentButton Disabled="@isBusy" OnClick="@(() => Dialog.CancelAsync())">@(preview is { Lines.Count: > 0 } ? "Cancel" : "Close")</FluentButton>
+            <FluentButton Disabled="@isBusy" OnClick="@(() => Dialog.CancelAsync())">@(preview is { HasChanges: true } ? "Cancel" : "Close")</FluentButton>
         </FluentStack>
     </ActionTemplate>
 </FluentDialogBody>
@@ -129,6 +148,10 @@
     private string? errorMessage;
     private bool isBusy;
     private LocationScope? scope;
+
+    private static string ApplyLabel(AutoBuildResult result) => result.Lines.Count > 0
+        ? $"Add {result.Lines.Count} draft {(result.Lines.Count == 1 ? "shift" : "shifts")}"
+        : $"Take off {result.RemovedLines.Count} {(result.RemovedLines.Count == 1 ? "shift" : "shifts")}";
 
     private string TemplatesLink => $"/manage/rota/templates?location={LocationId}";
 

@@ -30,7 +30,9 @@ public sealed record AutoBuildPick(Shift Shift, AutoBuildLine Line);
 // running it twice adds nothing, and shifts a manager made by hand are kept). Who works each new
 // shift is ShiftSuggestionRules' first choice, with three extra rules because nobody is checking
 // each pick: someone is never put on a shift that would take them over their contract maximum,
-// cut their rest short or fall on a day they've asked for off. If that leaves nobody, the shift is
+// leave them less than 11 hours' rest overnight between one day's work and the next, or fall on a
+// day they've asked for off. Two shifts on the same day (a morning shift and a party in the
+// afternoon) are a split shift, not a short rest, so they're allowed. If that leaves nobody, the shift is
 // made as an open shift for the manager (or a pick-up) to fill.
 //
 // Shifts are filled hardest first - the ones the fewest people could work - so a scarce person
@@ -38,7 +40,7 @@ public sealed record AutoBuildPick(Shift Shift, AutoBuildLine Line);
 public static class RotaAutoBuildRules
 {
     private static readonly SuggestionReasonKind[] AutoBlocking =
-        [SuggestionReasonKind.OverMaxHours, SuggestionReasonKind.ShortRest, SuggestionReasonKind.PendingTimeOff];
+        [SuggestionReasonKind.OverMaxHours, SuggestionReasonKind.PendingTimeOff];
 
     // The shifts the templates want on each day from..to, each slot once per day it applies.
     public static List<DemandSlot> ExpandTemplates(IEnumerable<ShiftTemplate> templates, DateOnly from, DateOnly to)
@@ -68,10 +70,46 @@ public static class RotaAutoBuildRules
         return slots.OrderBy(x => x.StartUtc).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
+    // The extra shifts booked parties need: for each party, its type's PartyStaffingRules (or the
+    // default rules), each covering the party plus the rule's time before and after.
+    public static List<DemandSlot> ExpandParties(IEnumerable<PartyBooking> parties, IReadOnlyCollection<PartyStaffingRule> rules)
+    {
+        List<DemandSlot> slots = [];
+
+        foreach (PartyBooking party in parties.Where(x => x.Status == PartyBookingStatus.Booked))
+        {
+            string name = PartyName(party);
+
+            foreach (PartyStaffingRule rule in PartyStaffingRule.For(rules, party.PartyType).Where(x => x.StaffCount > 0))
+            {
+                DateTime startUtc = party.StartUtc.AddMinutes(-rule.MinutesBefore);
+                DateTime endUtc = party.EndUtc.AddMinutes(rule.MinutesAfter);
+
+                slots.Add(new DemandSlot(name, RotaTime.LocalDate(startUtc), startUtc, endUtc, 0,
+                    rule.StaffPositionId, rule.StaffPosition?.Name ?? "Position", rule.StaffCount, null, party.Id));
+            }
+        }
+
+        return slots.OrderBy(x => x.StartUtc).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    // What a party's staff shift is called on the rota. The type, not the child's name: the shift
+    // is shown to the staff member and stays on their record after the party.
+    public static string PartyName(PartyBooking party) =>
+        PartyStaffingRule.Normalise(party.PartyType) is string type ? $"Party: {type}" : "Party";
+
     // Takes off what the rota already has: each active shift at the location with the same
     // position, start and end as a slot (assigned or open, draft or published) counts once towards
-    // it. Returns the slots still wanting shifts, and how many were already covered.
+    // it - and, for a party's slot, made for that same party. Returns the slots still wanting
+    // shifts and how many were already covered.
     public static (List<DemandSlot> Remaining, int Covered) SubtractCovered(IEnumerable<DemandSlot> slots, IEnumerable<Shift> existing)
+    {
+        (List<DemandSlot> remaining, int covered, _) = Match(slots, existing);
+        return (remaining, covered);
+    }
+
+    // As SubtractCovered, also returning the existing shifts that didn't count towards anything.
+    public static (List<DemandSlot> Remaining, int Covered, List<Shift> Unmatched) Match(IEnumerable<DemandSlot> slots, IEnumerable<Shift> existing)
     {
         List<Shift> unused = existing.Where(x => x.IsActive).ToList();
         List<DemandSlot> remaining = [];
@@ -84,6 +122,7 @@ public static class RotaAutoBuildRules
             while (needed > 0)
             {
                 Shift? match = unused.FirstOrDefault(x => x.StaffPositionId == slot.StaffPositionId
+                    && x.PartyBookingId == slot.PartyBookingId
                     && x.StartUtc == slot.StartUtc && x.EndUtc == slot.EndUtc);
 
                 if (match is null)
@@ -102,7 +141,7 @@ public static class RotaAutoBuildRules
             }
         }
 
-        return (remaining, covered);
+        return (remaining, covered, unused);
     }
 
     // Decides who works every shift the slots want. cantWork answers the fixed questions about a
@@ -154,7 +193,8 @@ public static class RotaAutoBuildRules
                 worker.Wish)).ToList();
 
             ShiftSuggestions ranking = ShiftSuggestionRules.Rank(shift, candidates);
-            ShiftSuggestion? best = ranking.Ranked.FirstOrDefault(x => !x.Reasons.Any(r => AutoBlocking.Contains(r.Kind)));
+            ShiftSuggestion? best = ranking.Ranked.FirstOrDefault(x => !x.Reasons.Any(r => AutoBlocking.Contains(r.Kind))
+                && !ShortOvernightRest(workers.First(w => w.UserId == x.UserId), shift));
 
             if (best is null)
             {
@@ -189,10 +229,21 @@ public static class RotaAutoBuildRules
         EndUtc = slot.EndUtc,
         BreakMinutes = slot.BreakMinutes,
         Notes = slot.Name,
+        PartyBookingId = slot.PartyBookingId,
         IsActive = true,
         CreateDate = nowUtc,
         CreateByUserId = actingUserId
     };
+
+    // Less than the 11-hour rest between a shift on one day and a shift on another.
+    public static bool ShortOvernightRest(AutoBuildWorker worker, Shift shift)
+    {
+        DateOnly day = RotaTime.LocalDate(shift.StartUtc);
+
+        return worker.Shifts.Any(x => x.IsActive && x.Id != shift.Id && RotaTime.LocalDate(x.StartUtc) != day
+            && ((x.EndUtc <= shift.StartUtc && shift.StartUtc - x.EndUtc < ShiftSuggestionRules.MinimumRest)
+                || (x.StartUtc >= shift.EndUtc && x.StartUtc - shift.EndUtc < ShiftSuggestionRules.MinimumRest)));
+    }
 
     private static string? ClashWithPicked(AutoBuildWorker worker, Shift shift) =>
         worker.Shifts.Any(x => x.IsActive && x.Id != shift.Id && x.StartUtc < shift.EndUtc && x.EndUtc > shift.StartUtc)

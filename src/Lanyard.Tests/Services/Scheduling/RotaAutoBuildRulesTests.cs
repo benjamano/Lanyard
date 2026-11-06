@@ -234,4 +234,115 @@ public class RotaAutoBuildRulesTests
 
         Assert.AreEqual("tom", picks.Single().Shift.UserId);
     }
+
+    // --- Parties ---
+
+    private static PartyBooking Party(string type, int startHour = 11, int endHour = 13, PartyBookingStatus status = PartyBookingStatus.Booked) => new()
+    {
+        Id = Guid.NewGuid(),
+        CompanyId = 1,
+        LocationId = 1,
+        PartyType = type,
+        ChildName = "Ava",
+        StartUtc = RotaTime.ToUtc(Saturday, new TimeOnly(startHour, 0)),
+        EndUtc = RotaTime.ToUtc(Saturday, new TimeOnly(endHour, 0)),
+        Status = status
+    };
+
+    private static PartyStaffingRule Rule(string? type, Guid position, int count, int before = 0, int after = 0) => new()
+    {
+        Id = Guid.NewGuid(),
+        CompanyId = 1,
+        LocationId = 1,
+        PartyType = type,
+        StaffPositionId = position,
+        StaffPosition = new StaffPosition { Id = position, CompanyId = 1, Name = position == Host ? "Host" : "Duty Manager" },
+        StaffCount = count,
+        MinutesBefore = before,
+        MinutesAfter = after
+    };
+
+    [TestMethod]
+    public void ExpandParties_UsesTheTypesOwnRules_WithTimeBeforeAndAfter()
+    {
+        PartyBooking party = Party(" lazer + PLAY ");
+        List<PartyStaffingRule> rules = [Rule("Lazer + Play", Host, 2, before: 30, after: 15), Rule(null, Host, 1)];
+
+        DemandSlot slot = RotaAutoBuildRules.ExpandParties([party], rules).Single();
+
+        Assert.AreEqual(2, slot.Needed);
+        Assert.AreEqual(party.Id, slot.PartyBookingId);
+        Assert.AreEqual(party.StartUtc.AddMinutes(-30), slot.StartUtc);
+        Assert.AreEqual(party.EndUtc.AddMinutes(15), slot.EndUtc);
+        Assert.AreEqual("Party: lazer + PLAY", slot.Name, "the type, never the child's name");
+    }
+
+    [TestMethod]
+    public void ExpandParties_TypeWithoutRules_UsesTheDefault()
+    {
+        DemandSlot slot = RotaAutoBuildRules.ExpandParties([Party("Play")], [Rule("Lazer + Play", Host, 2), Rule(null, Host, 1)]).Single();
+
+        Assert.AreEqual(1, slot.Needed);
+    }
+
+    [TestMethod]
+    public void ExpandParties_CancelledOrNoMatchingRules_Nothing()
+    {
+        Assert.AreEqual(0, RotaAutoBuildRules.ExpandParties([Party("Play", status: PartyBookingStatus.Cancelled)], [Rule(null, Host, 1)]).Count);
+        Assert.AreEqual(0, RotaAutoBuildRules.ExpandParties([Party("Play")], [Rule("Lazer", Host, 1)]).Count);
+    }
+
+    [TestMethod]
+    public void Match_PartyShiftOnlyCountsForItsOwnParty()
+    {
+        PartyBooking first = Party("Play");
+        PartyBooking second = Party("Play");
+        List<DemandSlot> slots = RotaAutoBuildRules.ExpandParties([first, second], [Rule(null, Host, 1)]);
+        Shift forFirst = new() { LocationId = 1, StaffPositionId = Host, StartUtc = first.StartUtc, EndUtc = first.EndUtc, PartyBookingId = first.Id, CreateByUserId = "m", IsActive = true };
+        Shift template = new() { LocationId = 1, StaffPositionId = Host, StartUtc = first.StartUtc, EndUtc = first.EndUtc, CreateByUserId = "m", IsActive = true };
+
+        (List<DemandSlot> remaining, int covered, List<Shift> unmatched) = RotaAutoBuildRules.Match(slots, [forFirst, template]);
+
+        Assert.AreEqual(1, covered);
+        Assert.AreEqual(second.Id, remaining.Single().PartyBookingId);
+        Assert.AreSame(template, unmatched.Single(), "a template shift at the same time isn't the party's");
+    }
+
+    [TestMethod]
+    public void Assign_PartyShiftsCarryThePartyId()
+    {
+        PartyBooking party = Party("Play");
+        List<DemandSlot> slots = RotaAutoBuildRules.ExpandParties([party], [Rule(null, Host, 1)]);
+
+        AutoBuildPick pick = RotaAutoBuildRules.Assign(1, slots, [Worker("Amy", Host)], (_, _) => null, "m", Now).Single();
+
+        Assert.AreEqual(party.Id, pick.Shift.PartyBookingId);
+        Assert.AreEqual("amy", pick.Shift.UserId);
+    }
+
+    [TestMethod]
+    public void Assign_LateFinishTheNightBefore_NotPicked()
+    {
+        List<DemandSlot> slots = RotaAutoBuildRules.ExpandTemplates([Template(slots: [(Host, "Host", 1)])], Saturday, Saturday);
+        AutoBuildWorker amy = Worker("Amy", Host);
+        amy.Shifts.Add(new Shift { Id = Guid.NewGuid(), LocationId = 1, UserId = "amy", CreateByUserId = "m", IsActive = true,
+            StartUtc = RotaTime.ToUtc(Saturday.AddDays(-1), new TimeOnly(17, 0)), EndUtc = RotaTime.ToUtc(Saturday.AddDays(-1), new TimeOnly(23, 0)) });
+
+        List<AutoBuildPick> picks = RotaAutoBuildRules.Assign(1, slots, [amy], (_, _) => null, "m", Now);
+
+        Assert.IsTrue(picks.Single().Line.IsOpen);
+    }
+
+    [TestMethod]
+    public void Assign_SplitShiftSameDay_Allowed()
+    {
+        List<DemandSlot> slots = RotaAutoBuildRules.ExpandTemplates([Template(DayOfWeek.Saturday, 15, 18, (Host, "Host", 1))], Saturday, Saturday);
+        AutoBuildWorker amy = Worker("Amy", Host);
+        amy.Shifts.Add(new Shift { Id = Guid.NewGuid(), LocationId = 1, UserId = "amy", CreateByUserId = "m", IsActive = true,
+            StartUtc = RotaTime.ToUtc(Saturday, new TimeOnly(9, 0)), EndUtc = RotaTime.ToUtc(Saturday, new TimeOnly(14, 0)) });
+
+        List<AutoBuildPick> picks = RotaAutoBuildRules.Assign(1, slots, [amy], (_, _) => null, "m", Now);
+
+        Assert.AreEqual("amy", picks.Single().Shift.UserId);
+    }
 }

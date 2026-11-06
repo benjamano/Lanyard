@@ -863,8 +863,10 @@
       "New Rota > Shift Templates page: add the shifts a location needs every week, such as Saturday AM 09:00 to 14:00, and how many people of each position they need (for example 2 Duty Managers and 4 Hosts).",
       "A template can be limited to some dates, such as the school holidays, and archived when it's no longer needed.",
       "New Auto-build button on the rota: it fills the week or month you're looking at from your shift templates and picks who works each shift, using their positions, training, contracts, availability and time off. You see the whole list first, and the shifts are added as drafts to check before you publish.",
-      "Auto-build never puts someone on a time they've said they can't work, over their weekly maximum, without 11 hours' rest, or on a day they've asked for off. Shifts nobody can take are added as open shifts, and shifts already on the rota are left as they are.",
-      "Staff can now say how much they'd like to work, as at most so many shifts or hours a week, on My Shifts > Availability (managers can set it from the person's Rota tab). Suggestions and Auto-build pick people who'd go past it last."
+      "Auto-build never puts someone on a time they've said they can't work, over their weekly maximum, without 11 hours' rest overnight, or on a day they've asked for off. Shifts nobody can take are added as open shifts, and shifts already on the rota are left as they are.",
+      "Staff can now say how much they'd like to work, as at most so many shifts or hours a week, on My Shifts > Availability (managers can set it from the person's Rota tab). Suggestions and Auto-build pick people who'd go past it last.",
+      "New Party staffing on Party Settings: set how many extra staff each type of party needs (for example 2 Party Hosts from 30 minutes before to 15 minutes after a Lazer + Play party). Auto-build adds those shifts for every booked party.",
+      "If a party is cancelled or moved after Auto-build, running it again takes off that party's draft shifts and adds new ones; published shifts are left alone with a warning."
     ]
   }
 ]

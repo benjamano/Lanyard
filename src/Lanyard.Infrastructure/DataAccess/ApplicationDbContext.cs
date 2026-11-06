@@ -126,6 +126,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<StaffAvailability> StaffAvailabilities { get; set; }
         public DbSet<StaffWorkPreference> StaffWorkPreferences { get; set; }
         public DbSet<ShiftTemplate> ShiftTemplates { get; set; }
+        public DbSet<PartyStaffingRule> PartyStaffingRules { get; set; }
         public DbSet<ShiftTemplateSlot> ShiftTemplateSlots { get; set; }
         public DbSet<CompanySchedulingSettings> CompanySchedulingSettings { get; set; }
         public DbSet<Shift> Shifts { get; set; }
@@ -592,6 +593,28 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<ShiftTemplateSlot>()
                 .HasIndex(x => new { x.ShiftTemplateId, x.StaffPositionId })
                 .IsUnique();
+
+            // A party's staff shifts keep their place on the rota if the booking row ever goes.
+            modelBuilder.Entity<Shift>()
+                .HasOne(x => x.PartyBooking)
+                .WithMany()
+                .HasForeignKey(x => x.PartyBookingId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<PartyStaffingRule>()
+                .HasIndex(x => x.LocationId);
+
+            modelBuilder.Entity<PartyStaffingRule>()
+                .HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<PartyStaffingRule>()
+                .HasOne(x => x.StaffPosition)
+                .WithMany()
+                .HasForeignKey(x => x.StaffPositionId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<CompanySchedulingSettings>()
                 .HasIndex(x => x.CompanyId)

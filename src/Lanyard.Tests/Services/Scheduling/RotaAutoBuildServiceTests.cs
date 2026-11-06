@@ -185,4 +185,133 @@ public class RotaAutoBuildServiceTests
 
         Assert.IsFalse(preview.IsSuccess);
     }
+
+    // --- Parties ---
+
+    private static async Task<PartyBooking> SeedPartyAsync(World w, string type = "Play", PartyBookingStatus status = PartyBookingStatus.Booked)
+    {
+        await using ApplicationDbContext ctx = new(w.Options);
+
+        if (!await ctx.PartyStaffingRules.AnyAsync())
+        {
+            ctx.PartyStaffingRules.Add(new PartyStaffingRule
+            {
+                Id = Guid.NewGuid(),
+                CompanyId = w.Ipswich.CompanyId,
+                LocationId = w.Ipswich.Id,
+                StaffPositionId = w.Host.Id,
+                StaffCount = 1,
+                MinutesBefore = 30
+            });
+        }
+
+        PartyBooking party = new()
+        {
+            Id = Guid.NewGuid(),
+            CompanyId = w.Ipswich.CompanyId,
+            LocationId = w.Ipswich.Id,
+            PartyType = type,
+            StartUtc = RotaTime.ToUtc(Saturday, new TimeOnly(15, 0)),
+            EndUtc = RotaTime.ToUtc(Saturday, new TimeOnly(17, 0)),
+            Status = status
+        };
+
+        ctx.PartyBookings.Add(party);
+        await ctx.SaveChangesAsync();
+
+        return party;
+    }
+
+    [TestMethod]
+    public async Task ApplyAsync_BookedParty_AddsItsStaffOnce()
+    {
+        World w = await SeedAsync();
+        PartyBooking party = await SeedPartyAsync(w);
+        RotaAutoBuildService service = GetService(w.Options);
+
+        Result<AutoBuildResult> applied = await service.ApplyAsync(w.ManagerScope, w.Ipswich.Id, Week, Week.AddDays(6), ManagerId);
+
+        Assert.IsTrue(applied.IsSuccess, applied.Error);
+        Assert.AreEqual(1, applied.Data!.PartyCount);
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            Shift partyShift = await ctx.Shifts.SingleAsync(x => x.PartyBookingId == party.Id);
+            Assert.AreEqual(party.StartUtc.AddMinutes(-30), partyShift.StartUtc);
+            Assert.IsNotNull(partyShift.UserId, "Amy and Tom are both free after the morning shift");
+        }
+
+        Result<AutoBuildResult> again = await service.PreviewAsync(w.ManagerScope, w.Ipswich.Id, Week, Week.AddDays(6));
+        Assert.IsFalse(again.Data!.HasChanges);
+    }
+
+    [TestMethod]
+    public async Task ApplyAsync_PartyCancelledAfterBuilding_DraftShiftTakenOff()
+    {
+        World w = await SeedAsync();
+        PartyBooking party = await SeedPartyAsync(w);
+        RotaAutoBuildService service = GetService(w.Options);
+
+        await service.ApplyAsync(w.ManagerScope, w.Ipswich.Id, Week, Week.AddDays(6), ManagerId);
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            (await ctx.PartyBookings.SingleAsync()).Status = PartyBookingStatus.Cancelled;
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<AutoBuildResult> preview = await service.PreviewAsync(w.ManagerScope, w.Ipswich.Id, Week, Week.AddDays(6));
+        Assert.AreEqual(1, preview.Data!.RemovedLines.Count);
+
+        Result<AutoBuildResult> applied = await service.ApplyAsync(w.ManagerScope, w.Ipswich.Id, Week, Week.AddDays(6), ManagerId);
+        Assert.IsTrue(applied.IsSuccess, applied.Error);
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            Shift partyShift = await ctx.Shifts.SingleAsync(x => x.PartyBookingId == party.Id);
+            Assert.IsFalse(partyShift.IsActive);
+            Assert.IsFalse(partyShift.RemovalPending, "never published, so nobody to tell");
+        }
+    }
+
+    [TestMethod]
+    public async Task PreviewAsync_PublishedShiftForCancelledParty_WarnedNotRemoved()
+    {
+        World w = await SeedAsync();
+        PartyBooking party = await SeedPartyAsync(w);
+        RotaAutoBuildService service = GetService(w.Options);
+
+        await service.ApplyAsync(w.ManagerScope, w.Ipswich.Id, Week, Week.AddDays(6), ManagerId);
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            Shift partyShift = await ctx.Shifts.SingleAsync(x => x.PartyBookingId == party.Id);
+            partyShift.MarkPublished(DateTime.UtcNow, ManagerId);
+            (await ctx.PartyBookings.SingleAsync()).Status = PartyBookingStatus.Cancelled;
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<AutoBuildResult> preview = await service.PreviewAsync(w.ManagerScope, w.Ipswich.Id, Week, Week.AddDays(6));
+
+        Assert.AreEqual(0, preview.Data!.RemovedLines.Count);
+        Assert.AreEqual(1, preview.Data.WarningLines.Count);
+    }
+
+    [TestMethod]
+    public async Task PreviewAsync_PartiesSwitchedOff_PartiesIgnored()
+    {
+        World w = await SeedAsync();
+        await SeedPartyAsync(w);
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = w.Ipswich.CompanyId, Feature = CompanyFeature.Parties, IsEnabled = false });
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<AutoBuildResult> preview = await GetService(w.Options).PreviewAsync(w.ManagerScope, w.Ipswich.Id, Week, Week.AddDays(6));
+
+        Assert.AreEqual(0, preview.Data!.PartyCount);
+        Assert.AreEqual(3, preview.Data.Lines.Count, "only the template's three Hosts");
+    }
 }
