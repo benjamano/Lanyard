@@ -97,6 +97,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<DmxSceneStep> DmxSceneSteps { get; set; }
         public DbSet<DmxSceneStepChannelValue> DmxSceneStepChannelValues { get; set; }
         public DbSet<DmxFixture> DmxFixtures { get; set; }
+        public DbSet<DmxClientOutputState> DmxClientOutputStates { get; set; }
         public DbSet<DmxFixtureDefinition> DmxFixtureDefinitions { get; set; }
         public DbSet<DmxFixtureMode> DmxFixtureModes { get; set; }
         public DbSet<DmxFixtureModeChannel> DmxFixtureModeChannels { get; set; }
@@ -124,6 +125,12 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ContractRequirement> ContractRequirements { get; set; }
         public DbSet<UserClockInPin> UserClockInPins { get; set; }
         public DbSet<StaffAvailability> StaffAvailabilities { get; set; }
+        public DbSet<StaffWorkPreference> StaffWorkPreferences { get; set; }
+        public DbSet<ShiftTemplate> ShiftTemplates { get; set; }
+        public DbSet<PartyStaffingRule> PartyStaffingRules { get; set; }
+        public DbSet<ShiftTemplateSlot> ShiftTemplateSlots { get; set; }
+        public DbSet<ShiftTemplateSlotRegular> ShiftTemplateSlotRegulars { get; set; }
+        public DbSet<TemplateSuggestionRun> TemplateSuggestionRuns { get; set; }
         public DbSet<CompanySchedulingSettings> CompanySchedulingSettings { get; set; }
         public DbSet<Shift> Shifts { get; set; }
         public DbSet<ClockInTerminal> ClockInTerminals { get; set; }
@@ -547,6 +554,96 @@ namespace Lanyard.Infrastructure.DataAccess
 
             modelBuilder.Entity<StaffAvailability>()
                 .HasIndex(x => new { x.UserId, x.DayOfWeek });
+
+            modelBuilder.Entity<StaffWorkPreference>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<StaffWorkPreference>()
+                .HasIndex(x => new { x.CompanyId, x.UserId })
+                .IsUnique();
+
+            modelBuilder.Entity<StaffWorkPreference>()
+                .Property(x => x.MaxHoursPerWeek)
+                .HasPrecision(5, 2);
+
+            // A location's weekly shift templates, read for one location at a time. Slots are part
+            // of their template (replaced whenever it's saved); a position in use can only be
+            // deactivated, never deleted, so Restrict never actually blocks anything.
+            modelBuilder.Entity<ShiftTemplate>()
+                .HasIndex(x => new { x.LocationId, x.DayOfWeek });
+
+            modelBuilder.Entity<ShiftTemplate>()
+                .HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ShiftTemplate>()
+                .HasMany(x => x.Slots)
+                .WithOne(x => x.ShiftTemplate)
+                .HasForeignKey(x => x.ShiftTemplateId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ShiftTemplateSlot>()
+                .HasOne(x => x.StaffPosition)
+                .WithMany()
+                .HasForeignKey(x => x.StaffPositionId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ShiftTemplateSlot>()
+                .HasIndex(x => new { x.ShiftTemplateId, x.StaffPositionId })
+                .IsUnique();
+
+            modelBuilder.Entity<ShiftTemplateSlot>()
+                .HasMany(x => x.Regulars)
+                .WithOne(x => x.ShiftTemplateSlot)
+                .HasForeignKey(x => x.ShiftTemplateSlotId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ShiftTemplateSlotRegular>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ShiftTemplateSlotRegular>()
+                .HasIndex(x => new { x.ShiftTemplateSlotId, x.UserId })
+                .IsUnique();
+
+            // The latest run for a location is what the banner reads.
+            modelBuilder.Entity<TemplateSuggestionRun>()
+                .HasIndex(x => new { x.LocationId, x.RunUtc });
+
+            modelBuilder.Entity<TemplateSuggestionRun>()
+                .HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // A party's staff shifts keep their place on the rota if the booking row ever goes.
+            modelBuilder.Entity<Shift>()
+                .HasOne(x => x.PartyBooking)
+                .WithMany()
+                .HasForeignKey(x => x.PartyBookingId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<PartyStaffingRule>()
+                .HasIndex(x => x.LocationId);
+
+            modelBuilder.Entity<PartyStaffingRule>()
+                .HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<PartyStaffingRule>()
+                .HasOne(x => x.StaffPosition)
+                .WithMany()
+                .HasForeignKey(x => x.StaffPositionId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<CompanySchedulingSettings>()
                 .HasIndex(x => x.CompanyId)
@@ -1164,6 +1261,14 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<ClientAvailableVideoDevice>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableNetworkInterface>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableDmxDevice>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
+
+            modelBuilder.Entity<DmxClientOutputState>(entity =>
+            {
+                entity.HasKey(x => x.ClientId);
+                entity.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
+                entity.Property(x => x.GrandMaster).HasDefaultValue((byte)255);
+                entity.HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
+            });
             modelBuilder.Entity<ClientAvailableAudioDevice>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ZoneScoreboardSettings>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<PlaylistSongMember>().HasQueryFilter(x => TenantFilterDisabled || x.Playlist!.CompanyId == TenantCompanyId);
@@ -1176,6 +1281,12 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<AutomationRuleActionExecution>().HasQueryFilter(x => TenantFilterDisabled || x.AutomationRuleExecution!.AutomationRule!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<DmxSceneStep>().HasQueryFilter(x => TenantFilterDisabled || x.Scene!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<DmxSceneStepChannelValue>().HasQueryFilter(x => TenantFilterDisabled || x.SceneStep!.Scene!.CompanyId == TenantCompanyId);
+
+            // One value per channel per step. Without it, two saves racing on the same fader
+            // could both insert, leaving a step with two values for one channel.
+            modelBuilder.Entity<DmxSceneStepChannelValue>()
+                .HasIndex(x => new { x.SceneStepId, x.ChannelNumber })
+                .IsUnique();
 
             // Shared-or-owned: built-in definitions (CompanyId null) are visible to everyone, a
             // company's own imports and custom fixtures only to that company.
@@ -1210,6 +1321,8 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<ShiftClaim>().HasQueryFilter(x => TenantFilterDisabled || Shifts.Any(sh => sh.Id == x.ShiftId && Locations.Any(l => l.Id == sh.LocationId && l.CompanyId == TenantCompanyId)));
             modelBuilder.Entity<UserPosition>().HasQueryFilter(x => TenantFilterDisabled || x.StaffPosition!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<StaffPositionRequiredCourse>().HasQueryFilter(x => TenantFilterDisabled || x.StaffPosition!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ShiftTemplateSlot>().HasQueryFilter(x => TenantFilterDisabled || x.ShiftTemplate!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ShiftTemplateSlotRegular>().HasQueryFilter(x => TenantFilterDisabled || x.ShiftTemplateSlot!.ShiftTemplate!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ChatMember>().HasQueryFilter(x => TenantFilterDisabled || x.Conversation!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ChatMessage>().HasQueryFilter(x => TenantFilterDisabled || x.Conversation!.CompanyId == TenantCompanyId);
         }

@@ -1,0 +1,214 @@
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@inject IRotaAutoBuildService _autoBuildService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.Sparkle())" />
+            <FluentText As="@TextTag.H3">Auto-build @RangeLabel</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="auto-build">
+            @if (errorMessage is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
+            }
+
+            @if (preview is null && errorMessage is null)
+            {
+                <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+                    <FluentSpinner />
+                    <FluentText>Working out who could work each shift...</FluentText>
+                </FluentStack>
+            }
+            else if (preview is not null)
+            {
+                @foreach (string warning in preview.WarningLines)
+                {
+                    <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">@warning</FluentMessageBar>
+                }
+
+                @if (preview.TemplateCount == 0 && preview.PartyCount == 0 && !preview.HasChanges)
+                {
+                    <FluentText>
+                        Auto-build fills the rota from this location's shift templates and party staffing, and there's nothing set up yet.
+                        Add the shifts you need every week on <a href="@TemplatesLink">Shift Templates</a> first.
+                    </FluentText>
+                }
+                else if (!preview.HasChanges)
+                {
+                    <FluentText>
+                        Nothing to add: every template and party shift from today to the end of @RangeLabel is already on the rota.
+                    </FluentText>
+                }
+                else
+                {
+                    @if (preview.RemovedLines.Count > 0)
+                    {
+                        <div class="auto-build-removed">
+                            <strong>@preview.RemovedLines.Count draft @(preview.RemovedLines.Count == 1 ? "shift" : "shifts") will be taken off</strong>
+                            because @(preview.RemovedLines.Count == 1 ? "its party was" : "their parties were") cancelled or changed:
+                            <ul>
+                                @foreach (AutoBuildLine line in preview.RemovedLines)
+                                {
+                                    <li>@line.Day.DayLabel() @RotaFormat.TimeRange(line.StartUtc, line.EndUtc) · @line.PositionName · @(line.DisplayName ?? "Open shift")</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+
+                    @if (preview.Lines.Count > 0)
+                    {
+                        <div class="auto-build-summary" role="status">
+                            <div class="auto-build-stat">
+                                <span class="auto-build-number">@preview.Assigned</span>
+                                <span>@(preview.Assigned == 1 ? "shift" : "shifts") for @preview.PeopleCount @(preview.PeopleCount == 1 ? "person" : "people")</span>
+                            </div>
+                            <div class="auto-build-stat @(preview.Open > 0 ? "auto-build-stat-open" : "")">
+                                <span class="auto-build-number">@preview.Open</span>
+                                <span>left as open @(preview.Open == 1 ? "shift" : "shifts")</span>
+                            </div>
+                        </div>
+
+                        <FluentText Class="auto-build-note">
+                            @Note(preview)
+                        </FluentText>
+                    }
+
+                    <div class="auto-build-days">
+                        @foreach (IGrouping<DateOnly, AutoBuildLine> day in preview.Lines.GroupBy(x => x.Day))
+                        {
+                            <section class="auto-build-day" aria-label="@day.Key.DayLabel()">
+                                <h4>@day.Key.DayLabel()</h4>
+                                <ul>
+                                    @foreach (AutoBuildLine line in day)
+                                    {
+                                        <li class="auto-build-line @(line.IsOpen ? "auto-build-line-open" : "")">
+                                            <div class="auto-build-line-what">
+                                                <span class="auto-build-time">@RotaFormat.TimeRange(line.StartUtc, line.EndUtc)</span>
+                                                <span>@line.Name · @line.PositionName</span>
+                                            </div>
+                                            <div class="auto-build-line-who">
+                                                @if (line.IsOpen)
+                                                {
+                                                    <strong>Open shift</strong>
+                                                    <span class="auto-build-why">@line.WhyOpen</span>
+                                                }
+                                                else
+                                                {
+                                                    <strong>@line.DisplayName</strong>
+                                                    @if (line.Reason is string reason)
+                                                    {
+                                                        <span class="auto-build-why">@reason</span>
+                                                    }
+                                                }
+                                            </div>
+                                        </li>
+                                    }
+                                </ul>
+                            </section>
+                        }
+                    </div>
+                }
+            }
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentStack HorizontalAlignment="HorizontalAlignment.End" HorizontalGap="8px">
+            @if (preview is { HasChanges: true })
+            {
+                <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" OnClick="@ApplyAsync">
+                    @(isBusy ? "Building..." : ApplyLabel(preview))
+                </FluentButton>
+            }
+            <FluentButton Disabled="@isBusy" OnClick="@(() => Dialog.CancelAsync())">@(preview is { HasChanges: true } ? "Cancel" : "Close")</FluentButton>
+        </FluentStack>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required int LocationId { get; set; }
+
+    [Parameter, EditorRequired]
+    public required DateOnly From { get; set; }
+
+    [Parameter, EditorRequired]
+    public required DateOnly To { get; set; }
+
+    [Parameter, EditorRequired]
+    public required string RangeLabel { get; set; }
+
+    private AutoBuildResult? preview;
+    private string? errorMessage;
+    private bool isBusy;
+    private LocationScope? scope;
+
+    private static string Note(AutoBuildResult result) =>
+        "Shifts are added as drafts, so nobody sees them until you publish. Shifts already on the rota are kept"
+        + (result.AlreadyCovered > 0 ? $" ({result.AlreadyCovered} of the shifts needed are there already)" : string.Empty)
+        + ", and days already over are skipped.";
+
+    private static string ApplyLabel(AutoBuildResult result) => result.Lines.Count > 0
+        ? $"Add {result.Lines.Count} draft {(result.Lines.Count == 1 ? "shift" : "shifts")}"
+        : $"Take off {result.RemovedLines.Count} {(result.RemovedLines.Count == 1 ? "shift" : "shifts")}";
+
+    private string TemplatesLink => $"/manage/rota/templates?location={LocationId}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            errorMessage = "Couldn't confirm who you are - try reloading the page.";
+            return;
+        }
+
+        scope = scopeResult.Data;
+
+        Result<AutoBuildResult> result = await _autoBuildService.PreviewAsync(scope, LocationId, From, To);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            errorMessage = result.Error;
+            return;
+        }
+
+        preview = result.Data;
+    }
+
+    private async Task ApplyAsync()
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            errorMessage = "Couldn't confirm who you are - try reloading the page.";
+            return;
+        }
+
+        isBusy = true;
+        Result<AutoBuildResult> result = await _autoBuildService.ApplyAsync(scope, LocationId, From, To, actingUser.Data);
+        isBusy = false;
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            errorMessage = result.Error;
+            return;
+        }
+
+        await Dialog.CloseAsync(result.Data);
+    }
+}

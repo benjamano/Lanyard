@@ -344,6 +344,50 @@ public class AutomationRuleService(
             }
         }
 
+        return await ValidateDmxActionsAsync(ctx, rule, ruleCompanyId);
+    }
+
+    // A DMX action's kiosk and scene come from ParametersJson, which the scene runner trusts, so
+    // they must be the rule's own company's (and the scene must be on that kiosk).
+    private static async Task<string?> ValidateDmxActionsAsync(ApplicationDbContext ctx, AutomationRule rule, int? ruleCompanyId)
+    {
+        foreach (AutomationRuleAction action in rule.Actions.Where(a => a.IsActive && a.ActionType == AutomationActionTypes.DmxSceneControl))
+        {
+            if (!DmxSceneControlActionExecutor.TryReadTargets(action.ParametersJson, out Guid clientId, out Guid? sceneId))
+            {
+                return "A DMX action couldn't be read. Remove it and add it again.";
+            }
+
+            // Not configured yet: the executor reports that when it runs, as it always has.
+            if (clientId == Guid.Empty)
+            {
+                continue;
+            }
+
+            bool clientFound = await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
+                .AnyAsync(c => c.Id == clientId && (ruleCompanyId == null || c.CompanyId == ruleCompanyId));
+
+            if (!clientFound)
+            {
+                return "A DMX action refers to a kiosk that doesn't exist.";
+            }
+
+            if (sceneId is Guid id && id != Guid.Empty)
+            {
+                bool sceneFound = await ctx.DmxScenes
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .AnyAsync(s => s.Id == id && s.ClientId == clientId && s.IsActive);
+
+                if (!sceneFound)
+                {
+                    return "A DMX action refers to a scene that isn't on its kiosk.";
+                }
+            }
+        }
+
         return null;
     }
 

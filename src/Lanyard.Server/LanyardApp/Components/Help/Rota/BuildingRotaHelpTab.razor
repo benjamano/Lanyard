@@ -46,6 +46,37 @@
         </FluentText>
     </HelpSection>
 
+    <HelpSection Title="Auto-building the rota">
+        <FluentText>
+            <strong>Auto-build</strong> fills the week or month you're looking at from this location's
+            <a href="/manage/rota/templates">shift templates</a>, adds extra staff for booked parties (set under
+            <strong>Party staffing</strong> on <a href="/manage/parties/settings">Party Settings</a>), and picks who works each shift.
+        </FluentText>
+        <ol>
+            <li>Select <strong>Auto-build</strong>. It lists every shift it would add, day by day, with who it picked and why,
+                and which shifts it would leave open.</li>
+            <li>Select <strong>Add</strong> to add them as drafts, or <strong>Cancel</strong> to change nothing.</li>
+            <li>Check the rota, change anything you like, then <strong>Publish</strong> as usual. Nobody sees the shifts before then.</li>
+        </ol>
+        <FluentText>How it picks people:</FluentText>
+        <ul>
+            <li>Only people at this location who hold the shift's position, have its required training and aren't already
+                working or booked off then.</li>
+            <li>Never someone who has said they can't work at that time, would go over their weekly maximum, would get less than
+                11 hours' rest overnight before or after another day's shift, or has asked for that day off. A shift nobody can take is added as an
+                <strong>open shift</strong>, which you can fill by hand or staff can pick up once it's published.</li>
+            <li>A shift's <strong>regulars</strong> (set on its template) get it first, as long as they can work it.</li>
+            <li>The rest are ranked the same way as <strong>Suggest staff</strong>: people who need shifts for their contract
+                first, then people who'd rather work then, then whoever has the fewest hours that week. People who'd go past
+                how much they've said they'd like to work each week come after everyone else, but can still be picked. Shifts that only a
+                few people can work are filled first.</li>
+        </ul>
+        <FluentText>
+            Shifts already on the rota are never moved or removed. A shift with the same position, start and end as a
+            template counts towards it, so running Auto-build again only adds what's still missing. Days already over are skipped.
+        </FluentText>
+    </HelpSection>
+
     <HelpSection Title="Reading the rota">
         <ul>
             <li><strong>Draft</strong>: staff can't see it yet.</li>

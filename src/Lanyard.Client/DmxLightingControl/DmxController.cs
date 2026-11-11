@@ -1,17 +1,19 @@
 using Lanyard.Infrastructure.Models.Dmx;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-public class DmxController
+public class DmxController(OpenDmxDevice device, ILogger<DmxController> logger)
 {
-    private readonly OpenDmxDevice _device;
-    private readonly IServiceScopeFactory _serviceScopeFactory;
-    private readonly ILogger<DmxController> _logger;
+    private readonly OpenDmxDevice _device = device;
+    private readonly ILogger<DmxController> _logger = logger;
 
-    private volatile bool _isDeviceOpen = false;
     private volatile bool _isConfigured = false;
+    private int _warnedNotOpen;
 
-    public bool IsDeviceOpen => _isDeviceOpen;
+    /// <summary>
+    /// True while frames are going out. Can turn true on its own: an interface that wouldn't open,
+    /// or was unplugged, is retried in the background.
+    /// </summary>
+    public bool IsDeviceOpen => _device.IsOpen;
 
     /// <summary>True once the server has told this kiosk to drive a DMX device, even if opening it failed.</summary>
     public bool IsConfigured => _isConfigured;
@@ -25,112 +27,89 @@ public class DmxController
 
     public DateTime? LastNonZeroFrameUtc => _device.LastNonZeroFrameUtc;
 
-    public DmxController(IServiceScopeFactory serviceScopeFactory, ILogger<DmxController> logger)
-    {
-        _serviceScopeFactory = serviceScopeFactory;
-        _logger = logger;
-
-        _device = _serviceScopeFactory.CreateScope().ServiceProvider.GetRequiredService<OpenDmxDevice>();
-    }
-
-    public void Open(uint dmxUsbDeviceIndex)
+    /// <summary>
+    /// Starts driving the interface at the given index. Called on every SignalR (re)connect with
+    /// the same settings, which is now a no-op once it's open. Never throws: it used to throw
+    /// inside the SignalR handler, where nothing caught it usefully.
+    /// </summary>
+    public bool Open(uint dmxUsbDeviceIndex)
     {
         _isConfigured = true;
         ConfiguredIndex = dmxUsbDeviceIndex;
 
-        if (!_device.Open(dmxUsbDeviceIndex))
+        try
         {
-            throw new InvalidOperationException("Failed to open DMX device.");
+            bool opened = _device.Open(dmxUsbDeviceIndex);
+
+            if (opened)
+            {
+                Interlocked.Exchange(ref _warnedNotOpen, 0);
+                _logger.LogInformation("DMX device on USB index {DmxUsbDeviceIndex} is open", dmxUsbDeviceIndex);
+            }
+            else
+            {
+                _logger.LogWarning("DMX device on USB index {DmxUsbDeviceIndex} didn't open ({Error}); retrying in the background", dmxUsbDeviceIndex, _device.LastWriteError);
+            }
+
+            return opened;
         }
-
-        _isDeviceOpen = true;
-
-        _logger.LogInformation("DMX device opened successfully on USB index {DmxUsbDeviceIndex}", dmxUsbDeviceIndex);
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error opening DMX device on USB index {DmxUsbDeviceIndex}", dmxUsbDeviceIndex);
+            return false;
+        }
     }
 
     // Values only ever arrive here from the server (there is no local fader input on the
-    // kiosk), so nothing is echoed back: the server already holds the value and raises its
-    // own change event. The old echo turned every write into a second hub call, a hub
-    // activation and a duplicate event server-side.
+    // kiosk), so nothing is echoed back. They always go into the frame, open or not, so a device
+    // that opens late (or comes back after an unplug) starts with the right levels.
     public void SetChannel(int channel, byte value)
     {
-        try
-        {
-            if (!_isDeviceOpen)
-            {
-                _logger.LogWarning("Attempted to set DMX channel value while device is not open. Channel: {Channel}, Value: {Value}", channel, value);
-                return;
-            }
+        WarnIfNotOpen();
+        _device.SetChannel(channel, value);
+    }
 
-            _device.SetChannel(channel, value);
+    /// <summary>Applies a whole batch to the frame; the frame thread sends it within ~25 ms.</summary>
+    public void SetChannels(IReadOnlyList<DmxChannel> channels)
+    {
+        WarnIfNotOpen();
 
-            SendFrame();
-        }
-        catch (Exception ex)
+        int skipped = _device.SetChannels(channels.Select(c => (c.Address, c.Value)));
+
+        if (skipped > 0)
         {
-            _logger.LogError(ex, "Error setting DMX channel value. Channel: {Channel}, Value: {Value}", channel, value);
+            _logger.LogWarning("Ignored {Skipped} of {Count} DMX values outside channels 1-512", skipped, channels.Count);
         }
     }
 
-    /// <summary>Applies a whole batch to the frame and sends it once.</summary>
-    public void SetChannels(IReadOnlyList<DmxChannel> channels)
+    /// <summary>Replaces all 512 channels, for the server's full-universe resync.</summary>
+    public void SetUniverse(byte[] values)
     {
-        try
-        {
-            if (!_isDeviceOpen)
-            {
-                _logger.LogWarning("Attempted to set {Count} DMX channel values while device is not open.", channels.Count);
-                return;
-            }
+        WarnIfNotOpen();
 
-            foreach (DmxChannel channel in channels)
-            {
-                _device.SetChannel(channel.Address, channel.Value);
-            }
-
-            SendFrame();
-        }
-        catch (Exception ex)
+        if (values.Length != OpenDmxDeviceUniverse.Size)
         {
-            _logger.LogError(ex, "Error setting {Count} DMX channel values.", channels.Count);
+            _logger.LogWarning("DMX universe resync had {Length} channels, expected {Expected}; applying what fits", values.Length, OpenDmxDeviceUniverse.Size);
         }
+
+        _device.SetUniverse(values);
     }
 
     public void ClearAll()
     {
-        try
-        {
-            if (!_isDeviceOpen)
-            {
-                _logger.LogWarning("Attempted to clear DMX channels while device is not open.");
-                return;
-            }
-
-            _device.ClearAll();
-
-            SendFrame();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error clearing DMX channels.");
-        }
+        _device.ClearAll();
     }
 
-    public void SendFrame()
+    // Once per closed spell, not once per message: a scene would otherwise log 40 times a second.
+    private void WarnIfNotOpen()
     {
-        try
+        if (!_device.IsOpen && Interlocked.Exchange(ref _warnedNotOpen, 1) == 0)
         {
-            if (!_isDeviceOpen)
-            {
-                _logger.LogWarning("Attempted to send DMX frame while device is not open.");
-                return;
-            }
-
-            _device.SendFrame();
+            _logger.LogWarning("DMX values arrived while the device isn't open; keeping them for when it is");
         }
-        catch (Exception ex)
+        else if (_device.IsOpen)
         {
-            _logger.LogError(ex, "Error sending DMX frame.");
+            Interlocked.Exchange(ref _warnedNotOpen, 0);
         }
     }
 
@@ -157,13 +136,11 @@ public class DmxController
 
     public void Close()
     {
-        if (!_isDeviceOpen)
-        {
-            _logger.LogWarning("Attempted to close DMX device while it is not open.");
-            return;
-        }
-
         _device.Close();
-        _isDeviceOpen = false;
     }
+}
+
+internal static class OpenDmxDeviceUniverse
+{
+    public const int Size = 512;
 }

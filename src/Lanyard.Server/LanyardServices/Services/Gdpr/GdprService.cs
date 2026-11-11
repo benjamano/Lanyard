@@ -340,6 +340,50 @@ public class GdprService : IGdprService
                 availability.UpdatedByUserId = null;
             }
 
+            List<StaffWorkPreference> preferencesSetByUser = await ctx.StaffWorkPreferences
+                .Where(x => x.UpdatedByUserId == userId)
+                .ToListAsync();
+
+            foreach (StaffWorkPreference preference in preferencesSetByUser)
+            {
+                preference.UpdatedByUserId = null;
+            }
+
+            List<PartyStaffingRule> staffingRulesSetByUser = await ctx.PartyStaffingRules
+                .Where(x => x.UpdatedByUserId == userId)
+                .ToListAsync();
+
+            foreach (PartyStaffingRule rule in staffingRulesSetByUser)
+            {
+                rule.UpdatedByUserId = null;
+            }
+
+            List<TemplateSuggestionRun> runsDismissedByUser = await ctx.TemplateSuggestionRuns
+                .Where(x => x.DismissedByUserId == userId)
+                .ToListAsync();
+
+            foreach (TemplateSuggestionRun run in runsDismissedByUser)
+            {
+                run.DismissedByUserId = null;
+            }
+
+            List<ShiftTemplate> templatesTouchedByUser = await ctx.ShiftTemplates
+                .Where(x => x.CreateByUserId == userId || x.UpdateByUserId == userId)
+                .ToListAsync();
+
+            foreach (ShiftTemplate template in templatesTouchedByUser)
+            {
+                if (template.CreateByUserId == userId)
+                {
+                    template.CreateByUserId = null;
+                }
+
+                if (template.UpdateByUserId == userId)
+                {
+                    template.UpdateByUserId = null;
+                }
+            }
+
             // Decisions and records this person made on other people's time off keep their
             // outcome but lose the name. Their own requests are removed in RemoveOwnedRecordsAsync.
             List<TimeOffRequest> timeOffActedOn = await ctx.TimeOffRequests
@@ -454,6 +498,8 @@ public class GdprService : IGdprService
             // When they said they can and can't work is theirs too. Every company's - the whole
             // account is going.
             ctx.StaffAvailabilities.RemoveRange(await ctx.StaffAvailabilities.IgnoreQueryFilters().Where(x => x.UserId == userId).ToListAsync());
+            ctx.StaffWorkPreferences.RemoveRange(await ctx.StaffWorkPreferences.IgnoreQueryFilters().Where(x => x.UserId == userId).ToListAsync());
+            ctx.ShiftTemplateSlotRegulars.RemoveRange(await ctx.ShiftTemplateSlotRegulars.IgnoreQueryFilters().Where(x => x.UserId == userId).ToListAsync());
 
             // Their devices and notification choices exist only for them.
             ctx.PushSubscriptions.RemoveRange(await ctx.PushSubscriptions.Where(x => x.UserId == userId).ToListAsync());

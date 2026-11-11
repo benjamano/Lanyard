@@ -1,0 +1,405 @@
+@page "/manage/rota/templates"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.StaffScheduling)]
+
+@using Lanyard.App.Components.Rota
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@inject IShiftTemplateService _templateService
+@inject IStaffPositionService _staffPositionService
+@inject ITemplateLearningService _learningService
+
+<PageTitle>Shift Templates</PageTitle>
+
+<div class="shift-templates">
+    <div class="templates-header">
+        <div class="templates-heading">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Shift templates</FluentText>
+            <FluentText Class="templates-intro">
+                The shifts this location needs every week and who they need, such as "Saturday AM, 2 Duty Managers and 4 Hosts".
+                <strong>Auto-build</strong> on the <a href="@RotaLink">rota</a> turns them into draft shifts and picks who works them.
+            </FluentText>
+        </div>
+        <HelpButton AreaKey="@HelpRegistry.Rota" Topic="setup" />
+    </div>
+
+    <div class="templates-toolbar">
+        @if (locationOptions.Count > 1)
+        {
+            <FluentSelect TOption="LocationOption" TValue="string" Items="@locationOptions" OptionText="@(x => x.Name)"
+                          OptionValue="@(x => x.Id.ToString())" Value="@locationId?.ToString()" ValueChanged="@OnLocationChanged"
+                          Label="Location" Width="260px" />
+        }
+        <FluentCheckbox Label="Show archived" Value="@showArchived" ValueChanged="@OnShowArchivedChanged" />
+        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Add())"
+                      Disabled="@(templates is null || positions.Count == 0)" OnClick="@(() => OpenDialogAsync(null))">
+            New shift template
+        </FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.LightbulbFilament())"
+                      Disabled="@(templates is null)" OnClick="@(() => LearnAsync(8))">
+            Learn from past rota
+        </FluentButton>
+    </div>
+
+    @if (openSuggestions is TemplateSuggestionRun run)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false" Class="templates-suggestions">
+            @if (run.FirstSetup)
+            {
+                <text>
+                    Lanyard has learned @run.Suggestions @(run.Suggestions == 1 ? "template" : "templates") from the rota you published
+                    from @RotaDisplayExtensions.RangeLabel(run.From, run.To)@(run.MatchPercent is int match ? $". With them, Auto-build would have made {match}% of that rota the same" : string.Empty).
+                    Review them to set up Auto-build.
+                </text>
+            }
+            else
+            {
+                <text>
+                    The rota you published from @RotaDisplayExtensions.RangeLabel(run.From, run.To) suggests
+                    @run.Suggestions @(run.Suggestions == 1 ? "change" : "changes") to these templates.
+                </text>
+            }
+            <div class="templates-suggestions-actions">
+                <FluentButton Appearance="ButtonAppearance.Primary" Size="ButtonSize.Small" OnClick="@(() => LearnAsync(ITemplateLearningService.MonthlyWeeks))">@(run.FirstSetup ? "Set up Auto-build" : "Review")</FluentButton>
+                <FluentButton Size="ButtonSize.Small" Disabled="@isBusy" OnClick="@DismissSuggestionsAsync">Dismiss</FluentButton>
+            </div>
+        </FluentMessageBar>
+    }
+
+    @if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else if (templates is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else
+    {
+        @if (positions.Count == 0)
+        {
+            <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                Templates say which positions a shift needs. Add some <a href="/manage/rota/positions">positions</a> first.
+            </FluentMessageBar>
+        }
+
+        @if (templates.Count == 0)
+        {
+            <FluentCard Height="auto">
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                    <FluentText Weight="TextWeight.Semibold">No shift templates yet</FluentText>
+                    <FluentText>
+                        Add one for each regular shift, for example Saturday AM 09:00 to 14:00. Then use Auto-build on the rota
+                        to fill a week or a month in one go.
+                    </FluentText>
+                </FluentStack>
+            </FluentCard>
+        }
+        else
+        {
+            <FluentText Class="templates-summary">
+                @templates.Count(x => x.IsActive) @(templates.Count(x => x.IsActive) == 1 ? "template needs" : "templates need")
+                @RotaFormat.Hours(WeeklyHours) of staff time a week.
+            </FluentText>
+
+            @foreach (IGrouping<DayOfWeek, ShiftTemplate> day in templates.GroupBy(x => x.DayOfWeek))
+            {
+                <section class="template-day" aria-label="@DayName(day.Key)">
+                    <h3 class="template-day-name">@DayName(day.Key)</h3>
+                    <div class="template-list">
+                        @foreach (ShiftTemplate template in day)
+                        {
+                            <div class="template-item @(template.IsActive ? "" : "template-archived")">
+                                <div class="template-info">
+                                    <div class="template-title">
+                                        <span class="template-name">@template.Name</span>
+                                        <span class="template-time">@TimeLabel(template)</span>
+                                        @if (!template.IsActive)
+                                        {
+                                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Subtle">Archived</FluentBadge>
+                                        }
+                                    </div>
+                                    <div class="template-slots">
+                                        @foreach (ShiftTemplateSlot slot in OrderedSlots(template))
+                                        {
+                                            <span class="template-slot">
+                                                <span class="template-swatch theme-colour-swatch" style="@PositionColours.CssVariables(slot.StaffPosition?.ColorIndex ?? 0)" aria-hidden="true"></span>
+                                                @(slot.Headcount == 0 ? $"{slot.StaffPosition?.Name ?? "Position"} for parties and hires" : $"{slot.Headcount} × {slot.StaffPosition?.Name ?? "Position"}")
+                                                @if (slot.Regulars.Count > 0)
+                                                {
+                                                    <span class="template-regulars">(@string.Join(", ", slot.Regulars.OrderBy(r => r.SortOrder).Select(r => r.User is null ? "Someone" : RotaNames.For(r.User))))</span>
+                                                }
+                                            </span>
+                                        }
+                                    </div>
+                                    @if (DatesLabel(template) is string dates)
+                                    {
+                                        <div class="template-dates">@dates</div>
+                                    }
+                                </div>
+                                <div class="template-actions">
+                                    @if (template.IsActive)
+                                    {
+                                        <FluentButton IconStart="@(new Icons.Regular.Size16.Edit())" Title="@($"Edit {template.Name}")"
+                                                      Disabled="@isBusy" OnClick="@(() => OpenDialogAsync(template))" />
+                                        <FluentButton IconStart="@(new Icons.Regular.Size16.Archive())" Title="@($"Archive {template.Name}")"
+                                                      Disabled="@isBusy" OnClick="@(() => SetArchivedAsync(template, true))" />
+                                    }
+                                    else
+                                    {
+                                        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size16.ArrowUndo())"
+                                                      Disabled="@isBusy" OnClick="@(() => SetArchivedAsync(template, false))">Restore</FluentButton>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </section>
+            }
+        }
+    }
+</div>
+
+@code {
+    private record LocationOption(int Id, string Name, int CompanyId);
+
+    [SupplyParameterFromQuery(Name = "location")]
+    public int? LocationQuery { get; set; }
+
+    private LocationScope? scope;
+    private List<LocationOption> locationOptions = [];
+    private int? locationId;
+    private bool showArchived;
+    private List<ShiftTemplate>? templates;
+    private List<StaffPosition> positions = [];
+    private List<RegularCandidate> candidates = [];
+    private TemplateSuggestionRun? openSuggestions;
+    private string? loadError;
+    private bool isBusy;
+
+    private string RotaLink => locationId is int id ? $"/manage/rota?location={id}" : "/manage/rota";
+
+    private decimal WeeklyHours => templates?
+        .Where(x => x.IsActive)
+        .Sum(x => x.TotalHeadcount * Math.Max(0m, (decimal)x.Length.TotalMinutes - x.BreakMinutes) / 60m) ?? 0m;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            loadError = $"Couldn't work out which location you're signed in to: {scopeResult.Error}";
+            return;
+        }
+
+        scope = scopeResult.Data;
+
+        // Same rule as the rota builder: a Manager looks after the location they signed in under;
+        // an Admin may pick any active location.
+        if (scope.IsAdmin)
+        {
+            Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsAsync();
+
+            locationOptions = locationsResult.IsSuccess && locationsResult.Data is not null
+                ? locationsResult.Data.OrderBy(l => l.GetDisplayName()).Select(l => new LocationOption(l.Id, l.GetDisplayName(), l.CompanyId)).ToList()
+                : [];
+        }
+        else if (scope.LocationId is int own && scope.CompanyId is int company)
+        {
+            locationOptions = [new LocationOption(own, scope.LocationDisplayName ?? "Your location", company)];
+        }
+
+        locationId = LocationQuery is int requested && locationOptions.Any(l => l.Id == requested)
+            ? requested
+            : scope.LocationId is int signedIn && locationOptions.Any(l => l.Id == signedIn)
+                ? signedIn
+                : locationOptions.FirstOrDefault()?.Id;
+
+        if (locationId is null)
+        {
+            loadError = "There are no active locations to set up shift templates for yet.";
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (scope is null || locationId is not int location)
+        {
+            return;
+        }
+
+        Result<List<ShiftTemplate>> result = await _templateService.GetTemplatesAsync(scope, location, showArchived);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            loadError = result.Error;
+            templates = null;
+            return;
+        }
+
+        loadError = null;
+        templates = result.Data;
+
+        int companyId = locationOptions.First(l => l.Id == location).CompanyId;
+        Result<List<StaffPosition>> positionsResult = await _staffPositionService.GetPositionsAsync(companyId);
+        positions = positionsResult.Data ?? [];
+
+        Result<List<RegularCandidate>> candidatesResult = await _templateService.GetRegularCandidatesAsync(scope, location);
+        candidates = candidatesResult.Data ?? [];
+
+        Result<TemplateSuggestionRun?> suggestions = await _learningService.GetOpenSuggestionsAsync(scope, location);
+        openSuggestions = suggestions.Data;
+    }
+
+    private async Task OnLocationChanged(string? value)
+    {
+        if (int.TryParse(value, out int id) && id != locationId)
+        {
+            locationId = id;
+            templates = null;
+            _navigationManager.NavigateTo($"/manage/rota/templates?location={id}", replace: true);
+            await LoadAsync();
+        }
+    }
+
+    private async Task OnShowArchivedChanged(bool value)
+    {
+        showArchived = value;
+        await LoadAsync();
+    }
+
+    private async Task OpenDialogAsync(ShiftTemplate? existing)
+    {
+        if (locationId is not int location)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<AddEditShiftTemplateDialog>(options =>
+        {
+            options.Width = "520px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(AddEditShiftTemplateDialog.LocationId), location);
+            options.Parameters.Add(nameof(AddEditShiftTemplateDialog.Positions), positions);
+            options.Parameters.Add(nameof(AddEditShiftTemplateDialog.Existing), existing);
+            options.Parameters.Add(nameof(AddEditShiftTemplateDialog.Candidates), candidates);
+        });
+
+        if (result.Value is true)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task LearnAsync(int weeks)
+    {
+        if (locationId is not int location)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<LearnTemplatesDialog>(options =>
+        {
+            options.Width = "680px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(LearnTemplatesDialog.LocationId), location);
+            options.Parameters.Add(nameof(LearnTemplatesDialog.Weeks), weeks);
+        });
+
+        if (result.Value is true)
+        {
+            // Saving suggestions deals with the month's banner too.
+            if (openSuggestions is not null)
+            {
+                await DismissSuggestionsAsync();
+            }
+
+            await LoadAsync();
+        }
+    }
+
+    private async Task DismissSuggestionsAsync()
+    {
+        if (scope is null || locationId is not int location)
+        {
+            return;
+        }
+
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            return;
+        }
+
+        isBusy = true;
+        Result<bool> result = await _learningService.DismissSuggestionsAsync(scope, location, actingUser.Data);
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't dismiss the suggestions.");
+            return;
+        }
+
+        openSuggestions = null;
+    }
+
+    private async Task SetArchivedAsync(ShiftTemplate template, bool archived)
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            _toastService.ShowError("Couldn't confirm who you are - try reloading the page.");
+            return;
+        }
+
+        isBusy = true;
+        Result<bool> result = await _templateService.SetArchivedAsync(scope, template.Id, archived, actingUser.Data);
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Couldn't change {template.Name}: {result.Error}");
+            return;
+        }
+
+        _toastService.ShowSuccess(archived
+            ? $"{template.Name} archived. Auto-build won't use it, and shifts already made from it stay on the rota."
+            : $"{template.Name} restored.");
+
+        await LoadAsync();
+    }
+
+    private static string DayName(DayOfWeek day) => RotaFormat.Uk.DateTimeFormat.GetDayName(day);
+
+    private static string TimeLabel(ShiftTemplate template) =>
+        $"{template.StartTime.ToString("HH:mm", RotaFormat.Uk)} – {template.EndTime.ToString("HH:mm", RotaFormat.Uk)}"
+        + (template.RunsPastMidnight ? " (next day)" : string.Empty)
+        + (template.BreakMinutes > 0 ? $" · {template.BreakMinutes} min break" : string.Empty);
+
+    private static string? DatesLabel(ShiftTemplate template) => (template.EffectiveFrom, template.EffectiveTo) switch
+    {
+        (DateOnly from, DateOnly to) => $"From {from.ToString("d MMM yyyy", RotaFormat.Uk)} to {to.ToString("d MMM yyyy", RotaFormat.Uk)}",
+        (DateOnly from, null) => $"From {from.ToString("d MMM yyyy", RotaFormat.Uk)}",
+        (null, DateOnly to) => $"Until {to.ToString("d MMM yyyy", RotaFormat.Uk)}",
+        _ => null
+    };
+
+    private static IEnumerable<ShiftTemplateSlot> OrderedSlots(ShiftTemplate template) =>
+        template.Slots.OrderBy(x => x.StaffPosition?.SortOrder ?? int.MaxValue).ThenBy(x => x.StaffPosition?.Name);
+}

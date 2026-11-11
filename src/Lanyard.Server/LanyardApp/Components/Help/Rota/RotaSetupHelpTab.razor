@@ -13,6 +13,61 @@
         </ul>
     </HelpSection>
 
+    <HelpSection Title="Shift templates">
+        <FluentText>
+            <a href="/manage/rota/templates">Shift Templates</a> are the shifts a location needs every week and who they
+            need, such as "Saturday AM, 09:00 to 14:00, 2 Duty Managers and 4 Hosts". Staff never see them.
+        </FluentText>
+        <ol>
+            <li>Select <strong>New shift template</strong>.</li>
+            <li>Give it a <strong>Name</strong>, pick the day under <strong>Every</strong>, and set when it
+                <strong>Starts</strong> and <strong>Ends</strong>. An end time earlier than the start runs into the next day.</li>
+            <li>Under <strong>Who it needs</strong>, choose a <strong>Position</strong> and <strong>How many</strong>.
+                Use <strong>Add another position</strong> for each extra position. <strong>How many</strong> can be 0 for a
+                shift that's only needed when a party or private hire adds people to it, such as a late evening shift.</li>
+            <li>Under <strong>Regulars</strong>, use <strong>Add a regular...</strong> to pick the people who normally work
+                that position on this shift. Auto-build gives them the shift first whenever they can work it.</li>
+            <li>Optionally set <strong>Starting</strong> and <strong>Until</strong> dates, for example for school holidays only.</li>
+        </ol>
+        <FluentText>
+            Templates belong to one location; Admins pick the location at the top of the page. <strong>Archive</strong> a
+            template you no longer need, and tick <strong>Show archived</strong> to find and <strong>Restore</strong> it.
+            Archiving never changes shifts already on the rota.
+        </FluentText>
+    </HelpSection>
+
+    <HelpSection Title="Learning templates from your rota">
+        <FluentText>
+            If you've been building the rota by hand, Lanyard can work out the templates for you. On
+            <a href="/manage/rota/templates">Shift Templates</a>, select <strong>Learn from past rota</strong> and choose how far
+            back to look under <strong>Learn from</strong>.
+        </FluentText>
+        <ul>
+            <li>A shift you had on most weeks becomes a template, with how many people you usually had and who usually worked
+                it as its regulars. Times within 15 minutes of each other count as the same shift.</li>
+            <li>A shift that only happened when there was a private hire is learned as needing nobody normally, and the
+                matching <strong>Private hire staffing</strong> is suggested too.</li>
+            <li>One-offs, such as cover for a day, are left out.</li>
+        </ul>
+        <FluentText>
+            Lanyard also tries the templates out on those same weeks and tells you how much of the rota you actually worked
+            Auto-build would have made the same. <strong>Where it differs</strong> lists the shifts it would get wrong.
+            Each suggestion is marked <strong>New</strong>, <strong>Update</strong> (with what would change) or
+            <strong>Already set up</strong>; untick any you don't want, then save. Only published shifts are used.
+        </FluentText>
+        <FluentText>
+            A location with no templates doesn't need to start from scratch: once you've published the rota by hand for four
+            weeks or more, the rota and Shift Templates show a message saying Lanyard has learned your templates and how closely
+            Auto-build would match your rota. Select <strong>Set up Auto-build</strong> to review and save them. Nothing is set
+            up until you do.
+        </FluentText>
+        <FluentText>
+            Once a location has templates, Lanyard compares them with the rota you published every month. If the last eight
+            weeks suggest changes, Shift Templates and the rota show a message: select <strong>Review</strong> to see and save
+            them, or <strong>Dismiss</strong> to leave the templates as they are until next month.
+        </FluentText>
+    </HelpSection>
+
     <HelpSection Title="Staff">
         <FluentText>
             Only people who hold a position appear on the rota. Give one person positions on the

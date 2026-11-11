@@ -1,0 +1,144 @@
+.template-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+}
+
+.template-dialog-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.template-dialog-dates ::deep fluent-datepicker,
+.template-dialog-dates ::deep .fluent-datepicker {
+    width: 100%;
+}
+
+.template-dialog-hint {
+    margin-top: -6px;
+    font-size: 0.8rem;
+    color: var(--colorNeutralForeground3);
+}
+
+.template-dialog-slots {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    padding: 10px 12px 12px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+}
+
+.template-dialog-slots legend {
+    padding: 0 4px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    line-height: 1.4;
+    margin: 0;
+}
+
+/* Position takes the room, the count stays narrow, and the bin lines up with the inputs. On a
+   phone the position gets its own line: Fluent's dropdown has a fixed 160px minimum width that
+   would otherwise run over the count. */
+.template-slot-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 96px auto;
+    grid-template-areas:
+        "position count remove"
+        "regulars regulars regulars";
+    align-items: end;
+    gap: 8px;
+}
+
+.template-slot-row ::deep fluent-field {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.template-slot-position {
+    grid-area: position;
+}
+
+.template-slot-count {
+    grid-area: count;
+}
+
+.template-slot-remove {
+    grid-area: remove;
+}
+
+.template-slot-position,
+.template-slot-count {
+    min-width: 0;
+}
+
+@media (max-width: 520px) {
+    .template-slot-count {
+        width: 120px;
+    }
+}
+
+.template-slot-row + .template-slot-row {
+    padding-top: 8px;
+    border-top: 1px solid var(--colorNeutralStroke2);
+}
+
+@media (max-width: 520px) {
+    .template-slot-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+            "position position"
+            "count remove"
+            "regulars regulars";
+    }
+}
+
+.template-slot-regulars {
+    grid-area: regulars;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.template-slot-regulars-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--colorNeutralForeground2);
+}
+
+.template-slot-hint {
+    flex-basis: 100%;
+    font-size: 0.8rem;
+    color: var(--colorNeutralForeground3);
+}
+
+.template-regular-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 4px 2px 10px;
+    border-radius: 999px;
+    background: var(--colorNeutralBackground3);
+    font-size: 0.85rem;
+}
+
+.template-regular-remove {
+    border: none;
+    background: transparent;
+    color: var(--colorNeutralForeground2);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 999px;
+}
+
+.template-regular-remove:hover,
+.template-regular-remove:focus-visible {
+    background: var(--colorNeutralBackground1Hover);
+}

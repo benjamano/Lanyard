@@ -1,5 +1,5 @@
 @inherits LayoutComponentBase
-@implements IDisposable
+@implements IAsyncDisposable
 
 @using Lanyard.App.Components.Notifications
 
@@ -9,6 +9,8 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject Lanyard.Application.Services.Demo.IDemoGuard DemoGuard
 @inject Lanyard.App.Components.Demo.DemoBrandingState DemoBranding
+@inject ISeasonalThemeService SeasonalThemeService
+@inject SeasonalThemeState SeasonalThemeState
 
 <FluentProviders />
 
@@ -199,7 +201,15 @@
 
         AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
         DemoBranding.Changed += OnDemoBrandingChanged;
+        SeasonalThemeState.Changed += OnSeasonalThemeChanged;
+        NavigationManager.LocationChanged += OnLocationChanged;
     }
+
+    private Task OnSeasonalThemeChanged() => InvokeAsync(ApplyBrandingAsync);
+
+    // The season itself only changes on sign-in or a settings save, but leaving the staff app for
+    // the login page or the public homepage has to take the decorations away with it.
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => _ = InvokeAsync(ApplySeasonAsync);
 
     private void OnDemoBrandingChanged() => _ = InvokeAsync(ApplyBrandingAsync);
 
@@ -227,6 +237,7 @@
         // /login would immediately stomp on that choice back to the default accent color.
         if (IsLoginPage)
         {
+            await ApplySeasonAsync();
             return;
         }
 
@@ -235,6 +246,7 @@
         _locationDisplayName = null;
         int? brandedCompanyId = null;
         _installLinks = AppInstallLinks.Default;
+        SeasonalThemeSetting companySeasonSetting = SeasonalThemeSetting.Automatic;
 
         try
         {
@@ -256,6 +268,7 @@
 
                     brandedCompanyId = companyId;
                     _installLinks = AppInstallLinks.For(branding.Data);
+                    companySeasonSetting = branding.Data.SeasonalThemeSetting;
                 }
             }
         }
@@ -298,14 +311,88 @@
         }
         catch { }
 
+        _season = await ResolveSeasonAsync(companySeasonSetting);
+        await ApplySeasonAsync();
+
         StateHasChanged();
+    }
+
+    // --- Seasonal decorations ---------------------------------------------------------------
+
+    private SeasonalTheme _season = SeasonalTheme.None;
+    private IJSObjectReference? _seasonModule;
+    private string? _appliedSeason;
+
+    private async Task<SeasonalTheme> ResolveSeasonAsync(SeasonalThemeSetting companySetting)
+    {
+        try
+        {
+            AuthenticationState state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            string? userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+            if (string.IsNullOrEmpty(userId))
+            {
+                return SeasonalTheme.None;
+            }
+
+            Result<bool> optIn = await SeasonalThemeService.GetUserOptInAsync(userId);
+
+            return SeasonalThemeService.Resolve(companySetting, !optIn.Success || optIn.Data);
+        }
+        catch
+        {
+            return SeasonalTheme.None;
+        }
+    }
+
+    private async Task ApplySeasonAsync()
+    {
+        // Login and 2FA (both under /login) stay plain. The public homepage is signed-out only, and a
+        // signed-out visitor always resolves to None; kiosk/terminal pages never use this layout.
+        SeasonalTheme season = IsLoginPage ? SeasonalTheme.None : _season;
+
+        string name = season.ToString().ToLowerInvariant();
+
+        if (name == _appliedSeason)
+        {
+            return;
+        }
+
+        try
+        {
+            // Nothing to tear down and nothing to show: don't even fetch the module.
+            if (_seasonModule is null && season == SeasonalTheme.None)
+            {
+                _appliedSeason = name;
+                return;
+            }
+
+            _seasonModule ??= await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/seasonalThemes.js");
+            await _seasonModule.InvokeVoidAsync("apply", name);
+            _appliedSeason = name;
+        }
+        catch { }
     }
 
     private void Recover() => _errorBoundary?.Recover();
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
         DemoBranding.Changed -= OnDemoBrandingChanged;
+        SeasonalThemeState.Changed -= OnSeasonalThemeChanged;
+        NavigationManager.LocationChanged -= OnLocationChanged;
+
+        if (_seasonModule is not null)
+        {
+            try
+            {
+                // Leaving the layout (e.g. into a kiosk page) must not leave snow behind.
+                await _seasonModule.InvokeVoidAsync("apply", "none");
+                await _seasonModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException) { }
+            catch { }
+        }
     }
 }

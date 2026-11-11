@@ -273,6 +273,7 @@ public class PartyBookingService(IDbContextFactory<ApplicationDbContext> factory
         to.EatTimeUtc = from.EatTimeUtc;
         to.LaserTagTimeUtc = from.LaserTagTimeUtc;
         to.PartyType = from.PartyType;
+        to.HireKind = from.HireKind;
         to.ChildName = from.ChildName;
         to.ChildAgeTurning = from.ChildAgeTurning;
         to.ContactName = from.ContactName;
@@ -302,20 +303,39 @@ public class PartyBookingService(IDbContextFactory<ApplicationDbContext> factory
         booking.Notes = NullIfBlank(booking.Notes);
         booking.PaymentNotes = NullIfBlank(booking.PaymentNotes);
         booking.PartyHostUserId = NullIfBlank(booking.PartyHostUserId);
+
+        // A private hire has no birthday child, food or party type; whatever the form had in those
+        // boxes before it was switched to a hire isn't kept.
+        if (booking.HireKind is not null)
+        {
+            booking.ChildName = string.Empty;
+            booking.ChildAgeTurning = null;
+            booking.PartyType = string.Empty;
+            booking.EatTimeUtc = null;
+            booking.LaserTagTimeUtc = null;
+            booking.AllergyNotes = null;
+        }
     }
 
     private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static string? Validate(PartyBooking booking)
     {
-        if (booking.ChildName.Length == 0)
+        bool hire = booking.HireKind is not null;
+
+        if (booking.HireKind is PrivateHireKind kind && !System.Enum.IsDefined(kind))
+        {
+            return "Choose what the private hire is for.";
+        }
+
+        if (!hire && booking.ChildName.Length == 0)
         {
             return "Enter the birthday child's name.";
         }
 
         if (booking.ContactName.Length == 0)
         {
-            return "Enter the name of the parent or guardian who booked.";
+            return hire ? "Enter the name of the person who booked the hire." : "Enter the name of the parent or guardian who booked.";
         }
 
         if (booking.ContactPhone.Length == 0)
@@ -330,7 +350,7 @@ public class PartyBookingService(IDbContextFactory<ApplicationDbContext> factory
 
         if (booking.EndUtc <= booking.StartUtc)
         {
-            return "The party must finish after it starts.";
+            return hire ? "The hire must finish after it starts." : "The party must finish after it starts.";
         }
 
         if (booking.EatTimeUtc is DateTime eat && (eat < booking.StartUtc || eat > booking.EndUtc))
@@ -345,7 +365,7 @@ public class PartyBookingService(IDbContextFactory<ApplicationDbContext> factory
 
         if (booking.ExpectedChildren < 1)
         {
-            return "Enter how many children are coming.";
+            return hire ? "Enter how many guests are coming." : "Enter how many children are coming.";
         }
 
         if (booking.ExpectedAdults is < 0)

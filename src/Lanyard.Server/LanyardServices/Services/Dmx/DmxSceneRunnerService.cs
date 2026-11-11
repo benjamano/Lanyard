@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
@@ -13,6 +14,10 @@ public class DmxSceneRunnerService(
     IBeatClockService beatClock,
     ILogger<DmxSceneRunnerService> logger) : IDmxSceneRunnerService
 {
+    // A step shorter than this would spin the loop (a 0 s step on a looping scene used to hammer
+    // the kiosk as fast as the CPU allowed). One DMX frame is ~23 ms.
+    public static readonly TimeSpan MinimumStepDelay = TimeSpan.FromMilliseconds(25);
+
     private readonly ISystemDbContextFactory _factory = factory;
     private readonly IDmxService _dmxService = dmxService;
     private readonly IBeatClockService _beatClock = beatClock;
@@ -21,8 +26,11 @@ public class DmxSceneRunnerService(
     public event Action<Guid, Guid>? OnSceneStarted;
     public event Action<Guid, Guid>? OnSceneStopped;
     public event Action<Guid, Guid, int>? OnSceneStepAdvanced;
+    public event Action<Guid, Guid, string>? OnSceneFailed;
 
-    private sealed class RunningScene
+    // One per StartSceneAsync call. Each run owns (and alone disposes) its CTS; a restart only
+    // cancels the run it replaces, so nothing ever touches a CTS another run already disposed.
+    private sealed class SceneRun
     {
         public required Guid ClientId { get; init; }
         public required CancellationTokenSource Cts { get; init; }
@@ -30,24 +38,48 @@ public class DmxSceneRunnerService(
 
     // Key: sceneId. Multiple scenes may run concurrently per client - the last
     // write to a channel wins, so no channel arbitration is needed.
-    private readonly Dictionary<Guid, RunningScene> _runningScenes = [];
+    private readonly Dictionary<Guid, SceneRun> _runningScenes = [];
     private readonly object _lock = new();
 
     public async Task<Result<bool>> StartSceneAsync(Guid clientId, Guid sceneId, TimeSpan? holdFor = null)
     {
+        // Registered before anything is awaited. A momentary button released (StopScene) while
+        // the scene is still loading used to find nothing to cancel, and the scene then started
+        // and ran forever. Now that release cancels this run before it begins.
+        SceneRun run = new() { ClientId = clientId, Cts = new CancellationTokenSource() };
+        bool loopStarted = false;
+
+        lock (_lock)
+        {
+            if (_runningScenes.TryGetValue(sceneId, out SceneRun? existing))
+            {
+                existing.Cts.Cancel();
+            }
+
+            _runningScenes[sceneId] = run;
+        }
+
         try
         {
-            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+            CancellationToken token = run.Cts.Token;
+
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync(token);
 
             DmxScene? scene = await context.DmxScenes
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Where(s => s.Id == sceneId && s.IsActive)
-                .FirstOrDefaultAsync();
+                .FirstOrDefaultAsync(token);
 
             if (scene == null)
             {
                 return Result<bool>.Fail("Scene not found.");
+            }
+
+            if (scene.ClientId != clientId)
+            {
+                _logger.LogWarning("Refused to start DMX scene {SceneId} on client {ClientId}: it belongs to client {SceneClientId}", sceneId, clientId, scene.ClientId);
+                return Result<bool>.Fail("That scene belongs to a different kiosk.");
             }
 
             // Snapshot the steps at start: edits mid-run never corrupt playback.
@@ -58,44 +90,31 @@ public class DmxSceneRunnerService(
                 .Where(s => s.SceneId == sceneId)
                 .OrderBy(s => s.StepNumber)
                 .Include(s => s.ChannelValues)
-                .ToListAsync();
+                .ToListAsync(token);
 
             if (steps.Count == 0)
             {
                 return Result<bool>.Fail("Scene has no steps.");
             }
 
-            CancellationTokenSource cts = new();
-
-            lock (_lock)
-            {
-                // Restart if already running so playback always reflects the latest start request.
-                if (_runningScenes.TryGetValue(sceneId, out RunningScene? existing))
-                {
-                    existing.Cts.Cancel();
-                    existing.Cts.Dispose();
-                }
-
-                _runningScenes[sceneId] = new RunningScene
-                {
-                    ClientId = clientId,
-                    Cts = cts
-                };
-            }
-
-            // Must happen before the loop starts: the run loop's finally disposes the
-            // CTS, and CancelAfter on a disposed CTS throws.
+            // Before the loop starts, while this method still owns the CTS.
             if (holdFor.HasValue && holdFor.Value > TimeSpan.Zero)
             {
-                cts.CancelAfter(holdFor.Value);
+                run.Cts.CancelAfter(holdFor.Value);
             }
-
-            OnSceneStarted?.Invoke(clientId, sceneId);
 
             _logger.LogInformation("Started DMX scene {SceneId} for client {ClientId} ({StepCount} steps, loop: {Loop}, bpmSync: {BpmSync}, hold: {HoldFor})", sceneId, clientId, steps.Count, scene.Loop, scene.BpmSyncEnabled, holdFor);
 
-            _ = Task.Run(() => RunSceneLoopAsync(clientId, sceneId, scene.IsMomentary, scene.Loop, scene.BpmSyncEnabled, steps, cts.Token));
+            Raise(OnSceneStarted, h => h(clientId, sceneId));
 
+            loopStarted = true;
+            _ = Task.Run(() => RunSceneLoopAsync(run, sceneId, scene.IsMomentary, scene.Loop, scene.BpmSyncEnabled, steps));
+
+            return Result<bool>.Ok(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // Stopped (or replaced) before it got going - exactly what the caller asked for.
             return Result<bool>.Ok(true);
         }
         catch (Exception ex)
@@ -103,24 +122,34 @@ public class DmxSceneRunnerService(
             _logger.LogError(ex, "Error starting DMX scene {SceneId} for client {ClientId}", sceneId, clientId);
             return Result<bool>.Fail("An error occurred while starting the DMX scene.");
         }
+        finally
+        {
+            if (!loopStarted)
+            {
+                ReleaseRun(sceneId, run);
+            }
+        }
     }
 
-    private async Task RunSceneLoopAsync(Guid clientId, Guid sceneId, bool isMomentary, bool loop, bool bpmSyncEnabled, List<DmxSceneStep> steps, CancellationToken token)
+    private async Task RunSceneLoopAsync(SceneRun run, Guid sceneId, bool isMomentary, bool loop, bool bpmSyncEnabled, List<DmxSceneStep> steps)
     {
+        Guid clientId = run.ClientId;
+        CancellationToken token = run.Cts.Token;
+        string? failure = null;
+
         try
         {
             do
             {
-                foreach (DmxSceneStep step in steps)
+                for (int index = 0; index < steps.Count; index++)
                 {
+                    DmxSceneStep step = steps[index];
+
                     token.ThrowIfCancellationRequested();
 
-                    OnSceneStepAdvanced?.Invoke(clientId, sceneId, step.StepNumber);
-
-                    // One batched write per step: a single hub message to the kiosk and a
-                    // single change event for any open virtual desk, instead of one of each
-                    // per channel (which also made the step's start smear out over N sends).
-                    await _dmxService.UpdateChannelValuesAsync(clientId, ToChannelBatch(step.ChannelValues));
+                    // The position, not StepNumber: numbers can have gaps after a delete.
+                    int position = index + 1;
+                    Raise(OnSceneStepAdvanced, h => h(clientId, sceneId, position));
 
                     // The delay IS the scheduler: hold the values, then move on.
                     // BPM sync recomputes from the live playback position every step,
@@ -131,7 +160,8 @@ public class DmxSceneRunnerService(
                     // double-fire steps. The first step fires immediately on start
                     // (operators start scenes on a downbeat by hand). When nothing is
                     // playing or the song has no known BPM, the step's fixed Duration
-                    // applies instead.
+                    // applies instead. Worked out before the step's write, and measured
+                    // from the step's start, so a fade inside the step doesn't lengthen it.
                     TimeSpan delay = step.Duration;
 
                     if (bpmSyncEnabled)
@@ -144,21 +174,56 @@ public class DmxSceneRunnerService(
                         }
                     }
 
-                    await Task.Delay(delay, token);
+                    if (delay < MinimumStepDelay)
+                    {
+                        delay = MinimumStepDelay;
+                    }
+
+                    long stepStarted = Stopwatch.GetTimestamp();
+                    TimeSpan fade = DmxFade.Effective(step.FadeTime, delay);
+
+                    if (fade > TimeSpan.Zero)
+                    {
+                        await FadeToStepAsync(clientId, step, fade, token);
+                    }
+                    else
+                    {
+                        // One batched write per step: a single change notification for any open desk
+                        // and (coalesced) a single kiosk message.
+                        await _dmxService.UpdateChannelValuesAsync(clientId, ToChannelBatch(step.ChannelValues));
+                    }
+
+                    TimeSpan remaining = delay - Stopwatch.GetElapsedTime(stepStarted);
+
+                    if (remaining > TimeSpan.Zero)
+                    {
+                        await Task.Delay(remaining, token);
+                    }
                 }
             } while (loop && !token.IsCancellationRequested);
         }
         catch (OperationCanceledException)
         {
-            // Stopped deliberately via StopScene/StopAllScenesForClient.
+            // Stopped deliberately via StopScene/StopAllScenesForClient/holdFor/restart.
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "DMX scene {SceneId} playback failed for client {ClientId}", sceneId, clientId);
+            failure = "Playback failed: " + ex.Message;
         }
         finally
         {
-            if (isMomentary)
+            // Restarted rather than stopped: a newer run of this scene already owns the slot.
+            // Zeroing here would land on top of that run's first step and black it out, and
+            // raising Stopped would tell desks a running scene had ended.
+            bool superseded;
+
+            lock (_lock)
+            {
+                superseded = _runningScenes.TryGetValue(sceneId, out SceneRun? current) && current != run;
+            }
+
+            if (isMomentary && !superseded)
             {
                 // Momentary scenes must not leave a channel stuck at its last value once
                 // playback stops for any reason (release, holdFor expiry, scene edited/
@@ -180,18 +245,88 @@ public class DmxSceneRunnerService(
                 }
             }
 
-            lock (_lock)
+            ReleaseRun(sceneId, run);
+
+            if (!superseded)
             {
-                if (_runningScenes.TryGetValue(sceneId, out RunningScene? running) && running.Cts.Token == token)
+                _logger.LogInformation("Stopped DMX scene {SceneId} for client {ClientId}", sceneId, clientId);
+
+                if (failure != null)
                 {
-                    _runningScenes.Remove(sceneId);
-                    running.Cts.Dispose();
+                    Raise(OnSceneFailed, h => h(clientId, sceneId, failure));
                 }
+
+                Raise(OnSceneStopped, h => h(clientId, sceneId));
+            }
+        }
+    }
+
+    // Crossfades from what the lights show now to the step, one frame every ~25 ms, sending only
+    // channels whose level moved since the last frame. The engine coalesces sends to the kiosk too.
+    private async Task FadeToStepAsync(Guid clientId, DmxSceneStep step, TimeSpan fade, CancellationToken token)
+    {
+        Result<IEnumerable<DmxChannel>>? current = await _dmxService.GetDmxChannelsAsync(clientId);
+        Dictionary<int, byte> from = current?.Data?.ToDictionary(c => c.Address, c => c.Value) ?? [];
+
+        List<(int Address, byte From, byte To)> channels = step.ChannelValues
+            .Select(v => (v.ChannelNumber, from.GetValueOrDefault(v.ChannelNumber), v.Value))
+            .ToList();
+
+        long started = Stopwatch.GetTimestamp();
+        double previous = -1;
+
+        while (true)
+        {
+            double progress = Math.Min(Stopwatch.GetElapsedTime(started) / fade, 1);
+            List<DmxChannel> frame = DmxFade.Frame(channels, progress, previous);
+
+            if (frame.Count > 0)
+            {
+                await _dmxService.UpdateChannelValuesAsync(clientId, frame);
             }
 
-            _logger.LogInformation("Stopped DMX scene {SceneId} for client {ClientId}", sceneId, clientId);
+            if (progress >= 1)
+            {
+                return;
+            }
 
-            OnSceneStopped?.Invoke(clientId, sceneId);
+            previous = progress;
+            await Task.Delay(DmxFade.FrameInterval, token);
+        }
+    }
+
+    private void ReleaseRun(Guid sceneId, SceneRun run)
+    {
+        lock (_lock)
+        {
+            if (_runningScenes.TryGetValue(sceneId, out SceneRun? current) && current == run)
+            {
+                _runningScenes.Remove(sceneId);
+            }
+        }
+
+        run.Cts.Dispose();
+    }
+
+    // Outside the lock, one subscriber at a time: a desk that throws mustn't break playback or
+    // stop the other desks hearing about it.
+    private void Raise<T>(T? handlers, Action<T> invoke) where T : Delegate
+    {
+        if (handlers == null)
+        {
+            return;
+        }
+
+        foreach (Delegate handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                invoke((T)handler);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "A DMX scene event subscriber threw; ignoring it");
+            }
         }
     }
 
@@ -208,7 +343,7 @@ public class DmxSceneRunnerService(
         {
             lock (_lock)
             {
-                if (_runningScenes.TryGetValue(sceneId, out RunningScene? running))
+                if (_runningScenes.TryGetValue(sceneId, out SceneRun? running))
                 {
                     running.Cts.Cancel();
                 }
@@ -229,7 +364,7 @@ public class DmxSceneRunnerService(
         {
             lock (_lock)
             {
-                foreach (RunningScene running in _runningScenes.Values.Where(r => r.ClientId == clientId))
+                foreach (SceneRun running in _runningScenes.Values.Where(r => r.ClientId == clientId))
                 {
                     running.Cts.Cancel();
                 }

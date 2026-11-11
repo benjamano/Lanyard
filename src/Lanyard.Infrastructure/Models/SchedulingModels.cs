@@ -151,6 +151,33 @@ namespace Lanyard.Infrastructure.Models
         public bool IsAllDay => StartTime == EndTime;
     }
 
+    // How much someone would like to work each week: "at most 2 shifts" or "no more than 16 hours".
+    // A wish, not a contract - rota suggestions and Auto-build put people who'd go past it behind
+    // everyone who wouldn't, but they can still be picked; a contract maximum (ContractRequirement)
+    // is the hard limit. Null on both, or no row, means they haven't said. One row per person per
+    // company, the person's own record like StaffAvailability, so GDPR erasure deletes it.
+    public class StaffWorkPreference : ICompanyOwned
+    {
+        public Guid Id { get; set; }
+
+        public required int CompanyId { get; set; }
+        public Company? Company { get; set; }
+
+        public required string UserId { get; set; }
+        public UserProfile? User { get; set; }
+
+        public int? MaxShiftsPerWeek { get; set; }
+        public decimal? MaxHoursPerWeek { get; set; }
+
+        public DateTime UpdateDate { get; set; }
+
+        // Null when the person set it themselves (or whoever did has since been erased); otherwise
+        // the manager who did.
+        public string? UpdatedByUserId { get; set; }
+
+        public bool HasAnyValue => MaxShiftsPerWeek is not null || MaxHoursPerWeek is not null;
+    }
+
     // The PIN a staff member types on the clock-in terminal. The terminal identifies the person
     // by name first (they tap themselves on today's roster), so the PIN only has to verify that
     // one user - it never has to be unique or looked up, which is why a salted Identity
@@ -230,10 +257,9 @@ namespace Lanyard.Infrastructure.Models
     //   UpdateDate > PublishedDateUtc           -> edited since publish, re-notify on next publish
     //   !IsActive && RemovalPending             -> removed after publish, not yet told
     //
-    // Automated scheduling (future) plugs in by generating Shift rows through the same
-    // IRotaService.SaveShiftAsync validation; it would add StaffAvailability (user, weekday, time
-    // range) and LocationDemand (location, weekday, position, headcount) tables to read from,
-    // not change this one.
+    // Auto-build creates draft Shift rows from a location's ShiftTemplates (the weekly demand)
+    // and picks who works them from StaffAvailability and the suggestion ranking; it doesn't need
+    // anything extra on this table.
     public class Shift
     {
         public Guid Id { get; set; }
@@ -255,6 +281,11 @@ namespace Lanyard.Infrastructure.Models
         public int BreakMinutes { get; set; }
 
         public string? Notes { get; set; }
+
+        // Set when Auto-build added the shift to staff a booked party (PartyStaffingRule), so running
+        // it again doesn't add the party's staff twice and a cancelled party's shifts can be found.
+        public Guid? PartyBookingId { get; set; }
+        public PartyBooking? PartyBooking { get; set; }
 
         public DateTime? PublishedDateUtc { get; set; }
         public string? PublishedByUserId { get; set; }
