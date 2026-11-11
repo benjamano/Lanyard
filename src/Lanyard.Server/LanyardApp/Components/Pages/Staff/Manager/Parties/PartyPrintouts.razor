@@ -13,7 +13,7 @@
             <HelpButton AreaKey="@HelpRegistry.Parties" Topic="settings" />
         </div>
         <p>
-            Use your own artwork for the free return voucher and the feedback form. Export the blank design (with the boxes left
+            Use your own artwork for the reserved table card, the free return voucher and the feedback form. Export the blank design (with the boxes left
             empty) as a PNG or JPEG, upload it, and Lanyard prints each party's details into the boxes. Without artwork, Lanyard
             prints its standard design with your logo and colour. These apply at every location in your company.
         </p>
@@ -25,6 +25,9 @@
     }
     else if (scope is not null && companyId is int company)
     {
+        <PartyTemplateEditor Scope="@scope" CompanyId="@company" Document="PartyArtworkDocument.ReservedCard" Title="Reserved table card"
+                             Intro="A5, for a table-card stand. Prints two to a sheet, one for each side of the stand, with the child's name filled in." />
+
         <PartyTemplateEditor Scope="@scope" CompanyId="@company" Document="PartyArtworkDocument.Voucher" Title="Free return voucher"
                              Intro="Given to the birthday child. Signed by whoever prints it, and valid for the number of months you choose." />
 

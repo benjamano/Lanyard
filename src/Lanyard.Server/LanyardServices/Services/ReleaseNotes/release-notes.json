@@ -903,5 +903,14 @@
       "Anyone can turn seasonal themes off for themselves under Seasonal Themes on their account page.",
       "Kiosk screens, the clock-in terminal and the login page are never decorated, and nothing moves when reduced motion is on."
     ]
+  },
+  {
+    "version": "1.4.22",
+    "releaseDate": "2026-11-11",
+    "summary": "The party reserved table card is now A5 and can use your own design.",
+    "details": [
+      "The reserved table card now prints at A5, to fit a table-card stand: two copies on one A4 sheet, one for each side of the stand.",
+      "Upload your own reserved card design on Parties > Printouts, like the voucher and feedback form, and choose where the child's name goes. The card can also show the arrival time and room."
+    ]
   }
 ]

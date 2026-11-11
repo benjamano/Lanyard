@@ -207,7 +207,8 @@ namespace Lanyard.Infrastructure.Models
         // PDF onto a page, so the artwork has to be an image. Null = the standard design.
         public Guid? ArtworkFileId { get; set; }
 
-        // The artwork's printed size. The voucher and feedback form are A5 portrait at Play2Day.
+        // The artwork's printed size. The voucher and feedback form are A5 portrait at Play2Day; the
+        // reserved table card starts as A5 landscape.
         public decimal WidthMm { get; set; } = 148;
         public decimal HeightMm { get; set; } = 210;
 
