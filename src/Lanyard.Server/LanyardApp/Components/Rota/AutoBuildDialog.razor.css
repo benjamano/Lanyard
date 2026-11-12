@@ -116,3 +116,15 @@
     margin: 6px 0 0;
     padding-left: 18px;
 }
+
+.auto-build-holidays {
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--colorBrandBackground) 10%, var(--colorNeutralBackground1));
+    font-size: 0.9rem;
+}
+
+.auto-build-holidays ul {
+    margin: 6px 0 0;
+    padding-left: 18px;
+}

@@ -1,0 +1,167 @@
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+
+@inject IRotaHolidayService _holidayService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.CalendarStar())" />
+            <FluentText As="@TextTag.H3">@(Existing is null ? "Add holiday" : "Edit holiday")</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="holiday-dialog">
+            @if (errorMessage is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
+            }
+
+            <fieldset class="holiday-dialog-kinds">
+                <legend>What kind of day</legend>
+                @foreach (RotaHolidayKind option in kinds)
+                {
+                    RotaHolidayKind current = option;
+                    <label class="holiday-kind @(kind == current ? "is-selected" : string.Empty)">
+                        <input type="radio" name="holiday-kind" checked="@(kind == current)" @onchange="@(() => SetKind(current))" />
+                        <span class="holiday-kind-text">
+                            <strong>@current.Label()</strong>
+                            <span>@KindHint(current)</span>
+                        </span>
+                    </label>
+                }
+            </fieldset>
+
+            <FluentTextInput @bind-Value="name" Label="Name" Placeholder="@NamePlaceholder" Required="true" Width="100%"
+                             Maxlength="@RotaHolidayRules.MaxNameLength" />
+
+            <div class="holiday-dialog-pair">
+                <FluentDatePicker TValue="DateTime?" @bind-Value="startDate" Label="@(kind == RotaHolidayKind.SchoolHoliday ? "First day" : "Date")" Culture="@RotaFormat.Uk" />
+                <FluentDatePicker TValue="DateTime?" @bind-Value="endDate" Label="Last day" Culture="@RotaFormat.Uk" />
+            </div>
+            <div class="holiday-dialog-hint">For one day, set the same first and last day.</div>
+
+            @if (kind == RotaHolidayKind.BankHoliday)
+            {
+                <FluentSelect TOption="DayOfWeek" TValue="string" Items="@dayOptions" OptionText="@(x => RotaFormat.Uk.DateTimeFormat.GetDayName(x))"
+                              OptionValue="@(x => x.ToString())" @bind-Value="staffLike" Label="Staff it like a" Width="100%" />
+                <div class="holiday-dialog-hint">Auto-build uses that day's shift templates instead. It also counts as a school holiday.</div>
+            }
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentStack HorizontalAlignment="HorizontalAlignment.End" HorizontalGap="8px">
+            <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" OnClick="@SaveAsync">@(isBusy ? "Saving..." : "Save")</FluentButton>
+            <FluentButton Disabled="@isBusy" OnClick="@(() => Dialog.CancelAsync())">Cancel</FluentButton>
+        </FluentStack>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required int LocationId { get; set; }
+
+    [Parameter]
+    public RotaHoliday? Existing { get; set; }
+
+    private readonly List<RotaHolidayKind> kinds = [RotaHolidayKind.SchoolHoliday, RotaHolidayKind.BankHoliday, RotaHolidayKind.Closed];
+
+    // Monday first, as the rota reads.
+    private readonly List<DayOfWeek> dayOptions = Enumerable.Range(0, 7).Select(i => (DayOfWeek)((i + 1) % 7)).ToList();
+
+    private RotaHolidayKind kind = RotaHolidayKind.SchoolHoliday;
+    private string name = string.Empty;
+    private DateTime? startDate;
+    private DateTime? endDate;
+    private string staffLike = nameof(DayOfWeek.Sunday);
+    private string? errorMessage;
+    private bool isBusy;
+
+    private string NamePlaceholder => kind switch
+    {
+        RotaHolidayKind.BankHoliday => "e.g. Summer bank holiday",
+        RotaHolidayKind.Closed => "e.g. Christmas Day",
+        _ => "e.g. Summer holidays"
+    };
+
+    private static string KindHint(RotaHolidayKind value) => value switch
+    {
+        RotaHolidayKind.BankHoliday => "Staffed like another day of the week",
+        RotaHolidayKind.Closed => "No shifts that day",
+        _ => "Shift templates set to school holidays run"
+    };
+
+    protected override void OnInitialized()
+    {
+        if (Existing is RotaHoliday holiday)
+        {
+            kind = holiday.Kind;
+            name = holiday.Name;
+            startDate = holiday.StartDate.ToDateTime(TimeOnly.MinValue);
+            endDate = holiday.EndDate.ToDateTime(TimeOnly.MinValue);
+            staffLike = holiday.StaffedLike.ToString();
+        }
+    }
+
+    private void SetKind(RotaHolidayKind value) => kind = value;
+
+    private async Task SaveAsync()
+    {
+        errorMessage = null;
+
+        if (startDate is not DateTime start)
+        {
+            errorMessage = kind == RotaHolidayKind.SchoolHoliday ? "Choose the first day." : "Choose the date.";
+            return;
+        }
+
+        DateTime end = endDate ?? start;
+
+        RotaHoliday holiday = new()
+        {
+            Id = Existing?.Id ?? Guid.Empty,
+            CompanyId = 0,
+            LocationId = LocationId,
+            Name = name ?? string.Empty,
+            Kind = kind,
+            StartDate = DateOnly.FromDateTime(start),
+            EndDate = DateOnly.FromDateTime(end),
+            StaffLike = kind == RotaHolidayKind.BankHoliday && Enum.TryParse(staffLike, out DayOfWeek like) ? like : null
+        };
+
+        if (RotaHolidayRules.Validate(holiday) is string invalid)
+        {
+            errorMessage = invalid;
+            return;
+        }
+
+        isBusy = true;
+
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null || !actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            isBusy = false;
+            errorMessage = "Couldn't confirm who you are - try reloading the page.";
+            return;
+        }
+
+        Result<RotaHoliday> result = await _holidayService.SaveHolidayAsync(scopeResult.Data, holiday, actingUser.Data);
+
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            errorMessage = result.Error;
+            return;
+        }
+
+        _toastService.ShowSuccess(Existing is null ? $"{holiday.Name.Trim()} added." : $"{holiday.Name.Trim()} saved.");
+        await Dialog.CloseAsync(true);
+    }
+}

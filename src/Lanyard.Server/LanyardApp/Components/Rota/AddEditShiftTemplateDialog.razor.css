@@ -142,3 +142,7 @@
 .template-regular-remove:focus-visible {
     background: var(--colorNeutralBackground1Hover);
 }
+
+.template-dialog-runs-hint {
+    margin-top: -8px;
+}

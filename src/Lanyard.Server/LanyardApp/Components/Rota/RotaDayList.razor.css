@@ -126,3 +126,40 @@
     background: var(--colorNeutralBackground2);
     box-shadow: inset 3px 0 0 var(--colorBrandStroke1);
 }
+
+/* A dot under a day that's a holiday, and a line saying what it is. */
+.day-strip-button {
+    position: relative;
+}
+
+.day-strip-holiday {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--colorBrandBackground);
+}
+
+.day-strip-button.is-selected .day-strip-holiday {
+    background: #fff;
+}
+
+.day-strip-holiday.is-closed {
+    background: var(--colorStatusDangerForeground1);
+}
+
+.day-list-holiday {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    background: color-mix(in srgb, var(--colorBrandBackground) 10%, var(--colorNeutralBackground1));
+}
+
+.day-list-holiday.is-closed {
+    background: color-mix(in srgb, var(--colorStatusDangerBackground3) 14%, var(--colorNeutralBackground1));
+}

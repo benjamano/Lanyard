@@ -26,6 +26,19 @@
             }
             else if (preview is not null)
             {
+                @if (preview.HolidayLines.Count > 0)
+                {
+                    <div class="auto-build-holidays">
+                        <strong>Holidays in @RangeLabel</strong>
+                        <ul>
+                            @foreach (string line in preview.HolidayLines)
+                            {
+                                <li>@line</li>
+                            }
+                        </ul>
+                    </div>
+                }
+
                 @foreach (string warning in preview.WarningLines)
                 {
                     <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">@warning</FluentMessageBar>

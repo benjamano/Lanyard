@@ -1,3 +1,5 @@
+using Lanyard.Infrastructure.Enum;
+
 namespace Lanyard.Infrastructure.Models
 {
     // A shift a location needs every week: "Saturday AM, 09:00 to 14:00, 2 Duty Managers and 4
@@ -31,6 +33,9 @@ namespace Lanyard.Infrastructure.Models
         public DateOnly? EffectiveFrom { get; set; }
         public DateOnly? EffectiveTo { get; set; }
 
+        // Term time, school holidays (the location's RotaHoliday dates) or both.
+        public TemplateRuns Runs { get; set; } = TemplateRuns.EveryWeek;
+
         public bool IsActive { get; set; } = true;
 
         public List<ShiftTemplateSlot> Slots { get; set; } = [];
@@ -53,6 +58,22 @@ namespace Lanyard.Infrastructure.Models
             && day.DayOfWeek == DayOfWeek
             && (EffectiveFrom is not DateOnly from || day >= from)
             && (EffectiveTo is not DateOnly to || day <= to);
+
+        // Whether the template runs on a day once the location's holidays are counted: never on a
+        // closed day; on a bank holiday it runs if it's for the weekday the day is staffed like;
+        // Runs decides between term time and school holidays. The dates are still the real day's.
+        public bool AppliesOn(RotaHolidayDay day) =>
+            IsActive
+            && !day.IsClosed
+            && day.StaffedLike == DayOfWeek
+            && Runs switch
+            {
+                TemplateRuns.TermTimeOnly => !day.IsSchoolHoliday,
+                TemplateRuns.SchoolHolidaysOnly => day.IsSchoolHoliday,
+                _ => true
+            }
+            && (EffectiveFrom is not DateOnly from || day.Day >= from)
+            && (EffectiveTo is not DateOnly to || day.Day <= to);
     }
 
     // How many people of one position a template needs. A template lists each position once;
