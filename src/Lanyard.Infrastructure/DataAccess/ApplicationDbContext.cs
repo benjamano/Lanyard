@@ -131,6 +131,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ShiftTemplateSlot> ShiftTemplateSlots { get; set; }
         public DbSet<ShiftTemplateSlotRegular> ShiftTemplateSlotRegulars { get; set; }
         public DbSet<TemplateSuggestionRun> TemplateSuggestionRuns { get; set; }
+        public DbSet<RotaHoliday> RotaHolidays { get; set; }
         public DbSet<CompanySchedulingSettings> CompanySchedulingSettings { get; set; }
         public DbSet<Shift> Shifts { get; set; }
         public DbSet<ClockInTerminal> ClockInTerminals { get; set; }
@@ -612,6 +613,20 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<ShiftTemplateSlotRegular>()
                 .HasIndex(x => new { x.ShiftTemplateSlotId, x.UserId })
                 .IsUnique();
+
+            // A location's holidays and closed days, read for one location and a date range.
+            modelBuilder.Entity<RotaHoliday>()
+                .HasIndex(x => new { x.LocationId, x.StartDate });
+
+            modelBuilder.Entity<RotaHoliday>()
+                .Property(x => x.Name)
+                .HasMaxLength(RotaHolidayRules.MaxNameLength);
+
+            modelBuilder.Entity<RotaHoliday>()
+                .HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             // The latest run for a location is what the banner reads.
             modelBuilder.Entity<TemplateSuggestionRun>()

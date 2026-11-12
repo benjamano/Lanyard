@@ -38,6 +38,7 @@ public sealed record AutoBuildLine(
 // AlreadyCovered counts template and party shifts the rota already had, which were left alone.
 // Removed are draft shifts it added for a party that has since been cancelled or moved, which it
 // takes off; Warnings are published party shifts like that, which only the manager can change.
+// Holidays describes each holiday or closed day in the range and what Auto-build did about it.
 public sealed record AutoBuildResult(
     string LocationName,
     DateOnly From,
@@ -47,8 +48,11 @@ public sealed record AutoBuildResult(
     List<AutoBuildLine> Lines,
     int PartyCount = 0,
     List<AutoBuildLine>? Removed = null,
-    List<string>? Warnings = null)
+    List<string>? Warnings = null,
+    List<string>? Holidays = null)
 {
+    public List<string> HolidayLines => Holidays ?? [];
+
     public List<AutoBuildLine> RemovedLines => Removed ?? [];
 
     public List<string> WarningLines => Warnings ?? [];

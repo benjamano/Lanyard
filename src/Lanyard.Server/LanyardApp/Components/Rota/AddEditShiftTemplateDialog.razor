@@ -1,5 +1,6 @@
 @using Lanyard.Application.Services.Scheduling
 @using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
 
 @inject IShiftTemplateService _templateService
 
@@ -86,6 +87,13 @@
                 </FluentButton>
             </fieldset>
 
+            <FluentSelect TOption="TemplateRuns" TValue="string" Items="@runsOptions" OptionText="@(x => x.Label())"
+                          OptionValue="@(x => x.ToString())" @bind-Value="runs" Label="Runs" Width="100%" />
+            <div class="template-dialog-hint template-dialog-runs-hint">
+                @RunsHint
+                <a href="@($"/manage/rota/holidays?location={LocationId}")" target="_blank">Set the dates under Holidays</a>.
+            </div>
+
             <div class="template-dialog-pair template-dialog-dates">
                 <FluentDatePicker TValue="DateTime?" @bind-Value="effectiveFrom" Label="Starting (optional)" Culture="@RotaFormat.Uk" />
                 <FluentDatePicker TValue="DateTime?" @bind-Value="effectiveTo" Label="Until (optional)" Culture="@RotaFormat.Uk" />
@@ -157,7 +165,16 @@
     private int breakMinutes;
     private DateTime? effectiveFrom;
     private DateTime? effectiveTo;
+    private string runs = nameof(TemplateRuns.EveryWeek);
+    private readonly List<TemplateRuns> runsOptions = [TemplateRuns.EveryWeek, TemplateRuns.TermTimeOnly, TemplateRuns.SchoolHolidaysOnly];
     private List<SlotModel> slots = [];
+
+    private string RunsHint => Enum.TryParse(runs, out TemplateRuns value) ? value switch
+    {
+        TemplateRuns.TermTimeOnly => "Auto-build skips it in the location's school holidays and on bank holidays.",
+        TemplateRuns.SchoolHolidaysOnly => "Auto-build only uses it in the location's school holidays and on bank holidays.",
+        _ => "Auto-build uses it in term time and school holidays."
+    } : string.Empty;
 
     // Positions the template already uses stay choosable even if they've since been archived.
     private List<StaffPosition> allPositions = [];
@@ -178,6 +195,7 @@
             breakMinutes = template.BreakMinutes;
             effectiveFrom = template.EffectiveFrom?.ToDateTime(TimeOnly.MinValue);
             effectiveTo = template.EffectiveTo?.ToDateTime(TimeOnly.MinValue);
+            runs = template.Runs.ToString();
 
             foreach (ShiftTemplateSlot slot in template.Slots)
             {
@@ -231,6 +249,7 @@
             BreakMinutes = breakMinutes,
             EffectiveFrom = effectiveFrom is DateTime from ? DateOnly.FromDateTime(from) : null,
             EffectiveTo = effectiveTo is DateTime to ? DateOnly.FromDateTime(to) : null,
+            Runs = Enum.TryParse(runs, out TemplateRuns chosen) ? chosen : TemplateRuns.EveryWeek,
             Slots = slots
                 .Where(s => Guid.TryParse(s.PositionId, out _))
                 .Select(s => new ShiftTemplateSlot

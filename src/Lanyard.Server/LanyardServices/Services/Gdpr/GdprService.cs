@@ -384,6 +384,23 @@ public class GdprService : IGdprService
                 }
             }
 
+            List<RotaHoliday> holidaysTouchedByUser = await ctx.RotaHolidays
+                .Where(x => x.CreateByUserId == userId || x.UpdateByUserId == userId)
+                .ToListAsync();
+
+            foreach (RotaHoliday holiday in holidaysTouchedByUser)
+            {
+                if (holiday.CreateByUserId == userId)
+                {
+                    holiday.CreateByUserId = null;
+                }
+
+                if (holiday.UpdateByUserId == userId)
+                {
+                    holiday.UpdateByUserId = null;
+                }
+            }
+
             // Decisions and records this person made on other people's time off keep their
             // outcome but lose the name. Their own requests are removed in RemoveOwnedRecordsAsync.
             List<TimeOffRequest> timeOffActedOn = await ctx.TimeOffRequests

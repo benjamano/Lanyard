@@ -1,0 +1,116 @@
+/* Plain flex list rather than FluentDataGrid so names and dates wrap at phone width. */
+.rota-holidays {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 8px;
+    max-width: 960px;
+}
+
+.holidays-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.holidays-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.rota-holidays ::deep .holidays-intro {
+    color: var(--colorNeutralForeground3);
+}
+
+.holidays-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px;
+}
+
+.holidays-toolbar ::deep fluent-field {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.holiday-list {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+}
+
+.holiday-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.holiday-item:last-child {
+    border-bottom: none;
+}
+
+.holiday-past {
+    opacity: 0.65;
+}
+
+.holiday-marker {
+    width: 4px;
+    align-self: stretch;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.holiday-marker-school {
+    background: var(--colorBrandBackground);
+}
+
+.holiday-marker-bank {
+    background: var(--colorPaletteBlueBorderActive, var(--colorBrandStroke1));
+}
+
+.holiday-marker-closed {
+    background: var(--colorPaletteRedBorderActive, var(--colorStatusDangerBorderActive));
+}
+
+.holiday-info {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.holiday-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+}
+
+.holiday-name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.holiday-dates {
+    color: var(--colorNeutralForeground2);
+}
+
+.holiday-effect {
+    font-size: 0.85rem;
+    color: var(--colorNeutralForeground3);
+}
+
+.holiday-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}

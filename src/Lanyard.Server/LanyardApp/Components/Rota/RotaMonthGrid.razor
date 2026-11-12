@@ -5,9 +5,15 @@
         <div class="month-corner" role="columnheader">Staff</div>
         @foreach (DateOnly day in Days)
         {
-            <div class="month-day-header @DayClasses(day)" role="columnheader" title="@day.DayLabel()">
+            RotaHolidayDay holiday = View.HolidayOn(day);
+            <div class="month-day-header @DayClasses(day) @HolidayClass(holiday)" role="columnheader"
+                 title="@(RotaHolidayRules.Describe(holiday) is string about ? $"{day.DayLabel()} · {about}" : day.DayLabel())">
                 <span class="month-day-name">@day.ToString("ddd", RotaDisplayExtensions.Uk)[..2]</span>
                 <span class="month-day-number">@day.Day</span>
+                @if (!holiday.IsOrdinary)
+                {
+                    <span class="month-day-holiday">@(holiday.IsClosed ? "Shut" : holiday.BankHoliday is not null ? "BH" : "Hols")</span>
+                }
             </div>
         }
 
@@ -94,6 +100,14 @@
         Enumerable.Range(0, View.To.DayNumber - View.From.DayNumber + 1).Select(i => View.From.AddDays(i)).ToList();
 
     private string GridColumns => $"grid-template-columns: minmax(150px, 180px) repeat({Days.Count}, 64px);";
+
+    private static string HolidayClass(RotaHolidayDay day) => day switch
+    {
+        { IsClosed: true } => "is-closed",
+        { BankHoliday: not null } => "is-bank-holiday",
+        { SchoolHoliday: not null } => "is-school-holiday",
+        _ => string.Empty
+    };
 
     private string DayClasses(DateOnly day)
     {
