@@ -82,7 +82,8 @@ public class RotaAutoBuildService(
                 return Result<AutoBuildResult>.Ok(new AutoBuildResult(location.GetDisplayName(), from, to, templates.Count, 0, []));
             }
 
-            List<RotaHoliday> holidays = await RotaHolidayService.ForRangeAsync(ctx, locationId, firstDay, to);
+            // The whole range, so the preview lists holidays on days already over too.
+            List<RotaHoliday> holidays = await RotaHolidayService.ForRangeAsync(ctx, locationId, from, to);
 
             DateTime windowStartUtc = RotaTime.StartOfDayUtc(firstDay);
             DateTime windowEndUtc = RotaTime.StartOfDayUtc(to.AddDays(1));
@@ -200,10 +201,12 @@ public class RotaAutoBuildService(
 
             int partyCount = parties.Count(p => demand.Any(d => d.PartyBookingId == p.Id));
 
-            List<string> holidayLines = HolidayLines(holidays, firstDay, to);
+            List<string> holidayLines = HolidayLines(holidays, from, to);
+            int closedDays = Enumerable.Range(0, to.DayNumber - firstDay.DayNumber + 1)
+                .Count(i => RotaHolidayRules.For(holidays, firstDay.AddDays(i)).IsClosed);
 
             AutoBuildResult Build(List<AutoBuildLine> lines) =>
-                new(location.GetDisplayName(), from, to, templates.Count, covered, lines, partyCount, removedLines, warnings, holidayLines);
+                new(location.GetDisplayName(), from, to, templates.Count, covered, lines, partyCount, removedLines, warnings, holidayLines, closedDays);
 
             if (remaining.Count == 0 && toRemove.Count == 0)
             {

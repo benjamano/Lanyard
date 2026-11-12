@@ -197,8 +197,9 @@ public static class TemplateLearningRules
         IReadOnlyDictionary<Guid, string> positionNames, IReadOnlyDictionary<string, string> names)
     {
         // Within 15 minutes, like the learning: a 09:00 template is the 09:05 shift, not a new one.
+        // Learning reads ordinary term-time days only, so a School holidays only template is never the match.
         ShiftTemplate? match = existing
-            .Where(x => x.IsActive && x.DayOfWeek == learned.DayOfWeek && Near(x.StartTime, learned.StartTime) && Near(x.EndTime, learned.EndTime))
+            .Where(x => x.IsActive && x.Runs != TemplateRuns.SchoolHolidaysOnly && x.DayOfWeek == learned.DayOfWeek && Near(x.StartTime, learned.StartTime) && Near(x.EndTime, learned.EndTime))
             .OrderBy(x => Math.Abs((x.StartTime - learned.StartTime).TotalMinutes) + Math.Abs((x.EndTime - learned.EndTime).TotalMinutes))
             .FirstOrDefault();
 

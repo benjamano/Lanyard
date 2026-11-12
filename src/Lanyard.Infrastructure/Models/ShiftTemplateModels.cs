@@ -53,11 +53,8 @@ namespace Lanyard.Infrastructure.Models
 
         public int TotalHeadcount => Slots.Sum(x => x.Headcount);
 
-        public bool AppliesOn(DateOnly day) =>
-            IsActive
-            && day.DayOfWeek == DayOfWeek
-            && (EffectiveFrom is not DateOnly from || day >= from)
-            && (EffectiveTo is not DateOnly to || day <= to);
+        // On an ordinary day with no holidays marked (term time).
+        public bool AppliesOn(DateOnly day) => AppliesOn(RotaHolidayRules.For([], day));
 
         // Whether the template runs on a day once the location's holidays are counted: never on a
         // closed day; on a bank holiday it runs if it's for the weekday the day is staffed like;

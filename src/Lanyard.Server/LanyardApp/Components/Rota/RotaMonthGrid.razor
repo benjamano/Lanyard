@@ -12,7 +12,7 @@
                 <span class="month-day-number">@day.Day</span>
                 @if (!holiday.IsOrdinary)
                 {
-                    <span class="month-day-holiday">@(holiday.IsClosed ? "Shut" : holiday.BankHoliday is not null ? "BH" : "Hols")</span>
+                    <span class="month-day-holiday">@(holiday.IsClosed ? "Closed" : holiday.BankHoliday is not null ? "Bank hol" : "Hols")</span>
                 }
             </div>
         }

@@ -280,9 +280,22 @@ public class TemplateLearningService(
             int saved = 0;
             List<string> failed = [];
 
+            // An update keeps the settings learning doesn't know about: which weeks it runs in and its dates.
+            Dictionary<Guid, ShiftTemplate> currentTemplates = ((await _templateService.GetTemplatesAsync(scope, locationId)).Data ?? [])
+                .ToDictionary(x => x.Id);
+
             foreach (LearnedTemplate learned in templates.Where(x => x.Status != LearnedStatus.Same))
             {
-                Result<ShiftTemplate> result = await _templateService.SaveTemplateAsync(scope, TemplateLearningRules.ToTemplate(learned, locationId), actingUserId);
+                ShiftTemplate template = TemplateLearningRules.ToTemplate(learned, locationId);
+
+                if (learned.ExistingTemplateId is Guid id && currentTemplates.TryGetValue(id, out ShiftTemplate? existing))
+                {
+                    template.Runs = existing.Runs;
+                    template.EffectiveFrom = existing.EffectiveFrom;
+                    template.EffectiveTo = existing.EffectiveTo;
+                }
+
+                Result<ShiftTemplate> result = await _templateService.SaveTemplateAsync(scope, template, actingUserId);
 
                 if (result.IsSuccess)
                 {

@@ -49,7 +49,8 @@ public sealed record AutoBuildResult(
     int PartyCount = 0,
     List<AutoBuildLine>? Removed = null,
     List<string>? Warnings = null,
-    List<string>? Holidays = null)
+    List<string>? Holidays = null,
+    int ClosedDays = 0)
 {
     public List<string> HolidayLines => Holidays ?? [];
 

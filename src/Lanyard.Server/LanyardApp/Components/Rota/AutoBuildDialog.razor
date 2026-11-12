@@ -54,7 +54,14 @@
                 else if (!preview.HasChanges)
                 {
                     <FluentText>
-                        Nothing to add: every template and party shift from today to the end of @RangeLabel is already on the rota.
+                        @if (preview.ClosedDays > 0)
+                        {
+                            <text>Nothing to add. @preview.ClosedDays @(preview.ClosedDays == 1 ? "day is" : "days are") marked closed, so @(preview.ClosedDays == 1 ? "it gets" : "they get") no shifts, and every other template and party shift from today to the end of @RangeLabel is already on the rota.</text>
+                        }
+                        else
+                        {
+                            <text>Nothing to add: every template and party shift from today to the end of @RangeLabel is already on the rota.</text>
+                        }
                     </FluentText>
                 }
                 else

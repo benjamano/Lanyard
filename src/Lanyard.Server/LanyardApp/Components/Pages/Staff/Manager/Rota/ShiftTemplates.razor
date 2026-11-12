@@ -105,7 +105,7 @@
         {
             <FluentText Class="templates-summary">
                 @templates.Count(x => x.IsActive) @(templates.Count(x => x.IsActive) == 1 ? "template needs" : "templates need")
-                @RotaFormat.Hours(WeeklyHours) of staff time a week.
+                @RotaFormat.Hours(WeeklyHours) of staff time @(HasHolidayTemplates ? "in a term-time week" : "a week").
             </FluentText>
 
             @foreach (IGrouping<DayOfWeek, ShiftTemplate> day in templates.GroupBy(x => x.DayOfWeek))
@@ -191,8 +191,11 @@
 
     private string HolidaysLink => locationId is int id ? $"/manage/rota/holidays?location={id}" : "/manage/rota/holidays";
 
+    // A term-time week: school-holiday-only templates never run alongside the term-time ones.
+    private bool HasHolidayTemplates => templates?.Any(x => x.IsActive && x.Runs != TemplateRuns.EveryWeek) ?? false;
+
     private decimal WeeklyHours => templates?
-        .Where(x => x.IsActive)
+        .Where(x => x.IsActive && x.Runs != TemplateRuns.SchoolHolidaysOnly)
         .Sum(x => x.TotalHeadcount * Math.Max(0m, (decimal)x.Length.TotalMinutes - x.BreakMinutes) / 60m) ?? 0m;
 
     protected override async Task OnInitializedAsync()

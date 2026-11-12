@@ -15,9 +15,9 @@
                 <span class="day-strip-name">@day.ToString("ddd", RotaDisplayExtensions.Uk)</span>
                 <span class="day-strip-number">@day.Day</span>
                 <span class="day-strip-count">@(count > 0 ? count.ToString() : "–")</span>
-                @if (!View.HolidayOn(day).IsOrdinary)
+                @if (HolidayOn(day) is { IsOrdinary: false } holidayDay)
                 {
-                    <span class="day-strip-holiday @(View.HolidayOn(day).IsClosed ? "is-closed" : string.Empty)" aria-label="Holiday"></span>
+                    <span class="day-strip-holiday @(holidayDay.IsClosed ? "is-closed" : string.Empty)" aria-label="Holiday"></span>
                 }
             </button>
         }
@@ -33,9 +33,9 @@
         </FluentButton>
     </div>
 
-    @if (RotaHolidayRules.Describe(View.HolidayOn(selectedDate)) is string holiday)
+    @if (RotaHolidayRules.Describe(HolidayOn(selectedDate)) is string holiday)
     {
-        <div class="day-list-holiday @(View.HolidayOn(selectedDate).IsClosed ? "is-closed" : string.Empty)">
+        <div class="day-list-holiday @(HolidayOn(selectedDate).IsClosed ? "is-closed" : string.Empty)">
             <FluentIcon Value="@(new Icons.Regular.Size16.CalendarStar())" />
             <span>@holiday</span>
         </div>
@@ -144,8 +144,16 @@
         }
     }
 
+    // Worked out once per load rather than on every render.
+    private Dictionary<DateOnly, RotaHolidayDay> holidayDays = [];
+
+    private RotaHolidayDay HolidayOn(DateOnly day) =>
+        holidayDays.TryGetValue(day, out RotaHolidayDay? found) ? found : View.HolidayOn(day);
+
     protected override void OnParametersSet()
     {
+        holidayDays = Days.ToDictionary(d => d, View.HolidayOn);
+
         // Keep the chosen day when the data reloads (e.g. after saving a shift); only reset it
         // when it falls outside the new range.
         if (selectedDate < View.From || selectedDate > View.To)
