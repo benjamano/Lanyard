@@ -12,7 +12,7 @@ halves:
 - a **Windows kiosk client** installed on the venue's PCs, which drives the physical hardware
   and takes commands from the server in real time over SignalR
 
-![.NET 10](https://img.shields.io/badge/.NET-10-512BD4)
+![.NET 11](https://img.shields.io/badge/.NET-11-512BD4)
 ![Blazor](https://img.shields.io/badge/Blazor-Server-512BD4)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-EF%20Core-336791)
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue)
@@ -69,7 +69,7 @@ flowchart LR
     Browser["Staff & managers<br/>(desktop / phone)"] -- "HTTPS / Blazor circuit" --> App
 
     subgraph Venue["Venue PCs"]
-        Client["Lanyard.Client<br/>WPF kiosk (.NET 10)"]
+        Client["Lanyard.Client<br/>WPF kiosk (.NET 11)"]
         WD["Watchdog<br/>auto-restart supervisor"]
         WD -. supervises .-> Client
         Client --> Audio["Speakers<br/>(NAudio)"]
@@ -92,7 +92,7 @@ react to a game ending, and several screens stay in sync, all through one Signal
 
 | Area | Technologies |
 |---|---|
-| Web app | .NET 10, ASP.NET Core, Blazor Server (Interactive Server rendering), Fluent UI Blazor v5, Fluent UI Charts |
+| Web app | .NET 11, ASP.NET Core, Blazor Server (Interactive Server rendering), Fluent UI Blazor v5, Fluent UI Charts |
 | Real-time | SignalR (server hub and .NET client), WebRTC for video |
 | Data | PostgreSQL, Entity Framework Core (Npgsql + NetTopologySuite), code-first migrations |
 | Auth | ASP.NET Core Identity, 2FA, role-based and default-deny route authorisation |
@@ -152,7 +152,7 @@ Contributor conventions are covered in [`AGENTS.md`](AGENTS.md) and [`CONTRIBUTI
 
 ## Local development
 
-**Prerequisites:** .NET 10 SDK, Docker, and the `dotnet-ef` tool (`dotnet tool install -g dotnet-ef`).
+**Prerequisites:** .NET 11 SDK, Docker, and the `dotnet-ef` tool (`dotnet tool install -g dotnet-ef`).
 
 1. Start a throwaway PostgreSQL (plus an optional Adminer UI at http://localhost:8081):
 

@@ -5,7 +5,7 @@ environment running and submitting a change.
 
 ## Local Development Setup
 
-1. **Prerequisites**: .NET 10 SDK and Docker (for the local Postgres database).
+1. **Prerequisites**: .NET 11 SDK and Docker (for the local Postgres database).
 
 2. **Clone the repository and restore dependencies:**
 

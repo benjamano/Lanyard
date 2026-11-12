@@ -22,7 +22,7 @@ For any Blazor or Fluent UI Blazor question or task, call the `blazor_knowledge`
 
 ## Solution Overview
 
-Lanyard is a .NET 10 solution (`LanyardApp.sln` at repo root) with a layered architecture and several runtime frontends. Real project paths are nested under `src/` — there are no top-level `LanyardData`/`LanyardServices`/`LanyardAPI` folders, those live under `src/Lanyard.Server/`:
+Lanyard is a .NET 11 solution (`LanyardApp.sln` at repo root) with a layered architecture and several runtime frontends. Real project paths are nested under `src/` — there are no top-level `LanyardData`/`LanyardServices`/`LanyardAPI` folders, those live under `src/Lanyard.Server/`:
 
 - `src/Lanyard.Server/LanyardApp` (csproj `Lanyard.App.csproj`):
   Blazor Server app (Interactive Server rendering) and the main staff/customer web UI.
@@ -35,7 +35,7 @@ Lanyard is a .NET 10 solution (`LanyardApp.sln` at repo root) with a layered arc
 - `src/Lanyard.Shared`:
   Cross-process DTOs/enums shared by server and WPF client.
 - `src/Lanyard.Client`:
-  .NET 10 WPF/console hybrid kiosk client connected over SignalR. The built/runnable binary is `build\Lanyard.Client.exe` at the repo root (the csproj sets `OutputPath=..\..\build\`) — `src/Lanyard.Client/bin/...` output is not what actually runs.
+  .NET 11 WPF/console hybrid kiosk client connected over SignalR. The built/runnable binary is `build\Lanyard.Client.exe` at the repo root (the csproj sets `OutputPath=..\..\build\`) — `src/Lanyard.Client/bin/...` output is not what actually runs.
 - `src/Lanyard.Client.Watchdog`:
   Console supervisor process for `Lanyard.Client.exe` — launches it, hides its own window, and auto-restarts it on crash (with a crash-loop guard: gives up after 5 rapid crashes within 30s).
 - `src/Lanyard.Tests` (csproj `Lanyard.Tests.csproj`):

@@ -20,7 +20,7 @@ Run `Lanyard.App.exe` with:
 
 ## Launching the client
 
-The real, runnable binary is `build\Lanyard.Client.exe` at the **repo root** (the csproj sets `OutputPath=..\..\build\`). Don't launch from `src\Lanyard.Client\bin\Debug\net10.0-windows\` — that can hold stale leftovers that predate the current server handshake and will 401 against a fresh server. (If the client fails to launch entirely with a runtime-not-found-looking error, see the `client-build-troubleshooting` skill — that's usually a stray-DLL issue in `build\`, not this handshake issue.)
+The real, runnable binary is `build\Lanyard.Client.exe` at the **repo root** (the csproj sets `OutputPath=..\..\build\`). Don't launch from `src\Lanyard.Client\bin\Debug\net11.0-windows\` — that can hold stale leftovers that predate the current server handshake and will 401 against a fresh server. (If the client fails to launch entirely with a runtime-not-found-looking error, see the `client-build-troubleshooting` skill — that's usually a stray-DLL issue in `build\`, not this handshake issue.)
 
 Required client env vars:
 - `LANYARD_SERVER_URL` — sourced from `%APPDATA%\LanyardClient\config.json` in a real install.
