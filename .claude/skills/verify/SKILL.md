@@ -7,7 +7,7 @@ description: Build, launch, and drive the Lanyard server app to verify changes e
 
 ## Prerequisites
 - Docker Postgres must be running: container `lanyard-postgres` (localhost:5432, db/user `lanyard_dev`, password `lanyard_dev_password`). Check: `docker ps`.
-- Don't build `LanyardApp.sln` (or the `.slnx`) as a whole — on Linux it fails on a project that can't build there. Which one you hit depends on the sandbox: `NETSDK1147: workloads must be installed: maui-android` from `Lanyard.Reach` (targets `net10.0-android`), or `NETSDK1100: To build a project targeting Windows on this operating system, set EnableWindowsTargeting` from `Lanyard.Client`. Build only the server project directly:
+- Don't build `LanyardApp.sln` (or the `.slnx`) as a whole — on Linux it fails on a project that can't build there. Which one you hit depends on the sandbox: `NETSDK1147: workloads must be installed: maui-android` from `Lanyard.Reach` (targets `net11.0-android`), or `NETSDK1100: To build a project targeting Windows on this operating system, set EnableWindowsTargeting` from `Lanyard.Client`. Build only the server project directly:
   `dotnet build src/Lanyard.Server/LanyardApp/Lanyard.App.csproj`
 - `dotnet test src/Lanyard.Tests/Lanyard.Tests.csproj` does work and is the check CLAUDE.md asks for before calling a task done.
 - First time in a fresh sandbox, Playwright's browser isn't installed yet — `mcp__playwright__browser_navigate` fails with `Chromium distribution 'chrome' is not found at /opt/google/chrome/chrome`. Fix once with:

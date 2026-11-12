@@ -9,7 +9,7 @@ description: Charting rules for this repo — Fluent UI Charts (Microsoft.Fluent
 
 ## Package
 
-`Microsoft.FluentUI.AspNetCore.Components.Charts`, referenced in `src/Lanyard.Server/LanyardApp/Lanyard.App.csproj` at the same version as the core `Microsoft.FluentUI.AspNetCore.Components` package (currently `5.0.0-rc.5-26219.1` — keep them in sync on upgrades). Available chart types include donut, funnel, gantt, and horizontal bar (with an axis variant). If a dashboard needs a type outside that set (e.g. line, area, vertical bar), check the package's current docs (see below) before assuming it's unsupported — the set has grown before.
+`Microsoft.FluentUI.AspNetCore.Components.Charts`, referenced in `src/Lanyard.Server/LanyardApp/Lanyard.App.csproj` at the same version as the core `Microsoft.FluentUI.AspNetCore.Components` package (currently `5.0.1` — keep them in sync on upgrades). Available chart types include donut, funnel, gantt, and horizontal bar (with an axis variant). If a dashboard needs a type outside that set (e.g. line, area, vertical bar), check the package's current docs (see below) before assuming it's unsupported — the set has grown before.
 
 ## Components actually in use
 

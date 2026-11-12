@@ -63,6 +63,12 @@ When a column renders a `FluentButton`/icon inside a `TemplateColumn`, the row c
 
 **The fix:** bind `@bind-Value` (the `TValue`-typed key, e.g. a `string? selectedId`) instead of `@bind-SelectedOption`, and derive the full object by looking it up in the `Items` list when you need it (`Items?.FirstOrDefault(x => x.Id.ToString() == selectedId)`). This fixed both the blank-on-load default and the stale-child-refresh bug simultaneously in `OnboardingSettings.razor`/`OnboardingSettingsManager.razor`, and was subsequently applied to `StaffDocumentTypes.razor` and `UploadStaffDocumentDialog.razor` too, which had the same pattern - verified via the same JS property check showing the correct value on first render and after every subsequent selection. Apply the same fix to any new `FluentSelect` bound to a reference-type option.
 
+## `FluentText` Size/Weight now apply to the heading inside it (5.0.0 GA onward)
+
+Up to `5.0.0-rc.5`, a heading tag inside `<FluentText Size="..." Weight="...">` (e.g. `<FluentText Size="500"><h4>Help</h4></FluentText>`) ignored `Size`/`Weight` and kept the browser's default heading style (h4 = 24px/500, h5 = 20px/500). From 5.0.0 GA the heading takes the `FluentText` typography: `Size="500"` is 20px/28px, `Size="400" Weight="Semibold"` is 16px/600. Pages written against rc.5 got smaller headings when the app moved to 5.0.1 with .NET 11. To make a heading bigger, raise `Size`; don't fight it with CSS on the `h*` tag.
+
+Fluent rc.5 also can't run on .NET 11: it registers the custom event `overflowchange` with `browserEventName: "overflowchange"`, which Blazor 11's `registerCustomEventType` now rejects. The throw aborts Fluent's `afterStarted` partway through ("The custom event 'overflowchange' cannot have the same name..." and then "The event 'accordionchange' is already registered" in the console). 5.0.1 fixes it.
+
 ## Charts
 
 Fluent's own charting package has separate gotchas (including an MCP documentation gap) — see the `charting` skill rather than duplicating that here.

@@ -93,7 +93,7 @@ public class FirstLoadAssetsIntegrationTests
 
         // Deferred scripts run in document order, so anything a component calls must sit above
         // blazorStart.js or Blazor could call it before it exists. Only scripts nothing calls into may follow.
-        string[] mayFollow = ["registerServiceWorker", "aspnetcore-browser-refresh", "ReconnectModal"];
+        string[] mayFollow = ["registerServiceWorker", "ReconnectModal"];
         List<string> late = sources.Skip(blazorStart + 1).Where(s => !mayFollow.Any(m => s.Contains(m, StringComparison.Ordinal))).ToList();
 
         Assert.AreEqual(0, late.Count, $"These load after Blazor starts: {string.Join(", ", late)}");

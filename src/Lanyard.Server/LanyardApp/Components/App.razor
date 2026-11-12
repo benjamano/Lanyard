@@ -1,6 +1,5 @@
 ﻿@using Lanyard.Application.Services.Authentication
 
-@inject NavigationManager NavigationManager
 
 <!DOCTYPE html>
 <html lang="en">
@@ -245,11 +244,8 @@
     @* After every script the app calls into, so all of them have run before Blazor.start(). *@
     <script src="@Assets["_framework/blazor.web.js"]" autostart="false" defer></script>
     <script src="@Assets["js/blazorStart.js"]" defer></script>
-
-    @if (NavigationManager.Uri.Contains("localhost", StringComparison.OrdinalIgnoreCase))
-    {
-        <script src="/_framework/aspnetcore-browser-refresh.js" defer></script>
-    }
+    @* No manual aspnetcore-browser-refresh.js tag: from .NET 11 the SDK wires Hot Reload in
+       through its own Debug-only JS initializer, and that script no longer exists. *@
 
     <ReconnectModal />
     <script src="@Assets["js/registerServiceWorker.js"]" defer></script>
