@@ -903,5 +903,15 @@
       "Anyone can turn seasonal themes off for themselves under Seasonal Themes on their account page.",
       "Kiosk screens, the clock-in terminal and the login page are never decorated, and nothing moves when reduced motion is on."
     ]
+  },
+  {
+    "version": "1.4.22",
+    "releaseDate": "2026-11-12",
+    "summary": "What's new has moved from the bottom of the sidebar to a button in the header.",
+    "details": [
+      "The megaphone button in the header, next to Send feedback, shows the latest update's summary. More info opens every release's notes.",
+      "A red dot on the button means there's an update you haven't looked at yet in this browser.",
+      "The sidebar no longer has the What's new card at the bottom, so it has more room for the menu."
+    ]
   }
 ]
