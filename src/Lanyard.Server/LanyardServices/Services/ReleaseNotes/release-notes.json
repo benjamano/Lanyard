@@ -903,5 +903,13 @@
       "Anyone can turn seasonal themes off for themselves under Seasonal Themes on their account page.",
       "Kiosk screens, the clock-in terminal and the login page are never decorated, and nothing moves when reduced motion is on."
     ]
+  },
+  {
+    "version": "1.4.22",
+    "releaseDate": "2026-11-12",
+    "summary": "Music, Audio Clips and Music Schedule now sit together in one Music group in the menu.",
+    "details": [
+      "The side menu has a new Music group: open it to find Music, Audio Clips and Music Schedule in one place, instead of spread across the menu and the Management section."
+    ]
   }
 ]
