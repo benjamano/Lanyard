@@ -80,20 +80,25 @@
                 </FluentNavItem>
             }
 
-            @if (_canControlMusic)
+            @if (MusicLinks.Any)
             {
-                <FluentNavItem Href="/music" IconRest="@(new Icons.Regular.Size20.MusicNote2())"
-                               IconActive="@(new Icons.Filled.Size20.MusicNote2())">
-                    Music
-                </FluentNavItem>
-            }
+                <FluentNavCategory Title="Music" IconRest="@(new Icons.Regular.Size20.MusicNote2())"
+                                   IconActive="@(new Icons.Filled.Size20.MusicNote2())">
+                    @if (MusicLinks.Player)
+                    {
+                        <FluentNavItem Href="/music" Match="NavLinkMatch.All">Music Player</FluentNavItem>
+                    }
 
-            @if (_canPlayAudioClips && Has(CompanyFeature.AudioClips))
-            {
-                <FluentNavItem Href="/manage/audio-clips" IconRest="@(new Icons.Regular.Size20.Speaker2())"
-                               IconActive="@(new Icons.Filled.Size20.Speaker2())">
-                    Audio Clips
-                </FluentNavItem>
+                    @if (MusicLinks.AudioClips)
+                    {
+                        <FluentNavItem Href="/manage/audio-clips">Audio Clips</FluentNavItem>
+                    }
+
+                    @if (MusicLinks.Schedule)
+                    {
+                        <FluentNavItem Href="/manage/music-schedule">Music Schedule</FluentNavItem>
+                    }
+                </FluentNavCategory>
             }
 
             @if (_isManager)
@@ -123,11 +128,6 @@
                         Insights
                     </FluentNavItem>
                 }
-
-                <FluentNavItem Href="/manage/music-schedule" IconRest="@(new Icons.Regular.Size20.CalendarClock())"
-                               IconActive="@(new Icons.Filled.Size20.CalendarClock())">
-                    Music Schedule
-                </FluentNavItem>
 
                 <FluentNavCategory Title="Manage" IconRest="@(new Icons.Regular.Size20.Settings())"
                                    IconActive="@(new Icons.Filled.Size20.Settings())">
@@ -317,6 +317,9 @@
     private IReadOnlySet<CompanyFeature> _hiddenFeatures = new HashSet<CompanyFeature>();
 
     private bool Has(CompanyFeature feature) => !_hiddenFeatures.Contains(feature);
+
+    private MusicNavLinks MusicLinks =>
+        MusicNavLinks.For(_canControlMusic, _canPlayAudioClips, Has(CompanyFeature.AudioClips), _isManager);
 
     // The category header only takes plain text, so its badge is drawn by a global style from this
     // attribute (see "Nav category badges" in App.razor) - otherwise the count would be hidden
