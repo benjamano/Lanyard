@@ -55,17 +55,23 @@ public class PartyDocumentService(
             bool needsFeedback = type is PartyDocumentType.FeedbackForm or PartyDocumentType.Pack;
             bool needsReservedCard = type is PartyDocumentType.ReservedCard or PartyDocumentType.Pack;
 
+            // Independent of each other (each load has its own context), so fetched together.
+            Task<PartyArtwork?> voucher = needsVoucher ? LoadArtworkAsync(scope, booking.CompanyId, PartyArtworkDocument.Voucher, cancellationToken) : Task.FromResult<PartyArtwork?>(null);
+            Task<PartyArtwork?> feedback = needsFeedback ? LoadArtworkAsync(scope, booking.CompanyId, PartyArtworkDocument.FeedbackForm, cancellationToken) : Task.FromResult<PartyArtwork?>(null);
+            Task<PartyArtwork?> reservedCard = needsReservedCard ? LoadArtworkAsync(scope, booking.CompanyId, PartyArtworkDocument.ReservedCard, cancellationToken) : Task.FromResult<PartyArtwork?>(null);
+            await Task.WhenAll(voucher, feedback, reservedCard);
+
             PartyDocumentModel model = new(
                 booking,
                 booking.PartyHost?.GetName(),
                 menuResult.Data,
                 logo,
                 accent,
-                needsVoucher ? await LoadArtworkAsync(scope, booking.CompanyId, PartyArtworkDocument.Voucher, cancellationToken) : null,
-                needsFeedback ? await LoadArtworkAsync(scope, booking.CompanyId, PartyArtworkDocument.FeedbackForm, cancellationToken) : null,
+                await voucher,
+                await feedback,
                 authorisedBy,
                 companyName,
-                needsReservedCard ? await LoadArtworkAsync(scope, booking.CompanyId, PartyArtworkDocument.ReservedCard, cancellationToken) : null);
+                await reservedCard);
 
             byte[] pdf = PartyDocumentRenderer.Render(model, type);
 

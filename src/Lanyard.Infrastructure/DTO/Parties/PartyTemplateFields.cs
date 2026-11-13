@@ -59,6 +59,21 @@ public static class PartyTemplateFields
 
     public static string Serialize(IEnumerable<PartyTemplateField> fields) => JsonSerializer.Serialize(fields, Json);
 
+    // What each printout can show. The voucher and feedback form keep every kind they've always had;
+    // the reserved card leaves out the voucher-only boxes (expiry date, authorised by) and uses the
+    // capitals child's name in place of "presented to".
+    public static IReadOnlyList<PartyTemplateFieldKind> AllowedKinds(PartyArtworkDocument document) => document == PartyArtworkDocument.ReservedCard
+        ?
+        [
+            PartyTemplateFieldKind.ChildName, PartyTemplateFieldKind.PartyName, PartyTemplateFieldKind.PartyDate,
+            PartyTemplateFieldKind.ArrivalTime, PartyTemplateFieldKind.Room, PartyTemplateFieldKind.ChildAge, PartyTemplateFieldKind.PartyHost
+        ]
+        :
+        [
+            PartyTemplateFieldKind.PresentedTo, PartyTemplateFieldKind.PartyDate, PartyTemplateFieldKind.ExpiryDate, PartyTemplateFieldKind.AuthorisedBy,
+            PartyTemplateFieldKind.PartyName, PartyTemplateFieldKind.PartyHost, PartyTemplateFieldKind.ChildAge
+        ];
+
     public static string Label(this PartyTemplateFieldKind kind) => kind switch
     {
         PartyTemplateFieldKind.PresentedTo => "Presented to (child's name)",

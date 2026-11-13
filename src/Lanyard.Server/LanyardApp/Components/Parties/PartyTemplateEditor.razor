@@ -157,7 +157,7 @@
 
                         <div class="tpl-presets">
                             <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Add())" OnClick="@AddField">Add a box</FluentButton>
-                            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowReset())" OnClick="@ResetFields">Reset to default positions</FluentButton>
+                            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowReset())" OnClick="@ResetFields">Reset to default size and positions</FluentButton>
                         </div>
                     </div>
                 }
@@ -192,8 +192,8 @@
 
     private record RotationOption(int Degrees, string Name);
 
-    private static readonly List<KindOption> KindOptions =
-        Enum.GetValues<PartyTemplateFieldKind>().Select(k => new KindOption(k, k.Label())).ToList();
+    private List<KindOption> KindOptions =>
+        PartyTemplateFields.AllowedKinds(Document).Select(k => new KindOption(k, k.Label())).ToList();
 
     private static readonly List<RotationOption> RotationOptions =
     [
@@ -314,8 +314,12 @@
 
     private void ResetFields()
     {
-        fields = PartyTemplateFields.Parse(PartyTemplateFields.Default(Document, CompanyId).FieldsJson);
+        PartyDocumentTemplate defaults = PartyTemplateFields.Default(Document, CompanyId);
+        fields = PartyTemplateFields.Parse(defaults.FieldsJson);
         selected = -1;
+
+        // The default boxes are placed for the default size, so a reset puts that back too.
+        SetSize(defaults.WidthMm, defaults.HeightMm);
     }
 
     private async Task SaveAsync()

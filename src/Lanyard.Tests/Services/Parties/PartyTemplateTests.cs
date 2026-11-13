@@ -76,6 +76,28 @@ public class PartyTemplateTests
         Assert.AreEqual(ActingUser, saved.UpdatedByUserId);
     }
 
+    // The expiry date belongs to the voucher: on the reserved card it would print a different date
+    // depending on whether the voucher's template was loaded alongside.
+    [TestMethod]
+    public async Task SaveTemplateAsync_RejectsBoxesThatDontBelongOnThePrintout()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        LocationScope manager = SchedulingTestHelpers.ManagerScopeFor(location);
+
+        PartyDocumentTemplate card = PartyTemplateFields.Default(PartyArtworkDocument.ReservedCard, company.Id);
+        Result<PartyDocumentTemplate> standard = await GetService(options).SaveTemplateAsync(manager, card, ActingUser);
+
+        List<PartyTemplateField> fields = PartyTemplateFields.Parse(card.FieldsJson);
+        fields.Add(new PartyTemplateField { Kind = PartyTemplateFieldKind.ExpiryDate, XMm = 10, YMm = 10 });
+        card.FieldsJson = PartyTemplateFields.Serialize(fields);
+        Result<PartyDocumentTemplate> withExpiry = await GetService(options).SaveTemplateAsync(manager, card, ActingUser);
+
+        Assert.IsTrue(standard.IsSuccess, standard.Error);
+        Assert.IsFalse(withExpiry.IsSuccess);
+        StringAssert.Contains(withExpiry.Error, "can't go on this printout");
+    }
+
     [TestMethod]
     public async Task SaveTemplateAsync_RejectsManagerFromAnotherCompany()
     {
