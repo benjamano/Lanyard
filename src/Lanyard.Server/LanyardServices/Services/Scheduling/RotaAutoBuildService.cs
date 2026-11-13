@@ -82,6 +82,8 @@ public class RotaAutoBuildService(
                 return Result<AutoBuildResult>.Ok(new AutoBuildResult(location.GetDisplayName(), from, to, templates.Count, 0, []));
             }
 
+            List<RotaHoliday> holidays = await RotaHolidayService.ForRangeAsync(ctx, locationId, firstDay, to);
+
             DateTime windowStartUtc = RotaTime.StartOfDayUtc(firstDay);
             DateTime windowEndUtc = RotaTime.StartOfDayUtc(to.AddDays(1));
 
@@ -108,7 +110,7 @@ public class RotaAutoBuildService(
 
             // Parties are matched to every template shift those days, including any already started,
             // so a party during a shift that's under way isn't reported as having no shift.
-            List<DemandSlot> templateDemand = RotaAutoBuildRules.ExpandTemplates(templates, firstDay, to);
+            List<DemandSlot> templateDemand = RotaAutoBuildRules.ExpandTemplates(templates, firstDay, to, holidays);
             (List<DemandSlot> partyDemand, List<PartyBooking> uncovered) = RotaAutoBuildRules.ExpandParties(parties, partyRules, templateDemand);
 
             List<DemandSlot> demand = templateDemand
@@ -182,6 +184,15 @@ public class RotaAutoBuildService(
 
             foreach (PartyBooking party in uncovered.Where(x => x.StartUtc > nowUtc))
             {
+                DateOnly partyDay = RotaTime.LocalDate(party.StartUtc);
+
+                if (RotaHolidayRules.For(holidays, partyDay).Closed is RotaHoliday closed)
+                {
+                    warnings.Add($"The {Describe(party)} on {partyDay.ToString("ddd d MMM", RotaFormat.Uk)} ({RotaFormat.TimeRange(party.StartUtc, party.EndUtc)}) "
+                        + $"is on a day marked closed ({closed.Name}), so nobody was added for it. Move the booking, or change the day under Holidays.");
+                    continue;
+                }
+
                 warnings.Add($"No shift template covers the {Describe(party)} on "
                     + $"{RotaTime.LocalDate(party.StartUtc).ToString("ddd d MMM", RotaFormat.Uk)} ({RotaFormat.TimeRange(party.StartUtc, party.EndUtc)}), "
                     + "so nobody was added for it. Add a template for that time, or add its staff by hand.");
@@ -189,8 +200,10 @@ public class RotaAutoBuildService(
 
             int partyCount = parties.Count(p => demand.Any(d => d.PartyBookingId == p.Id));
 
+            List<string> holidayLines = HolidayLines(holidays, firstDay, to);
+
             AutoBuildResult Build(List<AutoBuildLine> lines) =>
-                new(location.GetDisplayName(), from, to, templates.Count, covered, lines, partyCount, removedLines, warnings);
+                new(location.GetDisplayName(), from, to, templates.Count, covered, lines, partyCount, removedLines, warnings, holidayLines);
 
             if (remaining.Count == 0 && toRemove.Count == 0)
             {
@@ -271,6 +284,26 @@ public class RotaAutoBuildService(
             _logger.LogError(ex, "Auto-build failed at {LocationId} for {From} to {To}", locationId, from, to);
             return Result<AutoBuildResult>.Fail($"Auto-build failed: {ex.Message}");
         }
+    }
+
+    // One line per holiday in the range: "Mon 31 Aug: Summer bank holiday - staffed like a Sunday".
+    // A school holiday covering several days is given as its dates in the range.
+    internal static List<string> HolidayLines(IReadOnlyCollection<RotaHoliday> holidays, DateOnly from, DateOnly to)
+    {
+        List<string> lines = [];
+
+        foreach (RotaHoliday holiday in holidays.Where(x => x.IsActive && x.StartDate <= to && x.EndDate >= from).OrderBy(x => x.StartDate).ThenBy(x => x.Kind))
+        {
+            DateOnly start = holiday.StartDate < from ? from : holiday.StartDate;
+            DateOnly end = holiday.EndDate > to ? to : holiday.EndDate;
+            string dates = start == end
+                ? start.ToString("ddd d MMM", RotaFormat.Uk)
+                : $"{start.ToString("ddd d MMM", RotaFormat.Uk)} to {end.ToString("ddd d MMM", RotaFormat.Uk)}";
+
+            lines.Add($"{dates}: {holiday.Name} - {RotaHolidayRules.Effect(holiday)}");
+        }
+
+        return lines;
     }
 
     // "Lazer + Play party", "party", "Laser tag + Play private hire".

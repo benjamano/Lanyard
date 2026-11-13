@@ -41,6 +41,11 @@ public static class ShiftTemplateRules
             return "The end date must be on or after the start date.";
         }
 
+        if (!System.Enum.IsDefined(template.Runs))
+        {
+            return "Choose which weeks the shift runs in.";
+        }
+
         if (template.Slots.Count == 0)
         {
             return "Say who the shift needs - add at least one position.";

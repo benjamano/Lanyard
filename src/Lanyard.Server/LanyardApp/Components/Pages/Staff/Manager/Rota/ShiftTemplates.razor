@@ -5,6 +5,7 @@
 @using Lanyard.App.Components.Rota
 @using Lanyard.Application.Services.Scheduling
 @using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
 
 @inject IShiftTemplateService _templateService
 @inject IStaffPositionService _staffPositionService
@@ -19,6 +20,7 @@
             <FluentText Class="templates-intro">
                 The shifts this location needs every week and who they need, such as "Saturday AM, 2 Duty Managers and 4 Hosts".
                 <strong>Auto-build</strong> on the <a href="@RotaLink">rota</a> turns them into draft shifts and picks who works them.
+                Mark school holidays, bank holidays and closed days under <a href="@HolidaysLink">Holidays</a>.
             </FluentText>
         </div>
         <HelpButton AreaKey="@HelpRegistry.Rota" Topic="setup" />
@@ -118,6 +120,10 @@
                                     <div class="template-title">
                                         <span class="template-name">@template.Name</span>
                                         <span class="template-time">@TimeLabel(template)</span>
+                                        @if (template.Runs != TemplateRuns.EveryWeek)
+                                        {
+                                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="@(template.Runs == TemplateRuns.SchoolHolidaysOnly ? BadgeColor.Brand : BadgeColor.Informative)">@template.Runs.Label()</FluentBadge>
+                                        }
                                         @if (!template.IsActive)
                                         {
                                             <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Subtle">Archived</FluentBadge>
@@ -182,6 +188,8 @@
     private bool isBusy;
 
     private string RotaLink => locationId is int id ? $"/manage/rota?location={id}" : "/manage/rota";
+
+    private string HolidaysLink => locationId is int id ? $"/manage/rota/holidays?location={id}" : "/manage/rota/holidays";
 
     private decimal WeeklyHours => templates?
         .Where(x => x.IsActive)
