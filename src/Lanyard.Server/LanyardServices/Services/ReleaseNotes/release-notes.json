@@ -911,7 +911,13 @@
     "details": [
       "The megaphone button in the header, next to Send feedback, shows the latest update's summary. More info opens every release's notes.",
       "A red dot on the button means there's an update you haven't looked at yet in this browser.",
-      "The sidebar no longer has the What's new card at the bottom, so it has more room for the menu."
+      "The sidebar no longer has the What's new card at the bottom, so it has more room for the menu.",
+      "New Rota > Holidays page: add your local school holidays, bank holidays and the days you're closed for each location. School holidays differ from area to area, so you add your own.",
+      "Shift templates have a new Runs setting: Every week, Term time only or School holidays only. Auto-build uses the right ones for each day, so a busier holiday Tuesday can have its own template.",
+      "A bank holiday is staffed like a day you choose (Sunday to start with): Auto-build uses that day's templates. On a closed day Auto-build adds no shifts, and warns you if a party is booked.",
+      "Add bank holidays fills in the England and Wales bank holidays for the rest of this year and next year, for you to check and change.",
+      "Holidays and closed days are labelled on the rota, and Auto-build lists the ones in the week or month before you add anything.",
+      "Learn from past rota now leaves holidays and closed days out, so the templates it suggests are for an ordinary week."
     ]
   }
 ]
