@@ -1,0 +1,70 @@
+@using Lanyard.Infrastructure.Models
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Alert())" />
+            <FluentText Weight="TextWeight.Semibold" Color="Color.Default" Size="@TextSize.Size700">
+                Configure Operations Alerts
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+            <FluentSelect TOption="SeverityOption" TValue="string" Items="@Options" OptionText="@(x => x.Label)" OptionValue="@(x => x.Value)"
+                          Value="@SelectedSeverity" ValueChanged="@OnSeverityChanged" Label="Show" Width="240px" />
+            <FluentCheckbox @bind-Value="Widget.AlertOnlyUnacknowledged" Label="Hide alerts someone has acknowledged" />
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@SaveAsync">
+            Save
+        </FluentButton>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public required OperationsAlertsWidget Widget { get; set; }
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private record SeverityOption(string Value, string Label);
+
+    private static readonly List<SeverityOption> Options =
+    [
+        new("", "Every alert"),
+        new(((int)OperationsAlertSeverity.Warning).ToString(), "Warnings and critical"),
+        new(((int)OperationsAlertSeverity.Critical).ToString(), "Critical only")
+    ];
+
+    // Snapshot so Cancel can revert the live-edited widget.
+    private OperationsAlertSeverity? _originalSeverity;
+    private bool _originalOnlyUnacknowledged;
+
+    private string SelectedSeverity => Widget.AlertMinimumSeverity is OperationsAlertSeverity s ? ((int)s).ToString() : "";
+
+    protected override void OnInitialized()
+    {
+        _originalSeverity = Widget.AlertMinimumSeverity;
+        _originalOnlyUnacknowledged = Widget.AlertOnlyUnacknowledged;
+    }
+
+    private void OnSeverityChanged(string? value) =>
+        Widget.AlertMinimumSeverity = int.TryParse(value, out int severity) ? (OperationsAlertSeverity)severity : null;
+
+    private async Task SaveAsync()
+    {
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task CancelAsync()
+    {
+        Widget.AlertMinimumSeverity = _originalSeverity;
+        Widget.AlertOnlyUnacknowledged = _originalOnlyUnacknowledged;
+
+        await Dialog.CancelAsync();
+    }
+}

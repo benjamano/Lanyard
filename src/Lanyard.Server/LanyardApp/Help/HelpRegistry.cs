@@ -330,7 +330,8 @@ public static class HelpRegistry
             [
                 new("overview", "Overview"),
                 new("handling", "Acknowledge & Resolve"),
-                new("types", "Alert Types")
+                new("types", "Alert Types"),
+                new("widget", "On a Dashboard")
             ],
             ["/manage/alerts"],
             Roles: "Admin,Manager",

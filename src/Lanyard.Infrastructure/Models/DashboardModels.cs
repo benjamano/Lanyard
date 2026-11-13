@@ -201,6 +201,25 @@ public class KioskHealthWidget : DashboardWidget
     public bool OnlyShowOffline { get; set; }
 }
 
+// The Operations alerts list for the locations the viewer manages. Shows nothing but a sign-in
+// prompt on a kiosk dashboard, which runs signed out (see OperationsAlertService).
+public class OperationsAlertsWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public OperationsAlertsWidget()
+    {
+        Type = WidgetType.OperationsAlerts;
+
+        GridW = 4;
+        GridH = 3;
+    }
+
+    // Null shows every severity.
+    public OperationsAlertSeverity? AlertMinimumSeverity { get; set; }
+
+    public bool AlertOnlyUnacknowledged { get; set; }
+}
+
 public class AutomationRuleStatusWidget : DashboardWidget
 {
     [SetsRequiredMembers]
