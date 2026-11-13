@@ -907,9 +907,9 @@
   {
     "version": "1.4.22",
     "releaseDate": "2026-11-12",
-    "summary": "Music, Audio Clips and Music Schedule now sit together in one Music group in the menu.",
+    "summary": "Music Player, Audio Clips and Music Schedule now sit together in one Music group in the menu.",
     "details": [
-      "The side menu has a new Music group: open it to find Music, Audio Clips and Music Schedule in one place, instead of spread across the menu and the Management section."
+      "The side menu has a new Music group: open it to find Music Player, Audio Clips and Music Schedule in one place, instead of spread across the menu and the Management section."
     ]
   }
 ]
