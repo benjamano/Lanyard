@@ -920,7 +920,8 @@
       "Learn from past rota now leaves holidays and closed days out, so the templates it suggests are for an ordinary week.",
       "The reserved table card now prints at A5, to fit a table-card stand: two copies on one A4 sheet, one for each side of the stand.",
       "Upload your own reserved card design on Parties > Printouts, like the voucher and feedback form, and choose where the child's name goes. The card can also show the arrival time and room.",
-      "The side menu has a new Music group: open it to find Music Player, Audio Clips and Music Schedule in one place, instead of spread across the menu and the Management section."
+      "The side menu has a new Music group: open it to find Music Player, Audio Clips and Music Schedule in one place, instead of spread across the menu and the Management section.",
+      "Sign-in is harder to abuse: someone who knows your username can no longer lock you out by trying wrong passwords from their own device. Every failed sign-in now shows the same message, and after several failed attempts from one device sign-in is paused there for 15 minutes."
     ]
   }
 ]
