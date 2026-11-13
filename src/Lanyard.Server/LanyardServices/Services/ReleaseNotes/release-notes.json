@@ -907,8 +907,11 @@
   {
     "version": "1.4.22",
     "releaseDate": "2026-11-12",
-    "summary": "Mark school holidays, bank holidays and closed days for Auto-build, and see every kiosk and automation problem on one Operations alerts page.",
+    "summary": "Mark holidays and closed days for Auto-build, track kiosk and automation issues, and see updates to party cards, What's new and Music.",
     "details": [
+      "The megaphone button in the header, next to Send feedback, shows the latest update's summary. More info opens every release's notes.",
+      "A red dot on the button means there's an update you haven't looked at yet in this browser.",
+      "The sidebar no longer has the What's new card at the bottom, so it has more room for the menu.",
       "New Rota > Holidays page: add your local school holidays, bank holidays and the days you're closed for each location. School holidays differ from area to area, so you add your own.",
       "Shift templates have a new Runs setting: Every week, Term time only or School holidays only. Auto-build uses the right ones for each day, so a busier holiday Tuesday can have its own template.",
       "A bank holiday is staffed like a day you choose (Sunday to start with): Auto-build uses that day's templates. On a closed day Auto-build adds no shifts, and warns you if a party is booked.",
@@ -918,7 +921,11 @@
       "New Operations alerts page (Management > Operations Alerts) for Admins and Managers: one list of what needs attention right now, starting with kiosks offline or needing attention and automation rules that fail.",
       "Acknowledge an alert to show you're dealing with it, or resolve it with a note. Alerts clear themselves when the problem goes away, such as a kiosk coming back online, and stay in History for 90 days.",
       "New alerts appear without reloading and are announced to screen readers. The menu shows how many are waiting to be acknowledged.",
-      "Admins and the location's Managers get a new Automation rule failed notification the first time a rule fails, rather than on every run."
+      "Admins and the location's Managers get a new Automation rule failed notification the first time a rule fails, rather than on every run.",
+      "The reserved table card now prints at A5, to fit a table-card stand: two copies on one A4 sheet, one for each side of the stand.",
+      "Upload your own reserved card design on Parties > Printouts, like the voucher and feedback form, and choose where the child's name goes. The card can also show the arrival time and room.",
+      "The side menu has a new Music group: open it to find Music Player, Audio Clips and Music Schedule in one place, instead of spread across the menu and the Management section.",
+      "Sign-in is harder to abuse: someone who knows your username can no longer lock you out by trying wrong passwords from their own device. Every failed sign-in now shows the same message, and after several failed attempts from one device sign-in is paused there for 15 minutes."
     ]
   }
 ]
