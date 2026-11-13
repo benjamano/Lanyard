@@ -63,6 +63,7 @@ public class SchedulingSettingsService(IDbContextFactory<ApplicationDbContext> f
             existing.ShiftReminderLeadHours = settings.ShiftReminderLeadHours;
             existing.SendShiftReminders = settings.SendShiftReminders;
             existing.ClockInWindowMinutes = settings.ClockInWindowMinutes;
+            existing.MissedClockInAlertMinutes = settings.MissedClockInAlertMinutes;
             existing.PayPeriod = settings.PayPeriod;
             existing.PayPeriodStartDay = settings.PayPeriodStartDay;
             existing.PayPeriodAnchorDate = settings.PayPeriod == PayPeriodFrequency.Monthly ? null : settings.PayPeriodAnchorDate;
@@ -111,6 +112,11 @@ public class SchedulingSettingsService(IDbContextFactory<ApplicationDbContext> f
         if (settings.ClockInWindowMinutes is < 0 or > 240)
         {
             return "The clock-in window must be between 0 and 240 minutes.";
+        }
+
+        if (settings.MissedClockInAlertMinutes is < 0 or > 240)
+        {
+            return "The missed clock-in alert must be between 0 (off) and 240 minutes.";
         }
 
         if (!System.Enum.IsDefined(settings.PayPeriod))
