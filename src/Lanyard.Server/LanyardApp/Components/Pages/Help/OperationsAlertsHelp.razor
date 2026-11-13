@@ -1,0 +1,18 @@
+@page "/help/operations-alerts"
+@attribute [Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.OperationsAlerts)]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.OperationsAlerts
+
+<HelpPage AreaKey="@HelpRegistry.OperationsAlerts">
+    <FluentTab Id="help-overview" Header="Overview" IconStart="@(new Icons.Regular.Size16.Alert())">
+        <OperationsAlertsOverviewHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-handling" Header="Acknowledge &amp; Resolve" IconStart="@(new Icons.Regular.Size16.CheckmarkCircle())" DeferredLoading="true">
+        <OperationsAlertsHandlingHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-types" Header="Alert Types" IconStart="@(new Icons.Regular.Size16.List())" DeferredLoading="true">
+        <OperationsAlertsTypesHelpTab />
+    </FluentTab>
+</HelpPage>

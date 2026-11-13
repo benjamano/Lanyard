@@ -79,7 +79,7 @@ public class SignalRControlHubGameCaptureTests
             NullLogger<MusicPlayerService>.Instance);
 
         AutomationEngineService automationEngineService = new(
-            factory, [], new LaserGameStatusStore(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+            factory, [], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
         automationEngine = automationEngineService;
 
         SignalRProjectionControlHubEvents hubEvents = new(Mock.Of<IServiceScopeFactory>());

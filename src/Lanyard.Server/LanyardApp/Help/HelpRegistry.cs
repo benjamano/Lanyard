@@ -79,6 +79,7 @@ public static class HelpRegistry
     public const string Automation = "automation";
     public const string Dmx = "dmx";
     public const string Kiosks = "kiosks";
+    public const string OperationsAlerts = "operations-alerts";
     public const string Insights = "insights";
     public const string Parties = "parties";
     public const string Feedback = "feedback";
@@ -320,6 +321,20 @@ public static class HelpRegistry
             ],
             ["/manage/users", "/manage/roles", "/manage/companies-locations"],
             Roles: "Admin,Manager"),
+
+        new(OperationsAlerts,
+            "Operations Alerts",
+            "One list of what needs attention: kiosks offline, automation rules failing. Acknowledging and resolving alerts.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.Alert(),
+            [
+                new("overview", "Overview"),
+                new("handling", "Acknowledge & Resolve"),
+                new("types", "Alert Types")
+            ],
+            ["/manage/alerts"],
+            Roles: "Admin,Manager",
+            Feature: CompanyFeature.OperationsAlerts),
 
         new(Compliance,
             "Compliance",

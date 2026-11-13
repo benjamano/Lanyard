@@ -44,7 +44,7 @@ public class AutomationEngineServiceGameDataTests
             .ReturnsAsync(() => new ApplicationDbContext(options));
 
         RecordingActionExecutor executor = new();
-        AutomationEngineService engine = new(factoryMock.Object, [executor], new LaserGameStatusStore(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+        AutomationEngineService engine = new(factoryMock.Object, [executor], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
 
         return new Harness(options, engine, executor);
     }

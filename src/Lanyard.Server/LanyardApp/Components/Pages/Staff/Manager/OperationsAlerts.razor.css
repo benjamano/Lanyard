@@ -1,0 +1,89 @@
+.ops-page {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 960px;
+    min-width: 0;
+}
+
+.ops-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.ops-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 16px;
+    min-width: 0;
+}
+
+.ops-title {
+    margin: 0;
+    font-size: var(--fontSizeBase500);
+    line-height: var(--lineHeightBase500);
+    font-weight: var(--fontWeightSemibold);
+}
+
+.ops-counts {
+    color: var(--colorNeutralForeground3);
+}
+
+.ops-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.ops-views {
+    display: flex;
+    gap: 8px;
+}
+
+.ops-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.ops-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ops-empty {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 24px 0;
+    color: var(--colorNeutralForeground2);
+}
+
+.ops-more {
+    display: flex;
+    justify-content: center;
+}
+
+.ops-filters ::deep fluent-field {
+    margin: 0;
+}
+
+@media (max-width: 600px) {
+    .ops-filters {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+    }
+
+    /* The selects carry a fixed desktop width inline; on a phone they share the row instead. */
+    .ops-filters ::deep fluent-field {
+        width: auto !important;
+        min-width: 0;
+    }
+}

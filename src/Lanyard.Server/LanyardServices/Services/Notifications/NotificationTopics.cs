@@ -9,7 +9,8 @@ public enum NotificationTopicGroup
     TimeOff,
     Chat,
     Announcements,
-    Kiosks
+    Kiosks,
+    Operations
 }
 
 // How one topic is described in Notification settings, and what someone gets before they have
@@ -81,7 +82,12 @@ public static class NotificationTopics
         new(NotificationTopic.KioskOffline, NotificationTopicGroup.Kiosks,
             "Kiosk offline", "A kiosk at your location stops responding, and when it's back.", DefaultPush: true, DefaultEmail: true, ManagerOnly: true),
         new(NotificationTopic.KioskNeedsAttention, NotificationTopicGroup.Kiosks,
-            "Kiosk needs attention", "A kiosk has had a problem for 10 minutes, such as low disk space or its lighting not connected.", DefaultPush: true, DefaultEmail: false, ManagerOnly: true)
+            "Kiosk needs attention", "A kiosk has had a problem for 10 minutes, such as low disk space or its lighting not connected.", DefaultPush: true, DefaultEmail: false, ManagerOnly: true),
+
+        // Raised on the Operations alerts page by OperationsAlertWriter, once per failing rule until
+        // it runs cleanly again, so a rule that fails every minute doesn't send one every minute.
+        new(NotificationTopic.AutomationRuleFailed, NotificationTopicGroup.Operations,
+            "Automation rule failed", "An automation rule ran but one of its actions failed.", DefaultPush: true, DefaultEmail: false, ManagerOnly: true)
     ];
 
     public static NotificationTopicInfo Get(NotificationTopic topic) =>
@@ -103,6 +109,7 @@ public static class NotificationTopics
         NotificationTopicGroup.Chat => "Chat",
         NotificationTopicGroup.Announcements => "Announcements",
         NotificationTopicGroup.Kiosks => "Kiosks",
+        NotificationTopicGroup.Operations => "Operations alerts",
         _ => group.ToString()
     };
 }

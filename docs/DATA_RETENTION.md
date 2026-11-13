@@ -16,6 +16,7 @@
 | Kiosk hardware self-test results | `90 days` | Diagnosing venue hardware; links to the Admin who ran it |
 | Chat messages | `2 years` from sending (pinned posts: until unpinned) | Workplace messaging; data minimisation |
 | Chat reports | `2 years` after they were resolved | Evidence for disputes and repeat behaviour |
+| Operations alerts | `90 days` after they were resolved (unresolved alerts are kept until they resolve) | Showing managers what went wrong recently; some alerts name a staff member |
 
 ## Current implementation status
 
@@ -160,6 +161,22 @@ messages), so unlike log tails and screenshots they **are stored**, with a link 
 ran the test, and **purged after 90 days** (`Kiosks:SelfTest:RetentionDays`). They are deleted with
 the kiosk, only visible to Admins of the kiosk's own company, and GDPR erasure clears the link to
 the Admin while keeping the result.
+
+### Operations alerts
+
+The Operations alerts page (`/manage/alerts`) keeps one `OperationsAlert` row per problem, raised by
+the system: a kiosk offline or needing attention, or an automation rule failing. Later producers
+(missed clock-ins, overdue training, expiring staff documents) raise alerts about a named staff
+member.
+
+- Alerts never copy a staff member's name into their own text. An alert about a person points at
+  them (`SubjectUserId`) and the name is read through that link when the page shows it or a
+  notification is sent.
+- `OperationsAlertRetentionHostedService` deletes resolved alerts 90 days after they were resolved
+  (`OperationsAlerts:RetentionDays`, never less than the 90-day History tab). Alerts that are still
+  open or acknowledged are kept until they resolve.
+- A **GDPR erasure** deletes every alert about the person, and clears their name from the
+  "acknowledged by" and "resolved by" fields of alerts they handled. Those alerts stay as history.
 
 ### Party bookings
 

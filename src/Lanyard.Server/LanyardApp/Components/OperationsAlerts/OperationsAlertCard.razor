@@ -1,0 +1,109 @@
+@using Lanyard.Infrastructure.DTO.OperationsAlerts
+
+@* One alert, as a card rather than a grid row so long detail wraps on a phone. Used by the
+   Operations alerts page; Compact drops the detail and history lines for the dashboard widget. *@
+<article class="ops-alert ops-alert--@Alert.Severity.ToString().ToLowerInvariant() @(Compact ? "ops-alert--compact" : null)"
+         aria-label="@($"{OperationsAlertFormat.TypeLabel(Alert.Type)}: {Alert.Title}")">
+    <div class="ops-alert-top">
+        <OperationsAlertSeverityLabel Severity="Alert.Severity" />
+        <span class="ops-alert-type">@OperationsAlertFormat.TypeLabel(Alert.Type)</span>
+        @if (Alert.Status == OperationsAlertStatus.Acknowledged)
+        {
+            <span class="ops-alert-status">Acknowledged</span>
+        }
+        else if (Alert.Status == OperationsAlertStatus.Resolved)
+        {
+            <span class="ops-alert-status">Resolved</span>
+        }
+    </div>
+
+    <div class="ops-alert-title">@Alert.Title</div>
+
+    @if (!string.IsNullOrWhiteSpace(Alert.SubjectName) || ShowLocation)
+    {
+        <div class="ops-alert-meta">
+            @if (!string.IsNullOrWhiteSpace(Alert.SubjectName))
+            {
+                <span>@Alert.SubjectName</span>
+            }
+            @if (ShowLocation)
+            {
+                <span>@(Alert.LocationName ?? "Whole company")</span>
+            }
+        </div>
+    }
+
+    @if (!Compact && !string.IsNullOrWhiteSpace(Alert.Detail))
+    {
+        <div class="ops-alert-detail">@Alert.Detail</div>
+    }
+
+    <div class="ops-alert-when">@OperationsAlertFormat.Raised(Alert, NowUtc)</div>
+
+    @if (OperationsAlertFormat.Handled(Alert, NowUtc) is string handled)
+    {
+        <div class="ops-alert-when">@handled</div>
+    }
+
+    @if (!Compact && !string.IsNullOrWhiteSpace(Alert.ResolutionNote))
+    {
+        <div class="ops-alert-note">Note: @Alert.ResolutionNote</div>
+    }
+
+    @if (Alert.Status != OperationsAlertStatus.Resolved || (ShowLink && !string.IsNullOrWhiteSpace(Alert.LinkUrl)))
+    {
+        <div class="ops-alert-actions">
+            @if (Alert.Status == OperationsAlertStatus.Open)
+            {
+                <FluentButton Appearance="ButtonAppearance.Primary" Size="ButtonSize.Small" Disabled="@Busy"
+                              IconStart="@(new Icons.Regular.Size16.Eye())" OnClick="() => OnAcknowledge.InvokeAsync(Alert)"
+                              Title="@($"Acknowledge {Alert.Title}")">Acknowledge</FluentButton>
+            }
+            @if (Alert.Status != OperationsAlertStatus.Resolved)
+            {
+                <FluentButton Appearance="ButtonAppearance.Outline" Size="ButtonSize.Small" Disabled="@Busy"
+                              IconStart="@(new Icons.Regular.Size16.CheckmarkCircle())" OnClick="() => OnResolve.InvokeAsync(Alert)"
+                              Title="@($"Resolve {Alert.Title}")">Resolve…</FluentButton>
+            }
+            @if (ShowLink && !string.IsNullOrWhiteSpace(Alert.LinkUrl))
+            {
+                <a class="ops-alert-link" href="@Alert.LinkUrl">@LinkLabel(Alert.Type)</a>
+            }
+        </div>
+    }
+</article>
+
+@code {
+    [Parameter, EditorRequired]
+    public required OperationsAlertView Alert { get; set; }
+
+    [Parameter]
+    public DateTime NowUtc { get; set; }
+
+    // Admins see which location; a Manager only ever sees their own.
+    [Parameter]
+    public bool ShowLocation { get; set; }
+
+    // The kiosk and automation pages are Admin-only, so Managers get no link.
+    [Parameter]
+    public bool ShowLink { get; set; }
+
+    [Parameter]
+    public bool Compact { get; set; }
+
+    [Parameter]
+    public bool Busy { get; set; }
+
+    [Parameter]
+    public EventCallback<OperationsAlertView> OnAcknowledge { get; set; }
+
+    [Parameter]
+    public EventCallback<OperationsAlertView> OnResolve { get; set; }
+
+    private static string LinkLabel(OperationsAlertType type) => type switch
+    {
+        OperationsAlertType.KioskOffline or OperationsAlertType.KioskNeedsAttention => "Open Clients",
+        OperationsAlertType.AutomationRuleFailed => "Open Automation",
+        _ => "Open"
+    };
+}

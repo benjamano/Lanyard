@@ -26,7 +26,9 @@ public static class CompanyFeatureCatalog
         new(CompanyFeature.Parties, "Parties",
             "Party bookings, deposits and the documents printed for each party."),
         new(CompanyFeature.AudioClips, "Audio clips",
-            "Short recordings played over the kiosk music, clip schedules and the Play Audio Clip automation action.")
+            "Short recordings played over the kiosk music, clip schedules and the Play Audio Clip automation action."),
+        new(CompanyFeature.OperationsAlerts, "Operations alerts",
+            "One list of kiosk, automation and staff problems for Admins and Managers, with the Operations alerts widget.")
     ];
 
     // The module a dashboard widget belongs to, or null for widgets every company gets.

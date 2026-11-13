@@ -132,6 +132,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ShiftTemplateSlotRegular> ShiftTemplateSlotRegulars { get; set; }
         public DbSet<TemplateSuggestionRun> TemplateSuggestionRuns { get; set; }
         public DbSet<RotaHoliday> RotaHolidays { get; set; }
+        public DbSet<OperationsAlert> OperationsAlerts { get; set; }
         public DbSet<CompanySchedulingSettings> CompanySchedulingSettings { get; set; }
         public DbSet<Shift> Shifts { get; set; }
         public DbSet<ClockInTerminal> ClockInTerminals { get; set; }
@@ -256,6 +257,33 @@ namespace Lanyard.Infrastructure.DataAccess
                     .WithOne(x => x.Run)
                     .HasForeignKey(x => x.RunId)
                     .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<OperationsAlert>(entity =>
+            {
+                // At most one unresolved alert per problem in a company: raising it again refreshes
+                // that row, and two sweeps racing to insert it can't both win. Resolved rows are
+                // history and may repeat the key.
+                entity.HasIndex(x => new { x.CompanyId, x.DedupKey })
+                    .IsUnique()
+                    .HasFilter($"\"Status\" <> {(int)OperationsAlertStatus.Resolved}");
+
+                // The page and widget read a company's unresolved alerts, narrowed by location.
+                entity.HasIndex(x => new { x.CompanyId, x.Status, x.LocationId });
+
+                // The retention sweep deletes resolved alerts by age across every company.
+                entity.HasIndex(x => x.ResolvedAtUtc);
+
+                entity.HasOne(x => x.Location)
+                    .WithMany()
+                    .HasForeignKey(x => x.LocationId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                // GdprService deletes the alerts about a person and moves their name off the
+                // acknowledged/resolved columns before the user row goes.
+                entity.HasOne(x => x.SubjectUser).WithMany().HasForeignKey(x => x.SubjectUserId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.AcknowledgedByUser).WithMany().HasForeignKey(x => x.AcknowledgedByUserId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.ResolvedByUser).WithMany().HasForeignKey(x => x.ResolvedByUserId).OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<DashboardWidget>()

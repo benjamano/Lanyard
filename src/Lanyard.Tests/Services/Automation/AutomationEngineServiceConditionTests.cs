@@ -67,7 +67,7 @@ public class AutomationEngineServiceConditionTests
             factoryMock.Object,
             [executor],
             store,
-            clock,
+            new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), clock,
             NullLogger<AutomationEngineService>.Instance);
 
         return new Harness(options, engine, executor, store, clock);
@@ -395,7 +395,7 @@ public class AutomationEngineServiceConditionTests
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(first.Options));
         RecordingActionExecutor executor = new();
-        AutomationEngineService restarted = new(factoryMock.Object, [executor], new LaserGameStatusStore(), first.Clock, NullLogger<AutomationEngineService>.Instance);
+        AutomationEngineService restarted = new(factoryMock.Object, [executor], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), first.Clock, NullLogger<AutomationEngineService>.Instance);
 
         await restarted.ProcessScheduledRulesAsync(nineAm.AddMinutes(1), CancellationToken.None);
 

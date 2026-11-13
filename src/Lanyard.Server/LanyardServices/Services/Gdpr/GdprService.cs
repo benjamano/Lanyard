@@ -358,6 +358,26 @@ public class GdprService : IGdprService
                 rule.UpdatedByUserId = null;
             }
 
+            // Operations alerts they acknowledged or resolved stay as history, without their name.
+            // Every company's: the alert rows aren't theirs, only the attribution.
+            List<OperationsAlert> alertsHandledByUser = await ctx.OperationsAlerts
+                .IgnoreQueryFilters()
+                .Where(x => x.AcknowledgedByUserId == userId || x.ResolvedByUserId == userId)
+                .ToListAsync();
+
+            foreach (OperationsAlert alert in alertsHandledByUser)
+            {
+                if (alert.AcknowledgedByUserId == userId)
+                {
+                    alert.AcknowledgedByUserId = null;
+                }
+
+                if (alert.ResolvedByUserId == userId)
+                {
+                    alert.ResolvedByUserId = null;
+                }
+            }
+
             List<TemplateSuggestionRun> runsDismissedByUser = await ctx.TemplateSuggestionRuns
                 .Where(x => x.DismissedByUserId == userId)
                 .ToListAsync();
@@ -498,6 +518,15 @@ public class GdprService : IGdprService
                 .ToListAsync();
 
             ctx.TimeOffRequests.RemoveRange(timeOffRequests);
+
+            // Alerts about them (a missed clock-in, overdue training, an expiring document) say
+            // something about that person, so they go rather than being anonymised.
+            List<OperationsAlert> alertsAboutUser = await ctx.OperationsAlerts
+                .IgnoreQueryFilters()
+                .Where(x => x.SubjectUserId == userId)
+                .ToListAsync();
+
+            ctx.OperationsAlerts.RemoveRange(alertsAboutUser);
 
             // Product feedback they sent: their own words, so it goes with them.
             List<UserFeedback> feedback = await ctx.UserFeedback
