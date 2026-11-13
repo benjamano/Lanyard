@@ -63,7 +63,7 @@ namespace Lanyard.API.Controllers
             return Inline(result);
         }
 
-        // The company's saved voucher or feedback form filled in with a made-up party, for checking
+        // The company's saved voucher, feedback form or reserved card filled in with a made-up party, for checking
         // the box positions on the Printouts page.
         [HttpGet("printouts/{document}/preview")]
         [Authorize(Roles = "Admin,Manager")]
@@ -73,6 +73,7 @@ namespace Lanyard.API.Controllers
             {
                 "voucher" => PartyArtworkDocument.Voucher,
                 "feedback-form" => PartyArtworkDocument.FeedbackForm,
+                "reserved-card" => PartyArtworkDocument.ReservedCard,
                 _ => null
             };
 
