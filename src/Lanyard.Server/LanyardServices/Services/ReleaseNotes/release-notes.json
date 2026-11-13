@@ -907,7 +907,7 @@
   {
     "version": "1.4.22",
     "releaseDate": "2026-11-12",
-    "summary": "What's new has moved from the bottom of the sidebar to a button in the header.",
+    "summary": "Mark school holidays, bank holidays and closed days, and Auto-build staffs the rota around them. The party reserved table card is now A5 and can use your own design. What's new is now in the header, and the side menu has a Music group.",
     "details": [
       "The megaphone button in the header, next to Send feedback, shows the latest update's summary. More info opens every release's notes.",
       "A red dot on the button means there's an update you haven't looked at yet in this browser.",
@@ -918,6 +918,8 @@
       "Add bank holidays fills in the England and Wales bank holidays for the rest of this year and next year, for you to check and change.",
       "Holidays and closed days are labelled on the rota, and Auto-build lists the ones in the week or month before you add anything.",
       "Learn from past rota now leaves holidays and closed days out, so the templates it suggests are for an ordinary week.",
+      "The reserved table card now prints at A5, to fit a table-card stand: two copies on one A4 sheet, one for each side of the stand.",
+      "Upload your own reserved card design on Parties > Printouts, like the voucher and feedback form, and choose where the child's name goes. The card can also show the arrival time and room.",
       "The side menu has a new Music group: open it to find Music Player, Audio Clips and Music Schedule in one place, instead of spread across the menu and the Management section."
     ]
   }
