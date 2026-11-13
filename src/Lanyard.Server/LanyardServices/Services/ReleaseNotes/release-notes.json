@@ -914,7 +914,8 @@
       "A bank holiday is staffed like a day you choose (Sunday to start with): Auto-build uses that day's templates. On a closed day Auto-build adds no shifts, and warns you if a party is booked.",
       "Add bank holidays fills in the England and Wales bank holidays for the rest of this year and next year, for you to check and change.",
       "Holidays and closed days are labelled on the rota, and Auto-build lists the ones in the week or month before you add anything.",
-      "Learn from past rota now leaves holidays and closed days out, so the templates it suggests are for an ordinary week."
+      "Learn from past rota now leaves holidays and closed days out, so the templates it suggests are for an ordinary week.",
+    "Sign-in is harder to abuse: someone who knows your username can no longer lock you out by trying wrong passwords from their own device. Every failed sign-in now shows the same message, and after several failed attempts from one device sign-in is paused there for 15 minutes."
     ]
   }
 ]
