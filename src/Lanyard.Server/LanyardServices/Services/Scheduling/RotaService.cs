@@ -251,7 +251,8 @@ public class RotaService(
             {
                 OpenShifts = locationShifts.Where(x => x.UserId is null && x.IsActive).ToList(),
                 UnpublishedOpenShiftCount = pendingUserIds.Count(x => x is null),
-                TrainingGapsByShift = trainingGaps
+                TrainingGapsByShift = trainingGaps,
+                Holidays = await RotaHolidayService.ForRangeAsync(ctx, locationId, from, to)
             });
         }
         catch (Exception ex)

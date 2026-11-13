@@ -27,12 +27,47 @@
                 shift that's only needed when a party or private hire adds people to it, such as a late evening shift.</li>
             <li>Under <strong>Regulars</strong>, use <strong>Add a regular...</strong> to pick the people who normally work
                 that position on this shift. Auto-build gives them the shift first whenever they can work it.</li>
-            <li>Optionally set <strong>Starting</strong> and <strong>Until</strong> dates, for example for school holidays only.</li>
+            <li>Under <strong>Runs</strong>, choose <strong>Every week</strong>, <strong>Term time only</strong> or
+                <strong>School holidays only</strong>. Term time and school holidays follow the dates on
+                <a href="/manage/rota/holidays">Holidays</a>, so a Tuesday that's busier in the holidays can have one
+                Tuesday template for term time and another for the holidays.</li>
+            <li>Optionally set <strong>Starting</strong> and <strong>Until</strong> dates, to limit it to some dates.</li>
         </ol>
         <FluentText>
             Templates belong to one location; Admins pick the location at the top of the page. <strong>Archive</strong> a
             template you no longer need, and tick <strong>Show archived</strong> to find and <strong>Restore</strong> it.
             Archiving never changes shifts already on the rota.
+        </FluentText>
+    </HelpSection>
+
+    <HelpSection Title="Holidays">
+        <FluentText>
+            <a href="/manage/rota/holidays">Holidays</a> is where each location marks its local school holidays, bank holidays
+            and the days it's closed. Lanyard never fills these in by itself, because school holidays differ from one area
+            to the next. Auto-build reads them when it decides which shift templates to use each day.
+        </FluentText>
+        <ol>
+            <li>Select <strong>Add holiday</strong>.</li>
+            <li>Choose what kind of day it is:
+                <ul>
+                    <li><strong>School holiday</strong>: templates set to <strong>School holidays only</strong> run, and
+                        <strong>Term time only</strong> ones don't. Templates set to <strong>Every week</strong> run as normal.</li>
+                    <li><strong>Bank holiday</strong>: pick a day under <strong>Staff it like a</strong> (Sunday to start with).
+                        Auto-build uses that day's templates instead of its own. A bank holiday also counts as a school holiday.</li>
+                    <li><strong>Closed</strong>: Auto-build adds no shifts that day, and warns you if a party is booked on it.</li>
+                </ul>
+            </li>
+            <li>Give it a <strong>Name</strong> and set the first and last day. For one day, use the same date for both.</li>
+        </ol>
+        <FluentText>
+            <strong>Add bank holidays</strong> lists the England and Wales bank holidays for the rest of this year and next year
+            that aren't on the page yet, each staffed like a Sunday, and adds them if you confirm. Check them against gov.uk,
+            because one-off bank holidays aren't included, and change any you need to, for example to mark Christmas Day as
+            closed. Remove a holiday with its bin button; shifts already on the rota stay as they are.
+        </FluentText>
+        <FluentText>
+            Holidays show on the rota above each day. <strong>Learn from past rota</strong> leaves holidays, bank holidays and
+            closed days out, so the templates it suggests are for an ordinary term-time week.
         </FluentText>
     </HelpSection>
 

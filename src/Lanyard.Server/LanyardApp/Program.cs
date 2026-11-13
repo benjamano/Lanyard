@@ -169,6 +169,7 @@ builder.Services.AddScoped<IShiftSuggestionService, ShiftSuggestionService>();
 builder.Services.AddScoped<IStaffAvailabilityService, StaffAvailabilityService>();
 builder.Services.AddScoped<IShiftTemplateService, ShiftTemplateService>();
 builder.Services.AddScoped<IRotaAutoBuildService, RotaAutoBuildService>();
+builder.Services.AddScoped<IRotaHolidayService, RotaHolidayService>();
 builder.Services.AddScoped<ITemplateLearningService, TemplateLearningService>();
 builder.Services.AddScoped<IPartyBookingService, PartyBookingService>();
 builder.Services.AddScoped<IPartySettingsService, PartySettingsService>();

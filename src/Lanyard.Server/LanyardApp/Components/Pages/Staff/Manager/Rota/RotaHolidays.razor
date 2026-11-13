@@ -1,0 +1,345 @@
+@page "/manage/rota/holidays"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.StaffScheduling)]
+
+@using Lanyard.App.Components.Dialogs
+@using Lanyard.App.Components.Rota
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+
+@inject IRotaHolidayService _holidayService
+
+<PageTitle>Holidays</PageTitle>
+
+<div class="rota-holidays">
+    <div class="holidays-header">
+        <div class="holidays-heading">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Holidays</FluentText>
+            <FluentText Class="holidays-intro">
+                Your local school holidays, bank holidays and the days you're closed. <strong>Auto-build</strong> on the
+                <a href="@RotaLink">rota</a> uses them to choose which <a href="@TemplatesLink">shift templates</a> run each day.
+                School holidays vary from area to area, so add your own.
+            </FluentText>
+        </div>
+        <HelpButton AreaKey="@HelpRegistry.Rota" Topic="setup" />
+    </div>
+
+    <div class="holidays-toolbar">
+        @if (locationOptions.Count > 1)
+        {
+            <FluentSelect TOption="LocationOption" TValue="string" Items="@locationOptions" OptionText="@(x => x.Name)"
+                          OptionValue="@(x => x.Id.ToString())" Value="@locationId?.ToString()" ValueChanged="@OnLocationChanged"
+                          Label="Location" Width="260px" />
+        }
+        <FluentCheckbox Label="Show past" Value="@showPast" ValueChanged="@OnShowPastChanged" />
+        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Add())"
+                      Disabled="@(holidays is null)" OnClick="@(() => OpenDialogAsync(null))">
+            Add holiday
+        </FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.CalendarAdd())"
+                      Disabled="@(holidays is null || isBusy)" OnClick="@AddBankHolidaysAsync">
+            Add bank holidays
+        </FluentButton>
+    </div>
+
+    @if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else if (holidays is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else if (holidays.Count == 0)
+    {
+        <FluentCard Height="auto">
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                <FluentText Weight="TextWeight.Semibold">No holidays @(showPast ? "yet" : "coming up")</FluentText>
+                <FluentText>
+                    Add your school's term breaks as school holidays, then set any shift templates that only run in the
+                    holidays (or only in term time) on Shift Templates. <strong>Add bank holidays</strong> fills in England and
+                    Wales bank holidays for you to check.
+                </FluentText>
+            </FluentStack>
+        </FluentCard>
+    }
+    else
+    {
+        <div class="holiday-list">
+            @foreach (RotaHoliday holiday in holidays)
+            {
+                <div class="holiday-item @(holiday.EndDate < today ? "holiday-past" : string.Empty)">
+                    <span class="holiday-marker holiday-marker-@KindClass(holiday.Kind)" aria-hidden="true"></span>
+                    <div class="holiday-info">
+                        <div class="holiday-title">
+                            <span class="holiday-name">@holiday.Name</span>
+                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="@BadgeFor(holiday.Kind)">@holiday.Kind.Label()</FluentBadge>
+                        </div>
+                        <div class="holiday-dates">@DatesLabel(holiday)</div>
+                        <div class="holiday-effect">@RotaHolidayRules.Effect(holiday)</div>
+                    </div>
+                    <div class="holiday-actions">
+                        <FluentButton IconStart="@(new Icons.Regular.Size16.Edit())" Title="@($"Edit {holiday.Name}")"
+                                      Disabled="@isBusy" OnClick="@(() => OpenDialogAsync(holiday))" />
+                        <FluentButton IconStart="@(new Icons.Regular.Size16.Delete())" Title="@($"Remove {holiday.Name}")"
+                                      Disabled="@isBusy" OnClick="@(() => RemoveAsync(holiday))" />
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private record LocationOption(int Id, string Name);
+
+    [SupplyParameterFromQuery(Name = "location")]
+    public int? LocationQuery { get; set; }
+
+    private LocationScope? scope;
+    private List<LocationOption> locationOptions = [];
+    private int? locationId;
+    private bool showPast;
+    private List<RotaHoliday>? holidays;
+    private string? loadError;
+    private bool isBusy;
+    private DateOnly today;
+
+    private string RotaLink => locationId is int id ? $"/manage/rota?location={id}" : "/manage/rota";
+
+    private string TemplatesLink => locationId is int id ? $"/manage/rota/templates?location={id}" : "/manage/rota/templates";
+
+    protected override async Task OnInitializedAsync()
+    {
+        today = RotaTime.Today(DateTime.UtcNow);
+
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            loadError = $"Couldn't work out which location you're signed in to: {scopeResult.Error}";
+            return;
+        }
+
+        scope = scopeResult.Data;
+
+        // Same rule as the rota builder: a Manager looks after the location they signed in under;
+        // an Admin may pick any active location.
+        if (scope.IsAdmin)
+        {
+            Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsAsync();
+
+            locationOptions = locationsResult.IsSuccess && locationsResult.Data is not null
+                ? locationsResult.Data.OrderBy(l => l.GetDisplayName()).Select(l => new LocationOption(l.Id, l.GetDisplayName())).ToList()
+                : [];
+        }
+        else if (scope.LocationId is int own)
+        {
+            locationOptions = [new LocationOption(own, scope.LocationDisplayName ?? "Your location")];
+        }
+
+        locationId = LocationQuery is int requested && locationOptions.Any(l => l.Id == requested)
+            ? requested
+            : scope.LocationId is int signedIn && locationOptions.Any(l => l.Id == signedIn)
+                ? signedIn
+                : locationOptions.FirstOrDefault()?.Id;
+
+        if (locationId is null)
+        {
+            loadError = "There are no active locations to add holidays for yet.";
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (scope is null || locationId is not int location)
+        {
+            return;
+        }
+
+        Result<List<RotaHoliday>> result = await _holidayService.GetHolidaysAsync(scope, location, showPast ? null : today);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            loadError = result.Error;
+            holidays = null;
+            return;
+        }
+
+        loadError = null;
+        holidays = result.Data;
+    }
+
+    private async Task OnLocationChanged(string? value)
+    {
+        if (int.TryParse(value, out int id) && id != locationId)
+        {
+            locationId = id;
+            holidays = null;
+            _navigationManager.NavigateTo($"/manage/rota/holidays?location={id}", replace: true);
+            await LoadAsync();
+        }
+    }
+
+    private async Task OnShowPastChanged(bool value)
+    {
+        showPast = value;
+        await LoadAsync();
+    }
+
+    private async Task OpenDialogAsync(RotaHoliday? existing)
+    {
+        if (locationId is not int location)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<AddEditRotaHolidayDialog>(options =>
+        {
+            options.Width = "480px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(AddEditRotaHolidayDialog.LocationId), location);
+            options.Parameters.Add(nameof(AddEditRotaHolidayDialog.Existing), existing);
+        });
+
+        if (result.Value is true)
+        {
+            await LoadAsync();
+        }
+    }
+
+    // The rest of this year and all of next, so a manager doing next year's rota in the autumn
+    // gets both in one go.
+    private async Task AddBankHolidaysAsync()
+    {
+        if (scope is null || locationId is not int location)
+        {
+            return;
+        }
+
+        DateOnly until = new(today.Year + 1, 12, 31);
+
+        Result<List<RotaHoliday>> missing = await _holidayService.GetMissingBankHolidaysAsync(scope, location, today, until);
+
+        if (!missing.IsSuccess || missing.Data is null)
+        {
+            _toastService.ShowError(missing.Error ?? "Couldn't work out the bank holidays.");
+            return;
+        }
+
+        if (missing.Data.Count == 0)
+        {
+            _toastService.ShowInfo($"Every bank holiday up to the end of {until.Year} is already here.");
+            return;
+        }
+
+        string list = string.Join(", ", missing.Data.Select(x => $"{x.StartDate.ToString("d MMM yyyy", RotaFormat.Uk)} ({x.Name})"));
+
+        DialogResult confirm = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Add bank holidays";
+            options.Width = "520px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message),
+                $"Add {missing.Data.Count} England and Wales bank {(missing.Data.Count == 1 ? "holiday" : "holidays")}, each staffed like a Sunday? {list}. "
+                + "Check them against gov.uk: extra one-off bank holidays aren't included. You can change any of them afterwards, "
+                + "for example to mark Christmas Day as closed.");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Add them");
+        });
+
+        if (confirm.Cancelled || confirm.Value is not true)
+        {
+            return;
+        }
+
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            _toastService.ShowError("Couldn't confirm who you are - try reloading the page.");
+            return;
+        }
+
+        isBusy = true;
+        Result<int> added = await _holidayService.AddBankHolidaysAsync(scope, location, today, until, actingUser.Data);
+        isBusy = false;
+
+        if (!added.IsSuccess)
+        {
+            _toastService.ShowError(added.Error ?? "Couldn't add the bank holidays.");
+            return;
+        }
+
+        _toastService.ShowSuccess($"Added {added.Data} bank {(added.Data == 1 ? "holiday" : "holidays")}.");
+        await LoadAsync();
+    }
+
+    private async Task RemoveAsync(RotaHoliday holiday)
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        DialogResult confirm = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Remove holiday";
+            options.Width = "460px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message),
+                $"Remove {holiday.Name}? Auto-build will treat {(holiday.Days == 1 ? "that day" : "those days")} as ordinary days. Shifts already on the rota stay as they are.");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Remove");
+        });
+
+        if (confirm.Cancelled || confirm.Value is not true)
+        {
+            return;
+        }
+
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            _toastService.ShowError("Couldn't confirm who you are - try reloading the page.");
+            return;
+        }
+
+        isBusy = true;
+        Result<bool> result = await _holidayService.RemoveHolidayAsync(scope, holiday.Id, actingUser.Data);
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? $"Couldn't remove {holiday.Name}.");
+            return;
+        }
+
+        _toastService.ShowSuccess($"{holiday.Name} removed.");
+        await LoadAsync();
+    }
+
+    private static string DatesLabel(RotaHoliday holiday) => holiday.StartDate == holiday.EndDate
+        ? holiday.StartDate.ToString("dddd d MMMM yyyy", RotaFormat.Uk)
+        : $"{holiday.StartDate.ToString("ddd d MMM yyyy", RotaFormat.Uk)} to {holiday.EndDate.ToString("ddd d MMM yyyy", RotaFormat.Uk)} · {holiday.Days} days";
+
+    private static string KindClass(RotaHolidayKind kind) => kind switch
+    {
+        RotaHolidayKind.BankHoliday => "bank",
+        RotaHolidayKind.Closed => "closed",
+        _ => "school"
+    };
+
+    private static BadgeColor BadgeFor(RotaHolidayKind kind) => kind switch
+    {
+        RotaHolidayKind.BankHoliday => BadgeColor.Informative,
+        RotaHolidayKind.Closed => BadgeColor.Danger,
+        _ => BadgeColor.Brand
+    };
+}
