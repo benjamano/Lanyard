@@ -1,0 +1,17 @@
+<Project>
+  <!--
+    NuGet audit for every project, transitive packages included. A High or Critical advisory is a
+    warning locally and fails the build in CI (GitHub Actions sets CI=true), so a vulnerable package
+    can't merge unnoticed. When a fresh advisory breaks CI, bump the package to its patched
+    servicing release (run dotnet list package with the vulnerable and include-transitive options).
+  -->
+  <PropertyGroup>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>high</NuGetAuditLevel>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(CI)' == 'true'">
+    <WarningsAsErrors>$(WarningsAsErrors);NU1903;NU1904</WarningsAsErrors>
+  </PropertyGroup>
+</Project>
