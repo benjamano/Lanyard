@@ -919,7 +919,9 @@
       "Acknowledge an alert to show you're dealing with it, or resolve it with a note. Alerts clear themselves when the problem goes away, such as a kiosk coming back online, and stay in History for 90 days.",
       "New alerts appear without reloading and are announced to screen readers. The menu shows how many are waiting to be acknowledged.",
       "Admins and the location's Managers get a new Automation rule failed notification the first time a rule fails, rather than on every run.",
-      "New Operations Alerts dashboard widget: the open alerts for your locations, with Acknowledge and Resolve, and settings to show only warnings or only unacknowledged alerts."
+      "New Operations Alerts dashboard widget: the open alerts for your locations, with Acknowledge and Resolve, and settings to show only warnings or only unacknowledged alerts.",
+      "Operations alerts now include missed clock-ins: when a published shift has been running for 15 minutes with nobody clocked in, the location's managers are told. Change the time, or turn it off, with the new Missed clock-in alert setting in Rota settings.",
+      "Overdue training and staff documents due for renewal or expired also appear as operations alerts, with one summary notification an hour rather than one per alert. They clear themselves once the course is done or the document is renewed."
     ]
   }
 ]

@@ -37,6 +37,10 @@
                         <div class="settings-hint">How long before a shift starts, and after it ends, staff can clock in for it on a terminal.</div>
                     </div>
                     <div class="settings-field">
+                        <FluentNumberInput TValue="int" Label="Missed clock-in alert after (minutes)" @bind-Value="missedClockInAlertMinutes" Width="100%" />
+                        <div class="settings-hint">How long after a published shift starts, with nobody clocked in, before it shows on Operations Alerts and managers are told. 0 turns these alerts off.</div>
+                    </div>
+                    <div class="settings-field">
                         <FluentSwitch @bind-Value="sendShiftReminders" Label="Email staff a reminder before each shift" />
                         <FluentNumberInput TValue="int" Label="Shift reminder lead time (hours)" @bind-Value="shiftReminderLeadHours" Width="100%"
                                            Disabled="@(!sendShiftReminders)" />
@@ -144,6 +148,7 @@
     private int shiftReminderLeadHours = 24;
     private bool sendShiftReminders = true;
     private int clockInWindowMinutes = 60;
+    private int missedClockInAlertMinutes = 15;
     private string payPeriod = "0";
     private int payPeriodStartDay = 1;
     private DateTime? payPeriodAnchor;
@@ -208,6 +213,7 @@
         shiftReminderLeadHours = settings.ShiftReminderLeadHours;
         sendShiftReminders = settings.SendShiftReminders;
         clockInWindowMinutes = settings.ClockInWindowMinutes;
+        missedClockInAlertMinutes = settings.MissedClockInAlertMinutes;
         payPeriod = ((int)settings.PayPeriod).ToString();
         payPeriodStartDay = settings.PayPeriodStartDay;
         payPeriodAnchor = settings.PayPeriodAnchorDate?.ToDateTime(TimeOnly.MinValue);
@@ -238,6 +244,7 @@
             ShiftReminderLeadHours = shiftReminderLeadHours,
             SendShiftReminders = sendShiftReminders,
             ClockInWindowMinutes = clockInWindowMinutes,
+            MissedClockInAlertMinutes = missedClockInAlertMinutes,
             PayPeriod = SelectedPayPeriod,
             PayPeriodStartDay = payPeriodStartDay,
             PayPeriodAnchorDate = payPeriodAnchor is DateTime anchor ? DateOnly.FromDateTime(anchor) : null,

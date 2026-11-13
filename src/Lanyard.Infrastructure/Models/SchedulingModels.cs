@@ -230,6 +230,10 @@ namespace Lanyard.Infrastructure.Models
         // added by a manager on the Timesheets page instead.
         public int ClockInWindowMinutes { get; set; } = 60;
 
+        // How long after a published shift starts, with nobody clocked in, before it is raised as
+        // a missed clock-in on the Operations alerts page. 0 turns missed clock-in alerts off.
+        public int MissedClockInAlertMinutes { get; set; } = 15;
+
         // The company's pay period, used by the timesheet export's "last pay period" preset.
         // Monthly runs from PayPeriodStartDay to the day before it the next month (1 = calendar
         // month, capped at 28 so every month has the day). The weekly-based frequencies count
