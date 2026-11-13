@@ -71,6 +71,12 @@
                     </AuthorizeView>
                 }
 
+                <AuthorizeView>
+                    <Authorized>
+                        <WhatsNewButton />
+                    </Authorized>
+                </AuthorizeView>
+
                 @* Not for demo visitors: they share accounts, and the feedback goes to Lanyard's own team. *@
                 @if (!_isDemoSession)
                 {

@@ -6,7 +6,6 @@
 @inject NavigationManager NavigationManager
 @inject ISecurityService SecurityService
 @inject AuthenticationStateProvider AuthStateProvider
-@inject IReleaseNotesService ReleaseNotesService
 @inject Lanyard.Application.Services.Feedback.IFeedbackService Feedback
 @inject ITimeOffService TimeOffService
 @inject ITimeOffEventBus TimeOffEventBus
@@ -264,27 +263,6 @@
     </FluentNav>
 
     <div class="w-100">
-        @if (_latestRelease is not null)
-        {
-            <FluentDivider />
-
-            <FluentNav Padding="@Padding.Bottom0">
-                <FluentCard Appearance="CardAppearance.Subtle" Padding="@Padding.Bottom1">
-                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
-                        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
-                            <FluentIcon Value="@(new Icons.Regular.Size16.MegaphoneLoud())" />
-                            <FluentText Weight="TextWeight.Bold">What's new in v@(_latestRelease.Version)</FluentText>
-                        </FluentStack>
-                        <FluentText Class="whats-new-summary" Title="@_latestRelease.Summary">@_latestRelease.Summary
-                        </FluentText>
-                        <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="@OpenReleaseNotesAsync">
-                            More info
-                        </FluentButton>
-                    </FluentStack>
-                </FluentCard>
-            </FluentNav>
-        }
-
         <FluentDivider />
 
         <FluentNav Margin="Margin.Top2" Density="NavDensity.Medium" Padding="@Padding.All3">
@@ -327,8 +305,6 @@
     private bool _canPostAnnouncements;
     private bool _canPlayAudioClips;
     private string? _displayName;
-    private ReleaseNote? _latestRelease;
-    private IEnumerable<ReleaseNote> _releaseNotes = [];
     private int _pendingTimeOff;
     private int _pendingShiftRequests;
     private int? _shiftRequestsLocationId;
@@ -424,13 +400,6 @@
                 Result<int> unreviewed = await Feedback.CountUnreviewedAsync();
                 _unreviewedFeedback = unreviewed.IsSuccess ? unreviewed.Data : 0;
             }
-
-            Result<IEnumerable<ReleaseNote>> releaseNotesResult = await ReleaseNotesService.GetReleaseNotesAsync();
-            if (releaseNotesResult.IsSuccess)
-            {
-                _releaseNotes = releaseNotesResult.Data ?? [];
-                _latestRelease = _releaseNotes.OrderByDescending(x => x.ReleaseDate).ThenByDescending(x => Version.Parse(x.Version)).FirstOrDefault();
-            }
         }
     }
 
@@ -504,15 +473,4 @@
     // the still-authenticated layout rendered at a URL that has no route for the duration of the
     // round trip. forceLoad bypasses the router so the browser hits the endpoint in one hop.
     private void Logout() => NavigationManager.NavigateTo("/api/auth/logout", forceLoad: true);
-
-    private async Task OpenReleaseNotesAsync()
-    {
-        await _dialogService.ShowDialogAsync<ReleaseNotesDialog>(options =>
-        {
-            options.Header.Title = "What's New";
-            options.Width = "600px";
-            options.Modal = true;
-            options.Parameters.Add(nameof(ReleaseNotesDialog.Releases), _releaseNotes);
-        });
-    }
 }

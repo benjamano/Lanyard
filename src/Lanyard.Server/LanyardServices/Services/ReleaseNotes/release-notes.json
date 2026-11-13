@@ -907,8 +907,11 @@
   {
     "version": "1.4.22",
     "releaseDate": "2026-11-12",
-    "summary": "Mark school holidays, bank holidays and closed days, and Auto-build staffs the rota around them.",
+    "summary": "What's new has moved from the bottom of the sidebar to a button in the header.",
     "details": [
+      "The megaphone button in the header, next to Send feedback, shows the latest update's summary. More info opens every release's notes.",
+      "A red dot on the button means there's an update you haven't looked at yet in this browser.",
+      "The sidebar no longer has the What's new card at the bottom, so it has more room for the menu.",
       "New Rota > Holidays page: add your local school holidays, bank holidays and the days you're closed for each location. School holidays differ from area to area, so you add your own.",
       "Shift templates have a new Runs setting: Every week, Term time only or School holidays only. Auto-build uses the right ones for each day, so a busier holiday Tuesday can have its own template.",
       "A bank holiday is staffed like a day you choose (Sunday to start with): Auto-build uses that day's templates. On a closed day Auto-build adds no shifts, and warns you if a party is booked.",
