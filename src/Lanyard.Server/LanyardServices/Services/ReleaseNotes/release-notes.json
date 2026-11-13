@@ -907,14 +907,18 @@
   {
     "version": "1.4.22",
     "releaseDate": "2026-11-12",
-    "summary": "Mark school holidays, bank holidays and closed days, and Auto-build staffs the rota around them.",
+    "summary": "Mark school holidays, bank holidays and closed days for Auto-build, and see every kiosk and automation problem on one Operations alerts page.",
     "details": [
       "New Rota > Holidays page: add your local school holidays, bank holidays and the days you're closed for each location. School holidays differ from area to area, so you add your own.",
       "Shift templates have a new Runs setting: Every week, Term time only or School holidays only. Auto-build uses the right ones for each day, so a busier holiday Tuesday can have its own template.",
       "A bank holiday is staffed like a day you choose (Sunday to start with): Auto-build uses that day's templates. On a closed day Auto-build adds no shifts, and warns you if a party is booked.",
       "Add bank holidays fills in the England and Wales bank holidays for the rest of this year and next year, for you to check and change.",
       "Holidays and closed days are labelled on the rota, and Auto-build lists the ones in the week or month before you add anything.",
-      "Learn from past rota now leaves holidays and closed days out, so the templates it suggests are for an ordinary week."
+      "Learn from past rota now leaves holidays and closed days out, so the templates it suggests are for an ordinary week.",
+      "New Operations alerts page (Management > Operations Alerts) for Admins and Managers: one list of what needs attention right now, starting with kiosks offline or needing attention and automation rules that fail.",
+      "Acknowledge an alert to show you're dealing with it, or resolve it with a note. Alerts clear themselves when the problem goes away, such as a kiosk coming back online, and stay in History for 90 days.",
+      "New alerts appear without reloading and are announced to screen readers. The menu shows how many are waiting to be acknowledged.",
+      "Admins and the location's Managers get a new Automation rule failed notification the first time a rule fails, rather than on every run."
     ]
   }
 ]

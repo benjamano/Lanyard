@@ -116,4 +116,19 @@ public record KioskBackOnlinePayload(int LocationId, Guid ClientId, string Clien
 public record KioskNeedsAttentionPayload(int LocationId, Guid ClientId, string ClientName, string? LocationName, List<string> Reasons, string Url)
     : NotificationPayload(LocationId);
 
+// For managers and Admins: an operations alert was raised. One payload for every alert type; the
+// wording is built from the alert's own title and detail (OperationsAlertNotices). LocationId is 0
+// for a company-wide alert. SubjectName is the staff member an alert is about, looked up when it is
+// sent and never stored on the alert. Url differs for Managers and Admins.
+public record OperationsAlertPayload(
+    int LocationId,
+    Guid AlertId,
+    OperationsAlertType Type,
+    OperationsAlertSeverity Severity,
+    string Title,
+    string? Detail,
+    string? LocationName,
+    string? SubjectName,
+    string Url) : NotificationPayload(LocationId);
+
 public record NotificationJob(string UserId, NotificationTopic Topic, NotificationPayload Payload);

@@ -1,0 +1,386 @@
+@page "/manage/alerts"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.OperationsAlerts)]
+
+@using Lanyard.App.Components.OperationsAlerts
+@using Lanyard.Application.Services.OperationsAlerts
+@using Lanyard.Infrastructure.DTO.OperationsAlerts
+
+@implements IDisposable
+
+@inject IOperationsAlertService _alerts
+@inject IOperationsAlertEventBus _alertEvents
+@inject TimeProvider _timeProvider
+
+<PageTitle>Operations alerts</PageTitle>
+
+@* Every current problem the system has noticed for the locations this person manages: kiosks,
+   automation rules and (later) staff. New ones arrive without a reload, and are read out by the
+   live region below. *@
+<div class="ops-page">
+    <div class="ops-header">
+        <div class="ops-heading">
+            <h1 class="ops-title">Operations alerts</h1>
+            @if (_counts is not null)
+            {
+                <span class="ops-counts">@CountsText(_counts)</span>
+            }
+        </div>
+        <HelpButton AreaKey="@HelpRegistry.OperationsAlerts" />
+    </div>
+
+    <div class="visually-hidden" aria-live="polite" aria-atomic="true">@_announcement</div>
+
+    <div class="ops-toolbar">
+        <div class="ops-views" role="group" aria-label="Which alerts to show">
+            <FluentButton Appearance="@(_showHistory ? ButtonAppearance.Outline : ButtonAppearance.Primary)"
+                          aria-pressed="@(!_showHistory)" OnClick="() => ShowHistoryAsync(false)">Open</FluentButton>
+            <FluentButton Appearance="@(_showHistory ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                          aria-pressed="@_showHistory" OnClick="() => ShowHistoryAsync(true)">History (90 days)</FluentButton>
+        </div>
+
+        <div class="ops-filters">
+            <FluentSelect TOption="FilterOption" TValue="string" Items="@TypeOptions" OptionText="@(x => x.Label)" OptionValue="@(x => x.Value)"
+                          Value="@_type" ValueChanged="@(v => SetFilterAsync(() => _type = v))" Label="Type" Width="200px" />
+            <FluentSelect TOption="FilterOption" TValue="string" Items="@SeverityOptions" OptionText="@(x => x.Label)" OptionValue="@(x => x.Value)"
+                          Value="@_severity" ValueChanged="@(v => SetFilterAsync(() => _severity = v))" Label="Severity" Width="180px" />
+            @if (_viewer?.Scope.IsAdmin == true && _locationOptions.Count > 2)
+            {
+                <FluentSelect TOption="FilterOption" TValue="string" Items="@_locationOptions" OptionText="@(x => x.Label)" OptionValue="@(x => x.Value)"
+                              Value="@_location" ValueChanged="@(v => SetFilterAsync(() => _location = v))" Label="Location" Width="200px" />
+            }
+        </div>
+    </div>
+
+    @if (_error is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@_error</FluentMessageBar>
+    }
+    else if (_items is null)
+    {
+        <FluentProgressBar />
+    }
+    else if (_items.Count == 0)
+    {
+        <div class="ops-empty" role="status">
+            <FluentIcon Value="@(new Icons.Regular.Size24.CheckmarkCircle())" Color="Color.Success" aria-hidden="true" />
+            <span>@(_showHistory ? "No alerts were resolved in the last 90 days." : "Nothing needs attention right now.")</span>
+        </div>
+    }
+    else
+    {
+        <div class="ops-list">
+            @foreach (OperationsAlertView alert in _items)
+            {
+                <OperationsAlertCard @key="alert.Id" Alert="alert" NowUtc="_now" Busy="_busyId == alert.Id"
+                                     ShowLocation="@(_viewer?.Scope.IsAdmin == true)" ShowLink="@(_viewer?.Scope.IsAdmin == true)"
+                                     OnAcknowledge="AcknowledgeAsync" OnResolve="ResolveAsync" />
+            }
+        </div>
+
+        @if (_showHistory && _items.Count < _historyTotal)
+        {
+            <div class="ops-more">
+                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="LoadMoreHistoryAsync">
+                    Show more (@(_historyTotal - _items.Count) left)
+                </FluentButton>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private record FilterOption(string Value, string Label);
+
+    private const string Any = "";
+    private const int HistoryPageSize = 25;
+    private const int EventCoalesceMs = 750;
+
+    // Only "12 minutes ago" moves with time; every real change arrives on the event bus.
+    private static readonly TimeSpan ClockInterval = TimeSpan.FromMinutes(2);
+
+    private static readonly List<FilterOption> TypeOptions =
+    [
+        new(Any, "All types"),
+        .. Enum.GetValues<OperationsAlertType>().Select(t => new FilterOption(((int)t).ToString(), OperationsAlertFormat.TypeLabel(t)))
+    ];
+
+    private static readonly List<FilterOption> SeverityOptions =
+    [
+        new(Any, "Any severity"),
+        new(((int)OperationsAlertSeverity.Warning).ToString(), "Warning or worse"),
+        new(((int)OperationsAlertSeverity.Critical).ToString(), "Critical only")
+    ];
+
+    private OperationsAlertViewer? _viewer;
+    private List<OperationsAlertView>? _items;
+    private OperationsAlertCounts? _counts;
+    private int _historyTotal;
+    private int _historyPage;
+    private List<FilterOption> _locationOptions = [];
+
+    private bool _showHistory;
+    private string _type = Any;
+    private string _severity = Any;
+    private string _location = Any;
+
+    private string? _error;
+    private string? _announcement;
+    private Guid? _busyId;
+    private DateTime _now;
+
+    private RenderCoalescer? _eventRefresh;
+    private PeriodicTimer? _clockTimer;
+    private CancellationTokenSource? _clockCancellation;
+    private bool _subscribed;
+    private bool _disposed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        Result<OperationsAlertViewer> viewer = await _alerts.GetViewerAsync();
+
+        if (!viewer.IsSuccess || viewer.Data is null)
+        {
+            _error = viewer.Error ?? "Couldn't load alerts.";
+            return;
+        }
+
+        _viewer = viewer.Data;
+
+        if (_viewer.Scope.IsAdmin)
+        {
+            Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync(_viewer.CompanyId);
+            _locationOptions =
+            [
+                new(Any, "All locations"),
+                .. (locations.Data ?? []).Where(l => l.IsActive).OrderBy(l => l.Name).Select(l => new FilterOption(l.Id.ToString(), l.Name))
+            ];
+        }
+
+        await LoadAsync();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender || _viewer is null)
+        {
+            return;
+        }
+
+        // Here rather than in OnInitializedAsync, so a prerender never subscribes.
+        _eventRefresh = new RenderCoalescer(RefreshInBackgroundAsync, EventCoalesceMs);
+        _alertEvents.OnChanged += OnAlertChanged;
+        _subscribed = true;
+
+        _clockCancellation = new CancellationTokenSource();
+        _clockTimer = new PeriodicTimer(ClockInterval);
+        _ = RunClockAsync(_clockTimer, _clockCancellation.Token);
+    }
+
+    // On the bus's thread: only note what happened, then let the coalescer refresh on ours.
+    private void OnAlertChanged(OperationsAlertChanged change)
+    {
+        if (_viewer is null || !_viewer.CanSee(change))
+        {
+            return;
+        }
+
+        if (change.Kind == OperationsAlertChangeKind.Raised)
+        {
+            string severity = Lanyard.Application.Services.Notifications.OperationsAlertNotices.SeverityLabel(change.Severity).ToLowerInvariant();
+            _announcement = $"New {severity} alert: {change.Title}";
+        }
+
+        _eventRefresh?.Request();
+    }
+
+    private async Task RefreshInBackgroundAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        try
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadAsync(keepHistoryPages: true);
+                StateHasChanged();
+            });
+        }
+        catch (ObjectDisposedException)
+        {
+            // The circuit went away between the check and the call.
+        }
+    }
+
+    private async Task RunClockAsync(PeriodicTimer timer, CancellationToken token)
+    {
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                await InvokeAsync(() =>
+                {
+                    _now = _timeProvider.GetUtcNow().UtcDateTime;
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+        {
+            // The page closed.
+        }
+    }
+
+    private OperationsAlertQuery Query() => new(
+        Type: int.TryParse(_type, out int type) ? (OperationsAlertType)type : null,
+        MinimumSeverity: int.TryParse(_severity, out int severity) ? (OperationsAlertSeverity)severity : null,
+        LocationId: int.TryParse(_location, out int location) ? location : null);
+
+    private async Task LoadAsync(bool keepHistoryPages = false)
+    {
+        _now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        Result<OperationsAlertCounts> counts = await _alerts.GetCountsAsync();
+        _counts = counts.Data;
+
+        if (_showHistory)
+        {
+            int pages = keepHistoryPages ? _historyPage + 1 : 1;
+            Result<OperationsAlertHistoryPage> history = await _alerts.GetHistoryAsync(Query(), 0, pages * HistoryPageSize);
+
+            if (!history.IsSuccess || history.Data is null)
+            {
+                _error = history.Error ?? "Couldn't load alert history.";
+                return;
+            }
+
+            _historyPage = pages - 1;
+            _items = history.Data.Alerts;
+            _historyTotal = history.Data.TotalCount;
+        }
+        else
+        {
+            Result<List<OperationsAlertView>> open = await _alerts.GetOpenAsync(Query());
+
+            if (!open.IsSuccess || open.Data is null)
+            {
+                _error = open.Error ?? "Couldn't load alerts.";
+                return;
+            }
+
+            _items = open.Data;
+        }
+
+        _error = null;
+    }
+
+    private async Task LoadMoreHistoryAsync()
+    {
+        Result<OperationsAlertHistoryPage> next = await _alerts.GetHistoryAsync(Query(), _historyPage + 1, HistoryPageSize);
+
+        if (next.IsSuccess && next.Data is not null)
+        {
+            _historyPage++;
+            _items = [.. _items ?? [], .. next.Data.Alerts.Where(a => _items?.All(x => x.Id != a.Id) != false)];
+            _historyTotal = next.Data.TotalCount;
+        }
+        else
+        {
+            _toastService.ShowError(next.Error ?? "Couldn't load more alerts.");
+        }
+    }
+
+    private async Task ShowHistoryAsync(bool history)
+    {
+        if (_showHistory == history)
+        {
+            return;
+        }
+
+        _showHistory = history;
+        _historyPage = 0;
+        _items = null;
+        await LoadAsync();
+    }
+
+    private async Task SetFilterAsync(Action set)
+    {
+        set();
+        _historyPage = 0;
+        await LoadAsync();
+    }
+
+    private async Task AcknowledgeAsync(OperationsAlertView alert)
+    {
+        _busyId = alert.Id;
+
+        Result<bool> result = await _alerts.AcknowledgeAsync(alert.Id);
+
+        _busyId = null;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't acknowledge the alert.");
+        }
+
+        await LoadAsync(keepHistoryPages: true);
+    }
+
+    private async Task ResolveAsync(OperationsAlertView alert)
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<ResolveAlertDialog>(options =>
+        {
+            options.Width = "480px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ResolveAlertDialog.Alert), alert);
+        });
+
+        if (result.Value is true)
+        {
+            _toastService.ShowSuccess("Alert resolved.");
+            await LoadAsync(keepHistoryPages: true);
+        }
+    }
+
+    private static string CountsText(OperationsAlertCounts counts)
+    {
+        if (counts.Open + counts.Acknowledged == 0)
+        {
+            return "All clear";
+        }
+
+        List<string> parts = [$"{counts.Open} open"];
+
+        if (counts.Acknowledged > 0)
+        {
+            parts.Add($"{counts.Acknowledged} acknowledged");
+        }
+
+        if (counts.Critical > 0)
+        {
+            parts.Add($"{counts.Critical} critical");
+        }
+
+        return string.Join(" · ", parts);
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+
+        if (_subscribed)
+        {
+            _alertEvents.OnChanged -= OnAlertChanged;
+        }
+
+        _clockCancellation?.Cancel();
+        _clockCancellation?.Dispose();
+        _clockTimer?.Dispose();
+        _eventRefresh?.Dispose();
+    }
+}

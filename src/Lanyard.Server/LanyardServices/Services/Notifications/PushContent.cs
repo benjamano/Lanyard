@@ -40,6 +40,7 @@ public static class PushContentBuilder
         _ when ChatNotices.Handles(payload) => FromChatNotice(payload),
         AnnouncementPayload announcement => Announcement(announcement),
         _ when KioskNotices.Handles(payload) => FromKioskNotice(payload),
+        OperationsAlertPayload alert => FromOperationsAlert(alert),
         _ => throw new ArgumentOutOfRangeException(nameof(payload), payload.GetType().Name, "No push wording for this payload.")
     };
 
@@ -147,6 +148,15 @@ public static class PushContentBuilder
         PushMessageUrgency urgency = payload is KioskOfflinePayload ? PushMessageUrgency.High : PushMessageUrgency.Normal;
 
         return new PushContent(notice.Title, string.Join(" · ", notice.Lines), notice.Url, notice.Tag, urgency, TimeSpan.FromDays(1));
+    }
+
+    private static PushContent FromOperationsAlert(OperationsAlertPayload alert)
+    {
+        Notice notice = OperationsAlertNotices.For(alert);
+        PushMessageUrgency urgency = alert.Severity == OperationsAlertSeverity.Critical ? PushMessageUrgency.High : PushMessageUrgency.Normal;
+
+        // The last line ("Open Operations alerts...") is for the email button; a tap does that.
+        return new PushContent(notice.Title, string.Join(" · ", notice.Lines.Take(notice.Lines.Count - 1)), notice.Url, notice.Tag, urgency, TimeSpan.FromDays(1));
     }
 
     // The body is cut to lock-screen length; the tap opens the home page, where the

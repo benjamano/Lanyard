@@ -1,9 +1,11 @@
 using Lanyard.Application.Services.Clients;
+using Lanyard.Application.Services.OperationsAlerts;
 using Lanyard.Application.Services.Notifications;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO.Notifications;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Tests.Services.OperationsAlerts;
 using Lanyard.Tests.Services.Scheduling;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -29,6 +31,7 @@ public class KioskAlertMonitorTests
         public required KioskAlertMonitorHostedService Monitor { get; init; }
         public required TestClock Clock { get; init; }
         public required RecordingNotificationDispatcher Dispatcher { get; init; }
+        public required RecordingOperationsAlertWriter Alerts { get; init; }
         public required DbContextOptions<ApplicationDbContext> Options { get; init; }
         public required Company Company { get; init; }
         public required Location Location { get; init; }
@@ -48,12 +51,14 @@ public class KioskAlertMonitorTests
         TestClock clock = new(startedAt ?? Now - TimeSpan.FromHours(1));
         RecordingNotificationDispatcher dispatcher = new();
 
-        KioskAlertMonitorHostedService monitor = new(Mock.Of<IServiceScopeFactory>(), dispatcher,
+        RecordingOperationsAlertWriter alerts = new();
+
+        KioskAlertMonitorHostedService monitor = new(Mock.Of<IServiceScopeFactory>(), dispatcher, alerts,
             Microsoft.Extensions.Options.Options.Create(HealthOptions), clock, NullLogger<KioskAlertMonitorHostedService>.Instance);
 
         clock.UtcNow = startedAt ?? Now;
 
-        return new Harness { Monitor = monitor, Clock = clock, Dispatcher = dispatcher, Options = options, Company = company, Location = location };
+        return new Harness { Monitor = monitor, Clock = clock, Dispatcher = dispatcher, Alerts = alerts, Options = options, Company = company, Location = location };
     }
 
     private static async Task<Client> SeedKioskAsync(Harness harness, DateTime lastHeartbeat, bool withLocation = true,
@@ -319,6 +324,78 @@ public class KioskAlertMonitorTests
         await HeartbeatAsync(harness, kiosk.Id);
         await harness.SweepAsync();
         Assert.HasCount(2, harness.JobsFor(manager.Id));
+    }
+
+    [TestMethod]
+    public async Task AlertsPage_OfflineRaisesACriticalAlertThatBackOnlineClears()
+    {
+        Harness harness = await BuildAsync();
+        Client kiosk = await SeedKioskAsync(harness, Now - Silent);
+
+        await harness.SweepAsync();
+
+        OperationsAlertRaise raised = harness.Alerts.Raised.Single();
+        Assert.AreEqual($"kiosk-offline:{kiosk.Id:N}", raised.DedupKey);
+        Assert.AreEqual(OperationsAlertType.KioskOffline, raised.Type);
+        Assert.AreEqual(OperationsAlertSeverity.Critical, raised.Severity);
+        Assert.AreEqual(harness.Company.Id, raised.CompanyId);
+        Assert.AreEqual(harness.Location.Id, raised.LocationId);
+        Assert.IsNull(raised.NotifyTopic, "the monitor sends its own kiosk notifications");
+
+        harness.Clock.Advance(TimeSpan.FromMinutes(30));
+        harness.Connected.Add(ConnectionId);
+        await HeartbeatAsync(harness, kiosk.Id);
+        await harness.SweepAsync();
+
+        Assert.AreEqual($"kiosk-offline:{kiosk.Id:N}", harness.Alerts.Resolved.Single().DedupKey);
+    }
+
+    [TestMethod]
+    public async Task AlertsPage_RaisedEvenWhenNobodyIsThereToNotify()
+    {
+        // No Admins or Managers: nothing can be sent, but the problem still belongs on the page.
+        Harness harness = await BuildAsync();
+        await SeedKioskAsync(harness, Now - Silent);
+
+        Assert.AreEqual(0, await harness.SweepAsync());
+        Assert.HasCount(1, harness.Alerts.Raised);
+    }
+
+    [TestMethod]
+    public async Task AlertsPage_NeedsAttentionIsClearedOnceTheKioskIsHealthy()
+    {
+        Harness harness = await BuildAsync();
+        harness.Connected.Add(ConnectionId);
+        Client kiosk = await SeedKioskAsync(harness, Now, dmxBroken: true);
+
+        await harness.SweepAsync();
+        harness.Clock.Advance(HealthOptions.NeedsAttentionAfter);
+        await HeartbeatAsync(harness, kiosk.Id);
+        await harness.SweepAsync();
+
+        OperationsAlertRaise raised = harness.Alerts.Raised.Single();
+        Assert.AreEqual(OperationsAlertType.KioskNeedsAttention, raised.Type);
+        Assert.AreEqual(OperationsAlertSeverity.Warning, raised.Severity);
+        Assert.AreEqual("DMX device not open", raised.Detail);
+        Assert.IsEmpty(harness.Alerts.Resolved);
+
+        await HeartbeatAsync(harness, kiosk.Id, x => x.DmxConfigured = false);
+        await harness.SweepAsync();
+        await harness.SweepAsync();
+
+        Assert.AreEqual($"kiosk-attention:{kiosk.Id:N}", harness.Alerts.Resolved.Single().DedupKey, "cleared once, not on every healthy sweep");
+    }
+
+    [TestMethod]
+    public async Task AlertsPage_AFailingAlertStoreDoesNotStopNotifications()
+    {
+        Harness harness = await BuildAsync();
+        UserProfile manager = await SeedPersonAsync(harness, "Mia", "Manager");
+        await SeedKioskAsync(harness, Now - Silent);
+        harness.Alerts.Fail = true;
+
+        await harness.SweepAsync();
+        Assert.HasCount(1, harness.JobsFor(manager.Id));
     }
 
     [TestMethod]

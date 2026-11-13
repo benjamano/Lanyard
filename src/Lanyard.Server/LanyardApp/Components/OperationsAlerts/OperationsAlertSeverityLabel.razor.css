@@ -1,0 +1,24 @@
+.ops-severity {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: var(--fontWeightSemibold);
+    white-space: nowrap;
+}
+
+.ops-severity-icon {
+    display: inline-flex;
+    align-items: center;
+}
+
+.ops-severity--critical .ops-severity-text {
+    color: var(--colorPaletteRedForeground1);
+}
+
+.ops-severity--warning .ops-severity-text {
+    color: var(--colorPaletteDarkOrangeForeground1);
+}
+
+.ops-severity--info .ops-severity-text {
+    color: var(--colorNeutralForeground2);
+}

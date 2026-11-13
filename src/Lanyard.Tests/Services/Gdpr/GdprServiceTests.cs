@@ -1,3 +1,4 @@
+using Lanyard.Tests.Services.OperationsAlerts;
 ﻿using System.Security.Cryptography;
 using System.Text;
 using Lanyard.Application.Services.Authentication;
@@ -299,6 +300,41 @@ public class GdprServiceTests
         ClientSelfTestRun? run = await verifyCtx.ClientSelfTestRuns.FindAsync(runId);
         Assert.IsNotNull(run);
         Assert.IsNull(run.RequestedByUserId);
+    }
+
+    [TestMethod]
+    public async Task EraseUserDataAsync_DeletesAlertsAboutThePerson_KeepsAlertsTheyHandledWithoutTheirName()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        UserManager<UserProfile> userManager = BuildUserManager(options);
+
+        UserProfile admin = await SeedUserAsync(userManager, "Ada", "Min", "admin@example.com");
+        UserProfile target = await SeedUserAsync(userManager);
+
+        OperationsAlert aboutThem = await OperationsAlertTestSupport.SeedAlertAsync(options, 1, null, "missed-clock-in:1", subjectUserId: target.Id);
+        OperationsAlert handled = await OperationsAlertTestSupport.SeedAlertAsync(options, 1, null, "kiosk-offline:1", OperationsAlertStatus.Resolved, resolvedAt: DateTime.UtcNow);
+        OperationsAlert someoneElse = await OperationsAlertTestSupport.SeedAlertAsync(options, 1, null, "missed-clock-in:2", subjectUserId: admin.Id);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            OperationsAlert tracked = await ctx.OperationsAlerts.SingleAsync(x => x.Id == handled.Id);
+            tracked.AcknowledgedByUserId = target.Id;
+            tracked.ResolvedByUserId = target.Id;
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<bool> result = await BuildService(options, userManager, BuildSecurityServiceMock(isAdmin: true, admin)).EraseUserDataAsync(target.Id);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using ApplicationDbContext verifyCtx = new(options);
+        Assert.IsNull(await verifyCtx.OperationsAlerts.FindAsync(aboutThem.Id));
+        Assert.IsNotNull(await verifyCtx.OperationsAlerts.FindAsync(someoneElse.Id));
+
+        OperationsAlert? kept = await verifyCtx.OperationsAlerts.FindAsync(handled.Id);
+        Assert.IsNotNull(kept);
+        Assert.IsNull(kept.AcknowledgedByUserId);
+        Assert.IsNull(kept.ResolvedByUserId);
     }
 
     [TestMethod]

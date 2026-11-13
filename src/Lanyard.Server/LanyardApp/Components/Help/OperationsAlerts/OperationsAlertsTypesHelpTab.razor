@@ -1,0 +1,25 @@
+<HelpTab>
+    <HelpSection Title="Kiosk offline (Critical)">
+        <FluentText>
+            A kiosk stopped responding, or was shut down and hasn't come back, for long enough to count as down. It's only
+            raised during the location's opening hours, and clears when the kiosk is back online.
+        </FluentText>
+    </HelpSection>
+
+    <HelpSection Title="Kiosk needs attention (Warning)">
+        <FluentText>
+            A kiosk has reported a problem for at least 10 minutes during opening hours, such as low disk space, high
+            CPU or memory, or its DMX lighting device not open. The alert lists the problems. It clears once the kiosk
+            reports itself healthy.
+        </FluentText>
+    </HelpSection>
+
+    <HelpSection Title="Automation rule failed (Warning)">
+        <FluentText>
+            An automation rule ran but at least one of its actions failed. The alert shows the first error. A rule that keeps
+            failing stays as one alert, with a count of how many times it has been seen. Rules that were skipped because
+            their conditions didn't hold aren't failures and raise nothing. The alert clears the next time the rule runs
+            without errors.
+        </FluentText>
+    </HelpSection>
+</HelpTab>

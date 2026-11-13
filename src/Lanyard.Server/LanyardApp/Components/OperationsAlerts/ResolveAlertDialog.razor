@@ -1,0 +1,63 @@
+@using Lanyard.Application.Services.OperationsAlerts
+@using Lanyard.Infrastructure.DTO.OperationsAlerts
+
+@inject IOperationsAlertService _alerts
+
+@* Closes one alert by hand, with an optional note for the other managers. *@
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentText As="@TextTag.H3">Resolve alert</FluentText>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="resolve-alert-dialog">
+            <FluentText>@Alert.Title</FluentText>
+            <FluentText Size="TextSize.Size200">
+                It moves to History. If the problem comes back, a new alert is raised.
+            </FluentText>
+
+            <FluentTextArea @bind-Value="_note" Rows="3" Maxlength="500" Style="width: 100%;"
+                            Label="What was done (optional, shown to other managers)" />
+
+            @if (_error is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@_error</FluentMessageBar>
+            }
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@_busy" OnClick="SaveAsync">
+            @(_busy ? "Saving..." : "Resolve")
+        </FluentButton>
+        <FluentButton Disabled="@_busy" OnClick="@(() => Dialog.CancelAsync())">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required OperationsAlertView Alert { get; set; }
+
+    private string? _note;
+    private string? _error;
+    private bool _busy;
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        _error = null;
+
+        Result<bool> result = await _alerts.ResolveAsync(Alert.Id, _note);
+
+        _busy = false;
+
+        if (!result.IsSuccess)
+        {
+            _error = result.Error;
+            return;
+        }
+
+        await Dialog.CloseAsync(true);
+    }
+}

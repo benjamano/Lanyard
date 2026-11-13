@@ -15,6 +15,8 @@
 @inject Lanyard.App.Services.ChatUnreadTracker ChatUnread
 @inject Lanyard.Application.Services.Chat.IChatModerationService ChatModeration
 @inject ICompanyFeatureService CompanyFeatures
+@inject Lanyard.Application.Services.OperationsAlerts.IOperationsAlertService OperationsAlerts
+@inject Lanyard.Application.Services.OperationsAlerts.IOperationsAlertEventBus OperationsAlertEvents
 
 <FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.SpaceBetween"
              HorizontalAlignment="HorizontalAlignment.Stretch" Height="100%">
@@ -100,6 +102,20 @@
             @if (_isManager)
             {
                 <FluentNavSectionHeader Title="Management" />
+
+                @if (Has(CompanyFeature.OperationsAlerts))
+                {
+                    <FluentNavItem Href="/manage/alerts" Match="NavLinkMatch.All" IconRest="@(new Icons.Regular.Size20.Alert())"
+                                   IconActive="@(new Icons.Filled.Size20.Alert())">
+                        <span class="nav-item-with-count">
+                            Operations Alerts
+                            @if (_openAlerts > 0)
+                            {
+                                <FluentCounterBadge Count="@_openAlerts" OverflowCount="99" aria-label="@($"{_openAlerts} open {(_openAlerts == 1 ? "alert" : "alerts")}")" />
+                            }
+                        </span>
+                    </FluentNavItem>
+                }
 
                 @if (_canManageFiles)
                 {
@@ -334,6 +350,8 @@
     private int? _shiftRequestsLocationId;
     private int _openChatReports;
     private int _unreviewedFeedback;
+    private int _openAlerts;
+    private Lanyard.Application.Services.OperationsAlerts.OperationsAlertViewer? _alertViewer;
 
     // Modules this user's company doesn't have (CompanyFeatureService). Read once per circuit, like
     // the roles above, so a switch flipped mid-session shows here after a reload; the route gate
@@ -409,6 +427,18 @@
                     // updates the count here without a reload.
                     TimeOffEventBus.OnChanged += OnTimeOffChanged;
                     ShiftClaimEventBus.OnChanged += OnShiftClaimsChanged;
+                }
+
+                if (Has(CompanyFeature.OperationsAlerts))
+                {
+                    Result<Lanyard.Application.Services.OperationsAlerts.OperationsAlertViewer> viewer = await OperationsAlerts.GetViewerAsync();
+
+                    if (viewer.IsSuccess && viewer.Data is not null)
+                    {
+                        _alertViewer = viewer.Data;
+                        await RefreshOpenAlertsAsync();
+                        OperationsAlertEvents.OnChanged += OnOperationsAlertChanged;
+                    }
                 }
 
                 if (Has(CompanyFeature.Chat))
@@ -491,11 +521,34 @@
 
     private void OnChatUnreadChanged() => _ = InvokeAsync(StateHasChanged);
 
+    // Alerts not yet acknowledged, for the locations this person sees.
+    private async Task RefreshOpenAlertsAsync()
+    {
+        Result<Lanyard.Infrastructure.DTO.OperationsAlerts.OperationsAlertCounts> counts = await OperationsAlerts.GetCountsAsync();
+        _openAlerts = counts.IsSuccess && counts.Data is not null ? counts.Data.Open : 0;
+    }
+
+    private void OnOperationsAlertChanged(Lanyard.Application.Services.OperationsAlerts.OperationsAlertChanged change)
+    {
+        // Refreshes (the same problem seen again) don't change the count.
+        if (_alertViewer is null || !_alertViewer.CanSee(change) || change.Kind == Lanyard.Application.Services.OperationsAlerts.OperationsAlertChangeKind.Refreshed)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            await RefreshOpenAlertsAsync();
+            StateHasChanged();
+        });
+    }
+
     public void Dispose()
     {
         TimeOffEventBus.OnChanged -= OnTimeOffChanged;
         ShiftClaimEventBus.OnChanged -= OnShiftClaimsChanged;
         ChatUnread.Changed -= OnChatUnreadChanged;
+        OperationsAlertEvents.OnChanged -= OnOperationsAlertChanged;
     }
 
     // /api/auth/logout is a controller endpoint, not an @page, so it must not be reached through

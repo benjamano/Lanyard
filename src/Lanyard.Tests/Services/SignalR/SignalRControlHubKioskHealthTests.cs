@@ -43,7 +43,7 @@ public class SignalRControlHubKioskHealthTests
             NullLogger<MusicPlayerService>.Instance);
 
         AutomationEngineService automationEngineService = new(
-            factoryMock.Object, [], new LaserGameStatusStore(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+            factoryMock.Object, [], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
 
         Mock<HubCallerContext> hubCallerContextMock = new();
         hubCallerContextMock.Setup(x => x.Items).Returns(new Dictionary<object, object?>());

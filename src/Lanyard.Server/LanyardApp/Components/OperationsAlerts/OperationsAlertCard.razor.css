@@ -1,0 +1,81 @@
+.ops-alert {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 14px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-left-width: 4px;
+    border-radius: var(--borderRadiusMedium);
+    background: var(--colorNeutralBackground1);
+    min-width: 0;
+}
+
+/* The left border repeats the severity colour; the label above it says it in words. */
+.ops-alert--critical {
+    border-left-color: var(--colorPaletteRedBorder2, var(--colorPaletteRedForeground1));
+}
+
+.ops-alert--warning {
+    border-left-color: var(--colorPaletteDarkOrangeBorder2, var(--colorPaletteDarkOrangeForeground1));
+}
+
+.ops-alert--info {
+    border-left-color: var(--colorNeutralStroke1);
+}
+
+.ops-alert--compact {
+    padding: 8px 10px;
+}
+
+.ops-alert-top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 12px;
+}
+
+.ops-alert-type,
+.ops-alert-meta,
+.ops-alert-when,
+.ops-alert-status {
+    color: var(--colorNeutralForeground3);
+    font-size: var(--fontSizeBase200);
+}
+
+.ops-alert-status {
+    padding: 0 6px;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: var(--borderRadiusCircular);
+}
+
+.ops-alert-title {
+    font-weight: var(--fontWeightSemibold);
+    overflow-wrap: anywhere;
+}
+
+.ops-alert-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 12px;
+}
+
+.ops-alert-detail,
+.ops-alert-note {
+    overflow-wrap: anywhere;
+}
+
+.ops-alert-note {
+    font-style: italic;
+}
+
+.ops-alert-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.ops-alert-link {
+    margin-left: auto;
+}
