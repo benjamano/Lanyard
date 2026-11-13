@@ -1,0 +1,244 @@
+@using Lanyard.App.Components.OperationsAlerts
+@using Lanyard.Application.Services.OperationsAlerts
+@using Lanyard.Infrastructure.DTO.OperationsAlerts
+@implements IDisposable
+
+@inject IOperationsAlertService _alerts
+@inject IOperationsAlertEventBus _alertEvents
+@inject TimeProvider _timeProvider
+
+@* The open alerts for the locations the viewer manages. On a kiosk dashboard (signed out) the
+   service refuses, and the widget says so rather than rendering blank. *@
+<FluentCard Height="100%">
+    <div class="ops-widget-body">
+        <div class="ops-widget-header">
+            <span class="ops-widget-title">@(Widget.Title ?? "Operations Alerts")</span>
+            @if (_counts is not null)
+            {
+                <span class="ops-widget-count">@(_counts.Open) open</span>
+            }
+        </div>
+
+        <div class="visually-hidden" aria-live="polite" aria-atomic="true">@_announcement</div>
+
+        @if (_error is not null)
+        {
+            <div class="ops-widget-empty">
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">@_error</FluentBadge>
+            </div>
+        }
+        else if (_items is null)
+        {
+            <FluentProgressBar />
+        }
+        else if (_items.Count == 0)
+        {
+            <div class="ops-widget-empty" role="status">
+                <FluentIcon Value="@(new Icons.Regular.Size20.CheckmarkCircle())" Color="Color.Success" aria-hidden="true" />
+                <span>Nothing needs attention</span>
+            </div>
+        }
+        else
+        {
+            <div class="ops-widget-list">
+                @foreach (OperationsAlertView alert in _items)
+                {
+                    <OperationsAlertCard @key="alert.Id" Alert="alert" NowUtc="_now" Compact="true" Busy="_busyId == alert.Id"
+                                         ShowLocation="@(_viewer?.Scope.IsAdmin == true)"
+                                         OnAcknowledge="AcknowledgeAsync" OnResolve="ResolveAsync" />
+                }
+            </div>
+        }
+
+        @if (_viewer is not null)
+        {
+            <a class="ops-widget-more" href="/manage/alerts">View all alerts</a>
+        }
+    </div>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required OperationsAlertsWidget Widget { get; set; }
+
+    private const int EventCoalesceMs = 750;
+    private static readonly TimeSpan ClockInterval = TimeSpan.FromMinutes(2);
+
+    private OperationsAlertViewer? _viewer;
+    private List<OperationsAlertView>? _items;
+    private OperationsAlertCounts? _counts;
+    private string? _error;
+    private string? _announcement;
+    private Guid? _busyId;
+    private DateTime _now;
+    private (OperationsAlertSeverity?, bool) _loadedSettings;
+
+    private RenderCoalescer? _eventRefresh;
+    private PeriodicTimer? _clockTimer;
+    private CancellationTokenSource? _clockCancellation;
+    private bool _subscribed;
+    private bool _disposed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        Result<OperationsAlertViewer> viewer = await _alerts.GetViewerAsync();
+
+        if (!viewer.IsSuccess || viewer.Data is null)
+        {
+            _error = "Sign in as a manager to see alerts";
+            return;
+        }
+
+        _viewer = viewer.Data;
+        await LoadAsync();
+    }
+
+    // The widget's settings change while it's on screen in the dashboard editor; the grid also
+    // re-renders for unrelated reasons, so only a real change of settings reloads.
+    protected override async Task OnParametersSetAsync()
+    {
+        (OperationsAlertSeverity?, bool) settings = (Widget.AlertMinimumSeverity, Widget.AlertOnlyUnacknowledged);
+
+        if (_viewer is not null && _items is not null && settings != _loadedSettings)
+        {
+            await LoadAsync();
+        }
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender || _viewer is null)
+        {
+            return;
+        }
+
+        _eventRefresh = new RenderCoalescer(RefreshInBackgroundAsync, EventCoalesceMs);
+        _alertEvents.OnChanged += OnAlertChanged;
+        _subscribed = true;
+
+        _clockCancellation = new CancellationTokenSource();
+        _clockTimer = new PeriodicTimer(ClockInterval);
+        _ = RunClockAsync(_clockTimer, _clockCancellation.Token);
+    }
+
+    private void OnAlertChanged(OperationsAlertChanged change)
+    {
+        if (_viewer is null || !_viewer.CanSee(change))
+        {
+            return;
+        }
+
+        if (change.Kind == OperationsAlertChangeKind.Raised)
+        {
+            _announcement = $"New {Lanyard.Application.Services.Notifications.OperationsAlertNotices.SeverityLabel(change.Severity).ToLowerInvariant()} alert: {change.Title}";
+        }
+
+        _eventRefresh?.Request();
+    }
+
+    private async Task RefreshInBackgroundAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        try
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadAsync();
+                StateHasChanged();
+            });
+        }
+        catch (ObjectDisposedException)
+        {
+            // The dashboard closed.
+        }
+    }
+
+    private async Task RunClockAsync(PeriodicTimer timer, CancellationToken token)
+    {
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                await InvokeAsync(() =>
+                {
+                    _now = _timeProvider.GetUtcNow().UtcDateTime;
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+        {
+            // The dashboard closed.
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _now = _timeProvider.GetUtcNow().UtcDateTime;
+        _loadedSettings = (Widget.AlertMinimumSeverity, Widget.AlertOnlyUnacknowledged);
+
+        Result<List<OperationsAlertView>> open = await _alerts.GetOpenAsync(new OperationsAlertQuery(
+            MinimumSeverity: Widget.AlertMinimumSeverity, OnlyUnacknowledged: Widget.AlertOnlyUnacknowledged));
+        Result<OperationsAlertCounts> counts = await _alerts.GetCountsAsync();
+
+        if (!open.IsSuccess || open.Data is null)
+        {
+            _error = "Couldn't load alerts";
+            return;
+        }
+
+        _error = null;
+        _items = open.Data;
+        _counts = counts.Data;
+    }
+
+    private async Task AcknowledgeAsync(OperationsAlertView alert)
+    {
+        _busyId = alert.Id;
+        Result<bool> result = await _alerts.AcknowledgeAsync(alert.Id);
+        _busyId = null;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't acknowledge the alert.");
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task ResolveAsync(OperationsAlertView alert)
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<ResolveAlertDialog>(options =>
+        {
+            options.Width = "480px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ResolveAlertDialog.Alert), alert);
+        });
+
+        if (result.Value is true)
+        {
+            await LoadAsync();
+        }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+
+        if (_subscribed)
+        {
+            _alertEvents.OnChanged -= OnAlertChanged;
+        }
+
+        _clockCancellation?.Cancel();
+        _clockCancellation?.Dispose();
+        _clockTimer?.Dispose();
+        _eventRefresh?.Dispose();
+    }
+}
