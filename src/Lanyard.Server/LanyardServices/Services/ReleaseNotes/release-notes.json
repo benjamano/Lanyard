@@ -915,7 +915,8 @@
       "Add bank holidays fills in the England and Wales bank holidays for the rest of this year and next year, for you to check and change.",
       "Holidays and closed days are labelled on the rota, and Auto-build lists the ones in the week or month before you add anything.",
       "Learn from past rota now leaves holidays and closed days out, so the templates it suggests are for an ordinary week.",
-      "Lanyard now runs on .NET 11 with the final release of its UI library. Some headings are a little smaller and tidier as a result, and the kiosk app updates to 1.0.47."
+      "Lanyard now runs on .NET 11 with the final release of its UI library. Some headings are a little smaller and tidier as a result, and the kiosk app updates to 1.0.47.",
+      "When an admin or manager adds or removes someone's role, it takes effect in that person's open tabs straight away: their menu and what they can do update without a reload. Before, an open tab kept its old roles until it was reloaded."
     ]
   }
 ]

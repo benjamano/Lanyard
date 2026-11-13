@@ -1,0 +1,83 @@
+@implements IDisposable
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IUserSessionRefreshBus SessionRefreshBus
+@inject IJSRuntime JS
+@inject ILogger<SessionRefreshListener> Logger
+
+@* Renders nothing. When an admin adds or removes one of this user's roles, it has this tab
+   re-issue its cookie and hand the new sign-in to the circuit (lanyardAuth.refresh in
+   blazorStart.js, using .NET 11's SignalR authentication refresh). The nav, AuthorizeView and the
+   server-side role checks then follow the new roles straight away instead of on the next reload. *@
+
+@code {
+    // Ticking several role boxes in a row fires one change per box; wait for them to settle so the
+    // tab refreshes once.
+    private static readonly TimeSpan SettleDelay = TimeSpan.FromMilliseconds(750);
+
+    private string? _userId;
+    private CancellationTokenSource? _pending;
+    private bool _disposed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthenticationState state = await AuthStateProvider.GetAuthenticationStateAsync();
+        _userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        if (_userId is not null)
+        {
+            SessionRefreshBus.RefreshRequested += OnRefreshRequested;
+        }
+    }
+
+    private void OnRefreshRequested(string userId)
+    {
+        if (_disposed || !string.Equals(userId, _userId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        CancellationTokenSource next = new();
+        Interlocked.Exchange(ref _pending, next)?.Cancel();
+
+        _ = RefreshAfterSettleAsync(next.Token);
+    }
+
+    private async Task RefreshAfterSettleAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(SettleDelay, cancellationToken);
+
+            await InvokeAsync(async () =>
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                bool refreshed = await JS.InvokeAsync<bool>("lanyardAuth.refresh", cancellationToken);
+
+                Logger.LogInformation("Role change for {UserId} pushed to an open tab: circuit refreshed {Refreshed}", _userId, refreshed);
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            // A later change superseded this one.
+        }
+        catch (JSDisconnectedException)
+        {
+            // The tab has gone; its next circuit reads the user from the cookie anyway.
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Couldn't refresh the sign-in of an open tab for {UserId} after a role change", _userId);
+        }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        SessionRefreshBus.RefreshRequested -= OnRefreshRequested;
+        Interlocked.Exchange(ref _pending, null)?.Cancel();
+    }
+}

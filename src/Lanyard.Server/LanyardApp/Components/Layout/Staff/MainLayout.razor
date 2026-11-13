@@ -96,6 +96,7 @@
 
     <FluentLayoutItem Area="LayoutArea.Content" Margin="@(IsLoginPage || _isPublicHome ? Margin.All0 : Margin.All3)">
         <AutoLogoutManager />
+        <SessionRefreshListener />
         <AuthorizeView>
             <Authorized>
                 <DeviceSync />

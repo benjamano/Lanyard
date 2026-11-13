@@ -12,8 +12,10 @@ namespace Lanyard.Application.Services.Tenancy;
 
 // Works out which company the current scope is acting for, for ApplicationDbContext's tenant
 // filter. Scoped: one per Blazor circuit or HTTP request. Once a signed-in user has been seen the
-// answer is kept (a circuit's user never changes - logging in or out is a full page load);
-// "nobody signed in" is re-checked on every call, since the user can still turn up later.
+// answer is kept until the circuit's sign-in changes (logging in or out is a full page load, but
+// an admin editing someone's roles hands their open circuits a refreshed principal - see
+// SessionRefreshListener - and PlatformAdmin may be one of them); "nobody signed in" is re-checked
+// on every call, since the user can still turn up later.
 //
 //  - Signed-in user    -> their session's company (the company claim, or the company of the
 //                         location claim for sessions issued before the company claim existed).
@@ -46,6 +48,7 @@ public sealed class TenantContext(
     private static readonly ConcurrentDictionary<int, int?> CompanyIdByLocationId = new();
 
     private bool _resolved;
+    private AuthenticationStateProvider? _watchedProvider;
     private bool _isSystem;
     private bool _isPlatformAdmin;
     private int? _companyId;
@@ -129,6 +132,13 @@ public sealed class TenantContext(
         if (provider is null)
         {
             return null;
+        }
+
+        // Both live in the same circuit scope, so there's nothing to unsubscribe from later.
+        if (_watchedProvider is null)
+        {
+            _watchedProvider = provider;
+            provider.AuthenticationStateChanged += _ => _resolved = false;
         }
 
         try
