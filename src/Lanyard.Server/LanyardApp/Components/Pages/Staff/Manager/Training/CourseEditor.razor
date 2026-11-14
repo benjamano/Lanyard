@@ -13,6 +13,7 @@
 @inject INotificationService _toastService
 @inject NavigationManager _navigationManager
 @inject IJSRuntime JS
+@inject PersistentComponentState _persistentState
 
 <PageTitle>Edit Course</PageTitle>
 
@@ -346,9 +347,26 @@ else
         }
     }
 
+    // Unsaved course details and the open section or question, carried over when the page pauses
+    // for a deploy and resumes on the new server. A section's body text lives in the Quill editor in
+    // the browser, so it isn't captured: the section reopens with its last saved body.
+    private sealed record OptionDraft(Guid Id, string OptionText, bool IsCorrect, int SortOrder);
+
+    private sealed record SectionDraft(Guid Id, string Title, int SortOrder);
+
+    private sealed record QuestionDraft(Guid Id, string QuestionText, int SortOrder, List<OptionDraft> Options);
+
+    private sealed record Draft(Guid CourseId, string Name, string? Description, int PassMarkPercent, int? RecurrenceMonths,
+        int? LocationId, bool IsShared, SectionDraft? Section, QuestionDraft? Question);
+
+    private FormDraft<Draft>? draft;
+
     protected override async Task OnInitializedAsync()
     {
+        draft = new FormDraft<Draft>(_persistentState, "course-editor", CaptureDraft);
+
         await LoadCourseAsync();
+        RestoreDraft();
 
         // Fetched for everyone, not just admins: non-admins never see the Location dropdown
         // below, but they're exactly who sees the "belongs to another location" message bar,
@@ -456,6 +474,66 @@ else
         catch (InvalidOperationException) { }
 
         _viewportRef?.Dispose();
+        draft?.Dispose();
+    }
+
+    private Draft? CaptureDraft() => course is null
+        ? null
+        : new Draft(CourseId, course.Name, course.Description, course.PassMarkPercent, course.RecurrenceMonths,
+            course.LocationId, course.IsShared,
+            selectedSection is null ? null : new SectionDraft(selectedSection.Id, selectedSection.Title, selectedSection.SortOrder),
+            selectedQuestion is null ? null : new QuestionDraft(selectedQuestion.Id, selectedQuestion.QuestionText, selectedQuestion.SortOrder,
+                [.. selectedQuestion.Options.Select(o => new OptionDraft(o.Id, o.OptionText, o.IsCorrect, o.SortOrder))]));
+
+    private void RestoreDraft()
+    {
+        if (course is null || draft?.TakeRestored() is not Draft saved || saved.CourseId != CourseId)
+        {
+            return;
+        }
+
+        course.Name = saved.Name;
+        course.Description = saved.Description;
+        course.PassMarkPercent = saved.PassMarkPercent;
+        course.RecurrenceMonths = saved.RecurrenceMonths;
+        course.LocationId = saved.LocationId;
+        course.IsShared = saved.IsShared;
+
+        if (saved.Section is SectionDraft section)
+        {
+            // An existing section reopens with its saved body; a new one starts blank as before.
+            CourseSection? existingSection = course.Sections.FirstOrDefault(x => x.Id == section.Id);
+
+            if (section.Id == Guid.Empty || existingSection is not null)
+            {
+                selectedSection = existingSection is not null
+                    ? CloneSection(existingSection)
+                    : new CourseSection { Id = Guid.Empty, CourseId = CourseId, Title = section.Title, BodyHtml = string.Empty };
+                selectedSection.Title = section.Title;
+                loadedSectionEditorId = null;
+            }
+        }
+        else if (saved.Question is QuestionDraft question
+            && (question.Id == Guid.Empty || course.Questions.Any(x => x.Id == question.Id)))
+        {
+            selectedQuestion = new CourseQuestion
+            {
+                Id = question.Id,
+                CourseId = CourseId,
+                QuestionText = question.QuestionText,
+                SortOrder = question.SortOrder,
+                IsActive = true,
+                Options = [.. question.Options.Select(o => new CourseQuestionOption
+                {
+                    Id = o.Id,
+                    QuestionId = question.Id,
+                    OptionText = o.OptionText,
+                    IsCorrect = o.IsCorrect,
+                    SortOrder = o.SortOrder,
+                    IsActive = true
+                })]
+            };
+        }
     }
 
     private async Task LoadCourseAsync()

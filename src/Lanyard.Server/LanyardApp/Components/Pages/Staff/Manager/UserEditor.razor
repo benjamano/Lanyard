@@ -14,6 +14,8 @@
 @inject IStaffDocumentService _staffDocumentService
 @inject IStaffDocumentTypeService _staffDocumentTypeService
 @inject ICompanyFeatureService _companyFeatureService
+@inject PersistentComponentState _persistentState
+@implements IDisposable
 
 <PageTitle>@(user?.GetName() ?? "User")</PageTitle>
 
@@ -274,11 +276,20 @@ else
     // Tabs for modules this company doesn't have (see CompanyFeatureService). Admins get none hidden.
     private IReadOnlySet<CompanyFeature> _hiddenFeatures = new HashSet<CompanyFeature>();
 
+    // Unsaved details and the open tab, carried over when the page pauses for a deploy and resumes
+    // on the new server. Passwords are deliberately left out.
+    private sealed record Draft(string UserId, string? ActiveTabId, string FirstName, string LastName, string? PhoneNumber);
+
+    private FormDraft<Draft>? draft;
+
     protected override async Task OnInitializedAsync()
     {
+        draft = new FormDraft<Draft>(_persistentState, "user-editor", CaptureDraft);
+
         _hiddenFeatures = await _companyFeatureService.GetHiddenFeaturesForCurrentUserAsync();
 
         await LoadUserAsync();
+        RestoreDraft();
 
         if (user is not null)
         {
@@ -300,6 +311,25 @@ else
             _ => "user-details"
         };
     }
+
+    private Draft? CaptureDraft() => user is null
+        ? null
+        : new Draft(UserId, activeTabId, detailsModel.FirstName, detailsModel.LastName, detailsModel.PhoneNumber);
+
+    private void RestoreDraft()
+    {
+        if (user is null || draft?.TakeRestored() is not Draft saved || saved.UserId != UserId)
+        {
+            return;
+        }
+
+        activeTabId = saved.ActiveTabId;
+        detailsModel.FirstName = saved.FirstName;
+        detailsModel.LastName = saved.LastName;
+        detailsModel.PhoneNumber = saved.PhoneNumber;
+    }
+
+    public void Dispose() => draft?.Dispose();
 
     private async Task LoadUserAsync()
     {
