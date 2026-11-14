@@ -75,7 +75,8 @@ public enum PartyDocumentType
 public enum PartyArtworkDocument
 {
     Voucher = 0,
-    FeedbackForm = 1
+    FeedbackForm = 1,
+    ReservedCard = 2
 }
 
 // What goes in a box on the artwork.
@@ -87,7 +88,10 @@ public enum PartyTemplateFieldKind
     AuthorisedBy,
     PartyName,
     PartyHost,
-    ChildAge
+    ChildAge,
+    ChildName,
+    ArrivalTime,
+    Room
 }
 
 public enum PartyTemplateFont

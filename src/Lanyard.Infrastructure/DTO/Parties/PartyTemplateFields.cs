@@ -59,6 +59,21 @@ public static class PartyTemplateFields
 
     public static string Serialize(IEnumerable<PartyTemplateField> fields) => JsonSerializer.Serialize(fields, Json);
 
+    // What each printout can show. The voucher and feedback form keep every kind they've always had;
+    // the reserved card leaves out the voucher-only boxes (expiry date, authorised by) and uses the
+    // capitals child's name in place of "presented to".
+    public static IReadOnlyList<PartyTemplateFieldKind> AllowedKinds(PartyArtworkDocument document) => document == PartyArtworkDocument.ReservedCard
+        ?
+        [
+            PartyTemplateFieldKind.ChildName, PartyTemplateFieldKind.PartyName, PartyTemplateFieldKind.PartyDate,
+            PartyTemplateFieldKind.ArrivalTime, PartyTemplateFieldKind.Room, PartyTemplateFieldKind.ChildAge, PartyTemplateFieldKind.PartyHost
+        ]
+        :
+        [
+            PartyTemplateFieldKind.PresentedTo, PartyTemplateFieldKind.PartyDate, PartyTemplateFieldKind.ExpiryDate, PartyTemplateFieldKind.AuthorisedBy,
+            PartyTemplateFieldKind.PartyName, PartyTemplateFieldKind.PartyHost, PartyTemplateFieldKind.ChildAge
+        ];
+
     public static string Label(this PartyTemplateFieldKind kind) => kind switch
     {
         PartyTemplateFieldKind.PresentedTo => "Presented to (child's name)",
@@ -67,32 +82,46 @@ public static class PartyTemplateFields
         PartyTemplateFieldKind.AuthorisedBy => "Authorised by",
         PartyTemplateFieldKind.PartyName => "Party name (\"Lily's party\")",
         PartyTemplateFieldKind.PartyHost => "Party host",
+        PartyTemplateFieldKind.ChildName => "Child's name (capitals)",
+        PartyTemplateFieldKind.ArrivalTime => "Arrival time",
+        PartyTemplateFieldKind.Room => "Room",
         _ => "Child's age"
     };
 
     // Where the boxes go on the artwork Play2Day sent (an A5 portrait voucher and feedback form),
     // measured from their files. A company with different artwork moves them on the Printouts
-    // page; these only decide where a fresh template starts.
+    // page; these only decide where a fresh template starts. The reserved table card is A5
+    // landscape, with the child's name across the middle.
     public static PartyDocumentTemplate Default(PartyArtworkDocument document, int companyId)
     {
-        List<PartyTemplateField> fields = document == PartyArtworkDocument.Voucher
-            ?
+        List<PartyTemplateField> fields = document switch
+        {
+            PartyArtworkDocument.Voucher =>
             [
                 Box(PartyTemplateFieldKind.PresentedTo, 67, 130.4),
                 Box(PartyTemplateFieldKind.PartyDate, 67, 143.8),
                 Box(PartyTemplateFieldKind.ExpiryDate, 67, 157.3),
                 Box(PartyTemplateFieldKind.AuthorisedBy, 67, 170.7)
-            ]
-            :
+            ],
+            PartyArtworkDocument.ReservedCard =>
+            [
+                new PartyTemplateField { Kind = PartyTemplateFieldKind.ChildName, XMm = 15, YMm = 54, WidthMm = 180, HeightMm = 40, FontSize = 72, Align = PartyTextAlign.Centre }
+            ],
+            _ =>
             [
                 new PartyTemplateField { Kind = PartyTemplateFieldKind.PartyHost, XMm = 87, YMm = 84.5, WidthMm = 50, HeightMm = 7, FontSize = 16 },
                 new PartyTemplateField { Kind = PartyTemplateFieldKind.PartyName, XMm = 138, YMm = 102, WidthMm = 8.8, HeightMm = 56, FontSize = 15, Rotation = 270 }
-            ];
+            ]
+        };
+
+        bool landscape = document == PartyArtworkDocument.ReservedCard;
 
         return new PartyDocumentTemplate
         {
             CompanyId = companyId,
             Document = document,
+            WidthMm = landscape ? 210 : 148,
+            HeightMm = landscape ? 148 : 210,
             FieldsJson = Serialize(fields)
         };
 

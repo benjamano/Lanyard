@@ -105,6 +105,7 @@ builder.Services.AddScoped<ISecurityService, SecurityService>();
 builder.Services.AddScoped<IGdprService, GdprService>();
 builder.Services.AddSingleton<IKioskCredentialService, KioskCredentialService>();
 builder.Services.AddSingleton<IKioskMediaTokenService, KioskMediaTokenService>();
+builder.Services.AddSingleton<ILoginAttemptThrottle, LoginAttemptThrottle>();
 builder.Services.AddScoped<IKioskEnrolmentService, KioskEnrolmentService>();
 builder.Services.AddScoped<IKioskSecurityService, KioskSecurityService>();
 builder.Services.AddSingleton<KioskConnectionRegistry>();

@@ -53,6 +53,13 @@ public class PartyDocumentService(
 
             bool needsVoucher = type is PartyDocumentType.Voucher or PartyDocumentType.Pack;
             bool needsFeedback = type is PartyDocumentType.FeedbackForm or PartyDocumentType.Pack;
+            bool needsReservedCard = type is PartyDocumentType.ReservedCard or PartyDocumentType.Pack;
+
+            // Independent of each other (each load has its own context), so fetched together.
+            Task<PartyArtwork?> voucher = needsVoucher ? LoadArtworkAsync(scope, booking.CompanyId, PartyArtworkDocument.Voucher, cancellationToken) : Task.FromResult<PartyArtwork?>(null);
+            Task<PartyArtwork?> feedback = needsFeedback ? LoadArtworkAsync(scope, booking.CompanyId, PartyArtworkDocument.FeedbackForm, cancellationToken) : Task.FromResult<PartyArtwork?>(null);
+            Task<PartyArtwork?> reservedCard = needsReservedCard ? LoadArtworkAsync(scope, booking.CompanyId, PartyArtworkDocument.ReservedCard, cancellationToken) : Task.FromResult<PartyArtwork?>(null);
+            await Task.WhenAll(voucher, feedback, reservedCard);
 
             PartyDocumentModel model = new(
                 booking,
@@ -60,10 +67,11 @@ public class PartyDocumentService(
                 menuResult.Data,
                 logo,
                 accent,
-                needsVoucher ? await LoadArtworkAsync(scope, booking.CompanyId, PartyArtworkDocument.Voucher, cancellationToken) : null,
-                needsFeedback ? await LoadArtworkAsync(scope, booking.CompanyId, PartyArtworkDocument.FeedbackForm, cancellationToken) : null,
+                await voucher,
+                await feedback,
                 authorisedBy,
-                companyName);
+                companyName,
+                await reservedCard);
 
             byte[] pdf = PartyDocumentRenderer.Render(model, type);
 
@@ -100,10 +108,16 @@ public class PartyDocumentService(
                 ChildAgeTurning = 7,
                 StartUtc = RotaTime.ToUtc(sampleDay, new TimeOnly(11, 0)),
                 EndUtc = RotaTime.ToUtc(sampleDay, new TimeOnly(13, 0)),
-                ExpectedChildren = 12
+                ExpectedChildren = 12,
+                Room = "Party Room 1"
             };
 
-            PartyDocumentType type = document == PartyArtworkDocument.Voucher ? PartyDocumentType.Voucher : PartyDocumentType.FeedbackForm;
+            PartyDocumentType type = document switch
+            {
+                PartyArtworkDocument.Voucher => PartyDocumentType.Voucher,
+                PartyArtworkDocument.ReservedCard => PartyDocumentType.ReservedCard,
+                _ => PartyDocumentType.FeedbackForm
+            };
 
             PartyDocumentModel model = new(
                 sample,
@@ -114,7 +128,8 @@ public class PartyDocumentService(
                 document == PartyArtworkDocument.Voucher ? artwork : null,
                 document == PartyArtworkDocument.FeedbackForm ? artwork : null,
                 authorisedBy,
-                branding.Data?.Name);
+                branding.Data?.Name,
+                document == PartyArtworkDocument.ReservedCard ? artwork : null);
 
             return Result<PartyDocument>.Ok(new PartyDocument(PartyDocumentRenderer.Render(model, type), $"{type} preview.pdf"));
         }
