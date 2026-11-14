@@ -5180,6 +5180,19 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasDiscriminator().HasValue(11);
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.OperationsAlertsWidget", b =>
+                {
+                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
+
+                    b.Property<int?>("AlertMinimumSeverity")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("AlertOnlyUnacknowledged")
+                        .HasColumnType("boolean");
+
+                    b.HasDiscriminator().HasValue(20);
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.PendingTimeOffWidget", b =>
                 {
                     b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");

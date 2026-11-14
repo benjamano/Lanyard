@@ -173,6 +173,20 @@
                                     <RenderKioskHealthWidget Widget="kioskHealthWidget" />
                                 </div>
                                 break;
+                            case WidgetType.OperationsAlerts:
+                                OperationsAlertsWidget? operationsAlertsWidget = widget as OperationsAlertsWidget;
+
+                                if (operationsAlertsWidget == null)
+                                {
+                                    break;
+                                }
+
+                                <div class="dashboard-widget-host"
+                                    @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
+                                    @oncontextmenu:preventDefault="true">
+                                    <RenderOperationsAlertsWidget Widget="operationsAlertsWidget" />
+                                </div>
+                                break;
                             case WidgetType.HallOfFame:
                                 HallOfFameWidget? hallOfFameWidget = widget as HallOfFameWidget;
 
@@ -496,6 +510,9 @@
             case KioskHealthWidget kioskHealthWidget:
                 await ShowConfigureKioskHealthDialog(kioskHealthWidget);
                 break;
+            case OperationsAlertsWidget operationsAlertsWidget:
+                await ShowConfigureOperationsAlertsDialog(operationsAlertsWidget);
+                break;
             case HallOfFameWidget hallOfFameWidget:
                 await ShowConfigureHallOfFameDialog(hallOfFameWidget);
                 break;
@@ -648,6 +665,20 @@
         {
             options.Modal = true;
             options.Parameters.Add(nameof(ConfigureKioskHealthDialog.Widget), kioskHealthWidget);
+        });
+
+        if (!dialogResult.Cancelled)
+        {
+            StateHasChanged();
+        }
+    }
+
+    private async Task ShowConfigureOperationsAlertsDialog(OperationsAlertsWidget operationsAlertsWidget)
+    {
+        DialogResult dialogResult = await _dialogService.ShowDialogAsync<ConfigureOperationsAlertsDialog>(options =>
+        {
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfigureOperationsAlertsDialog.Widget), operationsAlertsWidget);
         });
 
         if (!dialogResult.Cancelled)

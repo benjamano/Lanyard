@@ -922,6 +922,7 @@
       "Acknowledge an alert to show you're dealing with it, or resolve it with a note. Alerts clear themselves when the problem goes away, such as a kiosk coming back online, and stay in History for 90 days.",
       "New alerts appear without reloading and are announced to screen readers. The menu shows how many are waiting to be acknowledged.",
       "Admins and the location's Managers get a new Automation rule failed notification the first time a rule fails, rather than on every run.",
+      "New Operations Alerts dashboard widget: the open alerts for your locations, with Acknowledge and Resolve, and settings to show only warnings or only unacknowledged alerts.",
       "The reserved table card now prints at A5, to fit a table-card stand: two copies on one A4 sheet, one for each side of the stand.",
       "Upload your own reserved card design on Parties > Printouts, like the voucher and feedback form, and choose where the child's name goes. The card can also show the arrival time and room.",
       "The side menu has a new Music group: open it to find Music Player, Audio Clips and Music Schedule in one place, instead of spread across the menu and the Management section.",
