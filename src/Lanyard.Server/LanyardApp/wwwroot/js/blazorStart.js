@@ -35,9 +35,9 @@
                 body: '{}'
             });
 
-            if (response.status === 401) {
-                // The session itself has ended (password reset, account disabled): reloading
-                // takes them to the sign-in page.
+            if (response.status === 401 || response.redirected) {
+                // The session itself has ended (password reset, account disabled, or the cookie
+                // has expired, which redirects to sign-in): reloading takes them there.
                 location.reload();
                 return false;
             }

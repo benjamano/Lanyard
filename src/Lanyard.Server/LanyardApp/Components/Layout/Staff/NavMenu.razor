@@ -371,6 +371,11 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Roles can change while the page is open: an admin edits them and the circuit is handed
+        // the new sign-in (SessionRefreshListener). Re-read them so the menu follows. Subscribed
+        // before the first await so Dispose can't run before it and leave the handler attached.
+        AuthStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+
         AuthenticationState state = await AuthStateProvider.GetAuthenticationStateAsync();
         ApplyRoles(state.User);
 
@@ -396,10 +401,6 @@
                 _latestRelease = _releaseNotes.OrderByDescending(x => x.ReleaseDate).ThenByDescending(x => Version.Parse(x.Version)).FirstOrDefault();
             }
         }
-
-        // Roles can change while the page is open: an admin edits them and the circuit is handed
-        // the new sign-in (SessionRefreshListener). Re-read them so the menu follows.
-        AuthStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
     }
 
     private void ApplyRoles(System.Security.Claims.ClaimsPrincipal user)
