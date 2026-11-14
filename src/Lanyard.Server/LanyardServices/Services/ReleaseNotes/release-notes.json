@@ -916,7 +916,8 @@
       "Holidays and closed days are labelled on the rota, and Auto-build lists the ones in the week or month before you add anything.",
       "Learn from past rota now leaves holidays and closed days out, so the templates it suggests are for an ordinary week.",
       "Lanyard now runs on .NET 11 with the final release of its UI library. Some headings are a little smaller and tidier as a result, and the kiosk app updates to 1.0.47.",
-      "When Lanyard is updated, open pages no longer drop to Connection lost and reload. They show Lanyard is updating for a moment, then reconnect to the new version on their own and stay on the same page."
+      "When Lanyard is updated, open pages no longer drop to Connection lost and reload. They show Lanyard is updating for a moment, then reconnect to the new version on their own and stay on the same page.",
+      "Anything you've typed but not saved yet when booking a party, editing a staff member's details, a projection template or a training course's details and quiz questions is kept through an update too."
     ]
   }
 ]

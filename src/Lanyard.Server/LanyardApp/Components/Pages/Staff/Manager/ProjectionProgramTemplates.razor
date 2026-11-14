@@ -6,6 +6,8 @@
 
 @inject IProjectionProgramService _projectionProgramService
 @inject INotificationService _toastService
+@inject PersistentComponentState _persistentState
+@implements IDisposable
 
 <PageTitle>Projection Templates</PageTitle>
 
@@ -212,10 +214,67 @@
     private bool isSaving;
     private PaginationState pagination = new() { ItemsPerPage = 10 };
 
+    // The template being edited (with its unsaved parameters) and the half-filled "add parameter"
+    // row, carried over when the page pauses for a deploy and resumes on the new server.
+    private sealed record ParameterDraft(Guid Id, string Name, string? Description, string DataType, bool IsRequired);
+
+    private sealed record Draft(Guid TemplateId, string Name, string? Description, bool IsActive,
+        List<ParameterDraft> Parameters, ParameterDraft NewParameter);
+
+    private FormDraft<Draft>? draft;
+
     protected override async Task OnInitializedAsync()
     {
+        draft = new FormDraft<Draft>(_persistentState, "projection-step-templates", CaptureDraft);
+
         await LoadTemplatesAsync();
+        RestoreDraft();
     }
+
+    private static ParameterDraft ToDraft(ProjectionProgramStepTemplateParameter p) =>
+        new(p.Id, p.Name, p.Description, p.DataType, p.IsRequired);
+
+    private Draft? CaptureDraft() => selectedTemplate is null
+        ? null
+        : new Draft(selectedTemplate.Id, selectedTemplate.Name, selectedTemplate.Description, selectedTemplate.IsActive,
+            selectedTemplate.Parameters.Select(ToDraft).ToList(), ToDraft(newParameter));
+
+    private void RestoreDraft()
+    {
+        if (draft?.TakeRestored() is not Draft saved)
+        {
+            return;
+        }
+
+        // A template deleted in the meantime can't be resumed; a new one (Guid.Empty) always can.
+        if (saved.TemplateId != Guid.Empty && templates.All(t => t.Id != saved.TemplateId))
+        {
+            return;
+        }
+
+        selectedTemplate = new ProjectionProgramStepTemplate
+        {
+            Id = saved.TemplateId,
+            Name = saved.Name,
+            Description = saved.Description,
+            IsActive = saved.IsActive,
+            Parameters = saved.Parameters.Select(p => FromDraft(p, saved.TemplateId)).ToList()
+        };
+        newParameter = FromDraft(saved.NewParameter, Guid.Empty);
+    }
+
+    private static ProjectionProgramStepTemplateParameter FromDraft(ParameterDraft p, Guid templateId) => new()
+    {
+        Id = p.Id,
+        TemplateId = templateId,
+        Name = p.Name,
+        Description = p.Description,
+        DataType = p.DataType,
+        IsRequired = p.IsRequired,
+        IsActive = true
+    };
+
+    public void Dispose() => draft?.Dispose();
 
     private async Task LoadTemplatesAsync()
     {

@@ -8,6 +8,8 @@
 
 @inject IPartyBookingService _partyBookingService
 @inject IPartySettingsService _partySettingsService
+@inject PersistentComponentState _persistentState
+@implements IDisposable
 
 <PageTitle>@(IsNew ? "Book a Party" : Hire ? "Private Hire" : "Party")</PageTitle>
 
@@ -318,6 +320,17 @@
     private bool confirmingCancel;
     private string? loadError;
 
+    // Unsaved input carried over when the page pauses for a deploy and resumes on the new server.
+    private sealed record Draft(
+        Guid? BookingId, int? LocationId, DateTime? Date, TimeOnly StartTime, TimeOnly EndTime,
+        bool EndTouched, bool EatTouched, bool LaserTouched, TimeOnly? EatTime, TimeOnly? LaserTagTime,
+        string? HostUserId, string PartyType, PrivateHireKind? HireKind, string ChildName, int? ChildAgeTurning,
+        string ContactName, string ContactPhone, string? ContactEmail, int ExpectedChildren, int? ExpectedAdults,
+        string? Room, PartyMenuType MenuType, string? AllergyNotes, string? Notes,
+        decimal? TotalPrice, decimal? DepositAmount, string? PaymentNotes);
+
+    private FormDraft<Draft>? draft;
+
     private bool IsNew => BookingId is null;
 
     private bool Hire => booking.HireKind is not null;
@@ -352,6 +365,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        draft = new FormDraft<Draft>(_persistentState, "party-editor", CaptureDraft);
+
         Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
 
         if (!scopeResult.IsSuccess || scopeResult.Data is null)
@@ -426,8 +441,60 @@
 
         loadError = null;
         await LoadLocationListsAsync();
+        await RestoreDraftAsync();
         loaded = true;
     }
+
+    private Draft? CaptureDraft() => loaded && loadError is null
+        ? new Draft(BookingId, locationId, date, startTime, endTime, endTouched, eatTouched, laserTouched, eatTime, laserTagTime,
+            hostUserId, booking.PartyType, booking.HireKind, booking.ChildName, booking.ChildAgeTurning,
+            booking.ContactName, booking.ContactPhone, booking.ContactEmail, booking.ExpectedChildren, booking.ExpectedAdults,
+            booking.Room, booking.MenuType, booking.AllergyNotes, booking.Notes,
+            booking.TotalPrice, booking.DepositAmount, booking.PaymentNotes)
+        : null;
+
+    private async Task RestoreDraftAsync()
+    {
+        if (draft?.TakeRestored() is not Draft saved || saved.BookingId != BookingId)
+        {
+            return;
+        }
+
+        if (saved.LocationId is int savedLocation && savedLocation != locationId && locationOptions.Any(l => l.Id == savedLocation))
+        {
+            locationId = savedLocation;
+            await LoadLocationListsAsync();
+        }
+
+        date = saved.Date;
+        startTime = saved.StartTime;
+        endTime = saved.EndTime;
+        endTouched = saved.EndTouched;
+        eatTouched = saved.EatTouched;
+        laserTouched = saved.LaserTouched;
+        eatTime = saved.EatTime;
+        laserTagTime = saved.LaserTagTime;
+        hostUserId = hostOptions.Any(h => h.UserId == saved.HostUserId) ? saved.HostUserId : NoHost;
+
+        booking.PartyType = saved.PartyType;
+        booking.HireKind = saved.HireKind;
+        booking.ChildName = saved.ChildName;
+        booking.ChildAgeTurning = saved.ChildAgeTurning;
+        booking.ContactName = saved.ContactName;
+        booking.ContactPhone = saved.ContactPhone;
+        booking.ContactEmail = saved.ContactEmail;
+        booking.ExpectedChildren = saved.ExpectedChildren;
+        booking.ExpectedAdults = saved.ExpectedAdults;
+        booking.Room = saved.Room;
+        booking.MenuType = saved.MenuType;
+        booking.AllergyNotes = saved.AllergyNotes;
+        booking.Notes = saved.Notes;
+        booking.TotalPrice = saved.TotalPrice;
+        booking.DepositAmount = saved.DepositAmount;
+        booking.PaymentNotes = saved.PaymentNotes;
+    }
+
+    public void Dispose() => draft?.Dispose();
 
     private void ShowBooking(PartyBooking saved)
     {
