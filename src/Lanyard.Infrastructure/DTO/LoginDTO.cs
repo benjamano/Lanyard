@@ -24,4 +24,10 @@ namespace Lanyard.Infrastructure.DTO
         [MaxLength(64 * 1024)]
         public string CredentialJson { get; set; } = string.Empty;
     }
+
+    // Body of POST api/auth/refresh-session. Empty: it exists so the endpoint only accepts
+    // application/json, which a cross-site form can't send.
+    public class SessionRefreshRequest
+    {
+    }
 }

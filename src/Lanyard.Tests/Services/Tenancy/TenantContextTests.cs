@@ -47,6 +47,37 @@ public class TenantContextTests
             options ?? new DbContextOptionsBuilder<ApplicationDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
     }
 
+    // Stands in for the circuit's provider being handed a refreshed sign-in (an admin edited the
+    // user's roles while their tab was open).
+    private sealed class ChangeableAuthStateProvider(ClaimsPrincipal user) : AuthenticationStateProvider
+    {
+        private ClaimsPrincipal _user = user;
+
+        public override Task<AuthenticationState> GetAuthenticationStateAsync() =>
+            Task.FromResult(new AuthenticationState(_user));
+
+        public void Change(ClaimsPrincipal user)
+        {
+            _user = user;
+            NotifyAuthenticationStateChanged(GetAuthenticationStateAsync());
+        }
+    }
+
+    [TestMethod]
+    public void RefreshedSignIn_IsReadAgain()
+    {
+        Claim company = new(LocationClaimTypes.CompanyId, "7");
+        ChangeableAuthStateProvider provider = new(SignedIn(company, new Claim(ClaimTypes.Role, LanyardRoles.PlatformAdmin)));
+        TenantContext tenant = Build(provider);
+
+        Assert.IsTrue(tenant.IsPlatformAdmin);
+
+        provider.Change(SignedIn(company));
+
+        Assert.IsFalse(tenant.IsPlatformAdmin, "A role removed while the tab is open must stop counting once the circuit has the new sign-in.");
+        Assert.AreEqual(7, tenant.ManageableCompanyId);
+    }
+
     [TestMethod]
     public void NobodySignedIn_IsSystem()
     {

@@ -487,6 +487,46 @@ namespace Lanyard.API.Controllers
             return Content(html, "text/html; charset=utf-8");
         }
 
+        // Re-issues the signed-in user's cookie from the user/role store, keeping the location and
+        // company they signed in to. lanyardAuth.refresh() (blazorStart.js) calls this when their
+        // roles change and then asks the circuit to re-read the cookie (.NET 11 SignalR
+        // authentication refresh), so the open tab gains or loses the role without a reload - and
+        // a reload can't bring the old roles back from a stale cookie.
+        //
+        // [FromBody] JSON so a cross-site page can't trigger it (no CORS preflight is ever granted).
+        // Not behind "ip-fixed": a role deleted from many people makes all their tabs call this at
+        // once, and staff behind one venue NAT would then be locked out of signing in.
+        [Authorize]
+        [DisableRateLimiting]
+        [HttpPost("refresh-session")]
+        public async Task<IActionResult> RefreshSession([FromBody] SessionRefreshRequest request)
+        {
+            // Null when the stamp changed (password reset, account disabled): that session is over.
+            UserProfile? user = await _signInManager.ValidateSecurityStampAsync(User);
+
+            if (user is null)
+            {
+                _logger.LogInformation("Session refresh for {UserId} ended the session: the security stamp no longer matches", User.FindFirstValue(ClaimTypes.NameIdentifier));
+                await _signInManager.SignOutAsync();
+
+                return Unauthorized();
+            }
+
+            AuthenticateResult current = await HttpContext.AuthenticateAsync(IdentityConstants.ApplicationScheme);
+
+            if (!current.Succeeded)
+            {
+                return Unauthorized();
+            }
+
+            // Same properties as the existing cookie, so "Keep me signed in" and its expiry are kept.
+            await _signInManager.SignInWithClaimsAsync(user, current.Properties, SessionClaims.CarryOver(current.Principal));
+
+            _logger.LogInformation("Refreshed the session cookie for {UserId}", user.Id);
+
+            return NoContent();
+        }
+
         // The homepage's "Explore as admin / manager / staff" buttons land here. Like the sign-out
         // GET above, this only renders a self-submitting form: signing in is a state change, so it
         // happens on the POST, behind an antiforgery token - otherwise any site could quietly sign a

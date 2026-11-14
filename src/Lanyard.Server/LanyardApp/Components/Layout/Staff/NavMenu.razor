@@ -371,19 +371,13 @@
 
     protected override async Task OnInitializedAsync()
     {
-        AuthenticationState state = await AuthStateProvider.GetAuthenticationStateAsync();
-        System.Security.Claims.ClaimsPrincipal user = state.User;
+        // Roles can change while the page is open: an admin edits them and the circuit is handed
+        // the new sign-in (SessionRefreshListener). Re-read them so the menu follows. Subscribed
+        // before the first await so Dispose can't run before it and leave the handler attached.
+        AuthStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
 
-        _isAuthenticated = user.Identity?.IsAuthenticated == true;
-        _isAdmin = user.IsInRole("Admin");
-        _isPlatformAdmin = user.IsInRole(LanyardRoles.PlatformAdmin);
-        _isManager = _isAdmin || user.IsInRole("Manager");
-        // Everyone /music lets in (MusicRoles.Use).
-        _canControlMusic = _isManager || user.IsInRole(MusicRoles.CanControlMusic) || user.IsInRole(MusicRoles.CanManagePlaylists);
-        _canManageDmx = _isAdmin || user.IsInRole("CanManageDmxSystems");
-        _canManageFiles = _isAdmin || user.IsInRole("CanManageFiles");
-        _canPostAnnouncements = _isAdmin || user.IsInRole("CanPostAnnouncements");
-        _canPlayAudioClips = _isManager || user.IsInRole("CanPlayAudioClips");
+        AuthenticationState state = await AuthStateProvider.GetAuthenticationStateAsync();
+        ApplyRoles(state.User);
 
         if (_isAuthenticated)
         {
@@ -398,32 +392,7 @@
             string? name = await SecurityService.GetCurrentUserName();
             _displayName = name?.Length > 20 ? name[..20] + "…" : name;
 
-            if (_isManager)
-            {
-                if (Has(CompanyFeature.StaffScheduling))
-                {
-                    await RefreshPendingTimeOffAsync();
-                    await RefreshPendingShiftRequestsAsync();
-
-                    // Live: a request made on someone's phone, or decided on the requests page,
-                    // updates the count here without a reload.
-                    TimeOffEventBus.OnChanged += OnTimeOffChanged;
-                    ShiftClaimEventBus.OnChanged += OnShiftClaimsChanged;
-                }
-
-                if (Has(CompanyFeature.Chat))
-                {
-                    Result<LocationScope> reportScope = await _currentLocationContext.GetScopeAsync();
-                    Result<string> reportViewer = await SecurityService.GetCurrentUserIdAsync();
-                    _openChatReports = reportScope.Data is null ? 0 : (await ChatModeration.CountOpenForNavAsync(reportScope.Data, reportViewer.Data)).Data;
-                }
-            }
-
-            if (_isPlatformAdmin)
-            {
-                Result<int> unreviewed = await Feedback.CountUnreviewedAsync();
-                _unreviewedFeedback = unreviewed.IsSuccess ? unreviewed.Data : 0;
-            }
+            await LoadRoleExtrasAsync();
 
             Result<IEnumerable<ReleaseNote>> releaseNotesResult = await ReleaseNotesService.GetReleaseNotesAsync();
             if (releaseNotesResult.IsSuccess)
@@ -432,6 +401,78 @@
                 _latestRelease = _releaseNotes.OrderByDescending(x => x.ReleaseDate).ThenByDescending(x => Version.Parse(x.Version)).FirstOrDefault();
             }
         }
+    }
+
+    private void ApplyRoles(System.Security.Claims.ClaimsPrincipal user)
+    {
+        _isAuthenticated = user.Identity?.IsAuthenticated == true;
+        _isAdmin = user.IsInRole("Admin");
+        _isPlatformAdmin = user.IsInRole(LanyardRoles.PlatformAdmin);
+        _isManager = _isAdmin || user.IsInRole("Manager");
+        // Everyone /music lets in (MusicRoles.Use).
+        _canControlMusic = _isManager || user.IsInRole(MusicRoles.CanControlMusic) || user.IsInRole(MusicRoles.CanManagePlaylists);
+        _canManageDmx = _isAdmin || user.IsInRole("CanManageDmxSystems");
+        _canManageFiles = _isAdmin || user.IsInRole("CanManageFiles");
+        _canPostAnnouncements = _isAdmin || user.IsInRole("CanPostAnnouncements");
+        _canPlayAudioClips = _isManager || user.IsInRole("CanPlayAudioClips");
+    }
+
+    // The badge counts only managers and platform admins see. Loaded once each, the first time
+    // the user has the role - at start-up, or when it's granted while the page is open.
+    private bool _managerExtrasLoaded;
+
+    private async Task LoadRoleExtrasAsync()
+    {
+        if (_isManager && !_managerExtrasLoaded)
+        {
+            _managerExtrasLoaded = true;
+
+            if (Has(CompanyFeature.StaffScheduling))
+            {
+                await RefreshPendingTimeOffAsync();
+                await RefreshPendingShiftRequestsAsync();
+
+                // Live: a request made on someone's phone, or decided on the requests page,
+                // updates the count here without a reload.
+                TimeOffEventBus.OnChanged += OnTimeOffChanged;
+                ShiftClaimEventBus.OnChanged += OnShiftClaimsChanged;
+            }
+
+            if (Has(CompanyFeature.Chat))
+            {
+                Result<LocationScope> reportScope = await _currentLocationContext.GetScopeAsync();
+                Result<string> reportViewer = await SecurityService.GetCurrentUserIdAsync();
+                _openChatReports = reportScope.Data is null ? 0 : (await ChatModeration.CountOpenForNavAsync(reportScope.Data, reportViewer.Data)).Data;
+            }
+        }
+
+        if (_isPlatformAdmin)
+        {
+            Result<int> unreviewed = await Feedback.CountUnreviewedAsync();
+            _unreviewedFeedback = unreviewed.IsSuccess ? unreviewed.Data : 0;
+        }
+    }
+
+    private void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                ApplyRoles((await task).User);
+
+                if (_isAuthenticated)
+                {
+                    await LoadRoleExtrasAsync();
+                }
+
+                StateHasChanged();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Signed out or navigated away mid-refresh.
+            }
+        });
     }
 
     private async Task RefreshPendingTimeOffAsync()
@@ -493,6 +534,7 @@
 
     public void Dispose()
     {
+        AuthStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
         TimeOffEventBus.OnChanged -= OnTimeOffChanged;
         ShiftClaimEventBus.OnChanged -= OnShiftClaimsChanged;
         ChatUnread.Changed -= OnChatUnreadChanged;

@@ -14,17 +14,20 @@ public class ApplicationRolesService
     private readonly ISecurityService _sApi;
     private readonly UserManager<UserProfile> _umApi;
     private readonly RoleManager<ApplicationRole> _rmApi;
+    private readonly IUserSessionRefreshBus _sessionRefresh;
 
     public ApplicationRolesService(
         IDbContextFactory<ApplicationDbContext> factory,
         ISecurityService sApi,
         UserManager<UserProfile> userManager,
-        RoleManager<ApplicationRole> roleManager)
+        RoleManager<ApplicationRole> roleManager,
+        IUserSessionRefreshBus sessionRefresh)
     {
         _factory = factory;
         _sApi = sApi;
         _umApi = userManager;
         _rmApi = roleManager;
+        _sessionRefresh = sessionRefresh;
     }
 
     public async Task<Result<List<ApplicationRole>>> GetAllApplicationRolesAsync()
@@ -339,6 +342,9 @@ public class ApplicationRolesService
                 return Result<string>.Fail($"Failed to assign role: {errors}");
             }
 
+            // Their open tabs pick the new role up now, not on their next reload.
+            _sessionRefresh.RequestRefresh(user.Id);
+
             return Result<string>.Ok(user.Id);
         }
         catch (Exception ex)
@@ -404,6 +410,9 @@ public class ApplicationRolesService
                 return Result<string>.Fail($"Failed to remove role: {errors}");
             }
 
+            // Their open tabs lose the role now, not on their next reload.
+            _sessionRefresh.RequestRefresh(user.Id);
+
             return Result<string>.Ok(user.Id);
         }
         catch (Exception ex)
@@ -458,6 +467,11 @@ public class ApplicationRolesService
             {
                 string errors = string.Join(", ", updateResult.Errors.Select(e => e.Description));
                 return Result<List<string>>.Fail($"Failed to mark role as inactive: {errors}");
+            }
+
+            foreach (string userId in affectedUserIds)
+            {
+                _sessionRefresh.RequestRefresh(userId);
             }
 
             return Result<List<string>>.Ok(affectedUserIds);

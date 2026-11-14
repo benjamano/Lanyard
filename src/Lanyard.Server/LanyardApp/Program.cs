@@ -117,6 +117,8 @@ if (!builder.Environment.IsDevelopment())
     builder.Services.AddSingleton<IAmazonS3>(_ => S3StorageClientFactory.CreateFromEnvironment());
 }
 builder.Services.AddScoped<ApplicationRolesService>();
+// Role changes reach the affected user's open tabs straight away (see SessionRefreshListener).
+builder.Services.AddSingleton<IUserSessionRefreshBus, UserSessionRefreshBus>();
 builder.Services.AddScoped<IPlaylistService, PlaylistService>();
 builder.Services.AddSingleton<IMusicLibraryEvents, MusicLibraryEvents>();
 builder.Services.AddScoped<IMusicScheduleService, MusicScheduleService>();
@@ -408,18 +410,16 @@ builder.Services.Configure<DataProtectionTokenProviderOptions>(options =>
 
 // ASP.NET Identity's SecurityStampValidator periodically (every 30 minutes by default)
 // rebuilds the cookie principal from the user/role store via CreateUserPrincipalAsync.
-// The location claim is issued at sign-in only and is not backed by the user store, so
-// without this hook it would be silently dropped from the refreshed principal - breaking
-// every location-scoped page for any session that outlives the validation interval.
+// The location and company claims are issued at sign-in only and are not backed by the user
+// store, so without this hook they would be silently dropped from the refreshed principal -
+// breaking every location-scoped page for any session that outlives the validation interval.
 builder.Services.Configure<SecurityStampValidatorOptions>(options =>
 {
     options.OnRefreshingPrincipal = context =>
     {
-        Claim? locationClaim = context.CurrentPrincipal?.FindFirst(LocationClaimTypes.LocationId);
-
-        if (locationClaim is not null && context.NewPrincipal?.Identity is ClaimsIdentity identity)
+        if (context.NewPrincipal?.Identity is ClaimsIdentity identity)
         {
-            identity.AddClaim(locationClaim);
+            SessionClaims.CopyMissing(context.CurrentPrincipal, identity);
         }
 
         return Task.CompletedTask;
