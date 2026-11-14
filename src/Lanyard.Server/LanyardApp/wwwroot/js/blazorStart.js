@@ -8,6 +8,17 @@
 // for 5-15s after the network is actually back. Retrying every second instead reconnects about
 // a second after the network returns.
 (() => {
+    // Device pages must never be auto-paused (.NET 11 AutoPause, enabled in Program.cs): a kiosk's
+    // WebView2 window reports "hidden" when minimised or covered, and pausing it would stop the
+    // projection program until someone brings the window back. The auto-pause script defers while
+    // any Web Lock is held, so these pages take one for their whole lifetime. They're opened
+    // directly by the device and never navigate elsewhere, so checking the path once is enough.
+    const path = location.pathname.toLowerCase().replace(/\/+$/, '');
+    const isDevicePage = path.startsWith('/kiosk/') || path.startsWith('/video-publisher/') || path === '/rota/terminal';
+    if (isDevicePage && navigator.locks) {
+        navigator.locks.request('lanyard-device-page-no-autopause', () => new Promise(() => { }));
+    }
+
     const RetryEverySecondFor = 30;  // ~30s of quick retries, covers network wake-up and a server restart
     const MaxRetries = 100;          // then every 5s for ~6 more minutes, past the 3 min circuit retention
 

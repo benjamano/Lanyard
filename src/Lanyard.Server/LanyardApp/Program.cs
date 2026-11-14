@@ -645,8 +645,20 @@ app.MapHub<SignalRControlHub>("/websocket")
 app.MapControllers();
 
 app.MapStaticAssets();
+// .NET 11 auto-pause: a staff tab left hidden for 2 minutes has its circuit paused (state kept in
+// the browser, server memory and the SignalR connection freed) and resumed when it's shown again.
+// Device pages (kiosk display, video publisher, clock-in terminal) opt out in blazorStart.js by
+// holding a Web Lock, which the auto-pause script treats as "busy, don't pause".
+// Blazor:AutoPauseHiddenDelaySeconds overrides the 2-minute delay (0 or less turns auto-pause off).
+int autoPauseDelaySeconds = builder.Configuration.GetValue("Blazor:AutoPauseHiddenDelaySeconds", 120);
+
 app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
+    .AddInteractiveServerRenderMode()
+    .WithBrowserOptions(options => options.AddAutoPause(autoPause =>
+    {
+        autoPause.Enabled = autoPauseDelaySeconds > 0;
+        autoPause.HiddenDelay = TimeSpan.FromSeconds(Math.Max(autoPauseDelaySeconds, 1));
+    }));
 
 if (builder.Environment.IsDevelopment() == false)
 {
