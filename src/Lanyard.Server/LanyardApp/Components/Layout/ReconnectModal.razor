@@ -3,7 +3,7 @@
 <dialog id="components-reconnect-modal" data-nosnippet>
     <div class="components-reconnect-container">
         <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalGap="10">
-            <div class="components-reconnect-spinner">
+            <div class="components-reconnect-spinner components-server-restarting-spinner">
                 <FluentSpinner Size="SpinnerSize.Large" aria-hidden="true" />
             </div>
             <div class="components-failed-to-connect-visible">
@@ -23,6 +23,11 @@
                 <FluentButton Appearance="ButtonAppearance.Outline">
                     Retry
                 </FluentButton>
+            </div>
+            <div class="components-server-restarting-visible">
+                <FluentText>
+                    Lanyard is updating.<br />You'll be reconnected in a moment.
+                </FluentText>
             </div>
             <div class="components-pause-visible">
                 <FluentText>
