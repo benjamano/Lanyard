@@ -1,4 +1,6 @@
-﻿using Amazon.S3;
+﻿using Lanyard.App.Services.CircuitShutdown;
+using Microsoft.AspNetCore.Components.Server.Circuits;
+using Amazon.S3;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Lanyard.App;
@@ -96,6 +98,14 @@ builder.Services.AddRazorComponents(options => options.DetailedErrors = builder.
     // Circuit hub only (not the kiosk hub). Pinging every 5s lets the browser's 15s server timeout
     // (wwwroot/js/blazorStart.js) spot a socket that died silently while a phone was backgrounded.
     .AddHubOptions(options => options.KeepAliveInterval = TimeSpan.FromSeconds(5));
+
+// On shutdown (a deploy or restart), ask every open browser to pause its circuit first, so it
+// keeps its session state and resumes onto the new server instead of reloading.
+builder.Services.Configure<CircuitShutdownOptions>(builder.Configuration.GetSection(CircuitShutdownOptions.SectionName));
+builder.Services.AddSingleton<CircuitShutdownCoordinator>();
+builder.Services.AddSingleton<ICircuitShutdownCoordinator>(sp => sp.GetRequiredService<CircuitShutdownCoordinator>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<CircuitShutdownCoordinator>());
+builder.Services.TryAddEnumerable(ServiceDescriptor.Scoped<CircuitHandler, ShutdownCircuitHandler>());
 
 // Add HttpContextAccessor for accessing the current user
 builder.Services.AddHttpContextAccessor();
