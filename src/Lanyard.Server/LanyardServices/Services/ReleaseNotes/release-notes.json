@@ -923,6 +923,8 @@
       "New alerts appear without reloading and are announced to screen readers. The menu shows how many are waiting to be acknowledged.",
       "Admins and the location's Managers get a new Automation rule failed notification the first time a rule fails, rather than on every run.",
       "New Operations Alerts dashboard widget: the open alerts for your locations, with Acknowledge and Resolve, and settings to show only warnings or only unacknowledged alerts.",
+      "Operations alerts now include missed clock-ins: when a published shift has been running for 15 minutes with nobody clocked in, the location's managers are told. Change the time, or turn it off, with the new Missed clock-in alert setting in Rota settings.",
+      "Overdue training and staff documents due for renewal or expired also appear as operations alerts, with one summary notification an hour rather than one per alert. They clear themselves once the course is done or the document is renewed.",
       "The reserved table card now prints at A5, to fit a table-card stand: two copies on one A4 sheet, one for each side of the stand.",
       "Upload your own reserved card design on Parties > Printouts, like the voucher and feedback form, and choose where the child's name goes. The card can also show the arrival time and room.",
       "The side menu has a new Music group: open it to find Music Player, Audio Clips and Music Schedule in one place, instead of spread across the menu and the Management section.",

@@ -26,5 +26,8 @@ public enum NotificationTopic
 
     // 18 is kept for PolicyAcknowledgement (open PR #294).
 
-    AutomationRuleFailed = 19
+    AutomationRuleFailed = 19,
+    MissedClockIn = 20,
+    TrainingOverdue = 21,
+    StaffDocumentExpiring = 22
 }

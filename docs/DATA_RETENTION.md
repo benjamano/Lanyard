@@ -165,9 +165,9 @@ the Admin while keeping the result.
 ### Operations alerts
 
 The Operations alerts page (`/manage/alerts`) keeps one `OperationsAlert` row per problem, raised by
-the system: a kiosk offline or needing attention, or an automation rule failing. Later producers
-(missed clock-ins, overdue training, expiring staff documents) raise alerts about a named staff
-member.
+the system: a kiosk offline or needing attention, an automation rule failing, a missed clock-in,
+overdue training, or a staff document due for renewal or expired. The last three are about a named
+staff member.
 
 - Alerts never copy a staff member's name into their own text. An alert about a person points at
   them (`SubjectUserId`) and the name is read through that link when the page shows it or a

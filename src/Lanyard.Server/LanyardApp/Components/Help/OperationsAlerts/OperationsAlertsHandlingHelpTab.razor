@@ -22,7 +22,9 @@
         <ul>
             <li>a kiosk that was offline comes back online;</li>
             <li>a kiosk that needed attention reports itself healthy again;</li>
-            <li>a failing automation rule next runs without errors.</li>
+            <li>a failing automation rule next runs without errors;</li>
+            <li>someone who missed their clock-in clocks in;</li>
+            <li>overdue training is completed, or an expiring document is renewed.</li>
         </ul>
         <FluentText>This happens whether or not someone acknowledged the alert first.</FluentText>
     </HelpSection>
@@ -31,8 +33,10 @@
         <FluentText>
             Kiosk alerts send the same notifications as before (<strong>Kiosk offline</strong> and <strong>Kiosk needs
             attention</strong>). A failing automation rule sends an <strong>Automation rule failed</strong> notification
-            the first time it fails, not on every run. Each person can turn these on or off, by push or email, under
-            Notifications on their account page.
+            the first time it fails, not on every run. A missed clock-in sends <strong>Missed clock-in</strong> by push.
+            Overdue training and expiring documents are checked every hour and arrive as one <strong>Training overdue</strong>
+            or <strong>Staff documents expiring</strong> notification for everything new that hour, rather than one each.
+            Each person can turn these on or off, by push or email, under Notifications on their account page.
         </FluentText>
     </HelpSection>
 

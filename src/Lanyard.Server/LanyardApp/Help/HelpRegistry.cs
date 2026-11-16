@@ -324,7 +324,7 @@ public static class HelpRegistry
 
         new(OperationsAlerts,
             "Operations Alerts",
-            "One list of what needs attention: kiosks offline, automation rules failing. Acknowledging and resolving alerts.",
+            "One list of what needs attention: kiosks, automation rules, missed clock-ins, overdue training and expiring documents.",
             HelpAudience.Managers,
             () => new Icons.Regular.Size20.Alert(),
             [

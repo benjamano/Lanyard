@@ -1747,6 +1747,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<decimal>("HoursPerDay")
                         .HasColumnType("numeric");
 
+                    b.Property<int>("MissedClockInAlertMinutes")
+                        .HasColumnType("integer");
+
                     b.Property<int>("PayPeriod")
                         .HasColumnType("integer");
 

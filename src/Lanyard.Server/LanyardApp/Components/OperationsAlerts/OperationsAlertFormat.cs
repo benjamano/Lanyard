@@ -40,7 +40,11 @@ public static class OperationsAlertFormat
     {
         string raised = $"Raised {Ago(alert.RaisedAtUtc, nowUtc)}";
 
-        return alert.OccurrenceCount > 1
+        // Only a failure that keeps happening says something by its count. Training, documents and
+        // missed clock-ins are re-checked by a sweep, so their count is just how often it looked.
+        bool countMeansSomething = alert.Type is OperationsAlertType.AutomationRuleFailed or OperationsAlertType.KioskNeedsAttention;
+
+        return countMeansSomething && alert.OccurrenceCount > 1
             ? $"{raised} · seen {alert.OccurrenceCount} times, last {Ago(alert.LastSeenAtUtc, nowUtc)}"
             : raised;
     }
