@@ -139,6 +139,13 @@ public sealed class BookingImportService : IBookingImportService
 
             await ctx.SaveChangesAsync();
 
+            // Turning import off clears any open "import failed" alert for this location - the sweep
+            // skips disabled locations, so nothing else would ever resolve it.
+            if (!input.Enabled)
+            {
+                await ResolveAlertAsync(location.CompanyId, input.LocationId, CancellationToken.None);
+            }
+
             return Result<BookingImportSettingsView>.Ok(ToView(existing, input.LocationId));
         }
         catch (Exception ex)

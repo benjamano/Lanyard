@@ -110,6 +110,24 @@ public class BookingImportServiceTests
     }
 
     [TestMethod]
+    public async Task SaveSettings_Disabling_ClearsAnyOpenFailureAlert()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        (BookingImportService service, _, Mock<IOperationsAlertWriter> alerts) = GetService(options);
+
+        await EnableImportAsync(service, location);
+
+        // Turn import off for the location.
+        Result<BookingImportSettingsView> saved = await service.SaveSettingsAsync(SchedulingTestHelpers.AdminScope,
+            new BookingImportSettingsInput(location.Id, false, "venue@example.com", null, 1, 7, 23), ActingUser);
+        Assert.IsTrue(saved.IsSuccess, saved.Error);
+
+        // The failure alert (which the sweep can no longer clear) is resolved on disable.
+        alerts.Verify(a => a.ResolveAsync(company.Id, It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+    }
+
+    [TestMethod]
     public async Task SaveSettings_CannotEnableWithoutCredentials()
     {
         DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
