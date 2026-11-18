@@ -65,7 +65,8 @@
 
             <div class="tpl-settings">
                 <FileUploader Id="@($"artwork-{Document}")" Accept="image/png,image/jpeg" MaximumFileSize="@(10 * 1024 * 1024)"
-                              MaximumFileCount="1" Label="Upload the blank artwork (PNG or JPEG)" OnFileUploaded="@OnArtworkUploaded" />
+                              MaximumFileCount="1" Label="Upload the blank artwork (PNG or JPEG)" OnFileUploaded="@OnArtworkUploaded"
+                              OnUploadingChanged="@(uploading => isUploading = uploading)" />
 
                 @if (template.ArtworkFileId is not null)
                 {
@@ -163,10 +164,17 @@
                 }
 
                 <div class="tpl-actions">
-                    <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" Loading="@isBusy" OnClick="@SaveAsync">Save</FluentButton>
+                    @* Held back while artwork is uploading: saving before the upload finishes would save the old artwork,
+                       and the new image would then appear in the editor as if it had been saved. *@
+                    <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@(isBusy || isUploading)" Loading="@isBusy" OnClick="@SaveAsync">Save</FluentButton>
                     <FluentAnchorButton Href="@PreviewHref" Target="LinkTarget.Blank" Appearance="ButtonAppearance.Outline"
                                         IconStart="@(new Icons.Regular.Size20.DocumentPdf())">Preview saved version</FluentAnchorButton>
                 </div>
+
+                @if (isUploading)
+                {
+                    <span class="tpl-hint" role="status">Uploading the artwork. Save will be ready when it's done.</span>
+                }
             </div>
         </div>
     }
@@ -216,6 +224,7 @@
     private List<PartyTemplateField> fields = [];
     private int selected = -1;
     private bool isBusy;
+    private bool isUploading;
     private string? loadError;
 
     private string ViewBox => template is null ? "0 0 1 1" : $"0 0 {Mm(template.WidthMm)} {Mm(template.HeightMm)}";
@@ -324,7 +333,7 @@
 
     private async Task SaveAsync()
     {
-        if (template is null)
+        if (template is null || isUploading)
         {
             return;
         }
