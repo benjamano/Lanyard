@@ -936,6 +936,7 @@
     "releaseDate": "2026-11-18",
     "summary": "Fix printout artwork saving and previews, and add kiosk music equaliser controls.",
     "details": [
+      "Staff documents such as right-to-work checks, ID and certificates no longer appear in File Manager, and kiosks and other staff can't download them. Only Admins and the person's Managers can see, upload or delete them, from the Documents tab on the person's page. Documents uploaded before this change are hidden the same way.",
       "Parties > Printouts and party documents: the PDFs are no longer kept by the browser, so Preview saved version and each party's printouts always show what's saved now. Before, some browsers (Firefox especially) kept showing the old artwork, even after a reload.",
       "Parties > Printouts: Save now waits until new artwork has finished uploading. Before, saving during the upload kept the old artwork.",
       "On the Music page, the new EQ button next to the volume opens the kiosk's equaliser: Bass, Mid and Treble sliders from -12 to +12 dB, with the change playing on the kiosk as you drag.",

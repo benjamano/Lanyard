@@ -1,3 +1,5 @@
+using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
@@ -6,6 +8,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Lanyard.Application.Services.StaffDocuments;
 
+// Staff documents are right-to-work checks, ID and certificates, so their files are uploaded as
+// restricted: the File Manager and api/files/download never see them (Security Issue 9.2). Who
+// may see or change them is decided here - an Admin, a Manager of that person (the rule
+// SchedulingAccess.CanManageUserAsync applies to PINs and positions), and for reading the file,
+// the person themselves. The reminder sweep methods at the bottom run as the system and take no scope.
 public class StaffDocumentService(
     IDbContextFactory<ApplicationDbContext> factory,
     IFileService fileService) : IStaffDocumentService
@@ -13,11 +20,16 @@ public class StaffDocumentService(
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly IFileService _fileService = fileService;
 
-    public async Task<Result<StaffDocument>> UploadStaffDocumentAsync(string userId, Guid documentTypeId, IFormFile file, DateTime? expiryDate, DateTime? reminderDate, string uploadedByUserId, CancellationToken cancellationToken)
+    public async Task<Result<StaffDocument>> UploadStaffDocumentAsync(LocationScope scope, string userId, Guid documentTypeId, IFormFile file, DateTime? expiryDate, DateTime? reminderDate, string uploadedByUserId, CancellationToken cancellationToken)
     {
         try
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync(cancellationToken);
+
+            if (!await SchedulingAccess.CanManageUserAsync(ctx, scope, userId))
+            {
+                return Result<StaffDocument>.Fail("You can only upload documents for staff you manage.");
+            }
 
             StaffDocumentType? documentType = await ctx.StaffDocumentTypes
                 .AsNoTracking()
@@ -53,7 +65,8 @@ public class StaffDocumentService(
                 return Result<StaffDocument>.Fail("User not found.");
             }
 
-            Result<FileMetadata> uploadResult = await _fileService.UploadFileAsync(file, null, uploadedByUserId, cancellationToken);
+            Result<FileMetadata> uploadResult = await _fileService.UploadFileAsync(file, null, uploadedByUserId,
+                new FileUploadOptions(AddAudioToMusicLibrary: false, IsRestricted: true), cancellationToken);
 
             if (!uploadResult.IsSuccess || uploadResult.Data is null)
             {
@@ -74,7 +87,18 @@ public class StaffDocumentService(
             };
 
             ctx.StaffDocuments.Add(document);
-            await ctx.SaveChangesAsync(cancellationToken);
+
+            try
+            {
+                await ctx.SaveChangesAsync(cancellationToken);
+            }
+            catch
+            {
+                // Nothing points at the file now, and a restricted file can't be found from the
+                // File Manager to clean it up by hand.
+                await _fileService.DeleteRestrictedFileAsync(uploadResult.Data.Id, CancellationToken.None);
+                throw;
+            }
 
             return Result<StaffDocument>.Ok(document);
         }
@@ -84,11 +108,16 @@ public class StaffDocumentService(
         }
     }
 
-    public async Task<Result<List<StaffDocument>>> GetStaffDocumentsForUserAsync(string userId)
+    public async Task<Result<List<StaffDocument>>> GetStaffDocumentsForUserAsync(LocationScope scope, string userId)
     {
         try
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            if (!await SchedulingAccess.CanManageUserAsync(ctx, scope, userId))
+            {
+                return Result<List<StaffDocument>>.Fail("You can only see documents for staff you manage.");
+            }
 
             List<StaffDocument> documents = await ctx.StaffDocuments
                 .AsNoTracking()
@@ -107,7 +136,39 @@ public class StaffDocumentService(
         }
     }
 
-    public async Task<Result<bool>> DeleteStaffDocumentAsync(Guid staffDocumentId, CancellationToken cancellationToken)
+    public async Task<Result<FileContent>> OpenStaffDocumentFileAsync(Guid staffDocumentId, string callerUserId, LocationScope scope, FileByteRange? range, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync(cancellationToken);
+
+            StaffDocument? document = await ctx.StaffDocuments
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(x => x.Id == staffDocumentId && x.IsActive, cancellationToken);
+
+            if (document is null)
+            {
+                return Result<FileContent>.Fail("Document not found.");
+            }
+
+            bool allowed = document.UserId == callerUserId || await SchedulingAccess.CanManageUserAsync(ctx, scope, document.UserId);
+
+            if (!allowed)
+            {
+                // Same error as a missing document, so a guessed id tells the caller nothing.
+                return Result<FileContent>.Fail("Document not found.");
+            }
+
+            return await _fileService.OpenRestrictedFileContentAsync(document.FileMetadataId, range, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            return Result<FileContent>.Fail($"Failed to open staff document: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> DeleteStaffDocumentAsync(LocationScope scope, Guid staffDocumentId, CancellationToken cancellationToken)
     {
         try
         {
@@ -115,7 +176,7 @@ public class StaffDocumentService(
 
             StaffDocument? document = await ctx.StaffDocuments.FirstOrDefaultAsync(x => x.Id == staffDocumentId, cancellationToken);
 
-            if (document is null)
+            if (document is null || !await SchedulingAccess.CanManageUserAsync(ctx, scope, document.UserId))
             {
                 return Result<bool>.Fail("Document not found.");
             }
@@ -123,7 +184,7 @@ public class StaffDocumentService(
             document.IsActive = false;
             await ctx.SaveChangesAsync(cancellationToken);
 
-            Result<bool> deleteFileResult = await _fileService.DeleteFileAsync(document.FileMetadataId, cancellationToken);
+            Result<bool> deleteFileResult = await _fileService.DeleteRestrictedFileAsync(document.FileMetadataId, cancellationToken);
 
             if (!deleteFileResult.IsSuccess)
             {
