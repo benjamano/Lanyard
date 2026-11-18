@@ -54,7 +54,7 @@ public class AutomationRuleServiceTests
         AutomationEngineService engine = new(
             factory,
             [executor],
-            new LaserGameStatusStore(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+            new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
 
         return (new AutomationRuleService(factory, engine), engine, executor);
     }
@@ -700,7 +700,7 @@ public class AutomationRuleServiceTests
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options, new FixedTenantProvider(1)));
 
-        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
         AutomationRuleService service = new(tenantFactory.Object, engine);
 
         AutomationRule foreign = BuildRule(ownKioskId);
@@ -723,6 +723,61 @@ public class AutomationRuleServiceTests
         Result<AutomationRule> ownResult = await service.CreateRuleAsync(own);
 
         Assert.IsFalse(foreignResult.IsSuccess, "Another company's kiosk must look like it doesn't exist.");
+        Assert.IsTrue(ownResult.IsSuccess, ownResult.Error);
+    }
+
+    private static AutomationRuleAction DmxAction(Guid clientId, Guid sceneId) => new()
+    {
+        Id = Guid.NewGuid(),
+        ActionType = AutomationActionTypes.DmxSceneControl,
+        ParametersJson = $"{{\"TargetClientId\":\"{clientId}\",\"Operation\":\"StartScene\",\"SceneId\":\"{sceneId}\"}}",
+        SortOrder = 1,
+        IsActive = true
+    };
+
+    private static async Task<Guid> SeedDmxSceneAsync(DbContextOptions<ApplicationDbContext> options, Guid clientId, int companyId)
+    {
+        await using ApplicationDbContext ctx = new(options);
+
+        Lanyard.Infrastructure.Models.Dmx.DmxScene scene = new() { Id = Guid.NewGuid(), CompanyId = companyId, ClientId = clientId, Name = "Scene", IsActive = true, CreateByUserId = "seed" };
+        ctx.DmxScenes.Add(scene);
+        await ctx.SaveChangesAsync();
+
+        return scene.Id;
+    }
+
+    [TestMethod]
+    public async Task CreateRule_RejectsADmxActionAimedAtAnotherCompanysKioskOrScene()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid ownKioskId = await SeedKioskAsync(options, companyId: 1);
+        Guid otherKioskId = await SeedKioskAsync(options, companyId: 2);
+        Guid ownSceneId = await SeedDmxSceneAsync(options, ownKioskId, 1);
+        Guid otherSceneId = await SeedDmxSceneAsync(options, otherKioskId, 2);
+
+        Mock<IDbContextFactory<ApplicationDbContext>> tenantFactory = new();
+        tenantFactory
+            .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new ApplicationDbContext(options, new FixedTenantProvider(1)));
+
+        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+        AutomationRuleService service = new(tenantFactory.Object, engine);
+
+        AutomationRule foreignKiosk = BuildRule(ownKioskId);
+        foreignKiosk.Actions.Add(DmxAction(otherKioskId, otherSceneId));
+
+        AutomationRule sceneOnWrongKiosk = BuildRule(ownKioskId);
+        sceneOnWrongKiosk.Actions.Add(DmxAction(ownKioskId, otherSceneId));
+
+        AutomationRule own = BuildRule(ownKioskId);
+        own.Actions.Add(DmxAction(ownKioskId, ownSceneId));
+
+        Result<AutomationRule> foreignKioskResult = await service.CreateRuleAsync(foreignKiosk);
+        Result<AutomationRule> wrongSceneResult = await service.CreateRuleAsync(sceneOnWrongKiosk);
+        Result<AutomationRule> ownResult = await service.CreateRuleAsync(own);
+
+        Assert.AreEqual("A DMX action refers to a kiosk that doesn't exist.", foreignKioskResult.Error);
+        Assert.AreEqual("A DMX action refers to a scene that isn't on its kiosk.", wrongSceneResult.Error);
         Assert.IsTrue(ownResult.IsSuccess, ownResult.Error);
     }
 
@@ -895,7 +950,7 @@ public class AutomationRuleServiceTests
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options, new FixedTenantProvider(1)));
 
-        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
         AutomationRuleService service = new(tenantFactory.Object, engine);
 
         AutomationRule foreign = BuildRule(Guid.NewGuid());

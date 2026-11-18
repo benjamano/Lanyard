@@ -140,6 +140,9 @@ public class ChatChannelTests
 
         Assert.AreEqual("Welcome, everyone", thread.Messages.Single().Message.BodyText);
         Assert.AreEqual(0, (await w.Chat.GetUnreadTotalAsync(newStarter.Id)).Data, "Joining starts with the channel read");
+
+        ChatMessagesDelta since = (await w.Chat.GetMessagesSinceAsync(newStarter.Id, channel.ConversationId, DateTime.MinValue)).Data!;
+        Assert.AreEqual("Welcome, everyone", since.Messages.Single().Message.BodyText, "New messages follow the same history rule");
     }
 
     [TestMethod]
@@ -392,6 +395,9 @@ public class ChatChannelTests
         Assert.AreEqual(ChatMessageKind.OpenShiftCard, card.Message.Kind);
         Assert.IsTrue(card.Card!.IsOpen);
         Assert.AreEqual("/rota/open", card.Card.ActionUrl);
+
+        ChatMessageView fetched = (await w.Chat.GetMessagesSinceAsync(w.Tom.Id, channel.ConversationId, DateTime.MinValue)).Data!.Messages.Single();
+        Assert.AreEqual(card.Card, fetched.Card, "Fetched as a new message, the card shows the same live status");
 
         await using (ApplicationDbContext ctx = new(w.Options))
         {

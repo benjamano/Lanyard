@@ -79,7 +79,9 @@ public static class HelpRegistry
     public const string Automation = "automation";
     public const string Dmx = "dmx";
     public const string Kiosks = "kiosks";
+    public const string OperationsAlerts = "operations-alerts";
     public const string Insights = "insights";
+    public const string Parties = "parties";
     public const string Feedback = "feedback";
 
     public static IReadOnlyList<HelpArea> Areas { get; } =
@@ -204,7 +206,7 @@ public static class HelpRegistry
 
         new(Music,
             "Music & Audio Clips",
-            "Playing music on a kiosk, the music schedule for each time of day, and audio clips over the music.",
+            "Playing music on a kiosk and setting its equaliser, the music schedule for each time of day, and audio clips over the music.",
             HelpAudience.Managers,
             () => new Icons.Regular.Size20.MusicNote2(),
             [
@@ -213,7 +215,7 @@ public static class HelpRegistry
                 new("clips", "Audio Clips")
             ],
             ["/music", "/manage/music-schedule", "/manage/audio-clips"],
-            Roles: "Admin,Manager,CanControlMusic,CanPlayAudioClips"),
+            Roles: "Admin,Manager,CanControlMusic,CanManagePlaylists,CanPlayAudioClips"),
 
         new(Projection,
             "Projection",
@@ -280,6 +282,20 @@ public static class HelpRegistry
             Roles: "Admin,Manager",
             Feature: CompanyFeature.Insights),
 
+        new(Parties,
+            "Parties",
+            "Booking parties, deposits and payments, printing the party documents, and the menus and printouts behind them.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.Balloon(),
+            [
+                new("bookings", "Booking a Party"),
+                new("payments", "Payments & Cancelling"),
+                new("printing", "Printing"),
+                new("settings", "Settings & Printouts")
+            ],
+            ["/manage/parties"],
+            Roles: "Admin,Manager",
+            Feature: CompanyFeature.Parties),
         new(Feedback,
             "Lanyard Feedback",
             "Reading and replying to the thumbs and star ratings staff send about Lanyard.",
@@ -305,6 +321,21 @@ public static class HelpRegistry
             ],
             ["/manage/users", "/manage/roles", "/manage/companies-locations"],
             Roles: "Admin,Manager"),
+
+        new(OperationsAlerts,
+            "Operations Alerts",
+            "One list of what needs attention: kiosks, automation rules, missed clock-ins, overdue training and expiring documents.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.Alert(),
+            [
+                new("overview", "Overview"),
+                new("handling", "Acknowledge & Resolve"),
+                new("types", "Alert Types"),
+                new("widget", "On a Dashboard")
+            ],
+            ["/manage/alerts"],
+            Roles: "Admin,Manager",
+            Feature: CompanyFeature.OperationsAlerts),
 
         new(Compliance,
             "Compliance",

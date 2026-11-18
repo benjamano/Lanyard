@@ -8,6 +8,7 @@ public class MusicPlayer : IMusicPlayer, IDisposable
     private readonly ILogger<MusicPlayer> _logger;
     private readonly ISongCacheService _cacheService;
     private readonly MusicGain _gain;
+    private readonly MusicEqualiser _equaliser;
 
     public event Action<PlaybackState>? PlaybackStateChanged;
     public event Action<Guid>? PlayingSongChanged;
@@ -19,14 +20,20 @@ public class MusicPlayer : IMusicPlayer, IDisposable
     private WaveOutEvent? _player;
     private MediaFoundationReader? _reader;
 
+    // The queue the server sent, song -> playlist, in play order. Replaced whole, never edited in
+    // place, so the reconnect report and pre-caching can read it from other threads.
     private Dictionary<Guid, Guid> SongAndPlaylistQueue = [];
     private Guid QueueIndex = Guid.Empty;
 
-    public MusicPlayer(ILogger<MusicPlayer> logger, ISongCacheService cacheService, MusicGain gain)
+    // Guards swapping the audio reader, which the position timer reads every second.
+    private readonly object _readerLock = new();
+
+    public MusicPlayer(ILogger<MusicPlayer> logger, ISongCacheService cacheService, MusicGain gain, MusicEqualiser equaliser)
     {
         _logger = logger;
         _cacheService = cacheService;
         _gain = gain;
+        _equaliser = equaliser;
 
         _player = new WaveOutEvent();
         _player.PlaybackStopped += OnPlaybackStopped;
@@ -88,7 +95,7 @@ public class MusicPlayer : IMusicPlayer, IDisposable
         }
     }
 
-    public async Task<Result<bool>> LoadPlaylist(Dictionary<Guid, Guid> songList)
+    public async Task<Result<bool>> LoadPlaylist(Dictionary<Guid, Guid> songList, CancellationToken cancellationToken = default)
     {
         // An empty playlist has nothing to load; keep whatever is queued now rather than
         // swapping in an empty queue and looking up a song that isn't there.
@@ -97,15 +104,15 @@ public class MusicPlayer : IMusicPlayer, IDisposable
             return Result<bool>.Fail("Playlist has no songs");
         }
 
-        SongAndPlaylistQueue = songList;
+        SongAndPlaylistQueue = new Dictionary<Guid, Guid>(songList);
         QueueIndex = songList.Keys.FirstOrDefault();
 
-        await Load(QueueIndex, SongAndPlaylistQueue[QueueIndex]);
-
-        return Result<bool>.Ok(true);
+        return await Load(QueueIndex, SongAndPlaylistQueue[QueueIndex], cancellationToken);
     }
 
-    public async Task<Result<bool>> Load(Guid songId, Guid playlistId)
+    public Task<Result<bool>> Load(Guid songId, Guid playlistId) => Load(songId, playlistId, CancellationToken.None);
+
+    public async Task<Result<bool>> Load(Guid songId, Guid playlistId, CancellationToken cancellationToken)
     {
         try
         {
@@ -113,7 +120,10 @@ public class MusicPlayer : IMusicPlayer, IDisposable
 
             _cacheService.SetActiveSong(songId);
 
-            string audioSource = await _cacheService.GetAudioSourceAsync(songId);
+            string audioSource = await _cacheService.GetAudioSourceAsync(songId, cancellationToken);
+
+            // A newer load arrived while this one was downloading; it decides what plays.
+            cancellationToken.ThrowIfCancellationRequested();
 
             // audioSource may be a direct API URL carrying the client's shared secret in the
             // query string (see SongCacheService.BuildApiUrl) - strip it before logging so the
@@ -122,14 +132,30 @@ public class MusicPlayer : IMusicPlayer, IDisposable
             string logSafeSource = queryIndex >= 0 ? audioSource[..queryIndex] : audioSource;
             _logger.LogInformation("MusicPlayer: Loading audio from {Source}", logSafeSource);
 
-            SongAndPlaylistQueue[songId] = playlistId;
+            // Only songs the server queued belong in the queue. A song played offline (no playlist)
+            // used to be added too, so the queue grew all day and was sent back on reconnect.
+            if (playlistId != Guid.Empty && !SongAndPlaylistQueue.ContainsKey(songId))
+            {
+                SongAndPlaylistQueue = new Dictionary<Guid, Guid>(SongAndPlaylistQueue) { [songId] = playlistId };
+            }
 
             QueueIndex = songId;
 
-            _reader = new MediaFoundationReader(audioSource);
-            _player!.Init(new GainSampleProvider(_reader.ToSampleProvider(), _gain));
+            MediaFoundationReader reader = new(audioSource);
+
+            lock (_readerLock)
+            {
+                _reader = reader;
+                // Equaliser before the volume, so the headroom it leaves isn't undone by the duck.
+                _player!.Init(new GainSampleProvider(new EqualiserSampleProvider(_reader.ToSampleProvider(), _equaliser), _gain));
+            }
 
             return Result<bool>.Ok(true);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogInformation("MusicPlayer: Load of {SongId} replaced by a newer one", songId);
+            throw;
         }
         catch (Exception ex)
         {
@@ -218,8 +244,11 @@ public class MusicPlayer : IMusicPlayer, IDisposable
 
         _player?.Stop();
 
-        _reader?.Dispose();
-        _reader = null;
+        lock (_readerLock)
+        {
+            _reader?.Dispose();
+            _reader = null;
+        }
 
         // Report after stopping — reading the state first sends the server the outgoing
         // state (Playing), leaving it convinced the track is still running.
@@ -337,14 +366,15 @@ public class MusicPlayer : IMusicPlayer, IDisposable
     {
         try
         {
-            MediaFoundationReader? reader = _reader;
-
-            if (reader is null)
+            lock (_readerLock)
             {
-                return Result<double>.Fail("No song loaded.");
-            }
+                if (_reader is null)
+                {
+                    return Result<double>.Fail("No song loaded.");
+                }
 
-            return Result<double>.Ok(reader.CurrentTime.TotalSeconds);
+                return Result<double>.Ok(_reader.CurrentTime.TotalSeconds);
+            }
         }
         catch (Exception ex)
         {
@@ -355,21 +385,24 @@ public class MusicPlayer : IMusicPlayer, IDisposable
 
     public Result<bool> Seek(double seconds)
     {
-        if (_reader is null)
+        lock (_readerLock)
         {
-            return Result<bool>.Fail("No song loaded.");
+            if (_reader is null)
+            {
+                return Result<bool>.Fail("No song loaded.");
+            }
+
+            double safeSeconds = Math.Max(0, seconds);
+            TimeSpan targetTime = TimeSpan.FromSeconds(safeSeconds);
+
+            if (_reader.TotalTime > TimeSpan.Zero && targetTime > _reader.TotalTime)
+            {
+                targetTime = _reader.TotalTime;
+            }
+
+            _reader.CurrentTime = targetTime;
+            return Result<bool>.Ok(true);
         }
-
-        double safeSeconds = Math.Max(0, seconds);
-        TimeSpan targetTime = TimeSpan.FromSeconds(safeSeconds);
-
-        if (_reader.TotalTime > TimeSpan.Zero && targetTime > _reader.TotalTime)
-        {
-            targetTime = _reader.TotalTime;
-        }
-
-        _reader.CurrentTime = targetTime;
-        return Result<bool>.Ok(true);
     }
 
     private void PreCacheNext()

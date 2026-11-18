@@ -1,6 +1,7 @@
 @implements IAsyncDisposable
 
 @inject IJSRuntime JS
+@inject ILogger<ChatComposer> _logger
 
 @* The message box: Quill with bold, italic, lists and links. Enter sends (Shift+Enter for a new
    line); on a phone the return key adds a line and the Send button sends. *@
@@ -85,10 +86,16 @@
 
         try
         {
+            // Quill isn't on every page (see QuillGate); load it before the composer starts.
+            await QuillGate.EnsureQuillAsync(JS, Assets);
             await JS.InvokeVoidAsync("lanyardChat.init", host, toolbar, dotNetRef, Placeholder);
         }
         catch (JSDisconnectedException)
         {
+        }
+        catch (JSException ex)
+        {
+            _logger.LogWarning("The chat composer couldn't start: {Error}", ex.Message);
         }
     }
 

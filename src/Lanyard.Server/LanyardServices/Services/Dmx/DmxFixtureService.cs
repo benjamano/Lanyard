@@ -11,13 +11,17 @@ namespace Lanyard.Application.Services;
 public class DmxFixtureService(
     IDbContextFactory<ApplicationDbContext> factory,
     ILogger<DmxFixtureService> logger,
-    ISecurityService securityService) : IDmxFixtureService
+    ISecurityService securityService,
+    IDmxService dmxService) : IDmxFixtureService
 {
     public const int UniverseSize = 512;
 
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly ILogger<DmxFixtureService> _logger = logger;
     private readonly ISecurityService _securityService = securityService;
+
+    // Told after any patch change, so the grand master/blackout act on the right channels.
+    private readonly IDmxService _dmxService = dmxService;
 
     public async Task<Result<IEnumerable<DmxFixture>>> GetFixturesForClientAsync(Guid clientId)
     {
@@ -106,6 +110,8 @@ public class DmxFixtureService(
 
             newFixture.FixtureMode = mode;
 
+            await _dmxService.RefreshPatchAsync(clientId);
+
             return Result<DmxFixture>.Ok(newFixture);
         }
         catch (Exception ex)
@@ -181,6 +187,8 @@ public class DmxFixtureService(
 
             await context.SaveChangesAsync();
 
+            await _dmxService.RefreshPatchAsync(existingFixture.ClientId);
+
             return Result<bool>.Ok(true);
         }
         catch (Exception ex)
@@ -209,6 +217,8 @@ public class DmxFixtureService(
             fixture.IsActive = false;
 
             await context.SaveChangesAsync();
+
+            await _dmxService.RefreshPatchAsync(fixture.ClientId);
 
             return Result<bool>.Ok(true);
         }

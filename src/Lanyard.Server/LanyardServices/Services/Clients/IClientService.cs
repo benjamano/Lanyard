@@ -50,6 +50,10 @@ public interface IClientService
     Task<Result<bool>> SetClientAvailableAudioDevicesAsync(Guid clientId, IEnumerable<ClientAvailableAudioDeviceDTO> devices);
     Task<Result<IEnumerable<ClientAvailableAudioDevice>>> GetClientAvailableAudioDevicesAsync(Guid clientId);
     Task<Result<bool>> SetClientPreferredAudioDeviceAsync(Guid clientId, string? deviceId, string? deviceName);
+
+    // The kiosk's music equaliser. Set saves it and pushes it live when the kiosk can take it.
+    Task<Result<ClientEqualiserStateDTO>> GetClientEqualiserAsync(Guid clientId);
+    Task<Result<ClientEqualiserStateDTO>> SetClientEqualiserAsync(Guid clientId, Lanyard.Shared.Audio.MusicEqualiserSettings settings);
     Task<Result<IEnumerable<string>>> GetAllActiveVideoDeviceNamesAsync();
     Task<Result<IEnumerable<ActiveVideoDeviceInfoDTO>>> GetAllActiveVideoDevicesWithClientNamesAsync();
     Task<Result<bool>> StartVideoPublisherOnClientAsync(Guid clientId, string publisherToken);

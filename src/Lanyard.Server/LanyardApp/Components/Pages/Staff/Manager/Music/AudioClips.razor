@@ -1,5 +1,6 @@
 @page "/manage/audio-clips"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = AudioClipRoles.Play)]
+@attribute [RequiresFeature(CompanyFeature.AudioClips)]
 @implements IDisposable
 
 @using Lanyard.App.Components.AudioClips
@@ -9,6 +10,7 @@
 @inject IAudioClipService _audioClipService
 @inject IAudioClipPlaybackService _audioClipPlayback
 @inject IAudioClipScheduleService _audioClipScheduleService
+@inject ICompanyFeatureService _companyFeatures
 
 <PageTitle>Audio Clips</PageTitle>
 
@@ -34,6 +36,14 @@
                     }
                 </div>
             </div>
+
+            @if (switchedOff)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                    Audio clips are switched off for this company, so nothing here will play: not the Play button,
+                    schedules or automation rules. Switch them on under Manage &gt; Companies &amp; Locations.
+                </FluentMessageBar>
+            }
 
             @if (loadError is not null)
             {
@@ -180,6 +190,10 @@
 @code {
     private LocationScope? scope;
     private bool canAdd;
+
+    // Only an Admin gets here with clips switched off (everyone else is stopped at the route
+    // gate), so they see why nothing plays rather than a failed Play.
+    private bool switchedOff;
     private List<AudioClip>? clips;
     private List<Location> manageableLocations = [];
     private List<AudioClipPlaySummary> recentPlays = [];
@@ -210,6 +224,11 @@
         }
 
         canAdd = scope.IsAdmin || manageableLocations.Count > 0;
+
+        if (scope.CompanyId is int featureCompanyId)
+        {
+            switchedOff = !await _companyFeatures.IsEnabledForCompanyAsync(featureCompanyId, CompanyFeature.AudioClips);
+        }
 
         _audioClipPlayback.OnClipPlaybackChanged += OnClipPlaybackChanged;
 

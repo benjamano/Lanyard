@@ -13,5 +13,6 @@ public enum SuggestionReasonKind
     // Cautions
     OverMaxHours = 10,
     PendingTimeOff = 11,
-    ShortRest = 12
+    ShortRest = 12,
+    OverPreferredHours = 13
 }

@@ -18,10 +18,18 @@ public interface IPacketSniffer
 
     DateTime? CaptureStartedUtc { get; }
 
+    /// <summary>
+    /// The BPF filter in use, or null when every packet is captured. With a filter, only game
+    /// packets reach the kiosk, so <see cref="LastPacketUtc"/> only moves when game packets arrive.
+    /// </summary>
+    string? CaptureFilter { get; }
+
     /// <summary>Any packet at all, which shows the card is plugged into something.</summary>
     DateTime? LastPacketUtc { get; }
 
     /// <summary>A packet from the laser tag system, which shows the card is on the right network.</summary>
     DateTime? LastGamePacketUtc { get; }
-    Task HandlePacketAsync(string[] decodedData);
+
+    /// <summary>Handles one decoded game packet. Called on the capture thread, so packets stay in order.</summary>
+    void HandlePacket(string[] decodedData);
 }

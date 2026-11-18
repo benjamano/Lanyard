@@ -1,0 +1,790 @@
+/* Shared look of the DMX desk and scene editor pages. Both wrap their content in DmxSurface, and
+   everything inside is styled from here with ::deep (the pages' own markup doesn't carry this
+   component's scope attribute). */
+
+.dmx-page {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+}
+
+/* Toolbar --------------------------------------------------------------------------------------- */
+
+.dmx-page ::deep .dmx-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusLarge);
+    background: var(--colorNeutralBackground1);
+}
+
+.dmx-page ::deep .dmx-toolbar-kiosk {
+    flex: 1 1 260px;
+    min-width: 0;
+}
+
+.dmx-page ::deep .dmx-segmented {
+    display: inline-flex;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: var(--borderRadiusMedium);
+    overflow: hidden;
+    flex: 0 0 auto;
+}
+
+.dmx-page ::deep .dmx-segmented button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 0 12px;
+    border: 0;
+    background: var(--colorNeutralBackground1);
+    color: var(--colorNeutralForeground2);
+    font: inherit;
+    font-size: var(--fontSizeBase300);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.dmx-page ::deep .dmx-segmented button + button {
+    border-left: 1px solid var(--colorNeutralStroke1);
+}
+
+.dmx-page ::deep .dmx-segmented button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.dmx-page ::deep .dmx-segmented button.is-active {
+    background: var(--colorBrandBackground);
+    color: var(--colorNeutralForegroundOnBrand);
+}
+
+.dmx-page ::deep .dmx-segmented button.is-blind {
+    background: var(--colorStatusWarningBackground3, #f7630c);
+    color: #1b1b1b;
+}
+
+.dmx-page ::deep .dmx-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.4;
+}
+
+.dmx-page ::deep .is-live .dmx-dot {
+    background: var(--colorStatusSuccessForeground1, #13a10e);
+    opacity: 1;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6);
+}
+
+.dmx-page ::deep .dmx-master {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 1 220px;
+    min-width: 150px;
+}
+
+.dmx-page ::deep .dmx-master input {
+    flex: 1 1 auto;
+    min-width: 60px;
+    accent-color: var(--colorBrandBackground);
+}
+
+.dmx-page ::deep .dmx-master-label {
+    font-weight: 600;
+    font-size: var(--fontSizeBase300);
+}
+
+.dmx-page ::deep .dmx-master-value {
+    min-width: 38px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground2);
+}
+
+/* Banners --------------------------------------------------------------------------------------- */
+
+.dmx-page ::deep .dmx-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 12px;
+    padding: 8px 12px;
+    border-radius: var(--borderRadiusLarge);
+    font-size: var(--fontSizeBase300);
+}
+
+.dmx-page ::deep .dmx-banner-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.dmx-page ::deep .dmx-banner--danger {
+    background: var(--colorStatusDangerBackground1);
+    color: var(--colorStatusDangerForeground1);
+    border: 1px solid var(--colorStatusDangerBorder1, var(--colorStatusDangerForeground1));
+}
+
+.dmx-page ::deep .dmx-banner--warning {
+    background: var(--colorStatusWarningBackground1);
+    color: var(--colorStatusWarningForeground3, var(--colorNeutralForeground1));
+    border: 1px solid var(--colorStatusWarningBorder1, var(--colorStatusWarningForeground1));
+}
+
+.dmx-page ::deep .dmx-banner--info {
+    background: var(--colorBrandBackground2);
+    color: var(--colorNeutralForeground1);
+    border: 1px solid var(--colorBrandStroke2, var(--colorBrandStroke1));
+}
+
+.dmx-page ::deep .dmx-banner--preview {
+    justify-content: flex-start;
+    background: var(--colorNeutralBackground3);
+    border: 1px solid var(--colorNeutralStroke2);
+}
+
+.dmx-page ::deep .dmx-preview-scrub {
+    flex: 1 1 160px;
+    min-width: 120px;
+    accent-color: var(--colorBrandBackground);
+}
+
+/* Body ------------------------------------------------------------------------------------------ */
+
+.dmx-page ::deep .dmx-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+    gap: 10px;
+    align-items: start;
+}
+
+.dmx-page ::deep .dmx-main,
+.dmx-page ::deep .dmx-side {
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusLarge);
+    background: var(--colorNeutralBackground1);
+}
+
+.dmx-page ::deep .dmx-side {
+    position: sticky;
+    top: 8px;
+}
+
+.dmx-page ::deep .dmx-side-hidden {
+    display: none;
+}
+
+.dmx-page ::deep .dmx-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.dmx-page ::deep .dmx-tabs button {
+    padding: 8px 12px;
+    border: 0;
+    border-bottom: 3px solid transparent;
+    background: transparent;
+    color: var(--colorNeutralForeground2);
+    font: inherit;
+    font-size: var(--fontSizeBase300);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.dmx-page ::deep .dmx-tabs button.is-active {
+    color: var(--colorNeutralForeground1);
+    border-bottom-color: var(--colorBrandBackground);
+}
+
+/* Scenes live in the side column on desktop; the tab is for phones. */
+.dmx-page ::deep .dmx-tabs-phone {
+    display: none;
+}
+
+.dmx-page ::deep .dmx-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 24px 8px;
+    color: var(--colorNeutralForeground2);
+}
+
+/* Fixture cards --------------------------------------------------------------------------------- */
+
+.dmx-page ::deep .dmx-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+}
+
+.dmx-page ::deep .dmx-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusLarge);
+    background: var(--colorNeutralBackground2);
+    min-width: 0;
+}
+
+.dmx-page ::deep .dmx-card-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.dmx-page ::deep .dmx-card-swatch {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 2px solid var(--colorNeutralStroke1);
+    box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.15);
+    transition: background-color 60ms linear;
+}
+
+.dmx-page ::deep .dmx-card--strobe .dmx-card-swatch {
+    animation: dmx-strobe 0.25s steps(2, start) infinite;
+}
+
+@keyframes dmx-strobe {
+    to { opacity: 0.25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dmx-page ::deep .dmx-card--strobe .dmx-card-swatch {
+        animation: none;
+    }
+}
+
+.dmx-page ::deep .dmx-card-title {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.dmx-page ::deep .dmx-card-name {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dmx-page ::deep .dmx-card-meta {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dmx-page ::deep .dmx-card-row {
+    display: grid;
+    grid-template-columns: 76px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+}
+
+.dmx-page ::deep .dmx-card-row input[type="range"] {
+    width: 100%;
+    min-width: 0;
+    accent-color: var(--colorBrandBackground);
+}
+
+.dmx-page ::deep .dmx-card-label {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground2);
+}
+
+.dmx-page ::deep .dmx-card-number {
+    min-width: 36px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-size: var(--fontSizeBase200);
+}
+
+.dmx-page ::deep .dmx-card-colour {
+    width: 36px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: var(--borderRadiusMedium);
+    background: none;
+    cursor: pointer;
+}
+
+.dmx-page ::deep .dmx-card-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    grid-column: 1 / -1;
+}
+
+.dmx-page ::deep .dmx-card-preset {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1px solid var(--colorNeutralStroke1);
+    cursor: pointer;
+}
+
+.dmx-page ::deep .dmx-card-preset:disabled,
+.dmx-page ::deep .dmx-card-colour:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.dmx-page ::deep .dmx-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.dmx-page ::deep .dmx-card-faders {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+}
+
+/* Channels -------------------------------------------------------------------------------------- */
+
+.dmx-page ::deep .dmx-channels-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.dmx-page ::deep .dmx-channels-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+}
+
+.dmx-page ::deep .dmx-channels-select {
+    min-width: 0;
+    max-width: 220px;
+    height: 32px;
+    padding: 0 8px;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: var(--borderRadiusMedium);
+    background: var(--colorNeutralBackground1);
+    color: var(--colorNeutralForeground1);
+    font: inherit;
+}
+
+.dmx-page ::deep .dmx-channels-detail {
+    margin: 0 0 6px;
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}
+
+.dmx-page ::deep .dmx-channels-faders {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+}
+
+/* Scenes ---------------------------------------------------------------------------------------- */
+
+.dmx-page ::deep .dmx-scenes-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.dmx-page ::deep .dmx-scenes-tools {
+    display: inline-flex;
+    gap: 6px;
+}
+
+.dmx-page ::deep .dmx-scenes-note {
+    margin: 4px 0;
+    color: var(--colorNeutralForeground2);
+    font-size: var(--fontSizeBase300);
+}
+
+.dmx-page ::deep .dmx-scenes-note--error {
+    color: var(--colorStatusDangerForeground1);
+}
+
+.dmx-page ::deep .dmx-scene-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.dmx-page ::deep .dmx-scene {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusMedium);
+    background: var(--colorNeutralBackground2);
+}
+
+.dmx-page ::deep .dmx-scene.is-running {
+    border-color: var(--colorBrandStroke1);
+    box-shadow: inset 3px 0 0 var(--colorBrandBackground);
+}
+
+.dmx-page ::deep .dmx-scene.is-open {
+    background: var(--colorBrandBackground2);
+}
+
+.dmx-page ::deep .dmx-scene-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.dmx-page ::deep .dmx-scene-name {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dmx-page ::deep .dmx-scene-meta {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}
+
+.dmx-page ::deep .dmx-scene-keys {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+}
+
+.dmx-page ::deep .dmx-scene-keys kbd {
+    padding: 0 5px;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-bottom-width: 2px;
+    border-radius: var(--borderRadiusSmall);
+    background: var(--colorNeutralBackground1);
+    font-family: inherit;
+    font-size: var(--fontSizeBase100);
+}
+
+.dmx-page ::deep .dmx-scene-progress {
+    display: block;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--colorNeutralBackground5, var(--colorNeutralStroke2));
+    overflow: hidden;
+}
+
+.dmx-page ::deep .dmx-scene-progress span {
+    display: block;
+    height: 100%;
+    background: var(--colorBrandBackground);
+    transition: width 120ms linear;
+}
+
+.dmx-page ::deep .dmx-scene-failure {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorStatusDangerForeground1);
+}
+
+.dmx-page ::deep .dmx-scene-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    flex: 0 0 auto;
+}
+
+.dmx-page ::deep .dmx-scene-flash {
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* Phone ----------------------------------------------------------------------------------------- */
+
+@media (max-width: 900px) {
+    .dmx-page ::deep .dmx-body {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .dmx-page ::deep .dmx-side {
+        position: static;
+        display: none;
+    }
+
+    .dmx-page ::deep .dmx-side.is-phone-active {
+        display: block;
+    }
+
+    .dmx-page ::deep .dmx-main.is-phone-hidden {
+        /* Keep the tabs visible so the user can get back; hide the content below them. */
+        padding-bottom: 0;
+    }
+
+    .dmx-page ::deep .dmx-main.is-phone-hidden .dmx-main-content {
+        display: none;
+    }
+
+    .dmx-page ::deep .dmx-main.is-phone-hidden .dmx-tabs {
+        margin-bottom: 0;
+    }
+
+    .dmx-page ::deep .dmx-tabs-phone {
+        display: inline-block;
+    }
+}
+
+@media (max-width: 600px) {
+    .dmx-page ::deep .dmx-toolbar {
+        padding: 8px;
+    }
+
+    .dmx-page ::deep .dmx-toolbar-kiosk {
+        flex-basis: 100%;
+    }
+
+    /* Icon-only buttons on a phone; the title/aria text still says what they are. */
+    .dmx-page ::deep .dmx-toolbar .dmx-toolbar-label {
+        display: none;
+    }
+
+    .dmx-page ::deep .dmx-toolbar fluent-button {
+        min-width: 40px;
+    }
+
+    .dmx-page ::deep .dmx-master {
+        flex: 1 1 100%;
+        order: 10;
+    }
+
+    .dmx-page ::deep .dmx-cards {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* Scene editor --------------------------------------------------------------------------------- */
+
+.dmx-page ::deep .dmx-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--colorNeutralForeground2);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.dmx-page ::deep .dmx-back:hover {
+    color: var(--colorBrandForeground1);
+}
+
+.dmx-page ::deep .dmx-editor-name {
+    flex: 1 1 220px;
+    min-width: 0;
+    height: 34px;
+    padding: 0 10px;
+    border: 1px solid transparent;
+    border-radius: var(--borderRadiusMedium);
+    background: transparent;
+    color: var(--colorNeutralForeground1);
+    font: inherit;
+    font-size: var(--fontSizeBase500);
+    font-weight: 600;
+}
+
+.dmx-page ::deep .dmx-editor-name:hover,
+.dmx-page ::deep .dmx-editor-name:focus {
+    border-color: var(--colorNeutralStroke1);
+    background: var(--colorNeutralBackground1);
+}
+
+.dmx-page ::deep .dmx-editor-saved {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+    min-width: 52px;
+}
+
+.dmx-page ::deep .dmx-steps {
+    display: flex;
+    gap: 8px;
+    margin: 0;
+    padding: 2px 2px 8px;
+    list-style: none;
+    overflow-x: auto;
+}
+
+.dmx-page ::deep .dmx-step {
+    flex: 0 0 auto;
+}
+
+.dmx-page ::deep .dmx-step.is-dragging {
+    opacity: 0.4;
+}
+
+.dmx-page ::deep .dmx-step-button {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto auto;
+    column-gap: 8px;
+    row-gap: 2px;
+    width: 150px;
+    min-height: 74px;
+    padding: 8px 10px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusLarge);
+    background: var(--colorNeutralBackground2);
+    color: var(--colorNeutralForeground1);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.dmx-page ::deep .dmx-step.is-selected .dmx-step-button {
+    border-color: var(--colorBrandStroke1);
+    box-shadow: 0 0 0 2px var(--colorBrandStroke1);
+    background: var(--colorBrandBackground2);
+}
+
+.dmx-page ::deep .dmx-step.is-previewing .dmx-step-button {
+    box-shadow: inset 0 -3px 0 var(--colorPaletteYellowBorderActive, #fde300);
+}
+
+.dmx-page ::deep .dmx-step--add .dmx-step-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 120px;
+    border-style: dashed;
+    background: transparent;
+    color: var(--colorNeutralForeground2);
+}
+
+.dmx-page ::deep .dmx-step-number {
+    grid-row: 1 / span 2;
+    font-size: var(--fontSizeBase500);
+    font-weight: 700;
+    color: var(--colorNeutralForeground3);
+}
+
+.dmx-page ::deep .dmx-step-name {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dmx-page ::deep .dmx-step-time {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}
+
+.dmx-page ::deep .dmx-step-swatches {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 3px;
+    min-height: 10px;
+}
+
+.dmx-page ::deep .dmx-step-swatches span {
+    width: 14px;
+    height: 10px;
+    border-radius: 3px;
+    border: 1px solid var(--colorNeutralStroke2);
+}
+
+.dmx-page ::deep .dmx-step-details {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 10px;
+    padding: 10px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusLarge);
+    background: var(--colorNeutralBackground1);
+}
+
+.dmx-page ::deep .dmx-field {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground2);
+}
+
+.dmx-page ::deep .dmx-field input {
+    height: 32px;
+    padding: 0 8px;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: var(--borderRadiusMedium);
+    background: var(--colorNeutralBackground1);
+    color: var(--colorNeutralForeground1);
+    font: inherit;
+    font-size: var(--fontSizeBase300);
+}
+
+.dmx-page ::deep .dmx-field input[type="text"] {
+    width: 200px;
+    max-width: 100%;
+}
+
+.dmx-page ::deep .dmx-field input[type="number"] {
+    width: 110px;
+}
+
+.dmx-page ::deep .dmx-step-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-left: auto;
+}
+
+.dmx-page ::deep .dmx-hint {
+    margin: 0 0 8px;
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}
+
+@media (max-width: 600px) {
+    .dmx-page ::deep .dmx-step-button {
+        width: 128px;
+    }
+
+    .dmx-page ::deep .dmx-step-actions {
+        margin-left: 0;
+    }
+
+    .dmx-page ::deep .dmx-field input[type="text"] {
+        width: 100%;
+    }
+}

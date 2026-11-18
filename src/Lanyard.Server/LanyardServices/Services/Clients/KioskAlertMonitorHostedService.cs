@@ -1,4 +1,5 @@
 using Lanyard.Application.Services.Notifications;
+using Lanyard.Application.Services.OperationsAlerts;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
@@ -23,10 +24,13 @@ namespace Lanyard.Application.Services.Clients;
 /// during the location's opening hours; "back online" always goes out so nobody is left thinking
 /// a kiosk is still down. What has been sent lives on <see cref="ClientHealthSnapshot"/>, claimed
 /// before the notification is queued, so overlapping sweeps or a redeploy can't send twice.
+/// Each alert is also raised on the Operations alerts page (and cleared when the kiosk recovers)
+/// through <see cref="IOperationsAlertWriter"/>; the notifications stay this service's own.
 /// </summary>
 public partial class KioskAlertMonitorHostedService(
     IServiceScopeFactory scopeFactory,
     INotificationDispatcher notifications,
+    IOperationsAlertWriter alertWriter,
     IOptions<KioskHealthOptions> options,
     TimeProvider timeProvider,
     ILogger<KioskAlertMonitorHostedService> logger) : BackgroundService
@@ -39,6 +43,7 @@ public partial class KioskAlertMonitorHostedService(
 
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly INotificationDispatcher _notifications = notifications;
+    private readonly IOperationsAlertWriter _alertWriter = alertWriter;
     private readonly KioskHealthOptions _options = options.Value;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger<KioskAlertMonitorHostedService> _logger = logger;
@@ -129,7 +134,12 @@ public partial class KioskAlertMonitorHostedService(
 
             foreach (Alert alert in alerts)
             {
-                queued += await QueueAsync(ctx, client, alert, cancellationToken);
+                await RecordOnAlertsPageAsync(client, alert, cancellationToken);
+
+                if (alert is not AttentionClearedAlert)
+                {
+                    queued += await QueueAsync(ctx, client, alert, cancellationToken);
+                }
             }
         }
 
@@ -143,6 +153,10 @@ public partial class KioskAlertMonitorHostedService(
     private sealed record BackOnlineAlert(int DownForMinutes) : Alert(NotificationTopic.KioskOffline);
 
     private sealed record NeedsAttentionAlert(List<string> Reasons) : Alert(NotificationTopic.KioskNeedsAttention);
+
+    // Not a notification: the kiosk reported itself healthy after a needs-attention alert, so the
+    // alert on the Operations alerts page is cleared. Nobody is told, as today.
+    private sealed record AttentionClearedAlert() : Alert(NotificationTopic.KioskNeedsAttention);
 
     /// <summary>Updates the snapshot's alert state for this sweep and says what to send.</summary>
     private List<Alert> Decide(ClientHealthSnapshot snapshot, KioskHealthView health, DateTime now, bool inStartupGrace)
@@ -195,6 +209,11 @@ public partial class KioskAlertMonitorHostedService(
         }
         else if (health.Status == KioskHealthStatus.Healthy)
         {
+            if (snapshot.AttentionAlertReasons != null)
+            {
+                alerts.Add(new AttentionClearedAlert());
+            }
+
             // Unresponsive or offline says nothing about the problems, so they're only forgotten
             // once the kiosk reports itself healthy.
             snapshot.DegradedSinceUtc = null;
@@ -218,7 +237,8 @@ public partial class KioskAlertMonitorHostedService(
 
     private async Task<int> QueueAsync(ApplicationDbContext ctx, Client client, Alert alert, CancellationToken cancellationToken)
     {
-        (List<string> admins, List<string> managers) = await GetRecipientsAsync(ctx, client, cancellationToken);
+        (List<string> admins, List<string> managers) = await OperationsAlertRecipients.GetAsync(
+            ctx, client.CompanyId, client.LocationId, _timeProvider.GetUtcNow().UtcDateTime, cancellationToken);
 
         if (admins.Count == 0 && managers.Count == 0)
         {
@@ -257,43 +277,52 @@ public partial class KioskAlertMonitorHostedService(
         _ => throw new ArgumentOutOfRangeException(nameof(alert), alert.GetType().Name, "Unknown kiosk alert.")
     };
 
-    /// <summary>
-    /// Admins of the kiosk's company (a member of any of its locations), and the Managers of the
-    /// kiosk's own location who aren't also Admins. Locked accounts are left out.
-    /// </summary>
-    private async Task<(List<string> Admins, List<string> Managers)> GetRecipientsAsync(ApplicationDbContext ctx, Client client, CancellationToken cancellationToken)
+    // The Operations alerts page keeps one alert per kiosk problem: offline (cleared when it comes
+    // back) and needs attention (cleared once it reports itself healthy). A failed write is logged
+    // and the sweep goes on, so the notifications never wait on the alerts page.
+    private async Task RecordOnAlertsPageAsync(Client client, Alert alert, CancellationToken cancellationToken)
     {
-        DateTime now = _timeProvider.GetUtcNow().UtcDateTime;
+        Task<Infrastructure.DTO.Result<bool>> Resolve(string key, string note) =>
+            _alertWriter.ResolveAsync(client.CompanyId, key, note, cancellationToken);
 
-        List<string> admins = await (
-                from membership in ctx.UserLocationMemberships
-                join location in ctx.Locations on membership.LocationId equals location.Id
-                join userRole in ctx.UserRoles on membership.UserId equals userRole.UserId
-                join role in ctx.Roles on userRole.RoleId equals role.Id
-                where location.CompanyId == client.CompanyId
-                    && role.IsActive
-                    && role.Name == SchedulingRecipients.AdminRole
-                    && membership.UserId != ApplicationDbContext.SystemDeletedUserPlaceholderId
-                select membership.UserId)
-            .AsNoTracking()
-            .TagWithCallSite()
-            .Distinct()
-            .ToListAsync(cancellationToken);
+        string offlineKey = $"kiosk-offline:{client.Id:N}";
+        string attentionKey = $"kiosk-attention:{client.Id:N}";
 
-        List<string> managers = client.LocationId is int locationId
-            ? (await SchedulingRecipients.ManagersOfLocationAsync(ctx, locationId)).Except(admins).ToList()
-            : [];
+        string? error;
 
-        List<string> everyone = [.. admins, .. managers];
+        try
+        {
+            error = alert switch
+            {
+                OfflineAlert offline => (await _alertWriter.RaiseAsync(new OperationsAlertRaise(
+                    client.CompanyId, client.LocationId, OperationsAlertType.KioskOffline, OperationsAlertSeverity.Critical,
+                    offlineKey, $"{client.Name} is offline",
+                    offline.ShutDownCleanly
+                        ? $"Shut down or closed at {FormatSince(offline.DownSinceUtc)} and hasn't come back."
+                        : $"Stopped responding at {FormatSince(offline.DownSinceUtc)}.",
+                    KioskNotices.AdminUrl, SubjectClientId: client.Id), cancellationToken)).Error,
 
-        HashSet<string> locked = [.. await ctx.Users
-            .AsNoTracking()
-            .TagWithCallSite()
-            .Where(x => everyone.Contains(x.Id) && x.LockoutEnd != null && x.LockoutEnd > now)
-            .Select(x => x.Id)
-            .ToListAsync(cancellationToken)];
+                BackOnlineAlert back => (await Resolve(offlineKey, $"Back online after {back.DownForMinutes} min.")).Error,
 
-        return (admins.Where(x => !locked.Contains(x)).ToList(), managers.Where(x => !locked.Contains(x)).ToList());
+                NeedsAttentionAlert attention => (await _alertWriter.RaiseAsync(new OperationsAlertRaise(
+                    client.CompanyId, client.LocationId, OperationsAlertType.KioskNeedsAttention, OperationsAlertSeverity.Warning,
+                    attentionKey, $"{client.Name} needs attention", string.Join("; ", attention.Reasons),
+                    KioskNotices.AdminUrl, SubjectClientId: client.Id), cancellationToken)).Error,
+
+                AttentionClearedAlert => (await Resolve(attentionKey, "Reported healthy again.")).Error,
+
+                _ => null
+            };
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            error = ex.Message;
+        }
+
+        if (error != null)
+        {
+            _logger.LogWarning("Couldn't update the alerts page for kiosk {ClientId}: {Error}", client.Id, error);
+        }
     }
 
     // "14:02", or "Thu 16 Oct 14:02" when it wasn't today, in venue time.

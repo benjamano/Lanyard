@@ -288,4 +288,66 @@ public class StaffAvailabilityServiceTests
         Assert.IsTrue(saved.IsSuccess, saved.Error);
         Assert.IsFalse(saved.Data!.Warnings.Any(x => x.Contains("can't work")));
     }
+
+    // --- How much they'd like to work ---
+
+    [TestMethod]
+    public async Task SavePreferenceAsync_Own_SavedAndReadBack()
+    {
+        World w = await SeedAsync();
+        StaffAvailabilityService service = GetService(w.Options);
+
+        Result<StaffWorkPreference?> saved = await service.SavePreferenceAsync(w.AmyScope, w.Amy.Id, 2, 16.5m, w.Amy.Id);
+
+        Assert.IsTrue(saved.IsSuccess, saved.Error);
+        Assert.IsNull(saved.Data!.UpdatedByUserId);
+
+        Result<StaffWorkPreference?> loaded = await service.GetPreferenceAsync(w.AmyScope, w.Amy.Id, w.Amy.Id);
+        Assert.AreEqual(2, loaded.Data!.MaxShiftsPerWeek);
+        Assert.AreEqual(16.5m, loaded.Data.MaxHoursPerWeek);
+    }
+
+    [TestMethod]
+    public async Task SavePreferenceAsync_BothEmpty_ClearsIt()
+    {
+        World w = await SeedAsync();
+        StaffAvailabilityService service = GetService(w.Options);
+
+        await service.SavePreferenceAsync(w.AmyScope, w.Amy.Id, 2, null, w.Amy.Id);
+        Result<StaffWorkPreference?> cleared = await service.SavePreferenceAsync(w.AmyScope, w.Amy.Id, null, null, w.Amy.Id);
+
+        Assert.IsTrue(cleared.IsSuccess, cleared.Error);
+        Assert.IsNull(cleared.Data);
+
+        await using ApplicationDbContext ctx = new(w.Options);
+        Assert.AreEqual(0, await ctx.StaffWorkPreferences.CountAsync());
+    }
+
+    [TestMethod]
+    public async Task SavePreferenceAsync_OutOfRange_Refused()
+    {
+        World w = await SeedAsync();
+
+        Assert.IsFalse((await GetService(w.Options).SavePreferenceAsync(w.AmyScope, w.Amy.Id, 0, null, w.Amy.Id)).IsSuccess);
+        Assert.IsFalse((await GetService(w.Options).SavePreferenceAsync(w.AmyScope, w.Amy.Id, null, 500m, w.Amy.Id)).IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task SavePreferenceAsync_SomeoneElsesAsStaff_Refused()
+    {
+        World w = await SeedAsync();
+
+        Assert.IsFalse((await GetService(w.Options).SavePreferenceAsync(w.AmyScope, w.Tom.Id, 2, null, w.Amy.Id)).IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task SavePreferenceAsync_ByManager_RecordsWhoSetIt()
+    {
+        World w = await SeedAsync();
+
+        Result<StaffWorkPreference?> saved = await GetService(w.Options).SavePreferenceAsync(w.ManagerScope, w.Tom.Id, 3, null, ManagerId);
+
+        Assert.IsTrue(saved.IsSuccess, saved.Error);
+        Assert.AreEqual(ManagerId, saved.Data!.UpdatedByUserId);
+    }
 }

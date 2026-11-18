@@ -231,7 +231,8 @@ public sealed class KioskSelfTestRunner(
             _packetSniffer.ActiveDeviceName,
             _packetSniffer.CaptureStartedUtc,
             _packetSniffer.LastPacketUtc,
-            _packetSniffer.LastGamePacketUtc), Now()));
+            _packetSniffer.LastGamePacketUtc,
+            _packetSniffer.CaptureFilter != null), Now()));
     }
 
     private async Task<List<KioskSelfTestCheckDTO>> CheckWebView2Async()

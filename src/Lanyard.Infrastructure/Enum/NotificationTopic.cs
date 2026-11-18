@@ -22,5 +22,12 @@ public enum NotificationTopic
     PinnedPost = 14,
     Announcement = 15,
     KioskOffline = 16,
-    KioskNeedsAttention = 17
+    KioskNeedsAttention = 17,
+
+    // 18 is kept for PolicyAcknowledgement (open PR #294).
+
+    AutomationRuleFailed = 19,
+    MissedClockIn = 20,
+    TrainingOverdue = 21,
+    StaffDocumentExpiring = 22
 }

@@ -2,6 +2,7 @@
 @using Lanyard.Application.Services.Clients
 @using Lanyard.Infrastructure.DTO.ZoneScoreboard
 @using Lanyard.Infrastructure.Enum
+@using Lanyard.Shared.LaserGame
 @inject IClientZoneScoreboardService ZoneScoreboardService
 
 @if (ClientId != null)
@@ -36,6 +37,37 @@
                     {
                         <FluentText>No network interfaces found for this client.</FluentText>
                     }
+
+                    <div>
+                        <FluentSwitch @bind-Value="ZoneScoreboardSettings.UseCaptureFilter" Label="Only read laser game traffic (capture filter)" />
+                        <FluentText Style="display: block; color: var(--neutral-foreground-hint);">
+                            The network card drops everything except game messages from the source IP to the destination IP before the kiosk sees them, so a busy network uses far less of the kiosk's processor. The kiosk applies it straight away if it's connected.
+                        </FluentText>
+                        @if (ZoneScoreboardSettings.UseCaptureFilter)
+                        {
+                            string? filter = CaptureFilterBuilder.Build([ZoneScoreboardSettings.SourceIp], ZoneScoreboardSettings.DestinationIp);
+
+                            @if (filter == null)
+                            {
+                                <FluentText Color="@Color.Error" Style="display: block;" data-testid="capture-filter-invalid">
+                                    The source or destination IP above isn't a valid address, so the kiosk will read all traffic until it's fixed.
+                                </FluentText>
+                            }
+                            else
+                            {
+                                <FluentText Style="display: block; color: var(--neutral-foreground-hint); font-family: monospace; overflow-wrap: anywhere;" data-testid="capture-filter-preview">
+                                    @filter
+                                </FluentText>
+                            }
+                        }
+                    </div>
+
+                    <div>
+                        <FluentSwitch @bind-Value="ZoneScoreboardSettings.PromiscuousCapture" Label="Read traffic sent to other machines (promiscuous mode)" />
+                        <FluentText Style="display: block; color: var(--neutral-foreground-hint);">
+                            Only needed if the control box sends to a machine other than this kiosk. Messages to a broadcast address, like 192.168.0.255, arrive either way. Changing this restarts the capture.
+                        </FluentText>
+                    </div>
 
                 </FluentStack>
 
@@ -76,7 +108,8 @@
                         SourceIp = "",
                         DestinationIp = "",
                         IsActive = true,
-                        ZoneScoreboardVersion = ZoneScoreboardVersion.Begeara2
+                        ZoneScoreboardVersion = ZoneScoreboardVersion.Begeara2,
+                        PromiscuousCapture = true
                     };
             }
             else
