@@ -22,15 +22,19 @@
         {
             @if (_state.Status == EqualiserApplyStatus.SavedKioskOutdated)
             {
-                <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false" Class="eq-dialog-message">
+                <div class="eq-dialog-message">
+                <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
                     This kiosk is on @(_state.ReportedVersion is { } v ? $"version {v}" : "an old version") and needs @MusicEqualiserSettings.MinimumClientVersion or later for the equaliser. Changes are saved and apply once it updates.
                 </FluentMessageBar>
+                </div>
             }
             else if (_state.Status == EqualiserApplyStatus.SavedKioskOffline)
             {
-                <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false" Class="eq-dialog-message">
+                <div class="eq-dialog-message">
+                <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
                     This kiosk is offline. Changes are saved and apply when it reconnects.
                 </FluentMessageBar>
+                </div>
             }
 
             <MusicEqualiserControls Value="_settings" ValueChanged="OnChanged" />

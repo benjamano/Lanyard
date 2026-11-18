@@ -4,7 +4,7 @@
     overflow-wrap: anywhere;
 }
 
-::deep .eq-dialog-message {
+.eq-dialog-message {
     margin-bottom: 1rem;
 }
 
