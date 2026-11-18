@@ -41,7 +41,7 @@ public sealed class LoginAttemptThrottle(IMemoryCache cache, ILogger<LoginAttemp
 
         if (throttled)
         {
-            logger.LogWarning("Refused a sign-in for {Username} from {RemoteIp}: too many failed attempts from that address", Normalise(username), ip?.ToString() ?? "unknown");
+            logger.LogWarning("Refused a sign-in for {Username} from {RemoteIp}: too many failed attempts from that address", SanitizeForLog(Normalise(username)), ip?.ToString() ?? "unknown");
         }
 
         return throttled;
@@ -79,6 +79,8 @@ public sealed class LoginAttemptThrottle(IMemoryCache cache, ILogger<LoginAttemp
     private static string IpKey(IPAddress? ip) => $"login-fail-ip:{ip?.ToString() ?? "unknown"}";
 
     private static string Normalise(string username) => (username ?? string.Empty).Trim().ToUpperInvariant();
+
+    private static string SanitizeForLog(string value) => (value ?? string.Empty).Replace("\r", string.Empty).Replace("\n", string.Empty);
 
     private sealed class Counter
     {
