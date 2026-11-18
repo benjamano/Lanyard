@@ -1,0 +1,105 @@
+@* Holds back a rich-text editor (BlazoredTextEditor) until Quill has loaded. Quill is only fetched by
+   the pages that edit rich text, not by every page from App.razor, and BlazoredTextEditor calls into
+   it the moment it first renders, so it can't render before the load finishes. Content that has to
+   be pushed into the editor after it mounts belongs in OnReady, which runs once the editor is there. *@
+@inject IJSRuntime JS
+@inject ILogger<QuillGate> _logger
+
+@if (_ready)
+{
+    @ChildContent
+}
+else if (_failed)
+{
+    <div class="quill-gate-placeholder">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8px">
+            <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">
+                The editor couldn't load. Check your connection and try again.
+            </FluentMessageBar>
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowClockwise())"
+                          OnClick="RetryAsync">
+                Try again
+            </FluentButton>
+        </FluentStack>
+    </div>
+}
+else
+{
+    <div class="quill-gate-placeholder" role="status">
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8px">
+            <FluentSpinner />
+            <FluentText>Loading editor...</FluentText>
+        </FluentStack>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public RenderFragment? ChildContent { get; set; }
+
+    // After the editor has rendered for the first time - the place to load its initial content.
+    [Parameter]
+    public EventCallback OnReady { get; set; }
+
+    private bool _ready;
+    private bool _failed;
+    private bool _readyNotified;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadAsync();
+            return;
+        }
+
+        if (_ready && !_readyNotified)
+        {
+            _readyNotified = true;
+            await OnReady.InvokeAsync();
+        }
+    }
+
+    private async Task RetryAsync()
+    {
+        _failed = false;
+        StateHasChanged();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            await EnsureQuillAsync(JS, Assets);
+            _ready = true;
+        }
+        catch (JSDisconnectedException)
+        {
+            return;
+        }
+        catch (JSException ex)
+        {
+            _logger.LogWarning("Quill failed to load for a rich-text editor: {Error}", ex.Message);
+            _failed = true;
+        }
+
+        StateHasChanged();
+    }
+
+    // Loads Quill, its toolbar theme and Blazored.TextEditor's glue into the page, once per page. Also
+    // used directly by the chat composer, which drives Quill itself rather than through
+    // BlazoredTextEditor. Throws JSException if a file couldn't be fetched.
+    public static async Task EnsureQuillAsync(IJSRuntime js, ResourceAssetCollection assets)
+    {
+        await using IJSObjectReference module = await js.InvokeAsync<IJSObjectReference>("import", "./js/quillLoader.js");
+
+        await module.InvokeVoidAsync("ensureQuill", new
+        {
+            quill = assets["lib/quill/2.0.3/quill.js"],
+            snowCss = assets["lib/quill/2.0.3/quill.snow.css"],
+            blotFormatter = assets["_content/Blazored.TextEditor/quill-blot-formatter.min.js"],
+            blazoredQuill = assets["_content/Blazored.TextEditor/Blazored-BlazorQuill.js"]
+        });
+    }
+}

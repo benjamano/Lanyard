@@ -1,0 +1,13 @@
+.playlist-details-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* fluent-text-input caps itself at 400px; let it fill the dialog. */
+.playlist-details-form ::deep fluent-text-input,
+.playlist-details-form ::deep fluent-textarea,
+.playlist-details-form ::deep fluent-field {
+    width: 100%;
+    max-width: none;
+}

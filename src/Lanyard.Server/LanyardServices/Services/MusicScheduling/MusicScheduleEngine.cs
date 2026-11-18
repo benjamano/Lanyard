@@ -45,6 +45,15 @@ public class MusicScheduleEngine : IMusicScheduleEngine
     // Kiosk -> when this engine queued an end-of-song playlist switch on it.
     private readonly ConcurrentDictionary<Guid, DateTime> _pendingSince = new();
 
+    // Kiosk -> (part of the day, failed attempts). A Play that fails (an emptied playlist, a kiosk
+    // that dropped mid-command) is retried on later ticks, but not forever.
+    private readonly ConcurrentDictionary<Guid, (string Key, int Attempts)> _failures = new();
+    private const int MaxApplyAttempts = 5;
+
+    // Kiosk -> the hold this engine last wrote for it, so a run of changes by hand (someone dragging
+    // the volume, skipping songs) writes the Client row once rather than once per command.
+    private readonly ConcurrentDictionary<Guid, DateTime> _holdWritten = new();
+
     private readonly SemaphoreSlim _tickLock = new(1, 1);
 
     public MusicScheduleEngine(
@@ -70,6 +79,8 @@ public class MusicScheduleEngine : IMusicScheduleEngine
 
     public async Task TickAsync(DateTime utcNow, CancellationToken ct)
     {
+        List<Task> ramps = [];
+
         await _tickLock.WaitAsync(ct);
 
         try
@@ -95,7 +106,6 @@ public class MusicScheduleEngine : IMusicScheduleEngine
 
             DateTime venueLocal = RotaTime.ToVenueLocal(utcNow);
             HashSet<Guid> scheduled = [];
-            List<Task> ramps = [];
 
             foreach (MusicSchedule schedule in schedules)
             {
@@ -127,15 +137,25 @@ public class MusicScheduleEngine : IMusicScheduleEngine
                             continue;
                         }
 
-                        _applied[kiosk.Id] = key;
-
                         if (active is null)
                         {
                             _logger.LogInformation("Music schedule: nothing scheduled now at location {LocationId}, leaving kiosk {ClientId} as it is", schedule.LocationId, kiosk.Id);
+                            _applied[kiosk.Id] = key;
                         }
-                        else if (await ApplyAsync(kiosk.Id, active.Daypart, utcNow, ct) is Task ramp)
+                        else
                         {
-                            ramps.Add(ramp);
+                            (bool succeeded, Task? ramp) = await ApplyAsync(kiosk.Id, active.Daypart, utcNow, ct);
+
+                            if (ramp is not null)
+                            {
+                                ramps.Add(ramp);
+                            }
+
+                            if (succeeded || GaveUpRetrying(kiosk.Id, key))
+                            {
+                                _applied[kiosk.Id] = key;
+                                _failures.TryRemove(kiosk.Id, out _);
+                            }
                         }
 
                         OnStatusChanged?.Invoke(kiosk.Id);
@@ -150,13 +170,32 @@ public class MusicScheduleEngine : IMusicScheduleEngine
             }
 
             ForgetUnscheduled(scheduled);
-
-            await Task.WhenAll(ramps);
         }
         finally
         {
             _tickLock.Release();
         }
+
+        // Volume ramps take a few seconds; they run with the lock released so a "Resume schedule"
+        // press or the next tick isn't kept waiting behind them.
+        await Task.WhenAll(ramps);
+    }
+
+    // Counts a failed apply and says whether to stop retrying it within this part of the day.
+    private bool GaveUpRetrying(Guid clientId, string key)
+    {
+        (string Key, int Attempts) entry = _failures.AddOrUpdate(
+            clientId,
+            _ => (key, 1),
+            (_, existing) => existing.Key == key ? (key, existing.Attempts + 1) : (key, 1));
+
+        if (entry.Attempts < MaxApplyAttempts)
+        {
+            return false;
+        }
+
+        _logger.LogWarning("Music schedule: giving up on kiosk {ClientId} for this part of the day after {Attempts} failed attempts", clientId, entry.Attempts);
+        return true;
     }
 
     public async Task<Result<bool>> RecordManualChangeAsync(Guid clientId)
@@ -164,6 +203,18 @@ public class MusicScheduleEngine : IMusicScheduleEngine
         try
         {
             DateTime utcNow = UtcNow;
+
+            // Whatever was queued for the end of the song belonged to the schedule.
+            if (_pendingSince.TryRemove(clientId, out _))
+            {
+                _player.SetPendingPlaylist(clientId, null);
+            }
+
+            // Already held off until the next part of the day: nothing new to write.
+            if (_holdWritten.TryGetValue(clientId, out DateTime heldUntil) && heldUntil > utcNow)
+            {
+                return Result<bool>.Ok(true);
+            }
 
             await using ApplicationDbContext ctx = await _contextFactory.CreateDbContextAsync();
 
@@ -184,11 +235,7 @@ public class MusicScheduleEngine : IMusicScheduleEngine
             client.MusicScheduleOverrideUntilUtc = ToUtc(next);
             await ctx.SaveChangesAsync();
 
-            // Whatever was queued for the end of the song belonged to the schedule.
-            if (_pendingSince.TryRemove(clientId, out _))
-            {
-                _player.SetPendingPlaylist(clientId, null);
-            }
+            _holdWritten[clientId] = client.MusicScheduleOverrideUntilUtc.Value;
 
             _logger.LogInformation("Music schedule: kiosk {ClientId} changed by hand, schedule resumes at {ResumesAtUtc}", clientId, client.MusicScheduleOverrideUntilUtc);
 
@@ -222,6 +269,8 @@ public class MusicScheduleEngine : IMusicScheduleEngine
 
             // Forgetting what was applied makes the tick below apply the current part of the day again.
             _applied.TryRemove(clientId, out _);
+            _failures.TryRemove(clientId, out _);
+            _holdWritten.TryRemove(clientId, out _);
 
             _logger.LogInformation("Music schedule: resumed on kiosk {ClientId}", clientId);
 
@@ -313,7 +362,9 @@ public class MusicScheduleEngine : IMusicScheduleEngine
             .FirstOrDefaultAsync(x => x.LocationId == id && x.IsEnabled && ctx.Locations.Any(l => l.Id == id && l.IsActive));
     }
 
-    private async Task<Task?> ApplyAsync(Guid clientId, MusicDaypart daypart, DateTime utcNow, CancellationToken ct)
+    // Applied is false only when the kiosk should be tried again (the Play failed). The ramp, if
+    // any, is returned for the caller to await once it has released the tick lock.
+    private async Task<(bool Applied, Task? Ramp)> ApplyAsync(Guid clientId, MusicDaypart daypart, DateTime utcNow, CancellationToken ct)
     {
         _pendingSince.TryRemove(clientId, out _);
         _player.SetPendingPlaylist(clientId, null);
@@ -326,16 +377,17 @@ public class MusicScheduleEngine : IMusicScheduleEngine
 
             if (state == PlaybackState.Playing)
             {
-                await _player.Pause(clientId, MusicCommandSource.Schedule);
+                Result<bool> paused = await _player.Pause(clientId, MusicCommandSource.Schedule);
+                return (paused.IsSuccess, null);
             }
 
-            return null;
+            return (true, null);
         }
 
         if (daypart.Playlist is null || daypart.Playlist.DeleteDate is not null)
         {
             _logger.LogWarning("Music schedule: \"{Daypart}\" plays playlist {PlaylistId}, which has been deleted; leaving kiosk {ClientId} as it is", daypart.Name, playlistId, clientId);
-            return null;
+            return (true, null);
         }
 
         bool alreadyPlayingIt = state == PlaybackState.Playing && _player.GetCurrentPlaylist(clientId)?.Id == playlistId;
@@ -360,10 +412,11 @@ public class MusicScheduleEngine : IMusicScheduleEngine
             if (!played.IsSuccess)
             {
                 _logger.LogWarning("Music schedule: couldn't play \"{Daypart}\" on kiosk {ClientId}: {Error}", daypart.Name, clientId, played.Error);
+                return (false, null);
             }
         }
 
-        return daypart.Volume is int volume ? RampVolumeAsync(clientId, volume, ct) : null;
+        return (true, daypart.Volume is int volume ? RampVolumeAsync(clientId, volume, ct) : null);
     }
 
     private async Task SwitchIfLeftWaitingTooLongAsync(Guid clientId, DateTime utcNow)
@@ -399,6 +452,14 @@ public class MusicScheduleEngine : IMusicScheduleEngine
     // A few steps a second or so apart rather than one jump, so a change of volume isn't jarring.
     private async Task RampVolumeAsync(Guid clientId, int target, CancellationToken ct)
     {
+        // Until the kiosk has reported its volume the server's figure is just 0, and ramping up
+        // from silence would be a jolt of its own; set it outright instead.
+        if (!_player.IsVolumeKnown(clientId))
+        {
+            await _player.SetVolume(clientId, target, MusicCommandSource.Schedule);
+            return;
+        }
+
         int from = _player.GetCurrentVolume(clientId);
 
         if (from == target)
@@ -422,6 +483,7 @@ public class MusicScheduleEngine : IMusicScheduleEngine
         foreach (Guid clientId in _applied.Keys.Where(x => !scheduled.Contains(x)).ToList())
         {
             _applied.TryRemove(clientId, out _);
+            _failures.TryRemove(clientId, out _);
 
             // A switch this engine queued shouldn't fire after the schedule is turned off.
             if (_pendingSince.TryRemove(clientId, out _))

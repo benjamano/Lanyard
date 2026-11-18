@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -118,8 +118,8 @@ public class StaffDocumentAccessIntegrationTests
         Assert.AreEqual(HttpStatusCode.NotFound, (await bob.GetAsync($"/api/files/download/{_fileId}")).StatusCode);
         Assert.AreEqual(HttpStatusCode.NotFound, (await bob.GetAsync($"/api/staff-documents/{_staffDocumentId}/file")).StatusCode);
 
-        string listed = await bob.GetStringAsync("/api/files/list");
-        Assert.IsFalse(listed.Contains(_fileId.ToString(), StringComparison.OrdinalIgnoreCase), listed);
+        // A colleague without CanManageFiles can't list the File Manager at all (FilesController.CanBrowseFiles).
+        Assert.AreEqual(HttpStatusCode.Forbidden, (await bob.GetAsync("/api/files/list")).StatusCode);
     }
 
     [TestMethod]

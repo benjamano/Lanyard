@@ -338,6 +338,10 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 case KioskHealthWidget existingKioskHealth when widget is KioskHealthWidget incomingKioskHealth:
                     existingKioskHealth.OnlyShowOffline = incomingKioskHealth.OnlyShowOffline;
                     break;
+                case OperationsAlertsWidget existingAlerts when widget is OperationsAlertsWidget incomingAlerts:
+                    existingAlerts.AlertMinimumSeverity = incomingAlerts.AlertMinimumSeverity;
+                    existingAlerts.AlertOnlyUnacknowledged = incomingAlerts.AlertOnlyUnacknowledged;
+                    break;
                 case HallOfFameWidget existingHallOfFame when widget is HallOfFameWidget incomingHallOfFame:
                     existingHallOfFame.Period = incomingHallOfFame.Period;
                     existingHallOfFame.ShowTopScore = incomingHallOfFame.ShowTopScore;
@@ -717,6 +721,11 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             {
                 OnlyShowOffline = kioskHealthWidget.OnlyShowOffline
             },
+            OperationsAlertsWidget alertsWidget => new OperationsAlertsWidget
+            {
+                AlertMinimumSeverity = alertsWidget.AlertMinimumSeverity,
+                AlertOnlyUnacknowledged = alertsWidget.AlertOnlyUnacknowledged
+            },
             HallOfFameWidget hallOfFameWidget => new HallOfFameWidget
             {
                 Period = hallOfFameWidget.Period,
@@ -849,6 +858,13 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         if (target is KioskHealthWidget targetKioskHealth && source is KioskHealthWidget sourceKioskHealth)
         {
             targetKioskHealth.OnlyShowOffline = sourceKioskHealth.OnlyShowOffline;
+            return;
+        }
+
+        if (target is OperationsAlertsWidget targetAlerts && source is OperationsAlertsWidget sourceAlerts)
+        {
+            targetAlerts.AlertMinimumSeverity = sourceAlerts.AlertMinimumSeverity;
+            targetAlerts.AlertOnlyUnacknowledged = sourceAlerts.AlertOnlyUnacknowledged;
             return;
         }
 

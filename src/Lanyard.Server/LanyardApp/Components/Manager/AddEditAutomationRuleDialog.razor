@@ -16,6 +16,7 @@
 @inject Lanyard.Application.Services.AudioClips.IAudioClipService _audioClipService
 @inject ILogger<AddEditAutomationRuleDialog> _logger
 @inject Lanyard.Application.Services.Tenancy.ITenantContext _tenant
+@inject ICompanyFeatureService _companyFeatures
 
 <FluentDialogBody>
     <TitleTemplate>
@@ -308,7 +309,10 @@
                                 <FluentOption Value="@AutomationActionTypes.StopProjectionProgram">Stop Projection Program</FluentOption>
                                 <FluentOption Value="@AutomationActionTypes.DmxSceneControl">DMX Scene Control</FluentOption>
                                 <FluentOption Value="@AutomationActionTypes.ProjectionProgramControl">Projection Program Control</FluentOption>
-                                <FluentOption Value="@AutomationActionTypes.PlayAudioClip">Play Audio Clip</FluentOption>
+                                @if (_audioClipsEnabled || _actionRows[index].ActionType == AutomationActionTypes.PlayAudioClip)
+                                {
+                                    <FluentOption Value="@AutomationActionTypes.PlayAudioClip">Play Audio Clip</FluentOption>
+                                }
                             </FluentSelect>
                         </div>
                         <div>
@@ -757,6 +761,10 @@
     private IEnumerable<ProjectionProgram> _programs { get; set; } = [];
     private List<AudioClip> _audioClips = [];
 
+    // Off when the company doesn't have audio clips. A rule that already plays one keeps the
+    // option so it still shows what it does (the play is refused when the rule runs).
+    private bool _audioClipsEnabled;
+
     // Runs before OnInitializedAsync's first await, so the first render already shows the saved
     // rule. The static-option selects (trigger type, trigger event) don't pick up a value that
     // changes after they've rendered, so setting these after loading the kiosk list left an
@@ -803,8 +811,13 @@
         Result<List<Location>> locationResult = await _companyLocationService.GetLocationsAsync(_tenant.CompanyId);
         _locations = locationResult.Data ?? [];
 
+        // The company's own switch, not the signed-in user's: automation is Admin-only and Admins
+        // see every feature, but the play would still be refused for a company without clips.
+        _audioClipsEnabled = _tenant.CompanyId is int companyId
+            && await _companyFeatures.IsEnabledForCompanyAsync(companyId, CompanyFeature.AudioClips);
+
         Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
-        if (scopeResult.IsSuccess && scopeResult.Data is not null)
+        if (_audioClipsEnabled && scopeResult.IsSuccess && scopeResult.Data is not null)
         {
             Result<List<AudioClip>> clipResult = await _audioClipService.ListAsync(scopeResult.Data);
             _audioClips = clipResult.Data ?? [];

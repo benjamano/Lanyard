@@ -1,5 +1,6 @@
 #nullable enable
 
+using Lanyard.Application.Services.OperationsAlerts;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.Enum;
@@ -17,12 +18,14 @@ public class AutomationEngineService(
     ISystemDbContextFactory contextFactory,
     IEnumerable<IActionExecutor> actionExecutors,
     ILaserGameStatusStore laserGameStatusStore,
+    IOperationsAlertWriter alertWriter,
     TimeProvider timeProvider,
     ILogger<AutomationEngineService> logger)
 {
     private readonly ISystemDbContextFactory _contextFactory = contextFactory;
     private readonly IEnumerable<IActionExecutor> _actionExecutors = actionExecutors;
     private readonly ILaserGameStatusStore _laserGameStatusStore = laserGameStatusStore;
+    private readonly IOperationsAlertWriter _alertWriter = alertWriter;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger<AutomationEngineService> _logger = logger;
 
@@ -870,6 +873,62 @@ public class AutomationEngineService(
             _logger.LogError(ex, "Failed to write execution log for rule {RuleId}", rule.Id);
         }
 
+        await UpdateAlertsPageAsync(rule, clientId, actionExecutions, ct);
+
         return execution.OverallSuccess;
+    }
+
+    // A rule that ran with a failed action is raised on the Operations alerts page (one alert per
+    // rule, refreshed while it keeps failing) and cleared the next time it runs cleanly. Skipped
+    // runs never get here: a condition not holding isn't a failure. The page is a side effect, so
+    // nothing that goes wrong here can stop the engine.
+    private async Task UpdateAlertsPageAsync(AutomationRule rule, Guid clientId, List<AutomationRuleActionExecution> actionExecutions, CancellationToken ct)
+    {
+        string key = $"automation-failed:{rule.Id:N}";
+
+        try
+        {
+            if (actionExecutions.All(a => a.Success))
+            {
+                Infrastructure.DTO.Result<bool> cleared = await _alertWriter.ResolveAsync(rule.CompanyId, key, "The rule ran without errors.", ct);
+
+                if (!cleared.IsSuccess)
+                {
+                    _logger.LogWarning("Couldn't clear the failure alert for rule {RuleId}: {Error}", rule.Id, cleared.Error);
+                }
+
+                return;
+            }
+
+            // The rule has no location of its own; the kiosk that triggered it says where it is.
+            await using ApplicationDbContext ctx = await _contextFactory.CreateDbContextAsync(ct);
+
+            int? locationId = await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.Id == clientId && x.CompanyId == rule.CompanyId)
+                .Select(x => x.LocationId)
+                .FirstOrDefaultAsync(ct);
+
+            int failed = actionExecutions.Count(a => !a.Success);
+            string? firstError = actionExecutions.FirstOrDefault(a => !a.Success)?.ErrorMessage;
+            string detail = failed == 1
+                ? $"1 of {actionExecutions.Count} actions failed: {firstError ?? "no reason given"}"
+                : $"{failed} of {actionExecutions.Count} actions failed. First: {firstError ?? "no reason given"}";
+
+            Infrastructure.DTO.Result<OperationsAlertRaiseOutcome> raised = await _alertWriter.RaiseAsync(new OperationsAlertRaise(
+                rule.CompanyId, locationId, OperationsAlertType.AutomationRuleFailed, OperationsAlertSeverity.Warning,
+                key, $"Automation rule \"{rule.Name}\" failed", detail, "/automation",
+                SubjectClientId: clientId, SubjectRuleId: rule.Id, NotifyTopic: NotificationTopic.AutomationRuleFailed), ct);
+
+            if (!raised.IsSuccess)
+            {
+                _logger.LogWarning("Couldn't raise a failure alert for rule {RuleId}: {Error}", rule.Id, raised.Error);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Error updating the alerts page for rule {RuleId}", rule.Id);
+        }
     }
 }

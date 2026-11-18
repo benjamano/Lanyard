@@ -101,11 +101,11 @@ else
     {
         _loading = true;
 
-        Result<Dictionary<Guid, KioskHealthView>> result = await _kioskHealthService.GetHealthAsync();
+        Result<KioskHealthView?> result = await _kioskHealthService.GetClientHealthAsync(ClientId);
 
-        if (result.IsSuccess && result.Data != null)
+        if (result.IsSuccess)
         {
-            _health = result.Data.GetValueOrDefault(ClientId);
+            _health = result.Data;
             _snapshot = _health?.Snapshot;
             _error = null;
 

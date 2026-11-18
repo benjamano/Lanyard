@@ -311,6 +311,30 @@ public class AudioClipPlaybackServiceTests
         Assert.IsFalse(result.IsSuccess);
     }
 
+    private static async Task SwitchOffAudioClipsAsync(Setup s)
+    {
+        await using ApplicationDbContext ctx = new(s.Options);
+        ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = s.Company.Id, Feature = CompanyFeature.AudioClips, IsEnabled = false, UpdateDate = Now });
+        await ctx.SaveChangesAsync();
+    }
+
+    [TestMethod]
+    public async Task Play_FailsAndSendsNothing_WhenTheCompanyHasAudioClipsSwitchedOff()
+    {
+        Setup s = await SeedAsync();
+        Guid lobby = await AddKioskAsync(s, "Lobby", s.Ipswich);
+        await SwitchOffAudioClipsAsync(s);
+
+        Result<List<AudioClipKioskOutcome>> result = await s.Service.PlayAsync(Request(s, lobby));
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual(0, s.Sent.Count);
+        Assert.IsNull(s.Service.GetNowPlaying(lobby));
+
+        await using ApplicationDbContext ctx = new(s.Options);
+        Assert.AreEqual(0, await ctx.AudioClipPlays.CountAsync());
+    }
+
     [TestMethod]
     public async Task Play_ANewClipReplacesWhatTheKioskIsPlaying()
     {
@@ -456,6 +480,19 @@ public class AudioClipPlaybackServiceTests
         AudioClipPlayCommand command = ((List<AudioClipPlayCommand>)args.Single()!).Single();
         Assert.AreEqual(s.ClipId, command.ClipId);
         Assert.AreEqual(Guid.Empty, command.PlayId);
+    }
+
+    [TestMethod]
+    public async Task Prefetch_SendsNothing_WhenTheCompanyHasAudioClipsSwitchedOff()
+    {
+        Setup s = await SeedAsync();
+        Guid lobby = await AddKioskAsync(s, "Lobby", s.Ipswich);
+        await AddScheduleAsync(s, s.Ipswich);
+        await SwitchOffAudioClipsAsync(s);
+
+        await s.Service.PrefetchScheduledClipsAsync(lobby, "conn-Lobby");
+
+        Assert.AreEqual(0, s.Sent.Count);
     }
 
     [TestMethod]

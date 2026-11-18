@@ -44,7 +44,7 @@ public class DmxFixtureServiceTests
         Mock<ISecurityService> securityServiceMock = new();
         securityServiceMock.Setup(s => s.GetCurrentUserIdAsync()).ReturnsAsync(Result<string>.Ok(TestUserId));
 
-        return new DmxFixtureService(GetFactoryMock(options, companyId).Object, NullLogger<DmxFixtureService>.Instance, securityServiceMock.Object);
+        return new DmxFixtureService(GetFactoryMock(options, companyId).Object, NullLogger<DmxFixtureService>.Instance, securityServiceMock.Object, Mock.Of<IDmxService>());
     }
 
     private static DmxFixture NewFixture(Guid clientId, string name, int startChannel, Guid modeId, bool isActive = true) => new()

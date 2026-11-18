@@ -1,7 +1,7 @@
 ﻿public interface IActionFunctions
 {
-    Task HandleTimingPacketAsync(string[] packetData);
-    Task HandlePlayerScorePacketAsync(string[] packetData);
-    Task HandleGameStatusPacketAsync(string[] packetData);
-    Task HandleShotConfirmedPacketAsync(string[] packetData);
+    void HandleTimingPacket(string[] packetData);
+    void HandlePlayerScorePacket(string[] packetData);
+    void HandleGameStatusPacket(string[] packetData);
+    void HandleShotConfirmedPacket(string[] packetData);
 }

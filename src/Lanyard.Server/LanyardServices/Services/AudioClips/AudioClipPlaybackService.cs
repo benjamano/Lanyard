@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Features;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
@@ -42,6 +43,13 @@ public class AudioClipPlaybackService(
             }
 
             await using ApplicationDbContext ctx = await contextFactory.CreateDbContextAsync(ct);
+
+            // Every play goes through here (Play button, schedules, automation rules), so this is
+            // the one place a company without audio clips is stopped.
+            if (!await CompanyFeatureQueries.IsEnabledForCompanyAsync(ctx, request.CompanyId, CompanyFeature.AudioClips, ct))
+            {
+                return Result<List<AudioClipKioskOutcome>>.Fail("Audio clips aren't switched on for this company.");
+            }
 
             // The system context sees every company, so the company is checked by hand throughout.
             AudioClip? clip = await ctx.AudioClips
@@ -285,6 +293,11 @@ public class AudioClipPlaybackService(
                 .FirstOrDefaultAsync();
 
             if (kiosk?.LocationId is not int locationId || !IsRecentEnough(kiosk.ReportedClientVersion))
+            {
+                return;
+            }
+
+            if (!await CompanyFeatureQueries.IsEnabledForCompanyAsync(ctx, kiosk.CompanyId, CompanyFeature.AudioClips))
             {
                 return;
             }

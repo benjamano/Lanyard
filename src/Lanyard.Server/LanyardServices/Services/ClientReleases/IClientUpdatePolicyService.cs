@@ -1,4 +1,5 @@
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.Contracts;
 using Lanyard.Shared.Enum;
 
@@ -10,6 +11,10 @@ public interface IClientUpdatePolicyService
 
     // Targets for every client the caller can see (their own company's), keyed by client ID.
     Task<Result<IReadOnlyDictionary<Guid, ClientUpdateTargetDTO>>> GetTargetsAsync(CancellationToken cancellationToken = default);
+
+    // Same, for clients the caller has already loaded: only the release catalogue is read. Each
+    // client needs Id, UpdateRing, PinnedClientVersion and ReportedClientVersion filled in.
+    Task<Result<IReadOnlyDictionary<Guid, ClientUpdateTargetDTO>>> GetTargetsAsync(IEnumerable<Client> clients, CancellationToken cancellationToken = default);
 
     // Admin only (enforced by the page); company-scoped by the tenant filter, so a client in
     // another company reads as not found.

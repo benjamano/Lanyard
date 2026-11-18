@@ -1,0 +1,101 @@
+@inject IPlaylistService _playlistService
+
+@* Adds one song to a playlist: one tap on the playlist. Closes with the playlist's id. *@
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size24.AddSquare())" />
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Add to a playlist</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <p class="add-to-playlist-song">“@SongName”</p>
+
+        @if (_playlists is null)
+        {
+            <FluentProgressBar />
+        }
+        else if (_playlists.Count == 0)
+        {
+            <p class="add-to-playlist-empty">There are no other playlists yet. Create one from the playlist list first.</p>
+        }
+        else
+        {
+            <div class="add-to-playlist-list" role="list">
+                @foreach (PlaylistOverview playlist in _playlists)
+                {
+                    <button type="button" role="listitem" class="add-to-playlist-item" disabled="@_saving"
+                            @onclick="() => AddAsync(playlist)">
+                        <MusicArtwork Seed="playlist.Id" Title="@playlist.Name" Size="MusicArtwork.ArtworkSize.Small" />
+                        <span class="add-to-playlist-text">
+                            <span class="add-to-playlist-name">@playlist.Name</span>
+                            <span class="add-to-playlist-meta">@MusicPlaylistPicker.SongCount(playlist.SongCount)</span>
+                        </span>
+                        <FluentIcon Value="@(new Icons.Regular.Size20.Add())" Color="Color.Default" />
+                    </button>
+                }
+            </div>
+        }
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton OnClick="() => Dialog.CancelAsync()">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter, EditorRequired] public Guid SongId { get; set; }
+    [Parameter, EditorRequired] public string SongName { get; set; } = "";
+
+    /// <summary>The playlist the song is being viewed in, left off the list.</summary>
+    [Parameter] public Guid? ExcludePlaylistId { get; set; }
+
+    [CascadingParameter] public required IDialogInstance Dialog { get; set; }
+
+    private List<PlaylistOverview>? _playlists;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<IReadOnlyList<PlaylistOverview>> result = await _playlistService.GetPlaylistOverviewsAsync();
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't load playlists.");
+            _playlists = [];
+            return;
+        }
+
+        _playlists = result.Data.Where(x => x.Id != ExcludePlaylistId).ToList();
+    }
+
+    private async Task AddAsync(PlaylistOverview playlist)
+    {
+        _saving = true;
+
+        try
+        {
+            Result<bool> added = await _playlistService.AddSongToPlaylistAsync(SongId, playlist.Id);
+
+            if (!added.IsSuccess)
+            {
+                _toastService.ShowError(added.Error ?? "Couldn't add the song.");
+                return;
+            }
+
+            if (added.Data)
+            {
+                _toastService.ShowSuccess($"Added to \"{playlist.Name}\"");
+            }
+            else
+            {
+                _toastService.ShowInfo($"It's already in \"{playlist.Name}\"");
+            }
+
+            await Dialog.CloseAsync(playlist.Id);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

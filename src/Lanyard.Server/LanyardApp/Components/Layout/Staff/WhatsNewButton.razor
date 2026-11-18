@@ -1,0 +1,150 @@
+@using Lanyard.App.Components.Dialogs
+@using Lanyard.Shared.DTO
+
+@inject IReleaseNotesService ReleaseNotesService
+@inject IJSRuntime JSRuntime
+
+@* The latest release's summary, from the header. It used to be a card at the bottom of the sidebar,
+   where it took up room on every page. A dot on the button marks a release this browser hasn't
+   opened yet. *@
+@if (_latestRelease is not null)
+{
+    <div class="whats-new-anchor">
+        <FluentButton Appearance="ButtonAppearance.Transparent" IconOnly="true" Class="fluent-header-hover"
+                      BackgroundColor="transparent" Title="@ButtonLabel" aria-label="@ButtonLabel"
+                      aria-haspopup="dialog" aria-expanded="@(_open ? "true" : "false")" OnClick="ToggleAsync">
+            <FluentIcon Class="hidden-if-light" Color="@Color.Default" Value="@(new Icons.Regular.Size20.MegaphoneLoud())" />
+            <FluentIcon Class="hidden-if-dark" Color="@Color.Lightweight" Value="@(new Icons.Regular.Size20.MegaphoneLoud())" />
+        </FluentButton>
+        @if (_unseen)
+        {
+            <span class="whats-new-dot" aria-hidden="true"></span>
+        }
+    </div>
+}
+
+@if (_open && _latestRelease is not null)
+{
+    @* Same fixed placement as FeedbackButton's panel: under the header's right-hand end, with an
+       invisible backdrop that closes it. *@
+    <div class="whats-new-backdrop" @onclick="Close"></div>
+    <div class="whats-new-panel" role="dialog" aria-modal="false" aria-labelledby="whats-new-heading" @onkeydown="OnKeyDown">
+        <div class="whats-new-heading-row">
+            <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6" Width="auto">
+                <FluentIcon Value="@(new Icons.Regular.Size16.MegaphoneLoud())" />
+                <FluentText id="whats-new-heading" Weight="TextWeight.Semibold" Size="TextSize.Size400">
+                    What's new in v@(_latestRelease.Version)
+                </FluentText>
+            </FluentStack>
+            <FluentButton Appearance="ButtonAppearance.Transparent" IconOnly="true" Title="Close" aria-label="Close"
+                          IconStart="@(new Icons.Regular.Size16.Dismiss())" OnClick="Close" />
+        </div>
+
+        <FluentText Size="TextSize.Size200" Class="whats-new-date">
+            @_latestRelease.ReleaseDate.ToString("d MMMM yyyy")
+        </FluentText>
+
+        <FluentText>@_latestRelease.Summary</FluentText>
+
+        <div class="whats-new-actions">
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="OpenReleaseNotesAsync">
+                More info
+            </FluentButton>
+        </div>
+    </div>
+}
+
+@code {
+    private const string SeenKey = "lanyard.whatsNewSeenVersion";
+
+    private ReleaseNote? _latestRelease;
+    private IEnumerable<ReleaseNote> _releaseNotes = [];
+    private bool _open;
+    private bool _unseen;
+
+    private string ButtonLabel => _unseen ? "What's new (new update)" : "What's new";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<IEnumerable<ReleaseNote>> result = await ReleaseNotesService.GetReleaseNotesAsync();
+
+        if (result.IsSuccess)
+        {
+            _releaseNotes = result.Data ?? [];
+            _latestRelease = _releaseNotes.OrderByDescending(x => x.ReleaseDate).ThenByDescending(x => Version.Parse(x.Version)).FirstOrDefault();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _latestRelease is null)
+        {
+            return;
+        }
+
+        string? seen = await ReadSeenVersionAsync();
+
+        if (seen != _latestRelease.Version)
+        {
+            _unseen = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ToggleAsync()
+    {
+        _open = !_open;
+
+        if (_open && _unseen && _latestRelease is not null)
+        {
+            _unseen = false;
+            await WriteSeenVersionAsync(_latestRelease.Version);
+        }
+    }
+
+    private void Close() => _open = false;
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            _open = false;
+        }
+    }
+
+    private async Task OpenReleaseNotesAsync()
+    {
+        _open = false;
+
+        await _dialogService.ShowDialogAsync<ReleaseNotesDialog>(options =>
+        {
+            options.Header.Title = "What's New";
+            options.Width = "600px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ReleaseNotesDialog.Releases), _releaseNotes);
+        });
+    }
+
+    // localStorage can be blocked (private browsing) or the circuit can be gone; either way the dot
+    // just isn't remembered, which is harmless.
+    private async Task<string?> ReadSeenVersionAsync()
+    {
+        try
+        {
+            return await JSRuntime.InvokeAsync<string?>("localStorage.getItem", SeenKey);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task WriteSeenVersionAsync(string version)
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("localStorage.setItem", SeenKey, version);
+        }
+        catch { }
+    }
+}

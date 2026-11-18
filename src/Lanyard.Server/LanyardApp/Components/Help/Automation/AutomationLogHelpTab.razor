@@ -5,7 +5,9 @@
     </FluentText>
     <ul>
         <li>A tick means every action worked.</li>
-        <li>A failure means at least one action didn't. Open the entry to see which, and the error.</li>
+        <li>A failure means at least one action didn't. Open the entry to see which, and the error. A failing rule
+            is also raised on <a href="/manage/alerts">Operations Alerts</a>, which notifies Admins and the
+            location's Managers once, and clears itself the next time the rule runs without errors.</li>
         <li><strong>Skipped</strong> means the rule was triggered but a condition wasn't met, so no actions ran.
             Open the entry for <strong>Why it was skipped</strong>.</li>
     </ul>
