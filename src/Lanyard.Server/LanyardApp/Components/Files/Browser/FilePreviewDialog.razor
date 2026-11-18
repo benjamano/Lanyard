@@ -1,0 +1,113 @@
+@using Lanyard.Infrastructure.DTO.Files
+
+@* Looks at a file without downloading it: images, video, audio, PDFs and text. Previous and next
+   (and the arrow keys) step through the other files in the folder or search it was opened from. *@
+<FluentDialogBody>
+    <TitleTemplate>
+        <div class="file-preview-title">
+            <span class="file-preview-name" title="@Current.FileName">@Current.FileName</span>
+            <span class="file-preview-meta">@Current.TypeName · @FileTypeInfo.FormatSize(Current.FileSize)@(Files.Count > 1 ? $" · {_index + 1} of {Files.Count}" : "")</span>
+        </div>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="file-preview" tabindex="0" @ref="_stage" @onkeydown="OnKeyDownAsync" aria-label="@($"Preview of {Current.FileName}")">
+            @if (Files.Count > 1)
+            {
+                <button type="button" class="file-preview-nav is-prev" aria-label="Previous file" disabled="@(_index == 0)" @onclick="() => GoAsync(-1)">
+                    <FluentIcon Value="@(new Icons.Regular.Size24.ChevronLeft())" Color="Color.Default" />
+                </button>
+            }
+
+            <div class="file-preview-stage" @key="Current.Id">
+                @switch (Kind)
+                {
+                    case PreviewKind.Image:
+                        <img src="@FileBrowserFormat.DownloadUrl(Current.Id)" alt="@Current.FileName" class="file-preview-image" />
+                        break;
+                    case PreviewKind.Video:
+                        <video src="@FileBrowserFormat.DownloadUrl(Current.Id)" controls autoplay playsinline class="file-preview-video"></video>
+                        break;
+                    case PreviewKind.Audio:
+                        <div class="file-preview-audio">
+                            <FluentIcon Value="@(new Icons.Regular.Size24.MusicNote2())" Color="Color.Default" />
+                            <audio src="@FileBrowserFormat.DownloadUrl(Current.Id)" controls autoplay></audio>
+                        </div>
+                        break;
+                    case PreviewKind.Frame:
+                        <iframe src="@($"{FileBrowserFormat.DownloadUrl(Current.Id)}?inline=true")" title="@Current.FileName" class="file-preview-frame"></iframe>
+                        break;
+                    default:
+                        <div class="file-preview-none">
+                            <FluentIcon Value="@FileBrowserFormat.IconFor(Current.TypeGroup, Current.FileName, large: true)" Color="Color.Default" />
+                            <p>@Current.TypeName files can't be shown here. Download it to open it.</p>
+                        </div>
+                        break;
+                }
+            </div>
+
+            @if (Files.Count > 1)
+            {
+                <button type="button" class="file-preview-nav is-next" aria-label="Next file" disabled="@(_index == Files.Count - 1)" @onclick="() => GoAsync(1)">
+                    <FluentIcon Value="@(new Icons.Regular.Size24.ChevronRight())" Color="Color.Default" />
+                </button>
+            }
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentStack HorizontalGap="4" HorizontalAlignment="HorizontalAlignment.End">
+            @* A plain link: Blazor leaves an <a download> alone, where it would route a Fluent anchor button. *@
+            <a class="files-link-button is-primary" href="@FileBrowserFormat.DownloadUrl(Current.Id)" download="@Current.FileName">
+                <FluentIcon Value="@(new Icons.Regular.Size20.ArrowDownload())" Color="Color.Default" /> Download
+            </a>
+            <FluentButton OnClick="() => Dialog.CancelAsync()">Close</FluentButton>
+        </FluentStack>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    private enum PreviewKind { None, Image, Video, Audio, Frame }
+
+    [Parameter, EditorRequired] public IReadOnlyList<FileListItem> Files { get; set; } = [];
+
+    [Parameter] public int StartIndex { get; set; }
+
+    [CascadingParameter] public required IDialogInstance Dialog { get; set; }
+
+    private int _index;
+    private ElementReference _stage;
+
+    private FileListItem Current => Files[_index];
+
+    private PreviewKind Kind => Current.TypeGroup switch
+    {
+        FileTypeGroup.Image => PreviewKind.Image,
+        FileTypeGroup.Video => PreviewKind.Video,
+        FileTypeGroup.Audio => PreviewKind.Audio,
+        _ when Current.ContentType is "application/pdf" or "text/plain" or "text/csv" => PreviewKind.Frame,
+        _ => PreviewKind.None,
+    };
+
+    protected override void OnInitialized() => _index = Math.Clamp(StartIndex, 0, Math.Max(0, Files.Count - 1));
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Focus the stage so the arrow keys work straight away.
+        if (firstRender)
+        {
+            try { await _stage.FocusAsync(); } catch (JSException) { }
+        }
+    }
+
+    private Task GoAsync(int step)
+    {
+        _index = Math.Clamp(_index + step, 0, Files.Count - 1);
+        return Task.CompletedTask;
+    }
+
+    private Task OnKeyDownAsync(KeyboardEventArgs e) => e.Key switch
+    {
+        "ArrowLeft" => GoAsync(-1),
+        "ArrowRight" => GoAsync(1),
+        _ => Task.CompletedTask,
+    };
+}

@@ -61,7 +61,7 @@ namespace Lanyard.API.Controllers
         }
 
         [HttpGet("download/{id}")]
-        public async Task<IActionResult> Download(Guid id, CancellationToken cancellationToken)
+        public async Task<IActionResult> Download(Guid id, [FromQuery] bool inline, CancellationToken cancellationToken)
         {
             if (await KioskRequestAuthorization.AuthorizeAsync(HttpContext) == KioskRequestAccess.Denied)
                 return Challenge(KioskAuthenticationDefaults.Scheme);
@@ -72,7 +72,16 @@ namespace Lanyard.API.Controllers
             if (!result.Success || result.Data == null)
                 return this.FileContentFailure(result.Error);
 
-            return await this.StreamFileContentAsync(result.Data, downloadFileName: result.Data.Metadata.FileName ?? "file.bin", cacheFor: TimeSpan.FromDays(1));
+            // ?inline=true lets the Files preview show a PDF or a text file in the page. Only those:
+            // anything that could carry script (an SVG, say) is always sent as a download.
+            bool showInline = inline && IsSafeInline(result.Data.Metadata.ContentType);
+
+            if (showInline && result.Data.Metadata.ContentType?.StartsWith("text/", StringComparison.OrdinalIgnoreCase) == true)
+                Response.Headers.ContentSecurityPolicy = "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'self'";
+
+            return await this.StreamFileContentAsync(result.Data,
+                downloadFileName: showInline ? null : result.Data.Metadata.FileName ?? "file.bin",
+                cacheFor: TimeSpan.FromDays(1));
         }
 
         [HttpGet("list")]
@@ -157,6 +166,9 @@ namespace Lanyard.API.Controllers
                 ? Ok(Result<List<FolderListItemDto>>.Ok(result.Data!.Select(FolderListItemDto.From).ToList()))
                 : result.ToActionResult();
         }
+
+        private static bool IsSafeInline(string? contentType) =>
+            contentType is "application/pdf" or "text/plain" or "text/csv";
 
         // ---------- Files library (the Files page's model, also usable over HTTP) ----------
 

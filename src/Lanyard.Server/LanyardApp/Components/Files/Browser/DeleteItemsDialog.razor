@@ -1,0 +1,97 @@
+@using Lanyard.Infrastructure.DTO.Files
+@inject IFileUsageService _usage
+
+@* Confirms sending files and folders to the Recycle bin, and warns about anything that uses them.
+   In the bin they keep working where they're used; they just can't be deleted for good until
+   nothing uses them. Closes with true. *@
+<FluentDialogBody>
+    <ChildContent>
+        <div class="delete-dialog">
+            <p class="delete-dialog-lead">
+                @if (Names.Count == 1)
+                {
+                    <text><strong>“@Names[0]”</strong> goes to the Recycle bin.</text>
+                }
+                else
+                {
+                    <text><strong>@Names.Count items</strong> go to the Recycle bin.</text>
+                }
+                You can restore @(Names.Count == 1 ? "it" : "them") from there for 30 days.
+                @if (FolderCount > 0)
+                {
+                    <text> A folder goes with everything in it.</text>
+                }
+            </p>
+
+            @if (Names.Count > 1)
+            {
+                <ul class="delete-dialog-names">
+                    @foreach (string name in Names.Take(6))
+                    {
+                        <li>@name</li>
+                    }
+                    @if (Names.Count > 6)
+                    {
+                        <li class="delete-dialog-more">and @(Names.Count - 6) more</li>
+                    }
+                </ul>
+            }
+
+            @if (_usages is null)
+            {
+                <FluentProgressBar />
+            }
+            else if (_usages.Count > 0)
+            {
+                <div class="delete-dialog-usage" role="note">
+                    <div class="delete-dialog-usage-title">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.Warning())" Color="Color.Warning" />
+                        Still in use
+                    </div>
+                    <ul>
+                        @foreach (FileUsage usage in _usages.Take(8))
+                        {
+                            <li>@usage.Description</li>
+                        }
+                        @if (_usages.Count > 8)
+                        {
+                            <li>and @(_usages.Count - 8) more</li>
+                        }
+                    </ul>
+                    <p>It keeps working there while it's in the bin, but it can't be deleted for good until nothing uses it.</p>
+                </div>
+            }
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentStack HorizontalGap="4" HorizontalAlignment="HorizontalAlignment.End">
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="() => Dialog.CloseAsync(true)">Delete</FluentButton>
+            <FluentButton OnClick="() => Dialog.CancelAsync()">Cancel</FluentButton>
+        </FluentStack>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<string> Names { get; set; } = [];
+
+    [Parameter] public IReadOnlyCollection<Guid> FileIds { get; set; } = [];
+
+    [Parameter] public int FolderCount { get; set; }
+
+    [CascadingParameter] public required IDialogInstance Dialog { get; set; }
+
+    private List<FileUsage>? _usages;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (FileIds.Count == 0)
+        {
+            _usages = [];
+            return;
+        }
+
+        Result<IReadOnlyDictionary<Guid, IReadOnlyList<FileUsage>>> found = await _usage.GetUsagesAsync(FileIds, CancellationToken.None);
+
+        _usages = found.Data?.Values.SelectMany(x => x).Where(x => x.BlocksPermanentDelete).ToList() ?? [];
+    }
+}

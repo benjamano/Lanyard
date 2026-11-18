@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.FluentUI.AspNetCore.Components;
@@ -194,15 +194,17 @@ public static class HelpRegistry
             Feature: CompanyFeature.Announcements),
 
         new(Files,
-            "File Manager",
-            "Folders, uploading, and moving, renaming and deleting your company's files.",
-            HelpAudience.Managers,
+            "Files",
+            "Finding, previewing and downloading files, uploading and organising them, sharing folders with staff, and the Recycle bin.",
+            HelpAudience.Everyone,
             () => new Icons.Regular.Size20.Folder(),
             [
-                new("overview", "File Manager")
+                new("overview", "Finding files"),
+                new("organising", "Uploading and organising"),
+                new("sharing", "Sharing with staff"),
+                new("bin", "Recycle bin")
             ],
-            ["/files"],
-            Roles: "Admin,CanManageFiles"),
+            ["/files"]),
 
         new(Music,
             "Music & Audio Clips",
