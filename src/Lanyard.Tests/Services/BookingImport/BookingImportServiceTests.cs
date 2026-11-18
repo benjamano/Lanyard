@@ -196,6 +196,40 @@ public class BookingImportServiceTests
     }
 
     [TestMethod]
+    public async Task RunImport_SetsPaymentStatusFromPaidAndBalance()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        (BookingImportService service, Mock<IJustStepClient> client, _) = GetService(options);
+
+        await EnableImportAsync(service, location);
+
+        DateOnly date = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
+        ExternalBookingDto Paid(string reference, decimal total, decimal paid, decimal balance) =>
+            new(reference, date, new TimeOnly(11, 30), new TimeOnly(13, 30), "Party", "Contact", "07000000000", "Child", null, 10, total, paid, balance, false);
+
+        SetupFetch(client,
+            Paid("FULL", 350m, 350m, 0m),   // paid in full
+            Paid("PART", 300m, 100m, 200m), // deposit paid, balance owing
+            Paid("NONE", 180m, 0m, 180m));  // nothing paid
+
+        await service.RunImportAsync(company.Id, location.Id, BookingImportTrigger.Scheduled);
+
+        await using ApplicationDbContext ctx = new(options);
+
+        PartyBooking full = await ctx.PartyBookings.SingleAsync(x => x.ExternalRef == "FULL");
+        Assert.AreEqual(PartyPaymentStatus.PaidInFull, full.PaymentStatus);
+        Assert.AreEqual(0m, full.BalanceDue);
+
+        PartyBooking part = await ctx.PartyBookings.SingleAsync(x => x.ExternalRef == "PART");
+        Assert.AreEqual(PartyPaymentStatus.DepositPaid, part.PaymentStatus);
+        Assert.AreEqual(200m, part.BalanceDue);
+
+        PartyBooking none = await ctx.PartyBookings.SingleAsync(x => x.ExternalRef == "NONE");
+        Assert.AreEqual(PartyPaymentStatus.Unpaid, none.PaymentStatus);
+    }
+
+    [TestMethod]
     public async Task RunImport_CancelsBookingsThatDroppedOutOfJustStep()
     {
         DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();

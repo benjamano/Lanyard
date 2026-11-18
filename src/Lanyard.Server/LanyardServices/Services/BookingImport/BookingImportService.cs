@@ -401,6 +401,7 @@ public sealed class BookingImportService : IBookingImportService
                 booking.ExpectedChildren = dto.Quantity;
                 booking.TotalPrice = dto.TotalDue;
                 booking.PaymentNotes = PaymentNote(dto);
+                ApplyPayment(booking, dto, now);
                 booking.ExternalIsProvisional = dto.IsProvisional;
 
                 if (isNew)
@@ -488,6 +489,40 @@ public sealed class BookingImportService : IBookingImportService
         }
 
         return $"Imported from Just Step: paid £{dto.Paid ?? 0m:0.00}, balance £{dto.Balance ?? 0m:0.00}.";
+    }
+
+    // Turns Just Step's "paid" and "balance" figures into the booking's payment state so it reads as
+    // Paid in full / Deposit paid / Unpaid rather than always Unpaid. The paid timestamps are only
+    // set when they are not already set, so re-importing the same figures doesn't rewrite the row
+    // (and doesn't keep moving the recorded paid time). Just Step is the source of truth, so a
+    // refund there clears the paid state here too.
+    private static void ApplyPayment(PartyBooking booking, ExternalBookingDto dto, DateTime now)
+    {
+        decimal paid = dto.Paid ?? 0m;
+        decimal balance = dto.Balance ?? 0m;
+        bool hasPaid = paid > 0m;
+
+        if (hasPaid && balance <= 0m)
+        {
+            // Fully paid.
+            booking.DepositAmount = paid;
+            booking.DepositPaidUtc ??= now;
+            booking.BalancePaidUtc ??= now;
+        }
+        else if (hasPaid)
+        {
+            // A deposit or part payment, with a balance still owing.
+            booking.DepositAmount = paid;
+            booking.DepositPaidUtc ??= now;
+            booking.BalancePaidUtc = null;
+        }
+        else
+        {
+            // Nothing paid.
+            booking.DepositAmount = null;
+            booking.DepositPaidUtc = null;
+            booking.BalancePaidUtc = null;
+        }
     }
 
     private async Task<BookingImportRunView> SaveRunAsync(ApplicationDbContext ctx, BookingImportRun run, CancellationToken ct)
