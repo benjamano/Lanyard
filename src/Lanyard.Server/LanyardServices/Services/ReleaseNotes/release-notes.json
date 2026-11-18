@@ -934,10 +934,15 @@
   {
     "version": "1.4.23",
     "releaseDate": "2026-11-18",
-    "summary": "Fixed printout previews showing old artwork after it had been replaced.",
+    "summary": "Fix printout artwork saving and previews, and add kiosk music equaliser controls.",
     "details": [
       "Parties > Printouts and party documents: the PDFs are no longer kept by the browser, so Preview saved version and each party's printouts always show what's saved now. Before, some browsers (Firefox especially) kept showing the old artwork, even after a reload.",
-      "Parties > Printouts: Save now waits until new artwork has finished uploading. Before, saving during the upload kept the old artwork."
+      "Parties > Printouts: Save now waits until new artwork has finished uploading. Before, saving during the upload kept the old artwork.",
+      "On the Music page, the new EQ button next to the volume opens the kiosk's equaliser: Bass, Mid and Treble sliders from -12 to +12 dB, with the change playing on the kiosk as you drag.",
+      "Presets for Flat, Bass Boost, Vocal, Treble Boost and Warm, plus Reset to flat. The EQ button shows which preset the kiosk is on, or Custom.",
+      "The same equaliser is on the Music tab of a kiosk's Settings.",
+      "Only the music changes. Audio clips and announcements play as they are.",
+      "Each kiosk keeps its own equaliser, also when it's offline or restarts. Kiosks need version 1.0.48 or later; older ones apply it once they update."
     ]
   }
 ]

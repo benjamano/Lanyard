@@ -56,6 +56,12 @@ public class Client : ICompanyOwned
     public string? PreferredAudioDeviceId { get; set; }
     public string? PreferredAudioDeviceName { get; set; }
 
+    // The music equaliser, in dB (-12 to +12, 0 is flat). Only ClientService.SetClientEqualiserAsync
+    // writes these, so a stale Client written back by UpdateClientAsync can't undo a change.
+    public int EqBassDb { get; set; }
+    public int EqMidDb { get; set; }
+    public int EqTrebleDb { get; set; }
+
     // The Velopack version the kiosk said it was running when it last connected. Null means it
     // has never reported one - every client older than 1.0.41, which doesn't send it. Kept when
     // a connection arrives without a version, so an old build reconnecting can't blank it.

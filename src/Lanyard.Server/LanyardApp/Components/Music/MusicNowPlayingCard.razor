@@ -75,6 +75,7 @@
         <div class="music-now-playing-footer">
             <MusicVolume ClientId="Snapshot.ClientId" Volume="Snapshot.Volume" Disabled="@(!CanControl)" />
             <div class="music-now-playing-chips">
+                <MusicEqualiserChip ClientId="Snapshot.ClientId" KioskName="@KioskName" Disabled="@(!CanControl)" />
                 <MusicScheduleStatusChip ClientId="Snapshot.ClientId" AllowResume="CanControl" />
                 <AudioClipNowPlayingChip ClientId="Snapshot.ClientId" />
             </div>

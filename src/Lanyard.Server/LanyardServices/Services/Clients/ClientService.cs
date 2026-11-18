@@ -6,9 +6,11 @@ using Lanyard.Infrastructure.DTO.Dmx;
 using Lanyard.Infrastructure.DTO.VideoDevices;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.Models.Dmx;
+using Lanyard.Shared.Audio;
 using Lanyard.Shared.Contracts;
 using Lanyard.Shared.DTO;
 using Lanyard.Shared.Enum;
+using Lanyard.Shared.SignalR;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -165,6 +167,12 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
             // owned by MusicScheduleEngine.
             entry.Property(x => x.LocationId).IsModified = false;
             entry.Property(x => x.MusicScheduleOverrideUntilUtc).IsModified = false;
+
+            // And the equaliser, owned by SetClientEqualiserAsync: the Music page changes it live
+            // while a settings dialog may be holding an older copy of the client.
+            entry.Property(x => x.EqBassDb).IsModified = false;
+            entry.Property(x => x.EqMidDb).IsModified = false;
+            entry.Property(x => x.EqTrebleDb).IsModified = false;
 
             await ctx.SaveChangesAsync();
 
@@ -1206,6 +1214,96 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
             return Result<bool>.Fail(ex.Message);
         }
     }
+
+    public async Task<Result<ClientEqualiserStateDTO>> GetClientEqualiserAsync(Guid clientId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Client? client = await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.Id == clientId)
+                .FirstOrDefaultAsync();
+
+            if (client == null)
+            {
+                return Result<ClientEqualiserStateDTO>.Fail("Client not found for the given client ID.");
+            }
+
+            Result<bool> connectedResult = await IsClientConnectedAsync(clientId);
+
+            return Result<ClientEqualiserStateDTO>.Ok(ToEqualiserState(client, connectedResult.IsSuccess && connectedResult.Data));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading the equaliser for client {ClientId}", clientId);
+            return Result<ClientEqualiserStateDTO>.Fail(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Saves the kiosk's music equaliser (clamped to +/-12 dB) and sends it straight to the kiosk if
+    /// it's connected. The returned state says whether it's playing with it now, or will on reconnect
+    /// or after an update.
+    /// </summary>
+    public async Task<Result<ClientEqualiserStateDTO>> SetClientEqualiserAsync(Guid clientId, MusicEqualiserSettings settings)
+    {
+        try
+        {
+            MusicEqualiserSettings clamped = settings.Clamp();
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Client? client = await ctx.Clients
+                .TagWithCallSite()
+                .Where(x => x.Id == clientId)
+                .FirstOrDefaultAsync();
+
+            if (client == null)
+            {
+                return Result<ClientEqualiserStateDTO>.Fail("Client not found for the given client ID.");
+            }
+
+            client.EqBassDb = clamped.BassDb;
+            client.EqMidDb = clamped.MidDb;
+            client.EqTrebleDb = clamped.TrebleDb;
+
+            await ctx.SaveChangesAsync();
+
+            _logger.LogInformation("Set music equaliser for client {ClientId}: bass {BassDb} dB, mid {MidDb} dB, treble {TrebleDb} dB", clientId, clamped.BassDb, clamped.MidDb, clamped.TrebleDb);
+
+            Result<bool> connectedResult = await IsClientConnectedAsync(clientId);
+            bool connected = connectedResult.IsSuccess && connectedResult.Data && !string.IsNullOrEmpty(client.MostRecentConnectionId);
+
+            ClientEqualiserStateDTO state = ToEqualiserState(client, connected);
+
+            // An outdated kiosk has no handler for it, so don't bother sending; it gets the stored
+            // values on its first connect after updating.
+            if (state.Status == EqualiserApplyStatus.Applied)
+            {
+                await _hubContext.Clients.Client(client.MostRecentConnectionId!).SendAsync(ClientHubMethods.ReceiveEqualiserSettings, clamped);
+            }
+
+            return Result<ClientEqualiserStateDTO>.Ok(state);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting the music equaliser for client {ClientId}", clientId);
+            return Result<ClientEqualiserStateDTO>.Fail(ex.Message);
+        }
+    }
+
+    private static ClientEqualiserStateDTO ToEqualiserState(Client client, bool connected) => new()
+    {
+        ClientId = client.Id,
+        ClientName = client.Name,
+        Settings = new MusicEqualiserSettings(client.EqBassDb, client.EqMidDb, client.EqTrebleDb),
+        IsConnected = connected,
+        IsSupported = MusicEqualiserSettings.IsSupportedBy(client.ReportedClientVersion),
+        ReportedVersion = client.ReportedClientVersion
+    };
 
     public async Task<Result<IEnumerable<string>>> GetAllActiveVideoDeviceNamesAsync()
     {

@@ -19,7 +19,7 @@ namespace Lanyard.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.11")
+                .HasAnnotation("ProductVersion", "10.0.15")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -978,6 +978,15 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Property<DateTime>("CreateDate")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("EqBassDb")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EqMidDb")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EqTrebleDb")
+                        .HasColumnType("integer");
 
                     b.Property<int?>("LastAuthMethod")
                         .HasColumnType("integer");
@@ -7088,7 +7097,9 @@ namespace Lanyard.Infrastructure.Migrations
 
                             b1.ToTable("AspNetUserPasskeys");
 
-                            b1.ToJson("Data");
+                            b1
+                                .ToJson("Data")
+                                .HasColumnType("jsonb");
 
                             b1.WithOwner()
                                 .HasForeignKey("IdentityUserPasskeyCredentialId");
