@@ -19,8 +19,14 @@ public static partial class PartyTypeNormalizer
     // text is the canonical or any of its variants.
     private static readonly (string Canonical, string[] Variants)[] Groups =
     [
-        // Confirmed by Ben: the non-laser play + inflatable hire goes by both names.
-        ("Play & Inflatable Exclusive Hire", ["Play and Inflatable Private Hire"]),
+        // Groupings confirmed by Ben. Most of the stray names are just different wording for the
+        // same party or private hire. The matching is loose (case, spaces, punctuation, "&"/"and",
+        // "Lazer"/"Laser"), so each variant below only needs listing once.
+        ("Play Party", ["Adventure Play Party"]),
+        ("Play and Laser Party", ["Adventure Play and Laser Party"]),
+        ("Play & Inflatable Exclusive Hire", ["Play and Inflatable Private Hire", "Play and Inflatable Party"]),
+        ("Play, Inflatable & Laser Tag Exclusive Hire", ["Lazer, Play and Inflatable Private Hire", "Lazer, Play and Inflatable Party"]),
+        ("1 Hour Laser Tag Private Hire", ["1 Hour Lazer Tag Private Hire & Soft Play"]),
     ];
 
     private static readonly Dictionary<string, string> AliasByKey = BuildAliasIndex();
