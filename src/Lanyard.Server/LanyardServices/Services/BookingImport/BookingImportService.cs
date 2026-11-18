@@ -119,8 +119,21 @@ public sealed class BookingImportService : IBookingImportService
                 return Result<BookingImportSettingsView>.Fail("Enter the Just Step Online email and password before switching import on.");
             }
 
+            if (input.FrequencyHours is < BookingImportSchedule.MinFrequencyHours or > BookingImportSchedule.MaxFrequencyHours)
+            {
+                return Result<BookingImportSettingsView>.Fail("Import frequency must be between 1 and 24 hours.");
+            }
+
+            if (input.ActiveStartHour is < 0 or > 23 || input.ActiveEndHour is < 1 or > 24 || input.ActiveEndHour <= input.ActiveStartHour)
+            {
+                return Result<BookingImportSettingsView>.Fail("The 'run between' hours must be a valid daytime window (start before end).");
+            }
+
             existing.Enabled = input.Enabled;
             existing.Username = username;
+            existing.FrequencyHours = input.FrequencyHours;
+            existing.ActiveStartHour = input.ActiveStartHour;
+            existing.ActiveEndHour = input.ActiveEndHour;
             existing.UpdateDate = _timeProvider.GetUtcNow().UtcDateTime;
             existing.UpdatedByUserId = actingUserId;
 
@@ -484,8 +497,10 @@ public sealed class BookingImportService : IBookingImportService
 
     private static BookingImportSettingsView ToView(BookingImportSettings? settings, int locationId) =>
         settings is null
-            ? new BookingImportSettingsView(locationId, false, string.Empty, false, null)
-            : new BookingImportSettingsView(locationId, settings.Enabled, settings.Username, settings.HasPassword, settings.UpdateDate);
+            ? new BookingImportSettingsView(locationId, false, string.Empty, false,
+                BookingImportSchedule.DefaultFrequencyHours, BookingImportSchedule.DefaultActiveStartHour, BookingImportSchedule.DefaultActiveEndHour, null)
+            : new BookingImportSettingsView(locationId, settings.Enabled, settings.Username, settings.HasPassword,
+                settings.FrequencyHours, settings.ActiveStartHour, settings.ActiveEndHour, settings.UpdateDate);
 
     private static BookingImportRunView ToView(BookingImportRun run) =>
         new(run.Id, run.LocationId, run.StartedAtUtc, run.CompletedAtUtc, run.Status, run.Trigger,

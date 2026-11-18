@@ -11,6 +11,9 @@ public sealed record BookingImportSettingsView(
     bool Enabled,
     string Username,
     bool HasPassword,
+    int FrequencyHours,
+    int ActiveStartHour,
+    int ActiveEndHour,
     DateTime? UpdateDate);
 
 // A saved change from the import page. NewPassword is null/blank to keep the stored one.
@@ -18,7 +21,10 @@ public sealed record BookingImportSettingsInput(
     int LocationId,
     bool Enabled,
     string Username,
-    string? NewPassword);
+    string? NewPassword,
+    int FrequencyHours,
+    int ActiveStartHour,
+    int ActiveEndHour);
 
 // One run for the history list.
 public sealed record BookingImportRunView(

@@ -8,17 +8,21 @@ using Microsoft.Extensions.Logging;
 
 namespace Lanyard.Application.Services.BookingImport;
 
-// Every five minutes, imports party bookings for each location that has it switched on, across all
-// active non-demo companies. Each location is isolated: one bad sign-in logs a failed run and raises
-// its own alert, the rest still import. Runs as the system tenant and resolves the scoped import
-// service per tick.
+// Wakes every so often and imports party bookings for each location that is due one: switched on,
+// inside its allowed hours (so it rests overnight), and whose interval has elapsed since its last
+// run. The per-location frequency and hours are set on the Booking Import page; the tick here is
+// just how often the service checks. Each location is isolated: one bad sign-in logs a failed run
+// and raises its own alert, the rest still import. Runs as the system tenant.
 public sealed class JustStepImportHostedService(
     ISystemDbContextFactory contextFactory,
     IServiceScopeFactory scopeFactory,
     TimeProvider timeProvider,
     ILogger<JustStepImportHostedService> logger) : BackgroundService
 {
-    private static readonly TimeSpan SweepInterval = TimeSpan.FromMinutes(5);
+    // How often the service checks for due locations. The real cadence is each location's own
+    // frequency (default hourly); this just needs to be fine enough to notice an interval elapsing
+    // and an active-hours boundary passing.
+    private static readonly TimeSpan SweepInterval = TimeSpan.FromMinutes(15);
 
     // Let the app finish starting before reaching out to an external site.
     private static readonly TimeSpan StartupDelay = TimeSpan.FromMinutes(2);
@@ -59,24 +63,51 @@ public sealed class JustStepImportHostedService(
         _logger.LogInformation("JustStepImportHostedService stopped");
     }
 
+    private sealed record Candidate(int CompanyId, int LocationId, int FrequencyHours, int ActiveStartHour, int ActiveEndHour);
+
     // One pass. Public so tests can run it without the timer. Returns how many locations it imported for.
     public async Task<int> RunSweepAsync(CancellationToken cancellationToken = default)
     {
+        DateTime nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
+        DateTime venueLocalNow = RotaTime.ToVenueLocal(nowUtc);
+
         List<(int CompanyId, int LocationId)> targets;
 
         await using (ApplicationDbContext ctx = await _contextFactory.CreateDbContextAsync(cancellationToken))
         {
-            var rows = await (
+            List<Candidate> candidates = await (
                     from setting in ctx.BookingImportSettings
                     join location in ctx.Locations on setting.LocationId equals location.Id
                     join company in ctx.Companies on location.CompanyId equals company.Id
                     where setting.Enabled && location.IsActive && company.IsActive && !company.IsDemo
-                    select new { location.CompanyId, setting.LocationId })
+                    select new Candidate(location.CompanyId, setting.LocationId, setting.FrequencyHours, setting.ActiveStartHour, setting.ActiveEndHour))
                 .AsNoTracking()
                 .TagWithCallSite()
                 .ToListAsync(cancellationToken);
 
-            targets = [.. rows.Select(x => (x.CompanyId, x.LocationId))];
+            if (candidates.Count == 0)
+            {
+                return 0;
+            }
+
+            // The most recent run for each candidate location, to work out whether its interval has elapsed.
+            List<int> locationIds = [.. candidates.Select(x => x.LocationId)];
+            Dictionary<int, DateTime> lastRun = await ctx.BookingImportRuns
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => locationIds.Contains(x.LocationId))
+                .GroupBy(x => x.LocationId)
+                .Select(g => new { LocationId = g.Key, Last = g.Max(x => x.StartedAtUtc) })
+                .ToDictionaryAsync(x => x.LocationId, x => x.Last, cancellationToken);
+
+            targets =
+            [
+                .. candidates
+                    .Where(c => BookingImportSchedule.IsDue(nowUtc, venueLocalNow,
+                        lastRun.TryGetValue(c.LocationId, out DateTime last) ? last : null,
+                        c.FrequencyHours, c.ActiveStartHour, c.ActiveEndHour))
+                    .Select(c => (c.CompanyId, c.LocationId))
+            ];
         }
 
         if (targets.Count == 0)

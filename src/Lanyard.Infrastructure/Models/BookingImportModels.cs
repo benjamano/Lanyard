@@ -29,6 +29,13 @@ namespace Lanyard.Infrastructure.Models
         // The password, encrypted with IDataProtector. Empty = none set yet.
         public string PasswordProtected { get; set; } = string.Empty;
 
+        // How often the background job imports, in hours (1 = hourly), and the venue-local hours it is
+        // allowed to run between - so it doesn't poll Just Step overnight. The window is [start, end):
+        // the default 7..23 runs 07:00-22:59 and rests 23:00-06:59. "Run now" ignores both.
+        public int FrequencyHours { get; set; } = 1;
+        public int ActiveStartHour { get; set; } = 7;
+        public int ActiveEndHour { get; set; } = 23;
+
         public DateTime? UpdateDate { get; set; }
         public string? UpdatedByUserId { get; set; }
 

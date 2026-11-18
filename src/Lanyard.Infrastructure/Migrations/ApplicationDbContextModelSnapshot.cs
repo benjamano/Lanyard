@@ -671,11 +671,20 @@ namespace Lanyard.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("ActiveEndHour")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ActiveStartHour")
+                        .HasColumnType("integer");
+
                     b.Property<int>("CompanyId")
                         .HasColumnType("integer");
 
                     b.Property<bool>("Enabled")
                         .HasColumnType("boolean");
+
+                    b.Property<int>("FrequencyHours")
+                        .HasColumnType("integer");
 
                     b.Property<int>("LocationId")
                         .HasColumnType("integer");

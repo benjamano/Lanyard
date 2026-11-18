@@ -61,6 +61,22 @@
     flex-wrap: wrap;
 }
 
+.booking-import-subhead {
+    margin: 6px 0 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.booking-import-hours {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.booking-import-hours > * {
+    flex: 1 1 140px;
+}
+
 .runs-head {
     display: flex;
     align-items: center;

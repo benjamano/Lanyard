@@ -57,7 +57,7 @@ public class BookingImportServiceTests
     private static async Task EnableImportAsync(BookingImportService service, Location location)
     {
         Result<BookingImportSettingsView> saved = await service.SaveSettingsAsync(SchedulingTestHelpers.AdminScope,
-            new BookingImportSettingsInput(location.Id, true, "venue@example.com", "secret-password"), ActingUser);
+            new BookingImportSettingsInput(location.Id, true, "venue@example.com", "secret-password", 1, 7, 23), ActingUser);
 
         Assert.IsTrue(saved.IsSuccess, saved.Error);
     }
@@ -85,6 +85,26 @@ public class BookingImportServiceTests
     }
 
     [TestMethod]
+    public async Task SaveSettings_PersistsScheduleAndRejectsABadWindow()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (_, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        (BookingImportService service, _, _) = GetService(options);
+
+        Result<BookingImportSettingsView> saved = await service.SaveSettingsAsync(SchedulingTestHelpers.AdminScope,
+            new BookingImportSettingsInput(location.Id, false, "venue@example.com", "pw", 2, 8, 22), ActingUser);
+        Assert.IsTrue(saved.IsSuccess, saved.Error);
+        Assert.AreEqual(2, saved.Data!.FrequencyHours);
+        Assert.AreEqual(8, saved.Data.ActiveStartHour);
+        Assert.AreEqual(22, saved.Data.ActiveEndHour);
+
+        // End before start is not a valid daytime window.
+        Result<BookingImportSettingsView> bad = await service.SaveSettingsAsync(SchedulingTestHelpers.AdminScope,
+            new BookingImportSettingsInput(location.Id, false, "venue@example.com", null, 1, 20, 6), ActingUser);
+        Assert.IsFalse(bad.IsSuccess);
+    }
+
+    [TestMethod]
     public async Task SaveSettings_CannotEnableWithoutCredentials()
     {
         DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
@@ -92,7 +112,7 @@ public class BookingImportServiceTests
         (BookingImportService service, _, _) = GetService(options);
 
         Result<BookingImportSettingsView> result = await service.SaveSettingsAsync(SchedulingTestHelpers.AdminScope,
-            new BookingImportSettingsInput(location.Id, true, "", null), ActingUser);
+            new BookingImportSettingsInput(location.Id, true, "", null, 1, 7, 23), ActingUser);
 
         Assert.IsFalse(result.IsSuccess);
     }

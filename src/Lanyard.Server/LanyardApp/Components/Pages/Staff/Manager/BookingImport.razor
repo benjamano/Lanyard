@@ -53,9 +53,23 @@
                 <FluentTextInput @bind-Value="_username" Label="Just Step Online email" Width="100%"
                                  Placeholder="name@yourvenue.co.uk" autocomplete="off" />
 
-                <FluentTextInput @bind-Value="_newPassword" TextFieldType="TextFieldType.Password" Width="100%"
+                <FluentTextInput @bind-Value="_newPassword" TextInputType="TextInputType.Password" Width="100%"
                                  Label="@(settings.HasPassword ? "New password (leave blank to keep the saved one)" : "Password")"
                                  Placeholder="@(settings.HasPassword ? "A password is saved" : "")" autocomplete="new-password" />
+
+                <h3 class="booking-import-subhead">Schedule</h3>
+
+                <FluentNumberInput TValue="int" @bind-Value="_frequencyHours" Label="Import every (hours)"
+                                   Min="1" Max="24" Step="1" Width="100%" />
+
+                <div class="booking-import-hours">
+                    <FluentNumberInput TValue="int" @bind-Value="_startHour" Label="Only run between (from)"
+                                       Min="0" Max="23" Step="1" Width="100%" />
+                    <FluentNumberInput TValue="int" @bind-Value="_endHour" Label="and (to)"
+                                       Min="1" Max="24" Step="1" Width="100%" />
+                </div>
+
+                <p class="settings-hint">@ScheduleSummary Times are this venue's local time. "Run now" ignores the schedule.</p>
 
                 <div class="booking-import-actions">
                     <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" Loading="@isSaving" OnClick="@SaveAsync">
@@ -160,6 +174,12 @@
     private bool _enabled;
     private string _username = string.Empty;
     private string _newPassword = string.Empty;
+    private int _frequencyHours = 1;
+    private int _startHour = 7;
+    private int _endHour = 23;
+
+    private string ScheduleSummary =>
+        $"Imports {(_frequencyHours == 1 ? "once an hour" : $"every {_frequencyHours} hours")}, between {_startHour:00}:00 and {_endHour:00}:00, and rests the other hours.";
 
     private bool isSaving;
     private bool isTesting;
@@ -224,6 +244,9 @@
         settings = result.Data;
         _enabled = settings.Enabled;
         _username = settings.Username;
+        _frequencyHours = settings.FrequencyHours;
+        _startHour = settings.ActiveStartHour;
+        _endHour = settings.ActiveEndHour;
         _newPassword = string.Empty;
         await LoadRunsAsync(location);
     }
@@ -262,7 +285,8 @@
 
         try
         {
-            BookingImportSettingsInput input = new(location, _enabled, _username, string.IsNullOrWhiteSpace(_newPassword) ? null : _newPassword);
+            BookingImportSettingsInput input = new(location, _enabled, _username,
+                string.IsNullOrWhiteSpace(_newPassword) ? null : _newPassword, _frequencyHours, _startHour, _endHour);
             Result<BookingImportSettingsView> result = await _bookingImportService.SaveSettingsAsync(scope, input, actingUser.Data);
 
             if (!result.IsSuccess || result.Data is null)
@@ -274,6 +298,9 @@
             settings = result.Data;
             _enabled = settings.Enabled;
             _username = settings.Username;
+            _frequencyHours = settings.FrequencyHours;
+            _startHour = settings.ActiveStartHour;
+            _endHour = settings.ActiveEndHour;
             _newPassword = string.Empty;
             _toastService.ShowSuccess("Booking import settings saved.");
         }
