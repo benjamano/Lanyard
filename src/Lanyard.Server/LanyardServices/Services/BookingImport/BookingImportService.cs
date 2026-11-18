@@ -393,7 +393,7 @@ public sealed class BookingImportService : IBookingImportService
                 // without the run time, so re-importing the same figures doesn't look like a change.
                 booking!.StartUtc = startUtc;
                 booking.EndUtc = endUtc;
-                booking.PartyType = dto.PartyType;
+                booking.PartyType = PartyTypeNormalizer.Normalize(dto.PartyType);
                 booking.ChildName = dto.ChildName;
                 booking.ChildAgeTurning = AgeTurning(dto.PartyDate, dto.ChildDob);
                 booking.ContactName = dto.ContactName;

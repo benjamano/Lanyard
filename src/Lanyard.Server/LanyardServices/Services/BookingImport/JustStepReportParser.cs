@@ -68,7 +68,7 @@ public static partial class JustStepReportParser
             (TimeOnly? start, TimeOnly? end) = ParseTimes(cells[ColTime]);
             (string childName, DateOnly? dob) = ParseChild(cells[ColChild]);
 
-            string partyType = !string.IsNullOrWhiteSpace(cells[ColType]) ? cells[ColType] : cells[ColTime];
+            string partyType = PickPartyType(cells[ColTime], cells[ColType]);
 
             bookings.Add(new ExternalBookingDto(
                 Ref: cells[ColRef],
@@ -91,6 +91,22 @@ public static partial class JustStepReportParser
     }
 
     private static string Collapse(string? value) => WhitespaceRun().Replace(value ?? string.Empty, " ").Trim();
+
+    // The party-type source. Column 6 is "Party Type / Comments", so it sometimes carries a long
+    // booking comment (dates, "Paid", "Confirmed", guest counts) rather than just the type. When it
+    // looks like that, the "Party Time" column (the slot name + time) is the cleaner type, so use it.
+    private static string PickPartyType(string slotColumn, string typeColumn)
+    {
+        if (string.IsNullOrWhiteSpace(typeColumn) || (LooksLikeComment(typeColumn) && !string.IsNullOrWhiteSpace(slotColumn)))
+        {
+            return slotColumn;
+        }
+
+        return typeColumn;
+    }
+
+    private static bool LooksLikeComment(string value) =>
+        value.Length > 60 || CommentWords().IsMatch(value);
 
     // "Lewis Kelley,2016-01-02,Boy" -> name + DOB. The 1970-01-01 placeholder means "not entered".
     private static (string Name, DateOnly? Dob) ParseChild(string cell)
@@ -192,6 +208,9 @@ public static partial class JustStepReportParser
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex WhitespaceRun();
+
+    [GeneratedRegex(@"\b(paid|confirmed|provisional|removed|deposit|balance|number of guest|payment)\b|\b20\d{2}\b", RegexOptions.IgnoreCase)]
+    private static partial Regex CommentWords();
 
     [GeneratedRegex(@"[^0-9.\-]")]
     private static partial Regex MoneyChars();

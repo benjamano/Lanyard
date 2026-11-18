@@ -105,6 +105,30 @@ public class JustStepReportParserTests
     }
 
     [TestMethod]
+    public void Parse_UsesSlotNameWhenTheTypeColumnIsAComment()
+    {
+        // Column 6 ("Party Type / Comments") carries a long booking comment; the slot column has the
+        // clean type, so that should win.
+        const string html = """
+            <table><tbody>
+            <tr><td colspan="12">Friday   02-01-2026</td></tr>
+            <tr>
+              <td>9001</td><td>Play &amp; Inflatable Exclusive hire 6:30PM - 08:30PM</td><td>Sam</td><td>07000000009</td>
+              <td>Child,2019-01-01,</td>
+              <td>Play and Inflatable Private Hire Confirmed 2026-11-10 17:12: 50.00 Paid on a Provisional Booking</td>
+              <td>50</td><td>350.00</td><td>0.00</td><td>100.00</td><td>250.00</td><td>Confirmed</td>
+            </tr>
+            </tbody></table>
+            """;
+
+        ExternalBookingDto booking = JustStepReportParser.Parse(html).Single();
+
+        // Raw slot text (the import normalises it to the canonical type afterwards).
+        StringAssert.Contains(booking.PartyType, "Exclusive hire");
+        Assert.IsFalse(booking.PartyType.Contains("Paid"), "The comment should not leak into the party type.");
+    }
+
+    [TestMethod]
     public void Parse_EmptyOrJunkHtml_ReturnsNothing()
     {
         Assert.AreEqual(0, JustStepReportParser.Parse(string.Empty).Count);
