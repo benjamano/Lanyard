@@ -5,6 +5,8 @@ using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Lanyard.Application.Services.StaffDocuments;
 
@@ -15,10 +17,12 @@ namespace Lanyard.Application.Services.StaffDocuments;
 // the person themselves. The reminder sweep methods at the bottom run as the system and take no scope.
 public class StaffDocumentService(
     IDbContextFactory<ApplicationDbContext> factory,
-    IFileService fileService) : IStaffDocumentService
+    IFileService fileService,
+    ILogger<StaffDocumentService>? logger = null) : IStaffDocumentService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly IFileService _fileService = fileService;
+    private readonly ILogger<StaffDocumentService> _logger = logger ?? NullLogger<StaffDocumentService>.Instance;
 
     public async Task<Result<StaffDocument>> UploadStaffDocumentAsync(LocationScope scope, string userId, Guid documentTypeId, IFormFile file, DateTime? expiryDate, DateTime? reminderDate, string uploadedByUserId, CancellationToken cancellationToken)
     {
@@ -104,7 +108,8 @@ public class StaffDocumentService(
         }
         catch (Exception ex)
         {
-            return Result<StaffDocument>.Fail($"Failed to upload staff document: {ex.Message}");
+            _logger.LogError(ex, "Failed to upload staff document");
+            return Result<StaffDocument>.Fail("Failed to upload staff document.");
         }
     }
 
@@ -132,7 +137,8 @@ public class StaffDocumentService(
         }
         catch (Exception ex)
         {
-            return Result<List<StaffDocument>>.Fail($"Failed to retrieve staff documents: {ex.Message}");
+            _logger.LogError(ex, "Failed to retrieve staff documents");
+            return Result<List<StaffDocument>>.Fail("Failed to retrieve staff documents.");
         }
     }
 
@@ -164,7 +170,8 @@ public class StaffDocumentService(
         }
         catch (Exception ex)
         {
-            return Result<FileContent>.Fail($"Failed to open staff document: {ex.Message}");
+            _logger.LogError(ex, "Failed to open staff document");
+            return Result<FileContent>.Fail("Failed to open staff document.");
         }
     }
 
@@ -199,7 +206,8 @@ public class StaffDocumentService(
         }
         catch (Exception ex)
         {
-            return Result<bool>.Fail($"Failed to delete staff document: {ex.Message}");
+            _logger.LogError(ex, "Failed to delete staff document");
+            return Result<bool>.Fail("Failed to delete staff document.");
         }
     }
 
@@ -231,7 +239,8 @@ public class StaffDocumentService(
         }
         catch (Exception ex)
         {
-            return Result<List<StaffDocument>>.Fail($"Failed to retrieve documents with pending reminders: {ex.Message}");
+            _logger.LogError(ex, "Failed to retrieve documents with pending reminders");
+            return Result<List<StaffDocument>>.Fail("Failed to retrieve documents with pending reminders.");
         }
     }
 
@@ -271,7 +280,8 @@ public class StaffDocumentService(
         }
         catch (Exception ex)
         {
-            return Result<bool>.Fail($"Failed to mark reminder as sent: {ex.Message}");
+            _logger.LogError(ex, "Failed to mark reminder as sent");
+            return Result<bool>.Fail("Failed to mark reminder as sent.");
         }
     }
 }

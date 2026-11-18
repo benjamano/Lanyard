@@ -938,6 +938,10 @@
     "details": [
       "Staff documents such as right-to-work checks, ID and certificates no longer appear in File Manager, and kiosks and other staff can't download them. Only Admins and the person's Managers can see, upload or delete them, from the Documents tab on the person's page. Documents uploaded before this change are hidden the same way.",
       "Erasing a person's data now also deletes their staff documents and the files behind them. Documents they uploaded for other people are kept.",
+      "File Manager only accepts images, video, audio, PDFs, office documents, text, CSV, JSON and ZIP files, up to 100 MB each. Other types, such as programs or web pages, are refused.",
+      "Deleting a file no longer loses it if something goes wrong part way: the file is only removed from storage once it's gone from Lanyard. Moving a file out of a folder and then deleting the folder no longer deletes the moved file.",
+      "A file or folder can't be uploaded into, moved into or created inside another company's folder, and an automation rule can't be set to start from another company's kiosk.",
+      "Error messages from File Manager and staff documents no longer show technical details.",
       "Parties > Printouts and party documents: the PDFs are no longer kept by the browser, so Preview saved version and each party's printouts always show what's saved now. Before, some browsers (Firefox especially) kept showing the old artwork, even after a reload.",
       "Parties > Printouts: Save now waits until new artwork has finished uploading. Before, saving during the upload kept the old artwork.",
       "On the Music page, the new EQ button next to the volume opens the kiosk's equaliser: Bass, Mid and Treble sliders from -12 to +12 dB, with the change playing on the kiosk as you drag.",

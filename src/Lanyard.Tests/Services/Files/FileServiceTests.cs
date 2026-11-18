@@ -9,6 +9,7 @@ using Moq;
 using Lanyard.Application.Services;
 using Microsoft.EntityFrameworkCore;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Application.Services.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Hosting;
@@ -581,6 +582,140 @@ public class FileServiceTests
 
         Assert.IsTrue(result.Success, result.Error);
         Assert.IsTrue((await FindFileFreshAsync(result.Data!.Id))!.IsRestricted);
+    }
+
+    private static Mock<IFormFile> FormFile(string name, string claimedContentType, long? length = null)
+    {
+        Mock<IFormFile> fileMock = new();
+        byte[] bytes = [1, 2, 3, 4, 5];
+        fileMock.Setup(f => f.FileName).Returns(name);
+        fileMock.Setup(f => f.Length).Returns(length ?? bytes.Length);
+        fileMock.Setup(f => f.ContentType).Returns(claimedContentType);
+        fileMock.Setup(f => f.OpenReadStream()).Returns(() => new MemoryStream(bytes));
+        fileMock.Setup(f => f.CopyToAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .Returns((Stream s, CancellationToken ct) => new MemoryStream(bytes).CopyToAsync(s, ct));
+        return fileMock;
+    }
+
+    // A FileService whose contexts are tenant-filtered to one company, like a signed-in caller's.
+    private FileService ServiceForCompany(int companyId)
+    {
+        Mock<IDbContextFactory<ApplicationDbContext>> factory = new();
+        factory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new ApplicationDbContext(_options, new FixedTenantProvider(companyId)));
+        return new FileService(factory.Object, _currentUserAccessorMock.Object, _analysisQueueMock.Object, _environmentMock.Object);
+    }
+
+    [TestMethod]
+    [DataRow("payload.exe", "application/octet-stream")]
+    [DataRow("page.html", "text/html")]
+    [DataRow("script.js", "text/javascript")]
+    [DataRow("no-extension", "image/png")]
+    public async Task UploadFileAsync_RefusesTypesOutsideTheAllowList(string name, string claimedContentType)
+    {
+        Result<FileMetadata> result = await _fileService.UploadFileAsync(FormFile(name, claimedContentType).Object, null, "user1", CancellationToken.None);
+
+        Assert.IsFalse(result.Success);
+        Assert.IsFalse(await _dbContext.FileMetadata.AnyAsync());
+    }
+
+    [TestMethod]
+    public async Task UploadFileAsync_RefusesAFileOverTheSizeLimit()
+    {
+        Result<FileMetadata> result = await _fileService.UploadFileAsync(
+            FormFile("huge.mp4", "video/mp4", FileUploadPolicy.MaxBytes + 1).Object, null, "user1", CancellationToken.None);
+
+        Assert.IsFalse(result.Success);
+        Assert.IsFalse(await _dbContext.FileMetadata.AnyAsync());
+    }
+
+    [TestMethod]
+    public async Task UploadFileAsync_StoresTheContentTypeOfTheExtension_NotWhatTheBrowserClaimed()
+    {
+        Result<FileMetadata> result = await _fileService.UploadFileAsync(FormFile("logo.png", "text/html").Object, null, "user1", CancellationToken.None);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual("image/png", (await FindFileFreshAsync(result.Data!.Id))!.ContentType);
+        File.Delete(result.Data.FilePath);
+    }
+
+    [TestMethod]
+    public async Task UploadAndCreateFolder_RefuseAnotherCompanysFolder()
+    {
+        Folder foreign = new() { Id = Guid.NewGuid(), Name = "Theirs", CompanyId = 2, CreatedAt = DateTime.UtcNow, IsActive = true };
+        Folder own = new() { Id = Guid.NewGuid(), Name = "Ours", CompanyId = 1, CreatedAt = DateTime.UtcNow, IsActive = true };
+        _dbContext.Folders.AddRange(foreign, own);
+        await _dbContext.SaveChangesAsync();
+
+        FileService companyOne = ServiceForCompany(1);
+
+        Assert.IsFalse((await companyOne.UploadFileAsync(FormFile("menu.pdf", "application/pdf").Object, foreign.Id, "user1", CancellationToken.None)).Success);
+        Assert.IsFalse((await companyOne.CreateFolderAsync("Inside theirs", foreign.Id, "user1", CancellationToken.None)).Success);
+
+        Result<FileMetadata> intoOwn = await companyOne.UploadFileAsync(FormFile("menu.pdf", "application/pdf").Object, own.Id, "user1", CancellationToken.None);
+        Assert.IsTrue(intoOwn.Success, intoOwn.Error);
+        File.Delete(intoOwn.Data!.FilePath);
+    }
+
+    [TestMethod]
+    public async Task DeleteAndMove_CannotReachAnotherCompanysFileOrFolder_AndTheBytesStay()
+    {
+        FileMetadata theirs = NewFile("theirs.pdf", null);
+        theirs.CompanyId = 2;
+        File.WriteAllBytes(theirs.FilePath, [1, 2, 3]);
+        FileMetadata ours = NewFile("ours.pdf", null);
+        ours.CompanyId = 1;
+        Folder theirFolder = new() { Id = Guid.NewGuid(), Name = "Theirs", CompanyId = 2, CreatedAt = DateTime.UtcNow, IsActive = true };
+        _dbContext.FileMetadata.AddRange(theirs, ours);
+        _dbContext.Folders.Add(theirFolder);
+        await _dbContext.SaveChangesAsync();
+
+        FileService companyOne = ServiceForCompany(1);
+
+        Assert.IsFalse((await companyOne.DeleteFileAsync(theirs.Id, CancellationToken.None)).Success);
+        Assert.IsFalse((await companyOne.MoveFileAsync(theirs.Id, null, CancellationToken.None)).Success);
+        Assert.IsFalse((await companyOne.MoveFileAsync(ours.Id, theirFolder.Id, CancellationToken.None)).Success, "Can't move a file into another company's folder");
+        Assert.IsFalse((await companyOne.DeleteFolderAsync(theirFolder.Id, CancellationToken.None)).Success);
+
+        Assert.IsTrue(File.Exists(theirs.FilePath), "The other company's bytes must not be touched");
+        Assert.IsNotNull(await FindFileFreshAsync(theirs.Id));
+        File.Delete(theirs.FilePath);
+    }
+
+    [TestMethod]
+    public async Task DeleteFolderAsync_RefusesAFolderWithContents()
+    {
+        Folder folder = new() { Id = Guid.NewGuid(), Name = "Full", CreatedAt = DateTime.UtcNow, IsActive = true };
+        Folder empty = new() { Id = Guid.NewGuid(), Name = "Child", ParentFolderId = folder.Id, CreatedAt = DateTime.UtcNow, IsActive = true };
+        _dbContext.Folders.AddRange(folder, empty);
+        _dbContext.FileMetadata.Add(NewFile("inside.pdf", folder.Id));
+        await _dbContext.SaveChangesAsync();
+
+        Assert.IsFalse((await _fileService.DeleteFolderAsync(folder.Id, CancellationToken.None)).Success);
+        Assert.IsTrue(await _dbContext.Folders.AnyAsync(x => x.Id == folder.Id));
+    }
+
+    // Moving a file changes its FolderId, not where its bytes are stored, so they still sit under
+    // the old folder's storage path. Deleting that folder used to wipe the path, file and all.
+    [TestMethod]
+    public async Task DeleteFolderAsync_LeavesTheBytesOfAFileMovedOutOfIt()
+    {
+        Result<Folder> folder = await _fileService.CreateFolderAsync("Temporary", null, "user1", CancellationToken.None);
+        Assert.IsTrue(folder.Success, folder.Error);
+
+        Result<FileMetadata> uploaded = await _fileService.UploadFileAsync(FormFile("poster.png", "image/png").Object, folder.Data!.Id, "user1", CancellationToken.None);
+        Assert.IsTrue(uploaded.Success, uploaded.Error);
+        Assert.IsTrue((await _fileService.MoveFileAsync(uploaded.Data!.Id, null, CancellationToken.None)).Success);
+
+        Result<bool> deleted = await _fileService.DeleteFolderAsync(folder.Data.Id, CancellationToken.None);
+
+        Assert.IsTrue(deleted.Success, deleted.Error);
+        Assert.IsTrue(File.Exists(uploaded.Data.FilePath), "The moved file's bytes must survive deleting its old folder");
+
+        Result<FileContent> opened = await _fileService.OpenFileContentAsync(uploaded.Data.Id, null, CancellationToken.None);
+        Assert.IsTrue(opened.Success, opened.Error);
+        await opened.Data!.DisposeAsync();
+        await _fileService.DeleteFileAsync(uploaded.Data.Id, CancellationToken.None);
     }
 
     private static FileMetadata NewFile(string name, Guid? folderId) => new()
