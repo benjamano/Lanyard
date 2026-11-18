@@ -950,5 +950,16 @@
       "Only the music changes. Audio clips and announcements play as they are.",
       "Each kiosk keeps its own equaliser, also when it's offline or restarts. Kiosks need version 1.0.48 or later; older ones apply it once they update."
     ]
+  },
+  {
+    "version": "1.4.24",
+    "releaseDate": "2026-11-18",
+    "summary": "Import party bookings automatically from Just Step Online.",
+    "details": [
+      "New Parties > Booking Import page (Admins): sign in to Just Step Online per location and Lanyard brings that venue's party bookings into Parties by itself, every few minutes.",
+      "Enter each location's Just Step Online email and password, switch import on, then use Test connection or Run now. The password is stored encrypted and never shown again.",
+      "Bookings are matched on their Just Step reference, so later runs update them in place instead of duplicating. Confirmed and provisional bookings both come in, with provisional ones marked.",
+      "Each import is listed on the page with its result and how many bookings came in. If an import can't run - a wrong password or the site being down - Admins and the location's Managers get one alert on Operations Alerts, which clears itself once an import succeeds again."
+    ]
   }
 ]

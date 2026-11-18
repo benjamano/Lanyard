@@ -82,6 +82,7 @@ public static class HelpRegistry
     public const string OperationsAlerts = "operations-alerts";
     public const string Insights = "insights";
     public const string Parties = "parties";
+    public const string BookingImport = "booking-import";
     public const string Feedback = "feedback";
 
     public static IReadOnlyList<HelpArea> Areas { get; } =
@@ -296,6 +297,19 @@ public static class HelpRegistry
             ["/manage/parties"],
             Roles: "Admin,Manager",
             Feature: CompanyFeature.Parties),
+
+        new(BookingImport,
+            "Booking Import",
+            "Bringing party bookings in automatically from Just Step Online, per location, and the record of each import run.",
+            HelpAudience.Admins,
+            () => new Icons.Regular.Size20.CloudArrowDown(),
+            [
+                new("setup", "Setting It Up"),
+                new("runs", "Import Runs & Alerts")
+            ],
+            ["/manage/booking-import"],
+            Roles: "Admin"),
+
         new(Feedback,
             "Lanyard Feedback",
             "Reading and replying to the thumbs and star ratings staff send about Lanyard.",

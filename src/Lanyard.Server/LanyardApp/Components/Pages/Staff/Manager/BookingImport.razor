@@ -1,0 +1,369 @@
+@page "/manage/booking-import"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+
+@using Lanyard.App.Components.BookingImport
+@using Lanyard.Application.Services.BookingImport
+@using Lanyard.Infrastructure.Enum
+@using Lanyard.Infrastructure.Models
+
+@inject IBookingImportService _bookingImportService
+
+<PageTitle>Booking import</PageTitle>
+
+<div class="booking-import">
+    <div class="booking-import-header">
+        <h1>Booking import</h1>
+
+        <div class="booking-import-tools">
+            @if (locationOptions.Count > 1)
+            {
+                <FluentSelect TOption="LocationOption" TValue="string" Items="@locationOptions" OptionText="@(x => x.Name)"
+                              OptionValue="@(x => x.Id.ToString())" Value="@locationId?.ToString()" ValueChanged="@OnLocationChanged"
+                              Label="Location" Width="260px" />
+            }
+
+            <HelpButton AreaKey="@HelpRegistry.BookingImport" Topic="setup" />
+        </div>
+    </div>
+
+    <p class="booking-import-intro">
+        Lanyard signs in to Just Step Online with the details below and brings this location's party bookings in
+        automatically, every few minutes. Each Just Step login covers one venue, so set up each location with its own.
+    </p>
+
+    @if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else if (settings is null || scope is null || locationId is not int location)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" HorizontalGap="8px">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else
+    {
+        <div class="booking-import-grid">
+            <section class="settings-card">
+                <h2>Just Step Online</h2>
+
+                <FluentSwitch @bind-Value="_enabled" Label="Import bookings for this location" />
+
+                <FluentTextInput @bind-Value="_username" Label="Just Step Online email" Width="100%"
+                                 Placeholder="name@yourvenue.co.uk" autocomplete="off" />
+
+                <FluentTextInput @bind-Value="_newPassword" TextFieldType="TextFieldType.Password" Width="100%"
+                                 Label="@(settings.HasPassword ? "New password (leave blank to keep the saved one)" : "Password")"
+                                 Placeholder="@(settings.HasPassword ? "A password is saved" : "")" autocomplete="new-password" />
+
+                <div class="booking-import-actions">
+                    <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" Loading="@isSaving" OnClick="@SaveAsync">
+                        Save
+                    </FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@isBusy" Loading="@isTesting" OnClick="@TestAsync">
+                        Test connection
+                    </FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@(isBusy || !_enabled || !settings.HasPassword)"
+                                  Loading="@isRunning" OnClick="@RunNowAsync" IconStart="@(new Icons.Regular.Size20.ArrowSync())">
+                        Run now
+                    </FluentButton>
+                </div>
+
+                @if (settings.UpdateDate is DateTime updated)
+                {
+                    <p class="settings-hint">Last changed @updated.ToString("d MMM yyyy HH:mm") UTC.</p>
+                }
+            </section>
+
+            <section class="settings-card">
+                <div class="runs-head">
+                    <h2>Import runs</h2>
+                    @if (LatestRun is BookingImportRunView latest)
+                    {
+                        <span class="runs-latest">
+                            @StatusIcon(latest.Status)
+                            <span>Last run @BookingImportDisplay.Ago(DateTime.UtcNow - latest.StartedAtUtc)</span>
+                        </span>
+                    }
+                </div>
+
+                @if (runs.Count == 0)
+                {
+                    <FluentText Style="color: var(--neutral-foreground-hint);">No imports have run for this location yet.</FluentText>
+                }
+                else
+                {
+                    <div class="runs-grid-wrapper">
+                        <FluentDataGrid Items="@runs.AsQueryable()" GridTemplateColumns="1.4fr 0.8fr 0.9fr 1.4fr 0.7fr" Class="runs-grid">
+                            <TemplateColumn Title="When">
+                                @context.StartedAtUtc.ToString("d MMM HH:mm") <span class="runs-utc">UTC</span>
+                            </TemplateColumn>
+                            <TemplateColumn Title="Trigger">
+                                @BookingImportDisplay.TriggerLabel(context.Trigger)
+                            </TemplateColumn>
+                            <TemplateColumn Title="Result">
+                                @StatusIcon(context.Status)
+                                <span class="runs-status-label">@BookingImportDisplay.StatusLabel(context.Status)</span>
+                            </TemplateColumn>
+                            <TemplateColumn Title="Bookings">
+                                @BookingImportDisplay.Counts(context)
+                                @if (!string.IsNullOrWhiteSpace(context.Error))
+                                {
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Info())" Color="Color.Error" Title="@context.Error" Class="runs-error-icon" />
+                                }
+                            </TemplateColumn>
+                            <TemplateColumn Title="Took">
+                                @(context.Duration is TimeSpan d ? $"{d.TotalSeconds:0.0}s" : "-")
+                            </TemplateColumn>
+                        </FluentDataGrid>
+                    </div>
+
+                    <div class="runs-phone-list">
+                        @foreach (BookingImportRunView run in runs)
+                        {
+                            <div class="runs-phone-item">
+                                <div class="runs-phone-top">
+                                    @StatusIcon(run.Status)
+                                    <span class="runs-phone-status">@BookingImportDisplay.StatusLabel(run.Status)</span>
+                                    <span class="runs-phone-when">@run.StartedAtUtc.ToString("d MMM HH:mm")</span>
+                                </div>
+                                <div class="runs-phone-meta">
+                                    <span>@BookingImportDisplay.TriggerLabel(run.Trigger)</span>
+                                    <span>@BookingImportDisplay.Counts(run)</span>
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(run.Error))
+                                {
+                                    <div class="runs-phone-error">@run.Error</div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </section>
+        </div>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "location")]
+    public int? LocationQuery { get; set; }
+
+    private record LocationOption(int Id, string Name, int CompanyId);
+
+    private LocationScope? scope;
+    private List<LocationOption> locationOptions = [];
+    private int? locationId;
+
+    private BookingImportSettingsView? settings;
+    private List<BookingImportRunView> runs = [];
+    private bool _enabled;
+    private string _username = string.Empty;
+    private string _newPassword = string.Empty;
+
+    private bool isSaving;
+    private bool isTesting;
+    private bool isRunning;
+    private bool isBusy => isSaving || isTesting || isRunning;
+    private string? loadError;
+
+    private BookingImportRunView? LatestRun => runs.Count > 0 ? runs[0] : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            loadError = $"Couldn't work out which location you're signed in to: {scopeResult.Error}";
+            return;
+        }
+
+        scope = scopeResult.Data;
+
+        Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsAsync();
+
+        locationOptions = locationsResult.IsSuccess && locationsResult.Data is not null
+            ? locationsResult.Data.OrderBy(l => l.GetDisplayName()).Select(l => new LocationOption(l.Id, l.GetDisplayName(), l.CompanyId)).ToList()
+            : [];
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        locationId = LocationQuery is int requested && locationOptions.Any(l => l.Id == requested)
+            ? requested
+            : scope.LocationId is int own && locationOptions.Any(l => l.Id == own)
+                ? own
+                : locationOptions.FirstOrDefault()?.Id;
+
+        if (locationId is not int location)
+        {
+            loadError = "There are no active locations to set up yet.";
+            return;
+        }
+
+        await LoadAsync(location);
+    }
+
+    private async Task LoadAsync(int location)
+    {
+        Result<BookingImportSettingsView> result = await _bookingImportService.GetSettingsAsync(scope!, location);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            loadError = result.Error;
+            return;
+        }
+
+        loadError = null;
+        settings = result.Data;
+        _enabled = settings.Enabled;
+        _username = settings.Username;
+        _newPassword = string.Empty;
+        await LoadRunsAsync(location);
+    }
+
+    private async Task LoadRunsAsync(int location)
+    {
+        Result<List<BookingImportRunView>> result = await _bookingImportService.GetHistoryAsync(scope!, location, 20);
+        runs = result.IsSuccess && result.Data is not null ? result.Data : [];
+    }
+
+    private void OnLocationChanged(string? value)
+    {
+        if (int.TryParse(value, out int id) && id != locationId)
+        {
+            settings = null;
+            _navigationManager.NavigateTo(_navigationManager.GetUriWithQueryParameter("location", id));
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (scope is null || settings is null || locationId is not int location)
+        {
+            return;
+        }
+
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || actingUser.Data is null)
+        {
+            _toastService.ShowError($"Couldn't work out who you are: {actingUser.Error}");
+            return;
+        }
+
+        isSaving = true;
+
+        try
+        {
+            BookingImportSettingsInput input = new(location, _enabled, _username, string.IsNullOrWhiteSpace(_newPassword) ? null : _newPassword);
+            Result<BookingImportSettingsView> result = await _bookingImportService.SaveSettingsAsync(scope, input, actingUser.Data);
+
+            if (!result.IsSuccess || result.Data is null)
+            {
+                _toastService.ShowError(result.Error ?? "Couldn't save the settings.");
+                return;
+            }
+
+            settings = result.Data;
+            _enabled = settings.Enabled;
+            _username = settings.Username;
+            _newPassword = string.Empty;
+            _toastService.ShowSuccess("Booking import settings saved.");
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task TestAsync()
+    {
+        if (scope is null || settings is null || locationId is not int location)
+        {
+            return;
+        }
+
+        isTesting = true;
+
+        try
+        {
+            Result<bool> result = await _bookingImportService.TestConnectionAsync(scope, location, _username, string.IsNullOrWhiteSpace(_newPassword) ? null : _newPassword);
+
+            if (result.IsSuccess && result.Data)
+            {
+                _toastService.ShowSuccess("Signed in to Just Step Online successfully.");
+            }
+            else
+            {
+                _toastService.ShowError(result.Error ?? "Couldn't sign in with those details.");
+            }
+        }
+        finally
+        {
+            isTesting = false;
+        }
+    }
+
+    private async Task RunNowAsync()
+    {
+        if (scope is null || locationId is not int location)
+        {
+            return;
+        }
+
+        isRunning = true;
+
+        try
+        {
+            Result<BookingImportRunView> result = await _bookingImportService.RunNowAsync(scope, location);
+
+            if (!result.IsSuccess || result.Data is null)
+            {
+                _toastService.ShowError(result.Error ?? "Couldn't run the import.");
+                return;
+            }
+
+            BookingImportRunView run = result.Data;
+
+            if (run.Status is BookingImportRunStatus.Success or BookingImportRunStatus.PartialSuccess or BookingImportRunStatus.NoChanges)
+            {
+                _toastService.ShowSuccess($"Import finished: {BookingImportDisplay.Counts(run)}.");
+            }
+            else
+            {
+                _toastService.ShowError($"Import {BookingImportDisplay.StatusLabel(run.Status).ToLowerInvariant()}: {run.Error}");
+            }
+
+            await LoadRunsAsync(location);
+        }
+        finally
+        {
+            isRunning = false;
+        }
+    }
+
+    private RenderFragment StatusIcon(BookingImportRunStatus status) => builder =>
+    {
+        BookingImportTone tone = BookingImportDisplay.StatusTone(status);
+        (Icon icon, Color color) = tone switch
+        {
+            BookingImportTone.Positive => ((Icon)new Icons.Regular.Size20.CheckmarkCircle(), Color.Success),
+            BookingImportTone.Caution => ((Icon)new Icons.Regular.Size20.Warning(), Color.Warning),
+            BookingImportTone.Negative => ((Icon)new Icons.Regular.Size20.DismissCircle(), Color.Error),
+            _ => ((Icon)new Icons.Regular.Size20.Circle(), Color.Neutral)
+        };
+
+        builder.OpenComponent<FluentIcon<Icon>>(0);
+        builder.AddAttribute(1, "Value", icon);
+        builder.AddAttribute(2, "Color", color);
+        builder.AddAttribute(3, "Title", BookingImportDisplay.StatusLabel(status));
+        builder.CloseComponent();
+    };
+}

@@ -76,14 +76,20 @@
                                     <div class="party-child">@(party.IsPrivateHire ? $"Private hire · {party.ContactName}" : party.ChildLabel())</div>
                                     <div class="party-when">@party.TimeRange()@(party.HireKind is PrivateHireKind kind ? $" · {kind.Label()}" : party.PartyType.Length > 0 ? $" · {party.PartyType}" : string.Empty)</div>
                                 </div>
-                                @if (party.Status == PartyBookingStatus.Cancelled)
-                                {
-                                    <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Danger">Cancelled</FluentBadge>
-                                }
-                                else
-                                {
-                                    <FluentBadge Appearance="BadgeAppearance.Filled" Color="@party.PaymentStatus.Color()">@party.PaymentStatus.Label()</FluentBadge>
-                                }
+                                <div class="party-card-badges">
+                                    @if (party.ExternalIsProvisional)
+                                    {
+                                        <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Warning" title="A provisional hold imported from Just Step Online">Provisional</FluentBadge>
+                                    }
+                                    @if (party.Status == PartyBookingStatus.Cancelled)
+                                    {
+                                        <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Danger">Cancelled</FluentBadge>
+                                    }
+                                    else
+                                    {
+                                        <FluentBadge Appearance="BadgeAppearance.Filled" Color="@party.PaymentStatus.Color()">@party.PaymentStatus.Label()</FluentBadge>
+                                    }
+                                </div>
                             </div>
 
                             <div class="party-facts">

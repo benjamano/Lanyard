@@ -1,0 +1,148 @@
+.booking-import {
+    padding: 16px;
+    max-width: 1100px;
+}
+
+.booking-import-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.booking-import-header h1 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.booking-import-tools {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+}
+
+.booking-import-intro {
+    color: var(--neutral-foreground-hint);
+    max-width: 70ch;
+    margin: 8px 0 16px;
+}
+
+.booking-import-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
+}
+
+.settings-card {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 20px;
+    border: 1px solid var(--neutral-stroke-rest);
+    border-radius: 10px;
+    background: var(--neutral-layer-1);
+}
+
+.settings-card h2 {
+    margin: 0;
+    font-size: 1.1rem;
+}
+
+.settings-hint {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--neutral-foreground-hint);
+}
+
+.booking-import-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.runs-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.runs-latest {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9rem;
+    color: var(--neutral-foreground-hint);
+}
+
+.runs-status-label {
+    margin-inline-start: 6px;
+}
+
+.runs-utc {
+    color: var(--neutral-foreground-hint);
+    font-size: 0.8rem;
+}
+
+.runs-error-icon {
+    margin-inline-start: 6px;
+    vertical-align: middle;
+}
+
+/* Desktop grid by default; a card list takes over on phones, where fixed grid columns can't wrap. */
+.runs-phone-list {
+    display: none;
+}
+
+.runs-phone-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px;
+    border: 1px solid var(--neutral-stroke-rest);
+    border-radius: 8px;
+}
+
+.runs-phone-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.runs-phone-status {
+    font-weight: 600;
+}
+
+.runs-phone-when {
+    margin-inline-start: auto;
+    color: var(--neutral-foreground-hint);
+    font-size: 0.85rem;
+}
+
+.runs-phone-meta {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    color: var(--neutral-foreground-hint);
+    font-size: 0.9rem;
+}
+
+.runs-phone-error {
+    color: var(--error);
+    font-size: 0.85rem;
+    word-break: break-word;
+}
+
+@media (max-width: 599px) {
+    .runs-grid-wrapper {
+        display: none;
+    }
+
+    .runs-phone-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+}

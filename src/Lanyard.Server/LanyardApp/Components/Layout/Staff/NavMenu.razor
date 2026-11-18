@@ -237,6 +237,10 @@
                         <FluentNavItem Href="/manage/parties/new">Book a Party</FluentNavItem>
                         <FluentNavItem Href="/manage/parties/settings">Party Settings</FluentNavItem>
                         <FluentNavItem Href="/manage/parties/printouts">Printouts</FluentNavItem>
+                        @if (_isAdmin)
+                        {
+                            <FluentNavItem Href="/manage/booking-import">Booking Import</FluentNavItem>
+                        }
                     </FluentNavCategory>
                 }
             }

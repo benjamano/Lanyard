@@ -96,7 +96,12 @@ public static class NotificationTopics
         new(NotificationTopic.TrainingOverdue, NotificationTopicGroup.Operations,
             "Training overdue", "Someone at your location has training past its due date.", DefaultPush: true, DefaultEmail: true, ManagerOnly: true),
         new(NotificationTopic.StaffDocumentExpiring, NotificationTopicGroup.Operations,
-            "Staff documents expiring", "A staff document at your location is due for renewal or has expired.", DefaultPush: true, DefaultEmail: true, ManagerOnly: true)
+            "Staff documents expiring", "A staff document at your location is due for renewal or has expired.", DefaultPush: true, DefaultEmail: true, ManagerOnly: true),
+
+        // Raised once per failing location until an import runs cleanly again, so a login that keeps
+        // failing doesn't notify every five minutes. Worth an email: bookings stop syncing until fixed.
+        new(NotificationTopic.PartyBookingImportFailed, NotificationTopicGroup.Operations,
+            "Booking import failed", "The automatic party booking import for one of your locations couldn't run.", DefaultPush: true, DefaultEmail: true, ManagerOnly: true)
     ];
 
     public static NotificationTopicInfo Get(NotificationTopic topic) =>
