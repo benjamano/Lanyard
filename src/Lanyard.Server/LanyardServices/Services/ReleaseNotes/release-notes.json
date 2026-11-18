@@ -930,5 +930,13 @@
       "The side menu has a new Music group: open it to find Music Player, Audio Clips and Music Schedule in one place, instead of spread across the menu and the Management section.",
       "Sign-in is harder to abuse: someone who knows your username can no longer lock you out by trying wrong passwords from their own device. Every failed sign-in now shows the same message, and after several failed attempts from one device sign-in is paused there for 15 minutes."
     ]
+  },
+  {
+    "version": "1.4.23",
+    "releaseDate": "2026-11-18",
+    "summary": "Fixed new printout artwork sometimes not being saved.",
+    "details": [
+      "Parties > Printouts: Save now waits until new artwork has finished uploading. Before, saving during the upload kept the old artwork, so the preview and the printed cards still showed it."
+    ]
   }
 ]
