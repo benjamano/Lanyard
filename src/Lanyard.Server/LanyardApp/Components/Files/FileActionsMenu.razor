@@ -2,6 +2,7 @@
 @using Lanyard.App.Components.Manager
 
 @inject IFileService _fileService
+@inject IFileLibraryService _library
 @inject INotificationService _toastService
 @inject NavigationManager Navigation
 
@@ -65,15 +66,16 @@
             return;
         }
 
-        Result<bool> result = await _fileService.DeleteFileAsync(File.Id, CancellationToken.None);
+        // To the Recycle bin, where it can be restored for 30 days.
+        Result<Lanyard.Infrastructure.DTO.Files.BulkOperationResult> result = await _library.MoveToBinAsync([File.Id], [], CancellationToken.None);
 
-        if (result?.Success == true)
+        if (result.IsSuccess && result.Data?.AllSucceeded == true)
         {
             await OnFileDeleted.InvokeAsync(File.Id);
         }
         else
         {
-            _toastService.ShowError($"Failed to delete file, {result?.Error}");
+            _toastService.ShowError($"Failed to delete file, {result.Error ?? result.Data?.Failures.FirstOrDefault()?.Reason}");
         }
     }
 

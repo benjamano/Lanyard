@@ -67,7 +67,7 @@ public class AudioClipService(
             }
 
             // Not added to the music library: a clip isn't a song and mustn't turn up in playlists.
-            Result<FileMetadata> uploaded = await fileService.UploadFileAsync(file, null, userId, new FileUploadOptions(AddAudioToMusicLibrary: false), ct);
+            Result<FileMetadata> uploaded = await fileService.UploadFileAsync(file, null, userId, new FileUploadOptions(AddAudioToMusicLibrary: false, IsSystemFile: true), ct);
             if (!uploaded.IsSuccess || uploaded.Data is null)
             {
                 return Result<AudioClip>.Fail(uploaded.Error ?? "Couldn't store the file.");

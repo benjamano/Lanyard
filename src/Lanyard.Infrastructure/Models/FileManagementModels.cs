@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 
 namespace Lanyard.Infrastructure.Models
 {
@@ -36,6 +36,20 @@ namespace Lanyard.Infrastructure.Models
         // member's HR document). The File Manager list/download/rename/move/delete paths treat it
         // as not found: api/files/download lets in every signed-in user and every kiosk in the company.
         public bool IsRestricted { get; set; }
+
+        // Owned by a feature that manages it on its own page (an audio clip's sound). Unlike
+        // IsRestricted it can still be served by id, but it never appears when browsing Files,
+        // in search or in a file picker.
+        public bool IsSystemFile { get; set; }
+
+        // IsActive = false means the file is in the Recycle bin. DeletedAt is when it went there,
+        // which the purge sweep uses to remove it for good after FileLibraryRules.BinRetention.
+        // A binned file can still be served by id, so anything that uses it keeps working until
+        // it is deleted for good (and that is refused while something still uses it).
+        public DateTime? DeletedAt { get; set; }
+
+        [MaxLength(450)]
+        public string? DeletedByUserId { get; set; }
     }
 
     public class Folder : ICompanyOwned
@@ -58,6 +72,18 @@ namespace Lanyard.Infrastructure.Models
         public virtual ICollection<Folder> SubFolders { get; set; } = [];
         public virtual ICollection<FileMetadata> Files { get; set; } = [];
 
+        // False while the folder is in the Recycle bin. Its contents keep their own IsActive:
+        // they are hidden because an ancestor is binned, come back when it is restored, and are
+        // deleted for good with it.
         public bool IsActive { get; set; } = true;
+
+        public DateTime? DeletedAt { get; set; }
+
+        [MaxLength(450)]
+        public string? DeletedByUserId { get; set; }
+
+        // Every signed-in staff member can browse and download this folder and everything under
+        // it, read-only. Inherited: a subfolder of a shared folder is shared too.
+        public bool IsSharedWithStaff { get; set; }
     }
 }
