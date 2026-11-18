@@ -165,6 +165,7 @@ public class ShiftTemplateService(
             target.BreakMinutes = template.BreakMinutes;
             target.EffectiveFrom = template.EffectiveFrom;
             target.EffectiveTo = template.EffectiveTo;
+            target.Runs = template.Runs;
 
             foreach (ShiftTemplateSlot slot in template.Slots)
             {

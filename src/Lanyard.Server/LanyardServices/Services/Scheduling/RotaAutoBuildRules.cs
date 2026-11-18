@@ -45,15 +45,22 @@ public static class RotaAutoBuildRules
         [SuggestionReasonKind.OverMaxHours, SuggestionReasonKind.PendingTimeOff];
 
     // The shifts the templates want on each day from..to, each slot once per day it applies.
-    public static List<DemandSlot> ExpandTemplates(IEnumerable<ShiftTemplate> templates, DateOnly from, DateOnly to)
+    // Holidays are the location's (RotaHolidayRules): nothing on a closed day, a bank holiday uses
+    // the templates of the weekday it's staffed like, and each template's Runs setting picks term
+    // time or school holidays.
+    public static List<DemandSlot> ExpandTemplates(IEnumerable<ShiftTemplate> templates, DateOnly from, DateOnly to,
+        IReadOnlyCollection<RotaHoliday>? holidays = null)
     {
         List<DemandSlot> slots = [];
+        List<ShiftTemplate> list = templates.ToList();
 
-        foreach (ShiftTemplate template in templates)
+        for (DateOnly day = from; day <= to; day = day.AddDays(1))
         {
-            for (DateOnly day = from; day <= to; day = day.AddDays(1))
+            RotaHolidayDay calendar = RotaHolidayRules.For(holidays ?? [], day);
+
+            foreach (ShiftTemplate template in list)
             {
-                if (!template.AppliesOn(day))
+                if (!template.AppliesOn(calendar))
                 {
                     continue;
                 }

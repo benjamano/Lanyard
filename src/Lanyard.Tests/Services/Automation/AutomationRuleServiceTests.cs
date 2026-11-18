@@ -54,7 +54,7 @@ public class AutomationRuleServiceTests
         AutomationEngineService engine = new(
             factory,
             [executor],
-            new LaserGameStatusStore(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+            new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
 
         return (new AutomationRuleService(factory, engine), engine, executor);
     }
@@ -700,7 +700,7 @@ public class AutomationRuleServiceTests
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options, new FixedTenantProvider(1)));
 
-        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
         AutomationRuleService service = new(tenantFactory.Object, engine);
 
         AutomationRule foreign = BuildRule(ownKioskId);
@@ -760,7 +760,7 @@ public class AutomationRuleServiceTests
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options, new FixedTenantProvider(1)));
 
-        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
         AutomationRuleService service = new(tenantFactory.Object, engine);
 
         AutomationRule foreignKiosk = BuildRule(ownKioskId);
@@ -950,7 +950,7 @@ public class AutomationRuleServiceTests
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options, new FixedTenantProvider(1)));
 
-        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
         AutomationRuleService service = new(tenantFactory.Object, engine);
 
         AutomationRule foreign = BuildRule(Guid.NewGuid());

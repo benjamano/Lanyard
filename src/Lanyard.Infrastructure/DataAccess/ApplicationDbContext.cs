@@ -131,6 +131,8 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ShiftTemplateSlot> ShiftTemplateSlots { get; set; }
         public DbSet<ShiftTemplateSlotRegular> ShiftTemplateSlotRegulars { get; set; }
         public DbSet<TemplateSuggestionRun> TemplateSuggestionRuns { get; set; }
+        public DbSet<RotaHoliday> RotaHolidays { get; set; }
+        public DbSet<OperationsAlert> OperationsAlerts { get; set; }
         public DbSet<CompanySchedulingSettings> CompanySchedulingSettings { get; set; }
         public DbSet<Shift> Shifts { get; set; }
         public DbSet<ClockInTerminal> ClockInTerminals { get; set; }
@@ -257,6 +259,33 @@ namespace Lanyard.Infrastructure.DataAccess
                     .OnDelete(DeleteBehavior.Cascade);
             });
 
+            modelBuilder.Entity<OperationsAlert>(entity =>
+            {
+                // At most one unresolved alert per problem in a company: raising it again refreshes
+                // that row, and two sweeps racing to insert it can't both win. Resolved rows are
+                // history and may repeat the key.
+                entity.HasIndex(x => new { x.CompanyId, x.DedupKey })
+                    .IsUnique()
+                    .HasFilter($"\"Status\" <> {(int)OperationsAlertStatus.Resolved}");
+
+                // The page and widget read a company's unresolved alerts, narrowed by location.
+                entity.HasIndex(x => new { x.CompanyId, x.Status, x.LocationId });
+
+                // The retention sweep deletes resolved alerts by age across every company.
+                entity.HasIndex(x => x.ResolvedAtUtc);
+
+                entity.HasOne(x => x.Location)
+                    .WithMany()
+                    .HasForeignKey(x => x.LocationId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                // GdprService deletes the alerts about a person and moves their name off the
+                // acknowledged/resolved columns before the user row goes.
+                entity.HasOne(x => x.SubjectUser).WithMany().HasForeignKey(x => x.SubjectUserId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.AcknowledgedByUser).WithMany().HasForeignKey(x => x.AcknowledgedByUserId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.ResolvedByUser).WithMany().HasForeignKey(x => x.ResolvedByUserId).OnDelete(DeleteBehavior.Restrict);
+            });
+
             modelBuilder.Entity<DashboardWidget>()
                 .HasDiscriminator(x => x.Type)
                 .HasValue<DashboardWidget>(WidgetType.Unknown)
@@ -269,6 +298,7 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasValue<MusicTimelineWidget>(WidgetType.MusicTimeline)
                 .HasValue<AutomationRuleStatusWidget>(WidgetType.AutomationRuleStatus)
                 .HasValue<KioskHealthWidget>(WidgetType.KioskHealth)
+                .HasValue<OperationsAlertsWidget>(WidgetType.OperationsAlerts)
                 .HasValue<HallOfFameWidget>(WidgetType.HallOfFame)
                 .HasValue<MyTrainingWidget>(WidgetType.MyTraining)
                 .HasValue<GreetingWidget>(WidgetType.Greeting)
@@ -612,6 +642,20 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<ShiftTemplateSlotRegular>()
                 .HasIndex(x => new { x.ShiftTemplateSlotId, x.UserId })
                 .IsUnique();
+
+            // A location's holidays and closed days, read for one location and a date range.
+            modelBuilder.Entity<RotaHoliday>()
+                .HasIndex(x => new { x.LocationId, x.StartDate });
+
+            modelBuilder.Entity<RotaHoliday>()
+                .Property(x => x.Name)
+                .HasMaxLength(RotaHolidayRules.MaxNameLength);
+
+            modelBuilder.Entity<RotaHoliday>()
+                .HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             // The latest run for a location is what the banner reads.
             modelBuilder.Entity<TemplateSuggestionRun>()

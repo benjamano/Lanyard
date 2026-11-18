@@ -27,5 +27,10 @@ public enum CompanyFeature
 
     // Audio clips played over the kiosk music: the Audio Clips page, clip schedules and the
     // Play Audio Clip automation action.
-    AudioClips = 8
+    AudioClips = 8,
+
+    // 9 is kept for Policies (open PR #284 still says 8, which AudioClips took).
+
+    // The Operations alerts page and widget: kiosk, automation and staff problems in one list.
+    OperationsAlerts = 10
 }

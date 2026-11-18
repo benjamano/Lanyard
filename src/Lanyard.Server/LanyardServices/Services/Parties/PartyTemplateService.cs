@@ -63,7 +63,7 @@ public class PartyTemplateService(IDbContextFactory<ApplicationDbContext> factor
             }
 
             List<PartyTemplateField> fields = PartyTemplateFields.Parse(template.FieldsJson);
-            string? fieldError = ValidateFields(fields, (double)template.WidthMm, (double)template.HeightMm);
+            string? fieldError = ValidateFields(fields, template.Document, (double)template.WidthMm, (double)template.HeightMm);
 
             if (fieldError is not null)
             {
@@ -100,11 +100,18 @@ public class PartyTemplateService(IDbContextFactory<ApplicationDbContext> factor
         }
     }
 
-    private static string? ValidateFields(List<PartyTemplateField> fields, double widthMm, double heightMm)
+    private static string? ValidateFields(List<PartyTemplateField> fields, PartyArtworkDocument document, double widthMm, double heightMm)
     {
+        IReadOnlyList<PartyTemplateFieldKind> allowed = PartyTemplateFields.AllowedKinds(document);
+
         foreach (PartyTemplateField field in fields)
         {
             string name = field.Kind.Label();
+
+            if (!allowed.Contains(field.Kind))
+            {
+                return $"\"{name}\" can't go on this printout.";
+            }
 
             if (field.WidthMm < 2 || field.HeightMm < 2)
             {

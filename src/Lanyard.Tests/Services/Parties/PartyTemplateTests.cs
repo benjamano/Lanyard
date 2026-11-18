@@ -76,6 +76,28 @@ public class PartyTemplateTests
         Assert.AreEqual(ActingUser, saved.UpdatedByUserId);
     }
 
+    // The expiry date belongs to the voucher: on the reserved card it would print a different date
+    // depending on whether the voucher's template was loaded alongside.
+    [TestMethod]
+    public async Task SaveTemplateAsync_RejectsBoxesThatDontBelongOnThePrintout()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        LocationScope manager = SchedulingTestHelpers.ManagerScopeFor(location);
+
+        PartyDocumentTemplate card = PartyTemplateFields.Default(PartyArtworkDocument.ReservedCard, company.Id);
+        Result<PartyDocumentTemplate> standard = await GetService(options).SaveTemplateAsync(manager, card, ActingUser);
+
+        List<PartyTemplateField> fields = PartyTemplateFields.Parse(card.FieldsJson);
+        fields.Add(new PartyTemplateField { Kind = PartyTemplateFieldKind.ExpiryDate, XMm = 10, YMm = 10 });
+        card.FieldsJson = PartyTemplateFields.Serialize(fields);
+        Result<PartyDocumentTemplate> withExpiry = await GetService(options).SaveTemplateAsync(manager, card, ActingUser);
+
+        Assert.IsTrue(standard.IsSuccess, standard.Error);
+        Assert.IsFalse(withExpiry.IsSuccess);
+        StringAssert.Contains(withExpiry.Error, "can't go on this printout");
+    }
+
     [TestMethod]
     public async Task SaveTemplateAsync_RejectsManagerFromAnotherCompany()
     {
@@ -237,6 +259,47 @@ public class PartyTemplateTests
         Assert.AreEqual("Lily's party", PartyDocumentRenderer.FieldValue(PartyTemplateFieldKind.PartyName, model));
         Assert.AreEqual("Amy Clarke", PartyDocumentRenderer.FieldValue(PartyTemplateFieldKind.PartyHost, model));
         Assert.AreEqual("7", PartyDocumentRenderer.FieldValue(PartyTemplateFieldKind.ChildAge, model));
+    }
+
+    // A5 landscape cards: two to a portrait A4 sheet, one per side of a stand.
+    [TestMethod]
+    public void Render_ReservedCardIsTwoA5CardsOnOneSheet()
+    {
+        PartyDocumentModel standard = new(Booking(), null, [], null, "#167a47");
+        PartyDocumentModel custom = new(Booking(), null, [], null, "#167a47", ReservedCard: Artwork(PartyArtworkDocument.ReservedCard, 210, 148));
+        PartyDocumentModel a4 = new(Booking(), null, [], null, "#167a47", ReservedCard: Artwork(PartyArtworkDocument.ReservedCard, 297, 210));
+
+        AssertIsPdf(PartyDocumentRenderer.Render(standard, PartyDocumentType.ReservedCard), 1);
+        AssertIsPdf(PartyDocumentRenderer.Render(custom, PartyDocumentType.ReservedCard), 1);
+
+        // Too big to share a sheet: just the one copy.
+        AssertIsPdf(PartyDocumentRenderer.Render(a4, PartyDocumentType.ReservedCard), 1);
+        AssertIsPdf(PartyDocumentRenderer.Render(custom with { Voucher = Artwork(PartyArtworkDocument.Voucher) }, PartyDocumentType.Pack), 3);
+    }
+
+    [TestMethod]
+    public void Default_ReservedCardIsA5LandscapeWithTheNameInTheMiddle()
+    {
+        PartyDocumentTemplate template = PartyTemplateFields.Default(PartyArtworkDocument.ReservedCard, 1);
+        PartyTemplateField name = PartyTemplateFields.Parse(template.FieldsJson).Single();
+
+        Assert.AreEqual(210m, template.WidthMm);
+        Assert.AreEqual(148m, template.HeightMm);
+        Assert.AreEqual(PartyTemplateFieldKind.ChildName, name.Kind);
+        Assert.AreEqual(105, name.XMm + name.WidthMm / 2, 0.01);
+        Assert.IsTrue(name.XMm + name.WidthMm <= 210 && name.YMm + name.HeightMm <= 148);
+    }
+
+    [TestMethod]
+    public void FieldValue_FillsTheReservedCardBoxes()
+    {
+        PartyBooking booking = Booking();
+        booking.Room = "Party Room 2";
+        PartyDocumentModel model = new(booking, null, [], null, "#167a47");
+
+        Assert.AreEqual("LILY", PartyDocumentRenderer.FieldValue(PartyTemplateFieldKind.ChildName, model));
+        Assert.AreEqual("10:30", PartyDocumentRenderer.FieldValue(PartyTemplateFieldKind.ArrivalTime, model));
+        Assert.AreEqual("Party Room 2", PartyDocumentRenderer.FieldValue(PartyTemplateFieldKind.Room, model));
     }
 
     [TestMethod]

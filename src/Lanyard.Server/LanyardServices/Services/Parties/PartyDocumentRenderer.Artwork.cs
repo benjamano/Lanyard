@@ -7,7 +7,7 @@ using QuestPDF.Infrastructure;
 
 namespace Lanyard.Application.Services.Parties;
 
-// The voucher and feedback form. Each is either the company's own artwork with the party's
+// The voucher, feedback form and reserved table card. Each is either the company's own artwork with the party's
 // details printed into its boxes, or - with no artwork uploaded - Lanyard's standard design.
 //
 // Both are usually A5. They print at actual size on A4: two A5 portrait pieces side by side on a
@@ -21,9 +21,13 @@ public static partial class PartyDocumentRenderer
     private const float A4Short = 210f;
     private const float A4Long = 297f;
 
-    // The standard designs are A5 portrait.
-    private const float StandardWidthMm = 148f;
-    private const float StandardHeightMm = 210f;
+    // The standard voucher and feedback form are A5 portrait; the standard reserved card is A5
+    // landscape.
+    private const float A5Short = 148f;
+    private const float A5Long = 210f;
+
+    private static (float Width, float Height) StandardSize(PartyArtworkDocument document) =>
+        document == PartyArtworkDocument.ReservedCard ? (A5Long, A5Short) : (A5Short, A5Long);
 
     private const int DefaultVoucherMonths = 12;
 
@@ -138,7 +142,7 @@ public static partial class PartyDocumentRenderer
         PartyArtwork? artwork = ArtworkFor(model, document);
 
         return artwork?.Artwork is null
-            ? (StandardWidthMm, StandardHeightMm)
+            ? StandardSize(document)
             : ((float)artwork.Template.WidthMm, (float)artwork.Template.HeightMm);
     }
 
@@ -159,8 +163,12 @@ public static partial class PartyDocumentRenderer
         return SheetSlot.Full;
     }
 
-    private static PartyArtwork? ArtworkFor(PartyDocumentModel model, PartyArtworkDocument document) =>
-        document == PartyArtworkDocument.Voucher ? model.Voucher : model.Feedback;
+    private static PartyArtwork? ArtworkFor(PartyDocumentModel model, PartyArtworkDocument document) => document switch
+    {
+        PartyArtworkDocument.Voucher => model.Voucher,
+        PartyArtworkDocument.ReservedCard => model.ReservedCard,
+        _ => model.Feedback
+    };
 
     private static void Piece(IContainer container, PartyDocumentModel model, PartyArtworkDocument document)
     {
@@ -168,15 +176,20 @@ public static partial class PartyDocumentRenderer
 
         if (artwork?.Artwork is not byte[] image)
         {
-            IContainer standard = container.Width(StandardWidthMm, Unit.Millimetre).Height(StandardHeightMm, Unit.Millimetre);
+            (float width, float height) = StandardSize(document);
+            IContainer standard = container.Width(width, Unit.Millimetre).Height(height, Unit.Millimetre);
 
-            if (document == PartyArtworkDocument.Voucher)
+            switch (document)
             {
-                StandardVoucher(standard, model);
-            }
-            else
-            {
-                StandardFeedback(standard, model);
+                case PartyArtworkDocument.Voucher:
+                    StandardVoucher(standard, model);
+                    break;
+                case PartyArtworkDocument.ReservedCard:
+                    StandardReservedCard(standard, model);
+                    break;
+                default:
+                    StandardFeedback(standard, model);
+                    break;
             }
 
             return;
@@ -242,6 +255,9 @@ public static partial class PartyDocumentRenderer
             PartyTemplateFieldKind.AuthorisedBy => model.AuthorisedBy ?? string.Empty,
             PartyTemplateFieldKind.PartyName => $"{model.Booking.ChildName}'s party",
             PartyTemplateFieldKind.PartyHost => model.HostName ?? string.Empty,
+            PartyTemplateFieldKind.ChildName => model.Booking.ChildName.ToUpper(Uk),
+            PartyTemplateFieldKind.ArrivalTime => LocalTime(model.Booking.StartUtc),
+            PartyTemplateFieldKind.Room => model.Booking.Room ?? string.Empty,
             _ => model.Booking.ChildAgeTurning?.ToString(Uk) ?? string.Empty
         };
     }
@@ -285,6 +301,28 @@ public static partial class PartyDocumentRenderer
             column.Item().ExtendVertical().AlignBottom().AlignCenter()
                 .Text(model.CompanyName is { Length: > 0 } company ? $"Valid for one free return visit to {company}." : "Valid for one free return visit.")
                 .FontSize(9).FontColor(Colors.Grey.Darken1);
+        });
+    }
+
+    private static void StandardReservedCard(IContainer container, PartyDocumentModel model)
+    {
+        container.Padding(7, Unit.Millimetre).Border(2.5f).BorderColor(model.AccentColorHex).Padding(8, Unit.Millimetre).Column(column =>
+        {
+            column.Spacing(6);
+
+            if (model.LogoBytes is not null)
+            {
+                column.Item().AlignCenter().Height(16, Unit.Millimetre).Image(model.LogoBytes).FitArea();
+            }
+
+            column.Item().ExtendVertical().AlignMiddle().Column(middle =>
+            {
+                middle.Spacing(4);
+                middle.Item().AlignCenter().Text("RESERVED FOR").FontSize(26).SemiBold().FontColor(Colors.Grey.Darken3);
+                middle.Item().Height(32, Unit.Millimetre).AlignCenter().AlignMiddle().ScaleToFit()
+                    .Text(FieldValue(PartyTemplateFieldKind.ChildName, model)).FontSize(80).Bold().FontColor(model.AccentColorHex);
+                middle.Item().AlignCenter().Text("PARTY").FontSize(26).SemiBold().FontColor(Colors.Grey.Darken3);
+            });
         });
     }
 

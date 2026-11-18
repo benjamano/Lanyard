@@ -64,18 +64,27 @@ public class TemplateLearningService(
         DateTime fromUtc = RotaTime.StartOfDayUtc(from);
         DateTime toUtc = RotaTime.StartOfDayUtc(to.AddDays(1));
 
-        // What was actually worked: published shifts still on the rota.
-        List<Shift> shifts = await ctx.Shifts
+        // What was actually worked: published shifts still on the rota. Holidays, bank holidays and
+        // closed days are left out, so the templates learned are for an ordinary term-time week.
+        List<RotaHoliday> holidays = await RotaHolidayService.ForRangeAsync(ctx, locationId, from, to);
+
+        bool Ordinary(DateTime startUtc) => RotaHolidayRules.For(holidays, RotaTime.LocalDate(startUtc)).IsOrdinary;
+
+        List<Shift> shifts = (await ctx.Shifts
             .AsNoTracking()
             .TagWithCallSite()
             .Where(x => x.LocationId == locationId && x.IsActive && x.PublishedDateUtc != null && x.StartUtc >= fromUtc && x.StartUtc < toUtc)
-            .ToListAsync();
+            .ToListAsync())
+            .Where(x => Ordinary(x.StartUtc))
+            .ToList();
 
         List<PartyBooking> bookings = await ctx.PartyBookings
             .AsNoTracking()
             .TagWithCallSite()
             .Where(x => x.LocationId == locationId && x.Status == PartyBookingStatus.Booked && x.StartUtc >= fromUtc.AddDays(-1) && x.StartUtc < toUtc.AddDays(1))
             .ToListAsync();
+
+        bookings = bookings.Where(x => Ordinary(x.StartUtc)).ToList();
 
         List<string> userIds = shifts.Where(x => x.UserId is not null).Select(x => x.UserId!).Distinct().ToList();
 
@@ -129,7 +138,7 @@ public class TemplateLearningService(
             return result;
         }
 
-        LearnedCheck check = await CheckAsync(ctx, location, from, to, shifts, bookings, result, positions, rules, names);
+        LearnedCheck check = await CheckAsync(ctx, location, from, to, shifts, bookings, result, positions, rules, names, holidays);
 
         return result with { Check = check };
     }
@@ -138,7 +147,7 @@ public class TemplateLearningService(
     // location's kids' party staffing), against an empty rota, and compares it with what was worked.
     private async Task<LearnedCheck> CheckAsync(ApplicationDbContext ctx, Location location, DateOnly from, DateOnly to, List<Shift> actual,
         List<PartyBooking> bookings, TemplateLearningResult learned, Dictionary<Guid, StaffPosition> positions,
-        List<PartyStaffingRule> rules, Dictionary<string, string> names)
+        List<PartyStaffingRule> rules, Dictionary<string, string> names, List<RotaHoliday> holidays)
     {
         List<ShiftTemplate> templates = learned.Templates.Select(t =>
         {
@@ -168,7 +177,10 @@ public class TemplateLearningService(
             })
         ];
 
-        List<DemandSlot> templateDemand = RotaAutoBuildRules.ExpandTemplates(templates, from, to);
+        // Only the ordinary days, the same ones the templates were learned from.
+        List<DemandSlot> templateDemand = RotaAutoBuildRules.ExpandTemplates(templates, from, to)
+            .Where(x => RotaHolidayRules.For(holidays, x.Day).IsOrdinary)
+            .ToList();
         (List<DemandSlot> partyDemand, _) = RotaAutoBuildRules.ExpandParties(bookings, checkRules, templateDemand);
 
         SuggestionPool pool = await SuggestionPool.LoadAsync(ctx, _contractRequirementService, _logger, location.Id, location.CompanyId, from, to);

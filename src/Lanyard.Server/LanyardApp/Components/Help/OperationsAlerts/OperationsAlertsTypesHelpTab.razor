@@ -1,0 +1,49 @@
+<HelpTab>
+    <HelpSection Title="Kiosk offline (Critical)">
+        <FluentText>
+            A kiosk stopped responding, or was shut down and hasn't come back, for long enough to count as down. It's only
+            raised during the location's opening hours, and clears when the kiosk is back online.
+        </FluentText>
+    </HelpSection>
+
+    <HelpSection Title="Kiosk needs attention (Warning)">
+        <FluentText>
+            A kiosk has reported a problem for at least 10 minutes during opening hours, such as low disk space, high
+            CPU or memory, or its DMX lighting device not open. The alert lists the problems. It clears once the kiosk
+            reports itself healthy.
+        </FluentText>
+    </HelpSection>
+
+    <HelpSection Title="Missed clock-in (Warning)">
+        <FluentText>
+            A published shift has been running for the <strong>Missed clock-in alert after</strong> time in Rota settings
+            (15 minutes to start with) and the person on it hasn't clocked in at that location. It clears when they clock in,
+            or when the shift is removed, unpublished or given to someone else. If the shift ends with nobody clocked in, the
+            alert stays open for you to deal with, and the shift shows as missed on Timesheets.
+        </FluentText>
+    </HelpSection>
+
+    <HelpSection Title="Training overdue (Warning)">
+        <FluentText>
+            Someone's training is past its due date. It clears when they complete it, or the course is no longer assigned to
+            them. Compliance lists everyone who is behind.
+        </FluentText>
+    </HelpSection>
+
+    <HelpSection Title="Document expiring (Info) and Document expired (Warning)">
+        <FluentText>
+            A staff document has reached the reminder date set when it was uploaded, or its expiry date has passed. The same
+            alert moves from Info to Warning when it expires. It clears when a renewed document is uploaded or the old one is
+            removed. Documents don't belong to a location, so the alert goes to the location the person works at.
+        </FluentText>
+    </HelpSection>
+
+    <HelpSection Title="Automation rule failed (Warning)">
+        <FluentText>
+            An automation rule ran but at least one of its actions failed. The alert shows the first error. A rule that keeps
+            failing stays as one alert, with a count of how many times it has been seen. Rules that were skipped because
+            their conditions didn't hold aren't failures and raise nothing. The alert clears the next time the rule runs
+            without errors.
+        </FluentText>
+    </HelpSection>
+</HelpTab>

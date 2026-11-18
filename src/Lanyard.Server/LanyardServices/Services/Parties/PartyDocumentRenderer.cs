@@ -18,17 +18,18 @@ public record PartyDocumentModel(
     PartyArtwork? Voucher = null,
     PartyArtwork? Feedback = null,
     string? AuthorisedBy = null,
-    string? CompanyName = null);
+    string? CompanyName = null,
+    PartyArtwork? ReservedCard = null);
 
-// A company's artwork for the voucher or feedback form: the template, its boxes, and the image
+// A company's artwork for the voucher, feedback form or reserved table card: the template, its boxes, and the image
 // itself. Artwork null = draw Lanyard's standard design instead.
 public record PartyArtwork(PartyDocumentTemplate Template, IReadOnlyList<PartyTemplateField> Fields, byte[]? Artwork);
 
 // Lays out the party printouts. Pure (data in, PDF bytes out) so the layouts can be changed or
 // replaced without touching how the data is loaded, and tested without a database.
 //
-// The layouts follow the venue's own paper sheets: the "RESERVED FOR ... PARTY" table card, the
-// hot food tally sheet (each meal with its allergens and a row per side to count on) and the cold
+// The layouts follow the venue's own paper sheets: the "RESERVED FOR ... PARTY" table card (A5,
+// drawn like the voucher - see PartyDocumentRenderer.Artwork), the hot food tally sheet (each meal with its allergens and a row per side to count on) and the cold
 // sheet (a row per child for their sandwich choice, with an allergy panel). Food is chosen when
 // the children arrive, so the sheets print with the party details filled in and the rest blank.
 public static partial class PartyDocumentRenderer
@@ -101,42 +102,17 @@ public static partial class PartyDocumentRenderer
         }
     }
 
-    // A4 landscape, folded along the middle into a tent: the top half is printed upside down so
-    // the card reads the right way up from both sides of the table.
+    // A5, so it fits a table-card stand. Two copies share the A4 sheet - one for each side of a
+    // double-sided stand - when the card is A5 or smaller; bigger artwork gets a sheet to itself.
     private static void ComposeReservedCard(IDocumentContainer container, PartyDocumentModel model)
     {
-        container.Page(page =>
-        {
-            page.Size(PageSizes.A4.Landscape());
-            page.Margin(0);
+        (float width, float height) = PieceSize(model, PartyArtworkDocument.ReservedCard);
 
-            page.Content().Column(column =>
-            {
-                float half = PageSizes.A4.Landscape().Height / 2;
+        PartyArtworkDocument[] copies = SlotFor(width, height) == SheetSlot.Full
+            ? [PartyArtworkDocument.ReservedCard]
+            : [PartyArtworkDocument.ReservedCard, PartyArtworkDocument.ReservedCard];
 
-                column.Item().Height(half).RotateRight().RotateRight().Element(x => ReservedCardFace(x, model));
-                column.Item().LineHorizontal(0.5f).LineColor(Colors.Grey.Lighten1);
-                column.Item().Height(half - 0.5f).Element(x => ReservedCardFace(x, model));
-            });
-        });
-    }
-
-    private static void ReservedCardFace(IContainer container, PartyDocumentModel model)
-    {
-        container.PaddingVertical(24).PaddingHorizontal(48).AlignMiddle().Column(column =>
-        {
-            column.Spacing(6);
-
-            if (model.LogoBytes is not null)
-            {
-                column.Item().AlignCenter().Height(40).Image(model.LogoBytes).FitArea();
-            }
-
-            column.Item().AlignCenter().Text("RESERVED FOR").FontSize(26).SemiBold().FontColor(Colors.Grey.Darken3);
-            column.Item().Height(90).AlignCenter().AlignMiddle().ScaleToFit()
-                .Text(model.Booking.ChildName.ToUpper(Uk)).FontSize(80).Bold().FontColor(model.AccentColorHex);
-            column.Item().AlignCenter().Text("PARTY").FontSize(26).SemiBold().FontColor(Colors.Grey.Darken3);
-        });
+        ComposeArtworkSheets(container, model, copies);
     }
 
     private static void ComposeHotSheet(IDocumentContainer container, PartyDocumentModel model)
