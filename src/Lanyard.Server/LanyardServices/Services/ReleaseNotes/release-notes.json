@@ -930,5 +930,17 @@
       "The side menu has a new Music group: open it to find Music Player, Audio Clips and Music Schedule in one place, instead of spread across the menu and the Management section.",
       "Sign-in is harder to abuse: someone who knows your username can no longer lock you out by trying wrong passwords from their own device. Every failed sign-in now shows the same message, and after several failed attempts from one device sign-in is paused there for 15 minutes."
     ]
+  },
+  {
+    "version": "1.4.23",
+    "releaseDate": "2026-11-18",
+    "summary": "Turn a kiosk's bass, mids or treble up or down with the new music equaliser.",
+    "details": [
+      "On the Music page, the new EQ button next to the volume opens the kiosk's equaliser: Bass, Mid and Treble sliders from -12 to +12 dB, with the change playing on the kiosk as you drag.",
+      "Presets for Flat, Bass Boost, Vocal, Treble Boost and Warm, plus Reset to flat. The EQ button shows which preset the kiosk is on, or Custom.",
+      "The same equaliser is on the Music tab of a kiosk's Settings.",
+      "Only the music changes. Audio clips and announcements play as they are.",
+      "Each kiosk keeps its own equaliser, also when it's offline or restarts. Kiosks need version 1.0.48 or later; older ones apply it once they update."
+    ]
   }
 ]

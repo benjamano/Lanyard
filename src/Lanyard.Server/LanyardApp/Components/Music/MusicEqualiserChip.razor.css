@@ -1,0 +1,38 @@
+.music-eq-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 6px 10px;
+    border: 0;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 0.85rem;
+    background: var(--colorNeutralBackground3);
+    color: var(--colorNeutralForeground2);
+    cursor: pointer;
+}
+
+.music-eq-chip:hover:not(:disabled) {
+    background: var(--colorNeutralBackground3Hover);
+    color: var(--colorNeutralForeground1);
+}
+
+.music-eq-chip.is-altered {
+    background: var(--colorBrandBackground2);
+    color: var(--colorBrandForeground2);
+}
+
+.music-eq-chip.is-altered:hover:not(:disabled) {
+    background: var(--colorBrandBackground2Hover);
+}
+
+.music-eq-chip:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.music-eq-chip:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+    outline-offset: 2px;
+}

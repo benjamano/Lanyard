@@ -1,0 +1,178 @@
+@using Lanyard.Shared.Audio
+@implements IDisposable
+@inject IClientService _clientService
+
+@* The Music page's live equaliser for one kiosk. Every change is saved and sent to the kiosk a
+   moment after the slider stops, so staff hear it while they adjust. *@
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Options())" />
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Equaliser</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <p class="eq-dialog-kiosk">@KioskName · music only, audio clips aren't affected</p>
+
+        @if (_state is null)
+        {
+            <FluentProgressBar />
+        }
+        else
+        {
+            @if (_state.Status == EqualiserApplyStatus.SavedKioskOutdated)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false" Class="eq-dialog-message">
+                    This kiosk is on @(_state.ReportedVersion is { } v ? $"version {v}" : "an old version") and needs @MusicEqualiserSettings.MinimumClientVersion or later for the equaliser. Changes are saved and apply once it updates.
+                </FluentMessageBar>
+            }
+            else if (_state.Status == EqualiserApplyStatus.SavedKioskOffline)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false" Class="eq-dialog-message">
+                    This kiosk is offline. Changes are saved and apply when it reconnects.
+                </FluentMessageBar>
+            }
+
+            <MusicEqualiserControls Value="_settings" ValueChanged="OnChanged" />
+
+            <div class="eq-dialog-status" role="status" aria-live="polite">
+                @if (_saving)
+                {
+                    <span>Saving…</span>
+                }
+                else if (_error is not null)
+                {
+                    <span class="is-error">@_error</span>
+                }
+                else if (_savedOnce && _state.Status == EqualiserApplyStatus.Applied)
+                {
+                    <span>Playing on the kiosk now</span>
+                }
+            </div>
+        }
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Subtle" Disabled="@(_state is null || _settings.IsFlat)" OnClick="ResetAsync"
+                      IconStart="@(new Icons.Regular.Size20.ArrowReset())">
+            Reset to flat
+        </FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="DoneAsync">Done</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter, EditorRequired] public Guid ClientId { get; set; }
+    [Parameter, EditorRequired] public string KioskName { get; set; } = "";
+
+    [CascadingParameter] public required IDialogInstance Dialog { get; set; }
+
+    // Long enough that dragging a slider doesn't send a command per step, short enough to feel live.
+    private static readonly TimeSpan SaveDelay = TimeSpan.FromMilliseconds(200);
+
+    private ClientEqualiserStateDTO? _state;
+    private MusicEqualiserSettings _settings = MusicEqualiserSettings.Flat;
+    private MusicEqualiserSettings? _pending;
+    private CancellationTokenSource? _debounce;
+    private readonly SemaphoreSlim _saveLock = new(1, 1);
+    private bool _saving;
+    private bool _savedOnce;
+    private string? _error;
+    private bool _disposed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<ClientEqualiserStateDTO> result = await _clientService.GetClientEqualiserAsync(ClientId);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't load the equaliser.");
+            await Dialog.CancelAsync();
+            return;
+        }
+
+        _state = result.Data!;
+        _settings = _state.Settings;
+    }
+
+    private void OnChanged(MusicEqualiserSettings settings)
+    {
+        _settings = settings;
+        _pending = settings;
+
+        _debounce?.Cancel();
+        _debounce = new CancellationTokenSource();
+        CancellationToken token = _debounce.Token;
+
+        _ = Task.Delay(SaveDelay, token).ContinueWith(async t =>
+        {
+            if (!t.IsCanceled)
+            {
+                await InvokeAsync(SavePendingAsync);
+            }
+        }, TaskScheduler.Default);
+    }
+
+    private Task ResetAsync()
+    {
+        OnChanged(MusicEqualiserSettings.Flat);
+        return SavePendingAsync();
+    }
+
+    private async Task DoneAsync()
+    {
+        _debounce?.Cancel();
+        await SavePendingAsync();
+        await Dialog.CloseAsync(_settings);
+    }
+
+    private async Task SavePendingAsync()
+    {
+        await _saveLock.WaitAsync();
+
+        try
+        {
+            if (_pending is not { } settings)
+            {
+                return;
+            }
+
+            _pending = null;
+            _saving = true;
+            Refresh();
+
+            Result<ClientEqualiserStateDTO> result = await _clientService.SetClientEqualiserAsync(ClientId, settings);
+
+            if (result.IsSuccess)
+            {
+                _state = result.Data!;
+                _savedOnce = true;
+                _error = null;
+            }
+            else
+            {
+                _error = result.Error ?? "Couldn't save the equaliser.";
+            }
+        }
+        finally
+        {
+            _saving = false;
+            _saveLock.Release();
+            Refresh();
+        }
+    }
+
+    private void Refresh()
+    {
+        if (!_disposed)
+        {
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        // A change still waiting on the debounce is saved, not dropped, when the dialog is closed
+        // with the X or Escape: the timer keeps running and SavePendingAsync skips the re-render.
+        _disposed = true;
+    }
+}

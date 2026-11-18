@@ -1,4 +1,6 @@
 ﻿@using Lanyard.Application.SignalR
+@using Lanyard.App.Components.Music
+@using Lanyard.Shared.Audio
 @using Lanyard.Shared.DTO
 @using Microsoft.AspNetCore.SignalR
 
@@ -36,6 +38,19 @@
                 }
                 <FluentText Style="display: block; color: var(--neutral-foreground-hint);">The client checks this every minute and switches Windows back to it, so a TV or projector that reconnects can't take over the sound. The list shows the devices the client reported when it last connected.</FluentText>
             </div>
+            <div class="client-eq-section">
+                <FluentText Weight="TextWeight.Semibold" Style="display: block;">Equaliser</FluentText>
+                <FluentText Style="display: block; color: var(--neutral-foreground-hint); margin-bottom: 0.5rem;">
+                    Turns the bass, mids or treble of this kiosk's music up or down. Audio clips aren't affected. Staff can also change it live from the EQ button on the Music page.
+                </FluentText>
+                @if (!_eqSupported)
+                {
+                    <FluentText Style="display: block; color: var(--colorPaletteRedForeground1); margin-bottom: 0.5rem;">
+                        This kiosk needs version @MusicEqualiserSettings.MinimumClientVersion or later for the equaliser. It's saved now and applies once the kiosk updates.
+                    </FluentText>
+                }
+                <MusicEqualiserControls @bind-Value="_eqSettings" />
+            </div>
             <FluentButton Type="ButtonType.Button" Appearance="ButtonAppearance.Outline" Disabled="!isClientConnected" IconStart="new Icons.Regular.Size20.ArrowDownload()" @onclick="GetCachedSongs">
                 Get Cached Songs
             </FluentButton>
@@ -63,6 +78,9 @@
 
     private record AudioDeviceOption(string Id, string Name, string Label, bool IsMissing = false);
 
+    private MusicEqualiserSettings _eqSettings = MusicEqualiserSettings.Flat;
+    private bool _eqSupported = true;
+
     private bool _selectedAudioDeviceIsMissing => _audioDeviceOptions.Any(x => x.Id == _selectedAudioDeviceId && x.IsMissing);
 
     protected override async Task OnParametersSetAsync()
@@ -83,6 +101,8 @@
         {
             client = result.Data!;
             _cacheLimitStr = client.MusicCacheLimitMb.ToString();
+            _eqSettings = new MusicEqualiserSettings(client.EqBassDb, client.EqMidDb, client.EqTrebleDb);
+            _eqSupported = MusicEqualiserSettings.IsSupportedBy(client.ReportedClientVersion);
             await LoadAudioDeviceOptionsAsync();
         }
         else
@@ -152,6 +172,7 @@
 
         // Compared against what's actually saved, so a save that failed last time is still treated as a change.
         bool audioDeviceChanged = (freshClient.PreferredAudioDeviceId ?? NoAudioDeviceId) != _selectedAudioDeviceId;
+        bool equaliserChanged = new MusicEqualiserSettings(freshClient.EqBassDb, freshClient.EqMidDb, freshClient.EqTrebleDb) != _eqSettings;
         AudioDeviceOption? selectedAudioDevice = _audioDeviceOptions.FirstOrDefault(x => x.Id == _selectedAudioDeviceId);
 
         freshClient.MusicCacheLimitMb = client.MusicCacheLimitMb;
@@ -168,6 +189,35 @@
 
         client = freshClient;
 
+        // The equaliser has its own save, which UpdateClientAsync never overwrites, and is sent live.
+        string? equaliserNote = null;
+
+        if (equaliserChanged)
+        {
+            Result<ClientEqualiserStateDTO> eqResult = await _clientService.SetClientEqualiserAsync(client.Id, _eqSettings);
+
+            if (!eqResult.IsSuccess)
+            {
+                _toastService.ShowError($"Settings saved, but the equaliser couldn't be saved, {eqResult.Error}");
+            }
+            else
+            {
+                _eqSettings = eqResult.Data!.Settings;
+                equaliserNote = eqResult.Data.Status switch
+                {
+                    EqualiserApplyStatus.Applied => " The equaliser is playing on the kiosk now.",
+                    EqualiserApplyStatus.SavedKioskOffline => " The equaliser applies when the kiosk reconnects.",
+                    _ => " The equaliser applies once the kiosk updates."
+                };
+            }
+        }
+
+        if (!audioDeviceChanged && equaliserChanged)
+        {
+            _toastService.ShowSuccess($"Client capabilities updated.{equaliserNote}");
+            return;
+        }
+
         if (!audioDeviceChanged)
         {
             _toastService.ShowSuccess("Client capabilities updated, changes will propagate to this client on next restart.");
@@ -183,11 +233,11 @@
         }
         else if (audioResult.Data)
         {
-            _toastService.ShowSuccess("Client capabilities updated. The default audio output has been applied on the client.");
+            _toastService.ShowSuccess($"Client capabilities updated. The default audio output has been applied on the client.{equaliserNote}");
         }
         else
         {
-            _toastService.ShowSuccess("Client capabilities updated. The client is offline, so the default audio output will apply when it next connects.");
+            _toastService.ShowSuccess($"Client capabilities updated. The client is offline, so the default audio output will apply when it next connects.{equaliserNote}");
         }
     }
 
