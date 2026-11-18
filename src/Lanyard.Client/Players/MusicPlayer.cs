@@ -8,6 +8,7 @@ public class MusicPlayer : IMusicPlayer, IDisposable
     private readonly ILogger<MusicPlayer> _logger;
     private readonly ISongCacheService _cacheService;
     private readonly MusicGain _gain;
+    private readonly MusicEqualiser _equaliser;
 
     public event Action<PlaybackState>? PlaybackStateChanged;
     public event Action<Guid>? PlayingSongChanged;
@@ -27,11 +28,12 @@ public class MusicPlayer : IMusicPlayer, IDisposable
     // Guards swapping the audio reader, which the position timer reads every second.
     private readonly object _readerLock = new();
 
-    public MusicPlayer(ILogger<MusicPlayer> logger, ISongCacheService cacheService, MusicGain gain)
+    public MusicPlayer(ILogger<MusicPlayer> logger, ISongCacheService cacheService, MusicGain gain, MusicEqualiser equaliser)
     {
         _logger = logger;
         _cacheService = cacheService;
         _gain = gain;
+        _equaliser = equaliser;
 
         _player = new WaveOutEvent();
         _player.PlaybackStopped += OnPlaybackStopped;
@@ -144,7 +146,8 @@ public class MusicPlayer : IMusicPlayer, IDisposable
             lock (_readerLock)
             {
                 _reader = reader;
-                _player!.Init(new GainSampleProvider(_reader.ToSampleProvider(), _gain));
+                // Equaliser before the volume, so the headroom it leaves isn't undone by the duck.
+                _player!.Init(new GainSampleProvider(new EqualiserSampleProvider(_reader.ToSampleProvider(), _equaliser), _gain));
             }
 
             return Result<bool>.Ok(true);

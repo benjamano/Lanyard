@@ -9,6 +9,7 @@ using Lanyard.Infrastructure.DTO.Dmx;
 using Lanyard.Infrastructure.DTO.VideoDevices;
 using Lanyard.Infrastructure.DTO.ZoneScoreboard;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Shared.Audio;
 using Lanyard.Shared.Contracts;
 using Lanyard.Shared.DTO;
 using Lanyard.Shared.Enum;
@@ -147,6 +148,7 @@ public class SignalRControlHub(
         await SendZoneScoreboardSettingsToClientAsync(client);
         await SendRestartScheduleToClientAsync(client);
         await SendAudioSettingsToClientAsync(client);
+        await SendEqualiserSettingsToClientAsync(client);
 
         _logger.LogInformation("Client {ClientName} ({ConnectionId}) connected", client.Name, Context.ConnectionId);
 
@@ -415,6 +417,15 @@ public class SignalRControlHub(
 
         await Clients.Caller.SendAsync("ReceiveAudioSettings", settings);
         _logger.LogInformation("Sent audio settings to client {ClientId}: preferred device {DeviceName} ({DeviceId})", client.Id, client.PreferredAudioDeviceName, client.PreferredAudioDeviceId);
+    }
+
+    private async Task SendEqualiserSettingsToClientAsync(Client client)
+    {
+        MusicEqualiserSettings settings = new MusicEqualiserSettings(client.EqBassDb, client.EqMidDb, client.EqTrebleDb).Clamp();
+
+        // Kiosks before 1.0.48 have no handler; SignalR drops it there without an error.
+        await Clients.Caller.SendAsync(ClientHubMethods.ReceiveEqualiserSettings, settings);
+        _logger.LogInformation("Sent music equaliser to client {ClientId}: bass {BassDb} dB, mid {MidDb} dB, treble {TrebleDb} dB", client.Id, settings.BassDb, settings.MidDb, settings.TrebleDb);
     }
 
     private async Task SendZoneScoreboardSettingsToClientAsync(Client client)

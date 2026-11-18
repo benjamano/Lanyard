@@ -206,7 +206,7 @@ public static class HelpRegistry
 
         new(Music,
             "Music & Audio Clips",
-            "Playing music on a kiosk, the music schedule for each time of day, and audio clips over the music.",
+            "Playing music on a kiosk and setting its equaliser, the music schedule for each time of day, and audio clips over the music.",
             HelpAudience.Managers,
             () => new Icons.Regular.Size20.MusicNote2(),
             [

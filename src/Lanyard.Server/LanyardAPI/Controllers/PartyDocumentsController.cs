@@ -108,6 +108,11 @@ namespace Lanyard.API.Controllers
             disposition.SetHttpFileName(result.Data.FileName);
             Response.Headers[HeaderNames.ContentDisposition] = disposition.ToString();
 
+            // Built fresh from the saved template and booking every time, so never worth storing.
+            // With no caching headers at all, Firefox kept showing the PDF from before the artwork
+            // was replaced, even on reload, while the saved template was already right.
+            Response.Headers[HeaderNames.CacheControl] = "no-store";
+
             return File(result.Data.Pdf, "application/pdf");
         }
 
