@@ -26,6 +26,9 @@ public interface IFileLibraryService
 
     Task<Result<StorageSummary>> GetStorageSummaryAsync(CancellationToken cancellationToken);
 
+    /// <summary>Every library file inside the folders and their subfolders, for warning about what deleting them affects.</summary>
+    Task<Result<IReadOnlyList<Guid>>> GetFileIdsInFoldersAsync(IReadOnlyCollection<Guid> folderIds, CancellationToken cancellationToken);
+
     /// <summary>
     /// The files a zip of the selection holds, folders included with everything in them, laid out
     /// as they are in Files. Fails when it would be bigger than <see cref="FileLibraryRules.MaxZipBytes"/>

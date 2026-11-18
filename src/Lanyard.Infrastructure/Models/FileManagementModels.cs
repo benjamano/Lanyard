@@ -28,7 +28,18 @@ namespace Lanyard.Infrastructure.Models
         public Guid? FolderId { get; set; }
         public Folder? Folder { get; set; }
 
+        // Length of a video or audio file, as the browser measured it while uploading.
         public TimeSpan? VideoLength { get; set; }
+
+        // An image's or video's size in pixels, when known.
+        public int? Width { get; set; }
+
+        public int? Height { get; set; }
+
+        // Storage key of the small WebP shown in Files' grid (FileThumbnailService). Null = not made
+        // yet; empty = tried and there isn't one (an SVG, a format SkiaSharp can't read).
+        [MaxLength(500)]
+        public string? ThumbnailPath { get; set; }
 
         public bool IsActive { get; set; } = true;
 

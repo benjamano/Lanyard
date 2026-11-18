@@ -2745,6 +2745,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<Guid?>("FolderId")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("Height")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -2753,6 +2756,10 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Property<bool>("IsSystemFile")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("ThumbnailPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<DateTime>("UploadedAt")
                         .HasColumnType("timestamp with time zone");
@@ -2763,6 +2770,9 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Property<TimeSpan?>("VideoLength")
                         .HasColumnType("interval");
+
+                    b.Property<int?>("Width")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 

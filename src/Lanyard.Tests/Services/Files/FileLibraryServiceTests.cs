@@ -564,6 +564,94 @@ public class FileLibraryServiceTests
         CollectionAssert.AreEqual(new[] { "Menus/menu.pdf" }, plan.Select(x => x.EntryPath).ToArray());
     }
 
+    // ---------- Review fixes ----------
+
+    private FileLibraryService LibraryFor(params string[] roles)
+    {
+        System.Security.Claims.ClaimsIdentity identity = new([new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, "someone")], "test");
+
+        foreach (string role in roles)
+            identity.AddClaim(new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, role));
+
+        Mock<IHttpContextAccessor> http = new();
+        http.SetupGet(x => x.HttpContext).Returns(new DefaultHttpContext { User = new System.Security.Claims.ClaimsPrincipal(identity) });
+
+        Mock<ICurrentUserAccessor> user = new();
+        user.Setup(x => x.GetCurrentUserIdAsync()).ReturnsAsync(Result<string>.Ok("someone"));
+
+        return new FileLibraryService(MockFactory(), _files, new FileUsageService(MockFactory(), NullLogger<FileUsageService>.Instance), user.Object,
+            NullLogger<FileLibraryService>.Instance, null, http.Object, new Lanyard.Infrastructure.DataAccess.Tenancy.FixedTenantProvider(1));
+    }
+
+    [TestMethod]
+    public async Task SomeoneWhoDoesntManageFiles_CantChangeAnything()
+    {
+        Guid folder = await SeedFolderAsync("Menus", shared: true);
+        Guid file = await SeedFileAsync("menu.pdf", folder);
+        FileLibraryService staff = LibraryFor("Staff");
+
+        Assert.IsFalse((await staff.MoveToBinAsync([file], [], CancellationToken.None)).IsSuccess);
+        Assert.IsFalse((await staff.MoveAsync([file], [], null, CancellationToken.None)).IsSuccess);
+        Assert.IsFalse((await staff.SetFolderSharedAsync(folder, false, CancellationToken.None)).IsSuccess);
+        Assert.IsFalse((await staff.EmptyBinAsync(CancellationToken.None)).IsSuccess);
+        Assert.IsFalse((await staff.ListBinAsync(CancellationToken.None)).IsSuccess);
+        Assert.IsTrue((await FileAsync(file))!.IsActive);
+
+        Assert.IsTrue((await LibraryFor("CanManageFiles").MoveToBinAsync([file], [], CancellationToken.None)).IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task ADeletedFile_CantBeOpened_UnlessSomethingStillUsesIt()
+    {
+        Mock<IDbContextFactory<ApplicationDbContext>> factory = new();
+        factory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>())).ReturnsAsync(() => new ApplicationDbContext(_options));
+        Mock<IWebHostEnvironment> environment = new();
+        environment.SetupGet(x => x.EnvironmentName).Returns(Environments.Development);
+        FileService files = new(factory.Object, Mock.Of<ICurrentUserAccessor>(), Mock.Of<ISongAnalysisQueue>(), environment.Object,
+            usage: new FileUsageService(factory.Object, NullLogger<FileUsageService>.Instance));
+
+        Guid unused = await SeedFileAsync("old.png", active: false, deletedAt: DateTime.UtcNow);
+        Guid logo = await SeedFileAsync("logo.png", active: false, deletedAt: DateTime.UtcNow);
+        Guid binnedFolder = await SeedFolderAsync("Old", active: false, deletedAt: DateTime.UtcNow);
+        Guid inFolder = await SeedFileAsync("inside.png", binnedFolder);
+        Guid live = await SeedFileAsync("live.png");
+
+        await using (ApplicationDbContext db = new(_options))
+        {
+            db.Companies.Add(new Company { Id = 9, Name = "Play2Day", LogoFileId = logo });
+            await db.SaveChangesAsync();
+        }
+
+        async Task<bool> Opens(Guid id)
+        {
+            Result<FileContent> opened = await files.OpenFileContentAsync(id, null, CancellationToken.None);
+
+            if (opened.Data is FileContent content)
+                await content.DisposeAsync();
+
+            return opened.IsSuccess;
+        }
+
+        Assert.IsFalse(await Opens(unused), "Deleted and unused: gone.");
+        Assert.IsFalse(await Opens(inFolder), "In a deleted folder counts as deleted.");
+        Assert.IsTrue(await Opens(logo), "Still the logo, so it keeps working.");
+        Assert.IsTrue(await Opens(live));
+    }
+
+    [TestMethod]
+    public async Task FileIdsInFolders_IncludesSubfolders()
+    {
+        Guid parent = await SeedFolderAsync("Posters");
+        Guid child = await SeedFolderAsync("Christmas", parent);
+        Guid a = await SeedFileAsync("a.png", parent);
+        Guid b = await SeedFileAsync("b.png", child);
+        await SeedFileAsync("elsewhere.png");
+
+        IReadOnlyList<Guid> ids = (await _library.GetFileIdsInFoldersAsync([parent], CancellationToken.None)).Data!;
+
+        CollectionAssert.AreEquivalent(new[] { a, b }, ids.ToArray());
+    }
+
     private IDbContextFactory<ApplicationDbContext> MockFactory()
     {
         Mock<IDbContextFactory<ApplicationDbContext>> factory = new();

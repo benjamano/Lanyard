@@ -43,21 +43,51 @@ namespace Lanyard.API.Controllers
             _logger = logger;
         }
 
-        // A little over FileUploadPolicy.MaxBytes for the multipart framing; FileService makes the
-        // real size and type check.
+        // A little over the largest upload (a video) plus its poster frame, for the multipart framing;
+        // FileService makes the real per-type size and type check. Files' upload queue sends the
+        // picture's or video's size, its length and a poster frame it took in the browser.
         [HttpPost("upload")]
-        [Authorize(Roles = "Admin, CanManageFiles")]
-        [RequestSizeLimit(FileUploadPolicy.MaxBytes + 1024 * 1024)]
-        [RequestFormLimits(MultipartBodyLengthLimit = FileUploadPolicy.MaxBytes + 1024 * 1024)]
-        public async Task<IActionResult> Upload([FromForm] IFormFile file, [FromForm] Guid? folderId, CancellationToken cancellationToken)
+        [Authorize(Roles = ManageRoles)]
+        [RequestSizeLimit(FileUploadPolicy.MaxVideoBytes + 8 * 1024 * 1024)]
+        [RequestFormLimits(MultipartBodyLengthLimit = FileUploadPolicy.MaxVideoBytes + 8 * 1024 * 1024)]
+        public async Task<IActionResult> Upload([FromForm] IFormFile file, [FromForm] Guid? folderId,
+            [FromForm] int? width, [FromForm] int? height, [FromForm] double? durationSeconds, IFormFile? poster,
+            CancellationToken cancellationToken)
         {
             if (file == null)
-                return BadRequest(Result<FileMetadata>.Fail("No file provided."));
+                return BadRequest(Result<FileListItemDto>.Fail("No file provided."));
 
             // The user id, so Files can show who uploaded it (it used to record the username).
             string uploadedBy = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "unknown";
-            Result<FileMetadata> result = await _fileService.UploadFileAsync(file, folderId, uploadedBy, cancellationToken);
-            return result.ToActionResult();
+
+            UploadedMedia media = new(
+                width is > 0 and < 100_000 ? width : null,
+                height is > 0 and < 100_000 ? height : null,
+                durationSeconds is > 0 and < 86_400 ? durationSeconds : null);
+
+            Result<FileMetadata> result = await _fileService.UploadFileAsync(file, folderId, uploadedBy,
+                new FileUploadOptions(Media: media, Poster: poster), cancellationToken);
+
+            return result.IsSuccess
+                ? Ok(Result<FileListItemDto>.Ok(FileListItemDto.From(result.Data!)))
+                : BadRequest(Result<FileListItemDto>.Fail(result.Error ?? "Couldn't upload the file."));
+        }
+
+        // Files' grid thumbnail. 404 when there isn't one: the page then shows the picture or an icon.
+        [HttpGet("thumb/{id}")]
+        public async Task<IActionResult> Thumbnail(Guid id, CancellationToken cancellationToken)
+        {
+            if (await KioskRequestAuthorization.AuthorizeAsync(HttpContext) == KioskRequestAccess.Denied)
+                return Challenge(KioskAuthenticationDefaults.Scheme);
+
+            Result<Stream> thumbnail = await _fileService.OpenThumbnailAsync(id, cancellationToken);
+
+            if (!thumbnail.IsSuccess || thumbnail.Data is null)
+                return NotFound();
+
+            // A file's thumbnail never changes (a new upload is a new id).
+            Response.Headers.CacheControl = "private, max-age=2592000, immutable";
+            return File(thumbnail.Data, "image/webp");
         }
 
         [HttpGet("download/{id}")]

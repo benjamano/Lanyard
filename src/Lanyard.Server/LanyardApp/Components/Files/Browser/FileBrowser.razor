@@ -6,12 +6,13 @@
 @inject INotificationService _toast
 @inject NavigationManager _navigation
 @inject IJSRuntime _js
+@implements IAsyncDisposable
 
 @* The Files browser. Three panes on a wide screen (folders | contents | details); on a phone the
    folder tree gives way to drill-down, Quick access becomes a row of chips and details open as a
    sheet from the bottom. Managers see everything and can change it; other staff see folders shared
    with staff, read-only. Where it is lives in the address bar (see FilesLocation). *@
-<div class="files @(_details is not null ? "has-details" : "")">
+<div class="files @(_details is not null ? "has-details" : "")" @ref="_root">
     <aside class="files-rail" aria-label="Files navigation">
         <nav class="files-quick" aria-label="Quick access">
             @QuickLink(FilesLocation.Home, CanManage ? "All files" : "Shared files", new Icons.Regular.Size20.Folder(), Location.View == FilesView.Folder && Location.FolderId is null)
@@ -252,6 +253,11 @@
             }
         </div>
     }
+
+    @if (CanManage)
+    {
+        <UploadTray Items="_uploads" OnCancel="CancelUploadAsync" OnRetry="RetryUploadAsync" OnClear="ClearUploadsAsync" OnShow="ShowUploadAsync" />
+    }
 </div>
 
 @code {
@@ -273,6 +279,7 @@
 
     private FilesLocation? _loadedLocation;
     private string _searchText = "";
+    private string? _searchedFromBox;
     private CancellationTokenSource? _searchDelay;
 
     private FileSort _sort = FileSort.Name;
@@ -281,6 +288,13 @@
 
     private Selection? _details;
     private MenuState? _menu;
+
+    private ElementReference _root;
+    private IJSObjectReference? _uploadModule;
+    private IJSObjectReference? _uploader;
+    private DotNetObjectReference<FileBrowser>? _self;
+    private IReadOnlyList<UploadTray.UploadItem> _uploads = [];
+    private CancellationTokenSource? _uploadRefresh;
 
     private bool SharedOnly => !CanManage;
 
@@ -347,6 +361,9 @@
 
         await RestorePreferencesAsync();
         _ready = true;
+
+        if (CanManage)
+            await AttachUploaderAsync();
         await Task.WhenAll(LoadTreeAsync(), LoadStorageAsync());
         await LoadContentAsync();
         StateHasChanged();
@@ -354,7 +371,16 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        _searchText = Location.View == FilesView.Search ? Location.Search ?? "" : "";
+        // Take the box's text from the address only when the change came from somewhere else
+        // (Back, a link, Quick access). After the box's own search, the address holds trimmed
+        // text, and copying it back would eat a space or letters typed meanwhile.
+        string? searched = Location.View == FilesView.Search ? Location.Search : null;
+
+        if (searched is null || searched != _searchedFromBox)
+        {
+            _searchText = searched ?? "";
+            _searchedFromBox = null;
+        }
 
         if (_ready && Location != _loadedLocation)
             await LoadContentAsync();
@@ -424,6 +450,8 @@
             _path = location.View == FilesView.Folder && location.FolderId is Guid folderId
                 ? (await _library.GetPathAsync(folderId, SharedOnly, CancellationToken.None)).Data ?? []
                 : [];
+
+            await TellUploaderAboutFolderAsync();
         }
         finally
         {
@@ -462,6 +490,7 @@
     {
         _searchText = e.Value?.ToString() ?? "";
         _searchDelay?.Cancel();
+        _searchDelay?.Dispose();
         _searchDelay = new CancellationTokenSource();
         CancellationToken token = _searchDelay.Token;
 
@@ -499,7 +528,10 @@
             : new FilesLocation(FilesView.Search, Search: text);
 
         if (to != Location)
+        {
+            _searchedFromBox = to.View == FilesView.Search ? to.Search : null;
             _navigation.NavigateTo(to.ToUrl(), replace: replace);
+        }
     }
 
     private Task ClearSearchAsync()
@@ -728,22 +760,164 @@
         await RefreshAsync();
     }
 
+    // Opens the browser's file picker; fileUploads.js takes it from there. Uploads land in the open
+    // folder, or the top level when a Quick access view or search is showing.
     private async Task UploadAsync()
     {
-        DialogResult result = await _dialogService.ShowDialogAsync<UploadFilesDialog>(options =>
+        if (_uploader is null)
         {
-            options.Header.Title = "Upload files";
-            options.Width = "min(560px, 95vw)";
-            options.Modal = true;
-            options.Parameters.Add(nameof(UploadFilesDialog.FolderId), CurrentFolderId);
-            options.Parameters.Add(nameof(UploadFilesDialog.FolderName), CurrentFolderName);
+            _toast.ShowWarning("Uploading isn't ready yet. Try again in a moment.");
+            return;
+        }
+
+        await _uploader.InvokeVoidAsync("pick", CurrentFolderId?.ToString());
+    }
+
+    // ---------- Uploads (fileUploads.js) ----------
+
+    private async Task AttachUploaderAsync()
+    {
+        try
+        {
+            _uploadModule = await _js.InvokeAsync<IJSObjectReference>("import", "./js/fileUploads.js");
+            _self = DotNetObjectReference.Create(this);
+            _uploader = await _uploadModule.InvokeAsync<IJSObjectReference>("attach", _root, _self,
+                new { folderId = CurrentFolderId?.ToString(), folderName = CurrentFolderName });
+        }
+        catch (Exception ex) when (ex is JSException or InvalidOperationException or TaskCanceledException)
+        {
+            // No uploads without the script; the rest of the page still works.
+        }
+    }
+
+    private async Task TellUploaderAboutFolderAsync()
+    {
+        if (_uploader is null)
+            return;
+
+        try
+        {
+            await _uploader.InvokeVoidAsync("setFolder", CurrentFolderId?.ToString(), CurrentFolderName);
+        }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException or TaskCanceledException)
+        {
+        }
+    }
+
+    [JSInvokable]
+    public Task OnUploadsChanged(List<UploadTray.UploadItem> items)
+    {
+        _uploads = items;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    // Each finished file refreshes the view, but a batch of 30 refreshes once, just after the last.
+    [JSInvokable]
+    public Task OnUploadFinished(UploadTray.UploadItem item)
+    {
+        _uploadRefresh?.Cancel();
+        _uploadRefresh?.Dispose();
+        _uploadRefresh = new CancellationTokenSource();
+        CancellationToken token = _uploadRefresh.Token;
+
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await Task.Delay(700, token);
+                await RefreshAsync();
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+            {
+                // A later upload finished first and took over the refresh.
+            }
         });
 
-        // Refresh either way: files uploaded before Cancel are still there.
-        await RefreshAsync();
+        return Task.CompletedTask;
+    }
 
-        if (result.Value is int count && count > 0)
-            _toast.ShowSuccess($"Uploaded {FileBrowserFormat.Plural(count, "file")}");
+    // A dropped folder: find or make each folder on the path ("Summer/Posters") under the parent,
+    // and return the last one's id. Null when it couldn't be made.
+    [JSInvokable]
+    public async Task<string?> EnsureFolderPath(string? parentId, string path)
+    {
+        // Only managers get the uploader, but a JS-invokable method is reachable from the browser.
+        if (!CanManage)
+            return null;
+
+        Guid? parent = Guid.TryParse(parentId, out Guid parsed) ? parsed : null;
+        Result<IReadOnlyList<FolderNode>> tree = await _library.GetTreeAsync(sharedOnly: false, CancellationToken.None);
+        List<FolderNode> folders = tree.Data?.ToList() ?? [];
+
+        foreach (string segment in path.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            FolderNode? existing = folders.FirstOrDefault(x => x.ParentFolderId == parent && FileNameRules.SameName(x.Name, segment));
+
+            if (existing is not null)
+            {
+                parent = existing.Id;
+                continue;
+            }
+
+            Result<Folder> created = await _fileService.CreateFolderAsync(segment, parent, CancellationToken.None);
+
+            if (!created.IsSuccess || created.Data is null)
+                return null;
+
+            folders.Add(new FolderNode(created.Data.Id, created.Data.Name, parent, false, false, 0, 0, 0, created.Data.CreatedAt));
+            parent = created.Data.Id;
+        }
+
+        return parent?.ToString();
+    }
+
+    private async Task CancelUploadAsync(int id) => await CallUploaderAsync("cancel", id);
+
+    private async Task RetryUploadAsync(int id) => await CallUploaderAsync("retry", id);
+
+    private async Task ClearUploadsAsync() => await CallUploaderAsync("clearFinished");
+
+    private Task ShowUploadAsync(UploadTray.UploadItem item) =>
+        GoAsync(new FilesLocation(FilesView.Folder, Guid.TryParse(item.FolderId, out Guid folder) ? folder : null));
+
+    private async Task CallUploaderAsync(string method, params object?[] args)
+    {
+        if (_uploader is null)
+            return;
+
+        try
+        {
+            await _uploader.InvokeVoidAsync(method, args);
+        }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException or TaskCanceledException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _uploadRefresh?.Cancel();
+        _uploadRefresh?.Dispose();
+        _searchDelay?.Cancel();
+        _searchDelay?.Dispose();
+
+        try
+        {
+            if (_uploader is not null)
+            {
+                await _uploader.InvokeVoidAsync("dispose");
+                await _uploader.DisposeAsync();
+            }
+
+            if (_uploadModule is not null)
+                await _uploadModule.DisposeAsync();
+        }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException or TaskCanceledException)
+        {
+            // The browser has gone; nothing to tidy.
+        }
+
+        _self?.Dispose();
     }
 
     private async Task RenameFileAsync(FileListItem file)
@@ -851,6 +1025,7 @@
             options.Parameters.Add(nameof(DeleteItemsDialog.Names), names);
             options.Parameters.Add(nameof(DeleteItemsDialog.FileIds), fileIds);
             options.Parameters.Add(nameof(DeleteItemsDialog.FolderCount), folderIds.Count);
+            options.Parameters.Add(nameof(DeleteItemsDialog.FolderIds), folderIds);
         });
 
         if (confirm.Cancelled || confirm.Value is not true)
@@ -967,6 +1142,7 @@
         FilesLocation open = new(FilesView.Folder, folder.Id);
 
         <div class="files-item is-folder @(selected ? "is-selected" : "")" role="listitem" @key="folder.Id"
+             data-drop-folder="@(CanManage ? folder.Id.ToString() : null)" data-drop-name="@folder.Name"
              @oncontextmenu="e => OpenMenu(e, folder.Name, FolderActions(folder))" @oncontextmenu:preventDefault>
             <a class="files-item-main" href="@open.ToUrl()" title="@folder.Name"
                @onclick="() => GoAsync(open)" @onclick:preventDefault
@@ -1013,9 +1189,13 @@
                     @onclick="() => Select(selection)" @ondblclick="() => PreviewAsync(index)"
                     @onkeydown="e => OnItemKeyDownAsync(e, selection)">
                 <span class="files-item-thumb @FileBrowserFormat.TypeClass(file.TypeGroup)">
-                    @if (file.TypeGroup == FileTypeGroup.Image)
+                    @if (FileBrowserFormat.TileImageUrl(file) is string tile)
                     {
-                        <img src="@FileBrowserFormat.DownloadUrl(file.Id)" alt="" loading="lazy" decoding="async" />
+                        <img src="@tile" alt="" loading="lazy" decoding="async" />
+                        @if (file.TypeGroup == FileTypeGroup.Video)
+                        {
+                            <span class="files-item-play"><FluentIcon Value="@(new Icons.Filled.Size24.Play())" Color="Color.Default" /></span>
+                        }
                     }
                     else
                     {
