@@ -1,11 +1,13 @@
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 
 namespace Lanyard.Application.Services.Locations;
 
 public record LoginLocationOption(int LocationId, string DisplayName, int CompanyId, string? ThemeColorHex, Guid? LogoFileId);
 public record LoginCompanyOption(int CompanyId, string Name, string? ThemeColorHex, Guid? LogoFileId, Guid? BackgroundImageFileId);
-public record CompanyBrandingInfo(int CompanyId, string Name, string? ThemeColorHex, Guid? LogoFileId, Guid? BackgroundImageFileId);
+public record CompanyBrandingInfo(int CompanyId, string Name, string? ThemeColorHex, Guid? LogoFileId, Guid? BackgroundImageFileId,
+    SeasonalThemeSetting SeasonalThemeSetting = SeasonalThemeSetting.Automatic);
 
 public interface ICompanyLocationService
 {

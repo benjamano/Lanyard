@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Lanyard.Infrastructure.DTO;
 
 namespace Lanyard.Application.Services.Locations;
@@ -9,4 +10,7 @@ public record LocationScope(bool IsAdmin, int? LocationId, int? CompanyId, strin
 public interface ICurrentLocationContext
 {
     Task<Result<LocationScope>> GetScopeAsync();
+
+    // For API controllers, which have the request's user but no Blazor authentication state.
+    Task<Result<LocationScope>> GetScopeAsync(ClaimsPrincipal user);
 }

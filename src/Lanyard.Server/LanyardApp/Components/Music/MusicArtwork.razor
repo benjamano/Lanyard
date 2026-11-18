@@ -1,0 +1,44 @@
+@* Songs have no cover art, so each gets a gradient picked from its id: the same song always looks
+   the same, and neighbours in a list look different. *@
+<div class="music-artwork is-@Size.ToString().ToLowerInvariant()" style="--art-hue: @Hue; --art-hue-2: @((Hue + 40) % 360);" aria-hidden="true">
+    @if (IsPlaying)
+    {
+        <span class="music-equaliser"><i></i><i></i><i></i><i></i></span>
+    }
+    else if (Icon is not null)
+    {
+        <FluentIcon Value="@Icon" Color="Color.Custom" CustomColor="#fff" />
+    }
+    else
+    {
+        <span class="music-artwork-initials">@Initials</span>
+    }
+</div>
+
+@code {
+    public enum ArtworkSize { Small, Medium, Large }
+
+    [Parameter] public Guid Seed { get; set; }
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public bool IsPlaying { get; set; }
+    [Parameter] public ArtworkSize Size { get; set; } = ArtworkSize.Medium;
+    [Parameter] public Icon? Icon { get; set; }
+
+    private int Hue => (int)((uint)Seed.GetHashCode() % 360);
+
+    private string Initials
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(Title))
+            {
+                return "♪";
+            }
+
+            string[] words = Title.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return words.Length >= 2
+                ? $"{char.ToUpperInvariant(words[0][0])}{char.ToUpperInvariant(words[1][0])}"
+                : char.ToUpperInvariant(words[0][0]).ToString();
+        }
+    }
+}

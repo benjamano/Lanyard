@@ -1,0 +1,119 @@
+.music-progress {
+    --music-progress: 0%;
+    display: grid;
+    grid-template-columns: 3.25rem 1fr 3.25rem;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.music-progress-time {
+    font-size: var(--fontSizeBase200);
+    font-variant-numeric: tabular-nums;
+    color: var(--colorNeutralForeground3);
+    background: none;
+    border: 0;
+    padding: 0.25rem 0;
+}
+
+.music-progress-time.is-elapsed {
+    text-align: right;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+.music-progress-time.is-elapsed:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+}
+
+.music-progress-range {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 24px;
+    margin: 0;
+    background: transparent;
+    cursor: pointer;
+    touch-action: none;
+}
+
+.music-progress-range:disabled {
+    cursor: default;
+}
+
+.music-progress-range::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(to right, var(--colorBrandBackground) var(--music-progress), var(--colorNeutralStroke2) var(--music-progress));
+}
+
+.music-progress-range::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(to right, var(--colorBrandBackground) var(--music-progress), var(--colorNeutralStroke2) var(--music-progress));
+}
+
+.music-progress-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    margin-top: -5px;
+    border-radius: 50%;
+    background: var(--colorBrandBackground);
+    border: 2px solid var(--colorNeutralBackground1);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
+    transition: transform 120ms;
+}
+
+.music-progress-range::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--colorBrandBackground);
+    border: 2px solid var(--colorNeutralBackground1);
+}
+
+.music-progress-range:hover::-webkit-slider-thumb,
+.music-progress-range:active::-webkit-slider-thumb {
+    transform: scale(1.25);
+}
+
+.music-progress-range:disabled::-webkit-slider-thumb {
+    visibility: hidden;
+}
+
+.music-progress-range:disabled::-moz-range-thumb {
+    visibility: hidden;
+}
+
+.music-progress-range:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* The compact player's line: no times, no thumb, flush with the top edge. */
+.music-progress.is-compact {
+    display: block;
+    height: 3px;
+}
+
+.music-progress.is-compact .music-progress-range {
+    display: block;
+    height: 3px;
+    pointer-events: none;
+}
+
+.music-progress.is-compact .music-progress-range::-webkit-slider-runnable-track {
+    height: 3px;
+    border-radius: 0;
+}
+
+.music-progress.is-compact .music-progress-range::-moz-range-track {
+    height: 3px;
+    border-radius: 0;
+}
+
+.music-progress.is-compact .music-progress-range::-webkit-slider-thumb {
+    visibility: hidden;
+}

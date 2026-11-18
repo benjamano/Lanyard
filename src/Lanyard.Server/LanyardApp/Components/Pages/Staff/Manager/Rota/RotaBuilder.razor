@@ -11,6 +11,7 @@
 
 @inject IRotaService _rotaService
 @inject IShiftClaimService _shiftClaimService
+@inject ITemplateLearningService _learningService
 @inject IJSRuntime JS
 
 <PageTitle>Rota</PageTitle>
@@ -45,6 +46,10 @@
 
             <div class="rota-actions">
                 <HelpButton AreaKey="@HelpRegistry.Rota" Topic="building" />
+                <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Sparkle())"
+                              Disabled="@(view is null || isBusy)" OnClick="@AutoBuildAsync">
+                    Auto-build
+                </FluentButton>
                 <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Copy())"
                               Disabled="@(view is null || isBusy)" OnClick="@CopyAsync">
                     @(monthView ? "Copy from 4 weeks earlier" : "Copy last week")
@@ -69,6 +74,22 @@
                     <span>@view.UnpublishedChangeCount unpublished @(view.UnpublishedChangeCount == 1 ? "change" : "changes") @WhoIsAffected(view.PeopleWithUnpublishedChanges, view.UnpublishedOpenShiftCount).</span>
                 }
             </FluentText>
+
+            @if (templateSuggestions is TemplateSuggestionRun suggestionRun)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                    @if (suggestionRun.FirstSetup)
+                    {
+                        <text>Lanyard has learned your shift templates from the rota you've been building@(suggestionRun.MatchPercent is int match ? $" ({match}% match)" : string.Empty), so Auto-build can do it for you.</text>
+                        <a href="@($"/manage/rota/templates?location={locationId}")">Set up Auto-build</a>
+                    }
+                    else
+                    {
+                        <text>Last month's rota suggests @suggestionRun.Suggestions @(suggestionRun.Suggestions == 1 ? "change" : "changes") to your shift templates.</text>
+                        <a href="@($"/manage/rota/templates?location={locationId}")">Review @(suggestionRun.Suggestions == 1 ? "it" : "them")</a>
+                    }
+                </FluentMessageBar>
+            }
 
             @if (pendingRequests > 0 && scope?.LocationId == locationId)
             {
@@ -154,6 +175,7 @@
     private RotaRangeView? view;
     private string? loadError;
     private int pendingRequests;
+    private TemplateSuggestionRun? templateSuggestions;
     private bool isBusy;
     private string? loadedKey;
 
@@ -267,6 +289,9 @@
         Result<string> viewer = await _securityService.GetCurrentUserIdAsync();
         Result<int> requests = await _shiftClaimService.CountPendingForNavAsync(scope, viewer.Data);
         pendingRequests = requests.Data;
+
+        Result<TemplateSuggestionRun?> suggestions = await _learningService.GetOpenSuggestionsAsync(scope, location);
+        templateSuggestions = suggestions.Data;
     }
 
     // All navigation goes through the URL so the page is linkable and back/forward work;
@@ -415,6 +440,38 @@
             string more = result.Data.Skipped.Count > 3 ? $" ...and {result.Data.Skipped.Count - 3} more." : string.Empty;
             _toastService.ShowWarning($"Skipped {result.Data.Skipped.Count}: {shown}{more}");
         }
+
+        await LoadAsync();
+    }
+
+    private async Task AutoBuildAsync()
+    {
+        if (view is null || locationId is not int location)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<AutoBuildDialog>(options =>
+        {
+            options.Width = "640px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(AutoBuildDialog.LocationId), location);
+            options.Parameters.Add(nameof(AutoBuildDialog.From), From);
+            options.Parameters.Add(nameof(AutoBuildDialog.To), To);
+            options.Parameters.Add(nameof(AutoBuildDialog.RangeLabel), RangeLabel);
+        });
+
+        if (result.Value is not AutoBuildResult built)
+        {
+            return;
+        }
+
+        string assigned = $"{built.Assigned} {(built.Assigned == 1 ? "shift" : "shifts")}";
+        string open = built.Open > 0 ? $" and {built.Open} open {(built.Open == 1 ? "shift" : "shifts")}" : string.Empty;
+        string removed = built.RemovedLines.Count > 0 ? $" Took off {built.RemovedLines.Count} for changed parties." : string.Empty;
+        _toastService.ShowSuccess(built.Lines.Count > 0
+            ? $"Added {assigned}{open} as drafts.{removed} Check them, then publish."
+            : removed.Trim());
 
         await LoadAsync();
     }

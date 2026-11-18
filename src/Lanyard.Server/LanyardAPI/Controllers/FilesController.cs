@@ -3,12 +3,14 @@ using Lanyard.Application.Services;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO.Files;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -58,8 +60,14 @@ namespace Lanyard.API.Controllers
             if (await KioskRequestAuthorization.AuthorizeAsync(HttpContext) == KioskRequestAccess.Denied)
                 return Challenge(KioskAuthenticationDefaults.Scheme);
 
+            if (!CanBrowseFiles())
+                return StatusCode(StatusCodes.Status403Forbidden);
+
             Result<IReadOnlyList<FileMetadata>> result = await _fileService.ListFilesAsync(folderId, cancellationToken);
-            return result.ToActionResult();
+
+            return result.IsSuccess
+                ? Ok(Result<List<FileListItemDto>>.Ok(result.Data!.Select(FileListItemDto.From).ToList()))
+                : result.ToActionResult();
         }
 
         [HttpDelete("{id}")]
@@ -117,8 +125,26 @@ namespace Lanyard.API.Controllers
             if (await KioskRequestAuthorization.AuthorizeAsync(HttpContext) == KioskRequestAccess.Denied)
                 return Challenge(KioskAuthenticationDefaults.Scheme);
 
+            if (!CanBrowseFiles())
+                return StatusCode(StatusCodes.Status403Forbidden);
+
             Result<IReadOnlyList<Folder>> result = await _fileService.ListFoldersAsync(parentFolderId, cancellationToken);
-            return result.ToActionResult();
+
+            return result.IsSuccess
+                ? Ok(Result<List<FolderListItemDto>>.Ok(result.Data!.Select(FolderListItemDto.From).ToList()))
+                : result.ToActionResult();
         }
+
+        // Listing is browsing the File Manager, which is only for the people who manage files (the
+        // page itself is [Authorize(Roles = "Admin, CanManageFiles")]). Before this any signed-in
+        // staff member or kiosk could list every file and folder in the company. Kiosks never list:
+        // they get their media through the music/kiosk-media/branding endpoints. Download stays open
+        // to every signed-in user and kiosk because course images, party artwork and logos are
+        // embedded by id on pages everyone sees; files that must stay private (staff documents)
+        // are kept out of the File Manager's routes entirely.
+        private bool CanBrowseFiles() =>
+            User.Identity?.IsAuthenticated == true
+            && User.FindFirst(KioskClaimTypes.ClientId) is null
+            && (User.IsInRole("Admin") || User.IsInRole("CanManageFiles"));
     }
 }

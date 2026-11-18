@@ -1,0 +1,57 @@
+@using Lanyard.Shared.Audio
+@inject IClientService _clientService
+
+@* The Music page's way into a kiosk's equaliser. Says which preset (or "Custom") is on, so a kiosk
+   that's been changed from flat stands out. *@
+<button type="button" class="music-eq-chip @(IsAltered ? "is-altered" : null)" disabled="@Disabled"
+        aria-label="Equaliser: @Summary. Change it" title="Equaliser (bass, mid, treble)" @onclick="OpenAsync">
+    <FluentIcon Value="@(new Icons.Regular.Size16.Options())" Color="Color.Custom" CustomColor="currentColor" />
+    <span>EQ<span class="music-eq-chip-summary">: @Summary</span></span>
+</button>
+
+@code {
+    [Parameter, EditorRequired] public Guid ClientId { get; set; }
+    [Parameter, EditorRequired] public string KioskName { get; set; } = "";
+    [Parameter] public bool Disabled { get; set; }
+
+    private MusicEqualiserSettings? _settings;
+    private Guid _loadedFor;
+
+    private bool IsAltered => _settings is { IsFlat: false };
+
+    private string Summary => _settings is null ? "…"
+        : _settings.MatchingPreset?.Name ?? "Custom";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedFor == ClientId)
+        {
+            return;
+        }
+
+        _loadedFor = ClientId;
+        _settings = null;
+
+        Result<ClientEqualiserStateDTO> result = await _clientService.GetClientEqualiserAsync(ClientId);
+        _settings = result.IsSuccess ? result.Data!.Settings : MusicEqualiserSettings.Flat;
+    }
+
+    private async Task OpenAsync()
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<MusicEqualiserDialog>(options =>
+        {
+            options.Width = "min(480px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(MusicEqualiserDialog.ClientId), ClientId);
+            options.Parameters.Add(nameof(MusicEqualiserDialog.KioskName), KioskName);
+        });
+
+        // Closed with Done or the X: re-read either way, since changes save as they're made.
+        Result<ClientEqualiserStateDTO> reloaded = await _clientService.GetClientEqualiserAsync(ClientId);
+
+        if (reloaded.IsSuccess)
+        {
+            _settings = reloaded.Data!.Settings;
+        }
+    }
+}

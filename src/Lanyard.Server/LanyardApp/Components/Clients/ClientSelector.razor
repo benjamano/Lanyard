@@ -1,81 +1,134 @@
-﻿@using Lanyard.Application.Services.Authentication
 @using Lanyard.Infrastructure.DTO
 @using Lanyard.Infrastructure.Models
 
 @inject INotificationService _toastService
 @inject IClientService _clientService
 
-<div class="client-selector-wrapper">
-    <FluentStack Orientation="Orientation.Horizontal"
-                VerticalAlignment="VerticalAlignment.Center"
-                HorizontalAlignment="HorizontalAlignment.Right"
-                HorizontalGap="4"
-                Class="client-selector-stack">
-        <FluentSelect TOption="Client"
-                      TValue="string"
-                      Items="@clients"
-                      OptionText="@(client => client?.Name ?? string.Empty)"
-                      OptionValue="@(client => client?.Id.ToString())"
-                      Placeholder="@ClientPlaceholder"
-                      Value="@(selectedClientId?.ToString() ?? string.Empty)"
-                      ValueChanged="@OnSelectedClientChanged"
-                      Disabled="@(!clients.Any())"
-                      Class="client-selector-select" />
+@* Picks the kiosk the DMX desk drives. Lists every kiosk in the company, online or not, so fixtures
+   and scenes can be set up while a kiosk is switched off; offline ones say so. *@
+<div class="client-selector">
+    <select class="client-selector-select"
+            aria-label="Kiosk"
+            disabled="@(clients.Count == 0)"
+            value="@(selectedClientId?.ToString() ?? string.Empty)"
+            @onchange="OnSelectedClientChanged">
+        @if (clients.Count == 0)
+        {
+            <option value="">@(isLoading ? "Loading kiosks…" : "No kiosks yet")</option>
+        }
+        else
+        {
+            <option value="" disabled="disabled">Choose a kiosk</option>
+            @foreach (ClientConnectedDTO client in clients)
+            {
+                <option value="@client.Id">@client.Name@(client.IsCurrentlyConnected ? string.Empty : " (offline)")</option>
+            }
+        }
+    </select>
 
-        <FluentButton Appearance="ButtonAppearance.Outline" OnClick="RefreshClientsAsync">
-            Refresh
-        </FluentButton>
-    </FluentStack>
+    @if (SelectedClient is ClientConnectedDTO selected)
+    {
+        <span class="client-selector-status @(selected.IsCurrentlyConnected ? "is-online" : "is-offline")"
+              title="@(selected.IsCurrentlyConnected ? "Connected: changes reach the lights" : "Offline: you can edit, but nothing reaches the lights until it reconnects")">
+            @(selected.IsCurrentlyConnected ? "Online" : "Offline")
+        </span>
+    }
+
+    <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="new Icons.Regular.Size20.ArrowClockwise()"
+                  Title="Refresh kiosks" aria-label="Refresh kiosks" OnClick="RefreshClientsAsync" />
 </div>
 
 @code {
+    // The kiosk to select once the list loads (from the URL or last visit). Ignored if it isn't
+    // one of this company's kiosks.
+    [Parameter]
+    public Guid? InitialClientId { get; set; }
+
     [Parameter]
     public EventCallback<Guid?> OnClientSelected { get; set; }
 
-    private IEnumerable<Client> clients = [];
-
+    private List<ClientConnectedDTO> clients = [];
+    private bool isLoading = true;
     private Guid? selectedClientId;
-    private string ClientPlaceholder => clients.Any() ? "Select a client" : "No connected clients";
+
+    private ClientConnectedDTO? SelectedClient => clients.FirstOrDefault(c => c.Id == selectedClientId);
 
     protected override async Task OnInitializedAsync()
     {
         await RefreshClientsAsync();
     }
 
-    private async Task RefreshClientsAsync()
+    private Guid? _appliedInitialClientId;
+
+    // The page may only learn the remembered kiosk after the list has loaded (it's read from the
+    // browser after the first render).
+    protected override async Task OnParametersSetAsync()
     {
-        Result<IEnumerable<Client>> result = await _clientService.GetConnectedClientsAsync();
-
-        if (result.IsSuccess && result.Data != null)
+        if (InitialClientId != _appliedInitialClientId)
         {
-            clients = result.Data;
+            _appliedInitialClientId = InitialClientId;
 
-            if (clients.Count() == 1)
+            if (InitialClientId is Guid id && selectedClientId == null && clients.Any(c => c.Id == id))
             {
-                selectedClientId = clients.First().Id;
-                
-                await OnClientSelected.InvokeAsync(selectedClientId);
+                await SelectAsync(id);
             }
-
-            _toastService.ShowSuccess($"Successfully loaded {clients.Count()} connected clients.");
-        }
-        else
-        {
-            _toastService.ShowError("Failed to load connected clients.");
         }
     }
 
-    private async Task OnSelectedClientChanged(string? newValue)
+    private async Task RefreshClientsAsync()
     {
-        selectedClientId = Guid.TryParse(newValue, out Guid clientId) ? clientId : (Guid?)null;
+        isLoading = true;
 
-        if (selectedClientId.HasValue)
+        Result<IEnumerable<ClientConnectedDTO>> result = await _clientService.GetClientsAsync();
+
+        isLoading = false;
+
+        if (!result.IsSuccess || result.Data == null)
         {
-            await OnClientSelected.InvokeAsync(selectedClientId.Value);
+            _toastService.ShowError("Couldn't load the kiosks.");
+            return;
         }
-        else
+
+        clients = result.Data
+            .OrderByDescending(c => c.IsCurrentlyConnected)
+            .ThenBy(c => c.Name)
+            .ToList();
+
+        Guid? wanted = selectedClientId ?? InitialClientId;
+
+        if (wanted is Guid id && clients.Any(c => c.Id == id))
         {
-            await OnClientSelected.InvokeAsync(null);
+            await SelectAsync(id);
         }
+        else if (clients.Count(c => c.IsCurrentlyConnected) == 1 || clients.Count == 1)
+        {
+            await SelectAsync((clients.FirstOrDefault(c => c.IsCurrentlyConnected) ?? clients[0]).Id);
+        }
+        else if (selectedClientId != null)
+        {
+            // The kiosk we had was removed.
+            await SelectAsync(null);
+        }
+    }
+
+    private async Task OnSelectedClientChanged(ChangeEventArgs e)
+    {
+        // Only ids from the list the tenant-filtered service gave us; anything else posted from the
+        // browser is ignored rather than trusted.
+        Guid? id = Guid.TryParse(e.Value?.ToString(), out Guid parsed) && clients.Any(c => c.Id == parsed) ? parsed : null;
+
+        await SelectAsync(id);
+    }
+
+    private async Task SelectAsync(Guid? id)
+    {
+        if (id == selectedClientId)
+        {
+            return;
+        }
+
+        selectedClientId = id;
+
+        await OnClientSelected.InvokeAsync(id);
     }
 }

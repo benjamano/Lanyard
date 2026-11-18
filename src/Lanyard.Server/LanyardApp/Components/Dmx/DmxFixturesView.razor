@@ -1,0 +1,54 @@
+@using Lanyard.Infrastructure.Models.Dmx
+
+<div class="dmx-fixtures">
+    @if (!State.FixturesLoaded)
+    {
+        <div class="dmx-empty"><FluentSpinner Size="SpinnerSize.Small" /> Loading fixtures…</div>
+    }
+    else if (State.Fixtures.Count == 0)
+    {
+        <div class="dmx-empty">
+            <FluentText Weight="TextWeight.Semibold">No fixtures yet</FluentText>
+            <FluentText>Add the kiosk's lights with <strong>Fixtures</strong> to control them here by brightness and colour, or use the <strong>Channels</strong> tab for raw faders.</FluentText>
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="new Icons.Regular.Size20.Add()" OnClick="OnManageFixtures">Add fixtures</FluentButton>
+        </div>
+    }
+    else
+    {
+        <div class="dmx-cards">
+            @foreach (DmxFixture fixture in State.Fixtures)
+            {
+                <DmxFixtureCard @key="fixture.Id"
+                                Fixture="@fixture"
+                                Values="@(OverrideValues ?? State.Values)"
+                                ValuesView="@(OverrideView ?? State.ValuesView)"
+                                ReadOnly="@(Disabled || OverrideValues != null)"
+                                PatchesFor="@State.PatchesFor"
+                                Version="@Version"
+                                OnWrite="OnWrite" />
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required DmxDeskState State { get; set; }
+
+    [Parameter]
+    public int Version { get; set; }
+
+    [Parameter]
+    public byte[]? OverrideValues { get; set; }
+
+    [Parameter]
+    public DmxUniverseView? OverrideView { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    [Parameter]
+    public EventCallback OnManageFixtures { get; set; }
+
+    private Task OnWrite(IReadOnlyList<DmxChannel> writes) => State.SetChannelsAsync(writes);
+}

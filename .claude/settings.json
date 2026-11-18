@@ -6,8 +6,20 @@
   "enabledMcpjsonServers": [
     "fluent-ui-blazor"
   ],
+  "extraKnownMarketplaces": {
+    "dotnet-agent-skills": {
+      "source": {
+        "source": "github",
+        "repo": "dotnet/skills"
+      }
+    }
+  },
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true,
-    "skill-creator@claude-plugins-official": true
+    "skill-creator@claude-plugins-official": true,
+    "dotnet-blazor@dotnet-agent-skills": true,
+    "dotnet-data@dotnet-agent-skills": true,
+    "dotnet@dotnet-agent-skills": true,
+    "dotnet-upgrade@dotnet-agent-skills": true
   }
 }

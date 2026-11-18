@@ -1,0 +1,21 @@
+@page "/help/parties"
+@attribute [Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.Parties)]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.Parties
+
+<HelpPage AreaKey="@HelpRegistry.Parties">
+    <FluentTab Id="help-bookings" Header="Booking a Party" IconStart="@(new Icons.Regular.Size16.Balloon())">
+        <PartiesBookingsHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-payments" Header="Payments &amp; Cancelling" IconStart="@(new Icons.Regular.Size16.Money())" DeferredLoading="true">
+        <PartiesPaymentsHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-printing" Header="Printing" IconStart="@(new Icons.Regular.Size16.Print())" DeferredLoading="true">
+        <PartiesPrintingHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-settings" Header="Settings &amp; Printouts" IconStart="@(new Icons.Regular.Size16.Settings())" DeferredLoading="true">
+        <PartiesSettingsHelpTab />
+    </FluentTab>
+</HelpPage>

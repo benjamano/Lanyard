@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Lanyard.Infrastructure.DTO;
 using NAudio.Wave;
 using Lanyard.Shared.DTO;
+using Lanyard.Shared.Music;
 using Timer = System.Threading.Timer;
 
 namespace Lanyard.Client.Controllers;
@@ -18,6 +19,11 @@ public class MusicControlHandler : IDisposable
     private readonly ILogger<MusicControlHandler> _logger;
     private readonly Timer _positionReportTimer;
     private HubConnection? _connection;
+
+    // Load, play, pause and the rest run here, in order, off the connection's thread, so a song
+    // that's still downloading doesn't hold up every other message to the kiosk (see
+    // MusicCommandQueue).
+    private readonly MusicCommandQueue _commands;
 
     // Guards against overlapping position-report ticks: InvokeAsync waits for a server
     // ack, and the server's default MaximumParallelInvocationsPerClient (1) processes a
@@ -36,6 +42,9 @@ public class MusicControlHandler : IDisposable
         _musicPlayer = musicPlayer;
         _cacheService = cacheService;
         _logger = logger;
+
+        _commands = new MusicCommandQueue((name, ex) => _logger.LogError(ex, "Music command {Command} failed", name));
+        _commands.Superseded += name => _logger.LogInformation("Music command {Command} skipped: a newer load replaced it", name);
 
         _musicPlayer.PlaybackStateChanged += OnPlaybackStateChanged;
         _musicPlayer.PlayingSongChanged += OnPlayingSongChanged;
@@ -71,6 +80,7 @@ public class MusicControlHandler : IDisposable
     public void Dispose()
     {
         _positionReportTimer.Dispose();
+        _commands.DisposeAsync().AsTask().GetAwaiter().GetResult();
         GC.SuppressFinalize(this);
     }
 
@@ -84,11 +94,15 @@ public class MusicControlHandler : IDisposable
             _cacheService.UpdateCacheLimit(settings.CacheLimitMb);
         });
 
-        connection.On("Load", async (Guid songId, Guid playlistId) =>
+        connection.On("Load", (Guid songId, Guid playlistId) =>
         {
             _logger.LogInformation("Received LOAD command for song {SongId} in playlist {PlaylistId}", songId, playlistId);
+            _commands.EnqueueLoad("Load", ct => LoadAsync(songId, playlistId, ct));
+        });
 
-            Result<bool> result = await _musicPlayer.Load(songId, playlistId);
+        async Task LoadAsync(Guid songId, Guid playlistId, CancellationToken ct)
+        {
+            Result<bool> result = await _musicPlayer.Load(songId, playlistId, ct);
 
             if (result.IsSuccess)
             {
@@ -98,12 +112,16 @@ public class MusicControlHandler : IDisposable
             {
                 _logger.LogError("Failed to load song {SongId}: {Error}", songId, result.Error);
             }
-        });
+        }
 
-        connection.On("Play", async () =>
+        connection.On("Play", () =>
         {
             _logger.LogInformation("Received PLAY command");
+            _commands.Enqueue("Play", _ => PlayAsync());
+        });
 
+        async Task PlayAsync()
+        {
             Result<bool> result = await _musicPlayer.Play();
 
             if (result.IsSuccess)
@@ -118,11 +136,16 @@ public class MusicControlHandler : IDisposable
             {
                 _logger.LogError("Failed to start playback: {Error}", result.Error);
             }
-        });
+        }
 
-        connection.On("Pause", async () =>
+        connection.On("Pause", () =>
         {
             _logger.LogInformation("Received PAUSE command");
+            _commands.Enqueue("Pause", _ => PauseAsync());
+        });
+
+        async Task PauseAsync()
+        {
             Result<bool> result = await _musicPlayer.Pause();
 
             if (result.IsSuccess)
@@ -133,21 +156,29 @@ public class MusicControlHandler : IDisposable
             {
                 _logger.LogError("Failed to pause playback: {Error}", result.Error);
             }
-        });
+        }
 
         connection.On("Stop", () =>
         {
             _logger.LogInformation("Received STOP command");
-            _musicPlayer.Stop();
+            _commands.Enqueue("Stop", _ =>
+            {
+                _musicPlayer.Stop();
+                return Task.CompletedTask;
+            });
         });
 
-        connection.On("LoadPlaylist", async (Dictionary<Guid, Guid> songList) =>
+        connection.On("LoadPlaylist", (Dictionary<Guid, Guid> songList) =>
         {
             _logger.LogInformation("Received LOADPLAYLIST command");
+            _commands.EnqueueLoad("LoadPlaylist", ct => LoadPlaylistAsync(songList, ct));
+        });
 
+        async Task LoadPlaylistAsync(Dictionary<Guid, Guid> songList, CancellationToken ct)
+        {
             try
             {
-                Result<bool> result = await _musicPlayer.LoadPlaylist(songList);
+                Result<bool> result = await _musicPlayer.LoadPlaylist(songList, ct);
 
                 if (result.IsSuccess)
                 {
@@ -158,15 +189,20 @@ public class MusicControlHandler : IDisposable
                     _logger.LogError("Failed to load playlist: {Error}", result.Error);
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogError(ex, "Failed to load playlist");
             }
-        });
+        }
 
-        connection.On("PlayNext", async () =>
+        connection.On("PlayNext", () =>
         {
             _logger.LogInformation("Received PLAYNEXT command");
+            _commands.EnqueueLoad("PlayNext", _ => PlayNextAsync());
+        });
+
+        async Task PlayNextAsync()
+        {
             Result<bool> result = await _musicPlayer.PlayNext();
 
             if (result.IsSuccess)
@@ -177,11 +213,16 @@ public class MusicControlHandler : IDisposable
             {
                 _logger.LogError("Failed to play next song: {Error}", result.Error);
             }
-        });
+        }
 
-        connection.On("PlayPrevious", async () =>
+        connection.On("PlayPrevious", () =>
         {
             _logger.LogInformation("Received PLAYPREVIOUS command");
+            _commands.EnqueueLoad("PlayPrevious", _ => PlayPreviousAsync());
+        });
+
+        async Task PlayPreviousAsync()
+        {
             Result<bool> result = await _musicPlayer.PlayPrevious();
 
             if (result.IsSuccess)
@@ -192,11 +233,16 @@ public class MusicControlHandler : IDisposable
             {
                 _logger.LogError("Failed to play previous song: {Error}", result.Error);
             }
-        });
+        }
 
-        connection.On("Seek", async (double seconds) =>
+        connection.On("Seek", (double seconds) =>
         {
             _logger.LogInformation("Received SEEK command to {Seconds}", seconds);
+            _commands.Enqueue("Seek", _ => SeekAsync(seconds));
+        });
+
+        async Task SeekAsync(double seconds)
+        {
             Result<bool> result = _musicPlayer.Seek(seconds);
 
             if (result.IsSuccess)
@@ -210,7 +256,7 @@ public class MusicControlHandler : IDisposable
             {
                 _logger.LogError("Failed to seek: {Error}", result.Error);
             }
-        });
+        }
 
         connection.On("GetCachedSongs", async () =>
         {

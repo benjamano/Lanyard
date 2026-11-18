@@ -1,0 +1,97 @@
+@using System.ComponentModel.DataAnnotations
+@inject IPlaylistService _playlistService
+
+@* Creates a playlist, or renames one when PlaylistId is set. Closes with the playlist's id. *@
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size24.MusicNote2())" />
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">@(IsRename ? "Rename playlist" : "New playlist")</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <EditForm id="playlist-details-form" EditContext="@_editContext" OnValidSubmit="SaveAsync">
+            <DataAnnotationsValidator />
+            <div class="playlist-details-form">
+                <FluentTextInput @bind-Value="_model.Name" Label="Name" Required="true" Placeholder="e.g. Lunch background"
+                                 Maxlength="@PlaylistService.NameMaxLength" autofocus
+                                 Message="@_editContext.GetValidationMessage(() => _model.Name)"
+                                 MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
+                                 MessageState="MessageState.Error" />
+                <FluentTextArea @bind-Value="_model.Description" Label="Description (optional)"
+                                Placeholder="When it's for, or what's on it" Height="5em" />
+            </div>
+        </EditForm>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit" form="playlist-details-form" Loading="@_saving">
+            @(IsRename ? "Save" : "Create")
+        </FluentButton>
+        <FluentButton OnClick="() => Dialog.CancelAsync()" Disabled="@_saving">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter] public Guid? PlaylistId { get; set; }
+    [Parameter] public string? InitialName { get; set; }
+    [Parameter] public string? InitialDescription { get; set; }
+
+    [CascadingParameter] public required IDialogInstance Dialog { get; set; }
+
+    private readonly DetailsModel _model = new();
+    private EditContext _editContext = default!;
+    private bool _saving;
+
+    private bool IsRename => PlaylistId is not null;
+
+    protected override void OnInitialized()
+    {
+        _model.Name = InitialName ?? "";
+        _model.Description = InitialDescription;
+        _editContext = new EditContext(_model);
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+
+        try
+        {
+            if (PlaylistId is Guid id)
+            {
+                Result<bool> renamed = await _playlistService.RenamePlaylistAsync(id, _model.Name, _model.Description);
+                if (!renamed.IsSuccess)
+                {
+                    _toastService.ShowError(renamed.Error ?? "Couldn't rename the playlist.");
+                    return;
+                }
+
+                await Dialog.CloseAsync(id);
+                return;
+            }
+
+            Result<Playlist> created = await _playlistService.CreatePlaylistAsync(_model.Name, _model.Description);
+            if (!created.IsSuccess || created.Data is null)
+            {
+                _toastService.ShowError(created.Error ?? "Couldn't create the playlist.");
+                return;
+            }
+
+            _toastService.ShowSuccess($"Created \"{created.Data.Name}\"");
+            await Dialog.CloseAsync(created.Data.Id);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private sealed class DetailsModel
+    {
+        [Required(ErrorMessage = "Give the playlist a name.")]
+        [StringLength(PlaylistService.NameMaxLength)]
+        public string Name { get; set; } = "";
+
+        public string? Description { get; set; }
+    }
+}

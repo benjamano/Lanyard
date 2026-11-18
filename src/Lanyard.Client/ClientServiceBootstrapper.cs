@@ -77,6 +77,7 @@ public static class ClientServiceBootstrapper
         services.AddSingleton<DmxSignalRController, DmxSignalRController>();
         services.AddSingleton<ISongCacheService, SongCacheService>();
         services.AddSingleton<MusicGain>();
+        services.AddSingleton<MusicEqualiser>();
         services.AddSingleton<IMusicDucker>(sp => sp.GetRequiredService<MusicGain>());
         services.AddSingleton<IMusicPlayer, MusicPlayer>();
         services.AddSingleton<IAudioClipCacheService, AudioClipCacheService>();
@@ -95,6 +96,7 @@ public static class ClientServiceBootstrapper
         services.AddSingleton<CredentialController>();
         services.AddSingleton<IAudioDeviceService, AudioDeviceService>();
         services.AddSingleton<AudioSettingsController>();
+        services.AddSingleton<EqualiserController>();
         services.AddSingleton(logLineBuffer);
         services.AddSingleton<ClientDiagnosticsController>();
         services.AddSingleton<KioskHealthReporter>();
@@ -123,6 +125,7 @@ public static class ClientServiceBootstrapper
             provider.GetRequiredService<UpdateController>().Register,
             provider.GetRequiredService<CredentialController>().Register,
             provider.GetRequiredService<AudioSettingsController>().Register,
+            provider.GetRequiredService<EqualiserController>().Register,
             provider.GetRequiredService<ClientDiagnosticsController>().Register,
             provider.GetRequiredService<KioskSelfTestController>().Register
         ];
