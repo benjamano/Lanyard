@@ -611,6 +611,109 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("AutomationRuleExecutions");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.BookingImportRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("BookingsSeen")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("Failed")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Imported")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Skipped")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Trigger")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Updated")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("StartedAtUtc");
+
+                    b.HasIndex("LocationId", "StartedAtUtc");
+
+                    b.ToTable("BookingImportRuns");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.BookingImportSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ActiveEndHour")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ActiveStartHour")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("FrequencyHours")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PasswordProtected")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("LocationId")
+                        .IsUnique();
+
+                    b.ToTable("BookingImportSettings");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.CalendarFeedToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3214,6 +3317,18 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<int>("ExpectedChildren")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("ExternalIsProvisional")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ExternalLastImportedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExternalRef")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ExternalSource")
+                        .HasColumnType("text");
+
                     b.Property<int?>("HireKind")
                         .HasColumnType("integer");
 
@@ -3265,6 +3380,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasIndex("PartyHostUserId");
 
                     b.HasIndex("LocationId", "StartUtc");
+
+                    b.HasIndex("LocationId", "ExternalSource", "ExternalRef")
+                        .IsUnique();
 
                     b.ToTable("PartyBookings");
                 });
@@ -5506,6 +5624,44 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("AutomationRule");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.BookingImportRun", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Location");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.BookingImportSettings", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Location");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.CalendarFeedToken", b =>
