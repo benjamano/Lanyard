@@ -448,4 +448,44 @@ public class PartyBookingServiceTests
         Assert.IsFalse(result.IsSuccess);
         StringAssert.Contains(result.Error, "child");
     }
+
+    [TestMethod]
+    public async Task HidingAPartyType_RemovesItFromSuggestionsButListsItAsHidden()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (_, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        PartyBookingService service = GetService(options);
+
+        await SeedBookingAsync(options, location, b => b.PartyType = "Play Party");
+        await SeedBookingAsync(options, location, b => b.PartyType = "Options");
+
+        Result<bool> hide = await service.SetPartyTypeHiddenAsync(SchedulingTestHelpers.ManagerScopeFor(location), location.Id, "Options", true, ActingUser);
+        Assert.IsTrue(hide.IsSuccess, hide.Error);
+
+        // No longer suggested on the booking form.
+        Result<List<string>> suggestions = await service.GetPartyTypeSuggestionsAsync(SchedulingTestHelpers.ManagerScopeFor(location), location.Id);
+        CollectionAssert.AreEquivalent(new[] { "Play Party" }, suggestions.Data!);
+
+        // Still listed on the settings screen, flagged as hidden.
+        Result<List<PartyTypeUsage>> all = await service.GetPartyTypesAsync(SchedulingTestHelpers.ManagerScopeFor(location), location.Id);
+        Assert.IsTrue(all.Data!.Single(x => x.Type == "Options").Hidden);
+        Assert.IsFalse(all.Data!.Single(x => x.Type == "Play Party").Hidden);
+    }
+
+    [TestMethod]
+    public async Task ShowingAHiddenPartyTypeAgain_BringsItBack()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (_, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        PartyBookingService service = GetService(options);
+
+        await SeedBookingAsync(options, location, b => b.PartyType = "Options");
+        LocationScope scope = SchedulingTestHelpers.ManagerScopeFor(location);
+
+        await service.SetPartyTypeHiddenAsync(scope, location.Id, "Options", true, ActingUser);
+        await service.SetPartyTypeHiddenAsync(scope, location.Id, "Options", false, ActingUser);
+
+        Result<List<string>> suggestions = await service.GetPartyTypeSuggestionsAsync(scope, location.Id);
+        CollectionAssert.Contains(suggestions.Data!, "Options");
+    }
 }

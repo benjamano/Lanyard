@@ -213,6 +213,8 @@ public class PartyBookingService(IDbContextFactory<ApplicationDbContext> factory
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
+            HashSet<string> hidden = await GetHiddenTypesAsync(ctx, locationId);
+
             List<string> types = await ctx.PartyBookings
                 .AsNoTracking()
                 .TagWithCallSite()
@@ -221,14 +223,120 @@ public class PartyBookingService(IDbContextFactory<ApplicationDbContext> factory
                 .OrderByDescending(g => g.Count())
                 .ThenBy(g => g.Key)
                 .Select(g => g.Key)
-                .Take(20)
                 .ToListAsync();
 
-            return Result<List<string>>.Ok(types);
+            return Result<List<string>>.Ok([.. types.Where(t => !hidden.Contains(t)).Take(20)]);
         }
         catch (Exception ex)
         {
             return Result<List<string>>.Fail($"Failed to load party types: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<List<PartyTypeUsage>>> GetPartyTypesAsync(LocationScope scope, int locationId)
+    {
+        try
+        {
+            if (!SchedulingAccess.CanManageLocation(scope, locationId))
+            {
+                return Result<List<PartyTypeUsage>>.Fail(NoAccess);
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            HashSet<string> hidden = await GetHiddenTypesAsync(ctx, locationId);
+
+            List<(string Type, int Count)> counts = await ctx.PartyBookings
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.LocationId == locationId && x.PartyType != string.Empty)
+                .GroupBy(x => x.PartyType)
+                .OrderByDescending(g => g.Count())
+                .ThenBy(g => g.Key)
+                .Select(g => new ValueTuple<string, int>(g.Key, g.Count()))
+                .ToListAsync();
+
+            return Result<List<PartyTypeUsage>>.Ok([.. counts.Select(c => new PartyTypeUsage(c.Type, c.Count, hidden.Contains(c.Type)))]);
+        }
+        catch (Exception ex)
+        {
+            return Result<List<PartyTypeUsage>>.Fail($"Failed to load party types: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> SetPartyTypeHiddenAsync(LocationScope scope, int locationId, string type, bool hidden, string actingUserId)
+    {
+        try
+        {
+            if (!SchedulingAccess.CanManageLocation(scope, locationId))
+            {
+                return Result<bool>.Fail(NoAccess);
+            }
+
+            string value = type?.Trim() ?? string.Empty;
+            if (value.Length == 0)
+            {
+                return Result<bool>.Fail("No party type was given.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            PartyLocationSettings? settings = await ctx.PartyLocationSettings.FirstOrDefaultAsync(x => x.LocationId == locationId);
+
+            if (settings is null)
+            {
+                settings = new PartyLocationSettings { Id = Guid.NewGuid(), LocationId = locationId };
+                ctx.PartyLocationSettings.Add(settings);
+            }
+
+            List<string> list = ParseHidden(settings.HiddenPartyTypesJson);
+            list.RemoveAll(x => string.Equals(x, value, StringComparison.OrdinalIgnoreCase));
+
+            if (hidden)
+            {
+                list.Add(value);
+            }
+
+            settings.HiddenPartyTypesJson = System.Text.Json.JsonSerializer.Serialize(list);
+            settings.UpdateDate = DateTime.UtcNow;
+            settings.UpdatedByUserId = actingUserId;
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to change the party type: {ex.Message}");
+        }
+    }
+
+    private static async Task<HashSet<string>> GetHiddenTypesAsync(ApplicationDbContext ctx, int locationId)
+    {
+        string? json = await ctx.PartyLocationSettings
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => x.LocationId == locationId)
+            .Select(x => x.HiddenPartyTypesJson)
+            .FirstOrDefaultAsync();
+
+        return new HashSet<string>(ParseHidden(json), StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static List<string> ParseHidden(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return [];
+        }
+
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? [];
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return [];
         }
     }
 

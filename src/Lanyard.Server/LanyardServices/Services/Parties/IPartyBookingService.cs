@@ -4,6 +4,10 @@ using Lanyard.Infrastructure.Models;
 
 namespace Lanyard.Application.Services.Parties;
 
+// A party type in use at a location: how many bookings use it, and whether it's hidden from the
+// booking form's suggestions.
+public sealed record PartyTypeUsage(string Type, int Count, bool Hidden);
+
 // Party bookings are per location. Every method takes the caller's LocationScope and refuses
 // anything outside it: an Admin may manage any location, a Manager only the one they signed in
 // under - the same rule as the rota.
@@ -24,6 +28,15 @@ public interface IPartyBookingService
 
     Task<Result<PartyBooking>> SetBalancePaidAsync(LocationScope scope, Guid bookingId, bool paid, string actingUserId);
 
-    // Party types already used at the location, most-used first, for the form's suggestions.
+    // Party types already used at the location, most-used first, for the form's suggestions. Types
+    // the manager has hidden are left out.
     Task<Result<List<string>>> GetPartyTypeSuggestionsAsync(LocationScope scope, int locationId);
+
+    // Every party type in use at the location (most-used first) with its booking count and whether
+    // it's hidden - for the Party Settings screen where types are shown or hidden.
+    Task<Result<List<PartyTypeUsage>>> GetPartyTypesAsync(LocationScope scope, int locationId);
+
+    // Shows or hides a party type on the booking form's suggestions. Hiding leaves it on any
+    // bookings that already use it.
+    Task<Result<bool>> SetPartyTypeHiddenAsync(LocationScope scope, int locationId, string type, bool hidden, string actingUserId);
 }

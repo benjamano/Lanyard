@@ -174,6 +174,11 @@ namespace Lanyard.Infrastructure.Models
         public int? EatTimeOffsetMinutes { get; set; }
         public int? LaserTagOffsetMinutes { get; set; }
 
+        // Party types the manager has hidden from the booking form's suggestions (a JSON array of
+        // the type names). The types stay on any bookings that already use them; they just stop
+        // being offered when booking a new party. Used to keep junk imported types off the list.
+        public string HiddenPartyTypesJson { get; set; } = "[]";
+
         public DateTime UpdateDate { get; set; }
         public string? UpdatedByUserId { get; set; }
     }

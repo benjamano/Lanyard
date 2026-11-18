@@ -1,0 +1,50 @@
+.party-types-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.settings-intro {
+    margin: 0;
+    color: var(--neutral-foreground-hint);
+    font-size: 0.9rem;
+}
+
+.party-types-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.party-type-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 10px;
+    border: 1px solid var(--neutral-stroke-rest);
+    border-radius: 8px;
+}
+
+.party-type-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.party-type-name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.party-type-count {
+    font-size: 0.8rem;
+    color: var(--neutral-foreground-hint);
+}
+
+/* A hidden type is dimmed so it's clear it won't be suggested. */
+.party-type-hidden .party-type-name {
+    color: var(--neutral-foreground-hint);
+    text-decoration: line-through;
+}

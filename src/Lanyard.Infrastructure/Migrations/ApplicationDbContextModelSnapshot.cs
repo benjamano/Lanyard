@@ -3446,6 +3446,10 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<int?>("EatTimeOffsetMinutes")
                         .HasColumnType("integer");
 
+                    b.Property<string>("HiddenPartyTypesJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<int?>("LaserTagOffsetMinutes")
                         .HasColumnType("integer");
 

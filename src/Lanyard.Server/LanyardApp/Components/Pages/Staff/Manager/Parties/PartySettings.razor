@@ -68,6 +68,11 @@
             <PartyStaffingSection Scope="@scope" LocationId="@location" CompanyId="@locationOptions.First(l => l.Id == location).CompanyId" />
 
             <section class="settings-card">
+                <h2>Party types</h2>
+                <PartyTypesSection Scope="@scope" LocationId="@location" />
+            </section>
+
+            <section class="settings-card">
                 <h2>Hot food menu</h2>
                 <p class="settings-intro">Printed on the hot food sheet: each meal with its allergens, and a row per side to tally.</p>
 

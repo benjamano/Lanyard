@@ -1,0 +1,99 @@
+@using Lanyard.Application.Services.Parties
+
+@inject IPartyBookingService _partyBookingService
+
+@* The party types in use at the location, with a switch to show or hide each one on the booking
+   form's suggestions. Hiding leaves the type on any bookings that already use it. *@
+<div class="party-types-section">
+    <p class="settings-intro">
+        These are the party types already used here, busiest first. Turn one off to stop it being
+        suggested when booking a new party - it stays on any bookings that already use it. Useful for
+        hiding odd one-off or imported names.
+    </p>
+
+    @if (types is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" HorizontalGap="8px">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else if (types.Count == 0)
+    {
+        <FluentText Style="color: var(--neutral-foreground-hint);">No party types yet - they appear here once you've booked some parties.</FluentText>
+    }
+    else
+    {
+        <div class="party-types-list">
+            @foreach (PartyTypeUsage type in types)
+            {
+                <div class="party-type-row @(type.Hidden ? "party-type-hidden" : string.Empty)">
+                    <div class="party-type-text">
+                        <span class="party-type-name">@type.Type</span>
+                        <span class="party-type-count">@type.Count @(type.Count == 1 ? "booking" : "bookings")</span>
+                    </div>
+                    <FluentSwitch Value="@(!type.Hidden)" ValueChanged="@((bool shown) => OnToggleAsync(type, shown))"
+                                  Disabled="@_busy" Label="@(type.Hidden ? "Hidden" : "Shown")" />
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required LocationScope Scope { get; set; }
+
+    [Parameter, EditorRequired]
+    public required int LocationId { get; set; }
+
+    private List<PartyTypeUsage>? types;
+    private bool _busy;
+    private int _loadedForLocation = -1;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedForLocation != LocationId)
+        {
+            _loadedForLocation = LocationId;
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        Result<List<PartyTypeUsage>> result = await _partyBookingService.GetPartyTypesAsync(Scope, LocationId);
+        types = result.IsSuccess && result.Data is not null ? result.Data : [];
+    }
+
+    private async Task OnToggleAsync(PartyTypeUsage type, bool shown)
+    {
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || actingUser.Data is null)
+        {
+            _toastService.ShowError($"Couldn't work out who you are: {actingUser.Error}");
+            return;
+        }
+
+        _busy = true;
+
+        try
+        {
+            Result<bool> result = await _partyBookingService.SetPartyTypeHiddenAsync(Scope, LocationId, type.Type, !shown, actingUser.Data);
+
+            if (!result.IsSuccess)
+            {
+                _toastService.ShowError(result.Error ?? "Couldn't change the party type.");
+                return;
+            }
+
+            _toastService.ShowSuccess(shown ? $"\"{type.Type}\" will be suggested again." : $"\"{type.Type}\" is hidden from the booking form.");
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}
