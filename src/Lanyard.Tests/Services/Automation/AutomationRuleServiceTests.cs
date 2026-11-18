@@ -1048,7 +1048,7 @@ public class AutomationRuleServiceTests
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options, new FixedTenantProvider(1)));
 
-        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
         AutomationRuleService service = new(tenantFactory.Object, engine);
 
         Result<AutomationRule> foreignResult = await service.CreateRuleAsync(BuildRule(otherKioskId));
