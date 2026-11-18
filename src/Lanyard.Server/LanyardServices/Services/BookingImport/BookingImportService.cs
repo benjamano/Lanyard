@@ -290,8 +290,10 @@ public sealed class BookingImportService : IBookingImportService
             }
 
             DateOnly today = RotaTime.Today(startedAt);
+            DateOnly from = today.AddDays(-WindowBackDays);
+            DateOnly to = today.AddDays(WindowForwardDays);
             Result<IReadOnlyList<ExternalBookingDto>> fetch = await _client.FetchBookingsAsync(
-                settings.Username, password, today.AddDays(-WindowBackDays), today.AddDays(WindowForwardDays), cancellationToken);
+                settings.Username, password, from, to, cancellationToken);
 
             if (!fetch.IsSuccess)
             {
@@ -302,7 +304,7 @@ public sealed class BookingImportService : IBookingImportService
                 return await SaveRunAsync(ctx, run, cancellationToken);
             }
 
-            await ApplyBookingsAsync(ctx, companyId, locationId, fetch.Data!, startedAt, run, cancellationToken);
+            await ApplyBookingsAsync(ctx, companyId, locationId, fetch.Data!, from, to, startedAt, run, cancellationToken);
 
             bool anyChanges = run.Imported + run.Updated > 0;
             run.Status = run.Failed > 0
@@ -333,10 +335,12 @@ public sealed class BookingImportService : IBookingImportService
     }
 
     // Upserts each report row into PartyBookings, keyed on (location, source, ref). New rows are
-    // created as booked; existing ones have their mapped fields refreshed (Just Step is the source
-    // of truth) but their Lanyard status is left alone, so a local cancellation sticks.
+    // created as booked; an existing row is only written (and counted as Updated) when a mapped
+    // field actually changed, so an unchanged run is a true no-op. A booking that has dropped out of
+    // Just Step within the imported window is cancelled, so cancellations there flow through too.
+    // A booking's Lanyard status is otherwise left alone, so a local cancellation sticks.
     private async Task ApplyBookingsAsync(ApplicationDbContext ctx, int companyId, int locationId,
-        IReadOnlyList<ExternalBookingDto> bookings, DateTime now, BookingImportRun run, CancellationToken ct)
+        IReadOnlyList<ExternalBookingDto> bookings, DateOnly from, DateOnly to, DateTime now, BookingImportRun run, CancellationToken ct)
     {
         run.BookingsSeen = bookings.Count;
 
@@ -365,7 +369,9 @@ public sealed class BookingImportService : IBookingImportService
                     endUtc = startUtc.Add(DefaultLength);
                 }
 
-                if (!existing.TryGetValue(dto.Ref, out PartyBooking? booking))
+                bool isNew = !existing.TryGetValue(dto.Ref, out PartyBooking? booking);
+
+                if (isNew)
                 {
                     booking = new PartyBooking
                     {
@@ -380,16 +386,12 @@ public sealed class BookingImportService : IBookingImportService
                     };
                     ctx.PartyBookings.Add(booking);
                     existing[dto.Ref] = booking;
-                    run.Imported++;
-                }
-                else
-                {
-                    booking.UpdateDate = now;
-                    booking.UpdateByUserId = ImportUserId;
-                    run.Updated++;
                 }
 
-                booking.StartUtc = startUtc;
+                // Assign the mapped fields. For an existing row EF only marks it Modified when a value
+                // actually differs, so an identical booking produces no write. PaymentNotes is built
+                // without the run time, so re-importing the same figures doesn't look like a change.
+                booking!.StartUtc = startUtc;
                 booking.EndUtc = endUtc;
                 booking.PartyType = dto.PartyType;
                 booking.ChildName = dto.ChildName;
@@ -398,9 +400,22 @@ public sealed class BookingImportService : IBookingImportService
                 booking.ContactPhone = dto.ContactPhone;
                 booking.ExpectedChildren = dto.Quantity;
                 booking.TotalPrice = dto.TotalDue;
-                booking.PaymentNotes = PaymentNote(now, dto);
+                booking.PaymentNotes = PaymentNote(dto);
                 booking.ExternalIsProvisional = dto.IsProvisional;
-                booking.ExternalLastImportedUtc = now;
+
+                if (isNew)
+                {
+                    booking.ExternalLastImportedUtc = now;
+                    run.Imported++;
+                }
+                else if (ctx.Entry(booking).State == EntityState.Modified)
+                {
+                    booking.UpdateDate = now;
+                    booking.UpdateByUserId = ImportUserId;
+                    booking.ExternalLastImportedUtc = now;
+                    run.Updated++;
+                }
+                // Otherwise unchanged: leave the row untouched (no write, not counted).
             }
             catch (Exception ex)
             {
@@ -409,7 +424,47 @@ public sealed class BookingImportService : IBookingImportService
             }
         }
 
+        run.Updated += await CancelDroppedBookingsAsync(ctx, locationId, refs, from, to, now, ct);
+
         await ctx.SaveChangesAsync(ct);
+    }
+
+    // Cancels still-booked imported parties inside the fetched window whose reference didn't come
+    // back this time - they've been cancelled or removed in Just Step. Skips the whole step when the
+    // report came back empty, so a one-off empty response can't wipe a window of bookings.
+    private async Task<int> CancelDroppedBookingsAsync(ApplicationDbContext ctx, int locationId, List<string> seenRefs,
+        DateOnly from, DateOnly to, DateTime now, CancellationToken ct)
+    {
+        if (seenRefs.Count == 0)
+        {
+            return 0;
+        }
+
+        DateTime windowFromUtc = RotaTime.StartOfDayUtc(from);
+        DateTime windowToUtc = RotaTime.StartOfDayUtc(to.AddDays(1));
+
+        List<PartyBooking> dropped = await ctx.PartyBookings
+            .Where(x => x.LocationId == locationId
+                && x.ExternalSource == Source
+                && x.Status == PartyBookingStatus.Booked
+                && x.StartUtc >= windowFromUtc && x.StartUtc < windowToUtc
+                && (x.ExternalRef == null || !seenRefs.Contains(x.ExternalRef)))
+            .ToListAsync(ct);
+
+        foreach (PartyBooking booking in dropped)
+        {
+            booking.Status = PartyBookingStatus.Cancelled;
+            booking.UpdateDate = now;
+            booking.UpdateByUserId = ImportUserId;
+            booking.ExternalLastImportedUtc = now;
+        }
+
+        if (dropped.Count > 0)
+        {
+            _logger.LogInformation("Cancelled {Count} booking(s) no longer in Just Step for location {LocationId}", dropped.Count, locationId);
+        }
+
+        return dropped.Count;
     }
 
     private static int? AgeTurning(DateOnly partyDate, DateOnly? dob)
@@ -423,14 +478,16 @@ public sealed class BookingImportService : IBookingImportService
         return age is >= 1 and <= 30 ? age : null;
     }
 
-    private static string? PaymentNote(DateTime now, ExternalBookingDto dto)
+    // No run time in here on purpose: re-importing the same figures must produce the same text, so
+    // an unchanged booking isn't rewritten every run.
+    private static string? PaymentNote(ExternalBookingDto dto)
     {
         if (dto.Paid is null && dto.Balance is null)
         {
             return null;
         }
 
-        return $"Imported from Just Step {now:dd MMM yyyy}: paid £{dto.Paid ?? 0m:0.00}, balance £{dto.Balance ?? 0m:0.00}.";
+        return $"Imported from Just Step: paid £{dto.Paid ?? 0m:0.00}, balance £{dto.Balance ?? 0m:0.00}.";
     }
 
     private async Task<BookingImportRunView> SaveRunAsync(ApplicationDbContext ctx, BookingImportRun run, CancellationToken ct)

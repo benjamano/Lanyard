@@ -22,6 +22,13 @@
     gap: 12px;
 }
 
+/* The FluentSelect's field wrapper carries default top/bottom margins that push the Help button
+   out of line with the dropdown; zero them so the control and the button sit inline. */
+.booking-import-tools ::deep fluent-field {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
 .booking-import-intro {
     color: var(--neutral-foreground-hint);
     max-width: 70ch;

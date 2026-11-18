@@ -958,7 +958,7 @@
     "details": [
       "New Parties > Booking Import page (Admins): sign in to Just Step Online per location and Lanyard brings that venue's party bookings into Parties by itself. By default it imports once an hour between 07:00 and 23:00 and rests overnight; the frequency and hours are set per location on the page.",
       "Enter each location's Just Step Online email and password, switch import on, then use Test connection or Run now. The password is stored encrypted and never shown again.",
-      "Bookings are matched on their Just Step reference, so later runs update them in place instead of duplicating. Confirmed and provisional bookings both come in, with provisional ones marked.",
+      "Bookings are matched on their Just Step reference, so later runs update them in place instead of duplicating, and a booking cancelled or removed in Just Step is cancelled in Lanyard too. Confirmed and provisional bookings both come in, with provisional ones marked.",
       "Each import is listed on the page with its result and how many bookings came in. If an import can't run - a wrong password or the site being down - Admins and the location's Managers get one alert on Operations Alerts, which clears itself once an import succeeds again."
     ]
   }

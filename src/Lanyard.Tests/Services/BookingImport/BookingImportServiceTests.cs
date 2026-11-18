@@ -45,10 +45,15 @@ public class BookingImportServiceTests
         return (service, client, alerts);
     }
 
-    private static ExternalBookingDto Booking(string reference, bool provisional = false, int qty = 10) =>
-        new(reference, new DateOnly(2026, 6, 20), new TimeOnly(11, 30), new TimeOnly(13, 30),
+    // 30 days out so the party falls inside the import window (today-7 .. today+365), which the
+    // drop/cancel reconciliation is scoped to.
+    private static ExternalBookingDto Booking(string reference, bool provisional = false, int qty = 10)
+    {
+        DateOnly date = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
+        return new(reference, date, new TimeOnly(11, 30), new TimeOnly(13, 30),
             "Adventure Play Party", "Contact " + reference, "07000000000", "Child " + reference,
-            new DateOnly(2019, 6, 20), qty, 180m, 50m, 130m, provisional);
+            date.AddYears(-7), qty, 180m, 50m, 130m, provisional);
+    }
 
     private void SetupFetch(Mock<IJustStepClient> client, params ExternalBookingDto[] bookings) =>
         client.Setup(c => c.FetchBookingsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
@@ -165,6 +170,70 @@ public class BookingImportServiceTests
         await using ApplicationDbContext ctx = new(options);
         PartyBooking party = await ctx.PartyBookings.SingleAsync();
         Assert.AreEqual(25, party.ExpectedChildren);
+    }
+
+    [TestMethod]
+    public async Task RunImport_SecondIdenticalRun_ChangesNothing()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        (BookingImportService service, Mock<IJustStepClient> client, _) = GetService(options);
+
+        await EnableImportAsync(service, location);
+        SetupFetch(client, Booking("8388"), Booking("9107", provisional: true));
+
+        await service.RunImportAsync(company.Id, location.Id, BookingImportTrigger.Scheduled);
+        BookingImportRunView second = await service.RunImportAsync(company.Id, location.Id, BookingImportTrigger.Scheduled);
+
+        // Nothing changed in Just Step, so the second run is a true no-op.
+        Assert.AreEqual(BookingImportRunStatus.NoChanges, second.Status);
+        Assert.AreEqual(0, second.Imported);
+        Assert.AreEqual(0, second.Updated);
+
+        await using ApplicationDbContext ctx = new(options);
+        // The rows were never rewritten, so their audit UpdateDate is still unset.
+        Assert.IsTrue(await ctx.PartyBookings.AllAsync(p => p.UpdateDate == null));
+    }
+
+    [TestMethod]
+    public async Task RunImport_CancelsBookingsThatDroppedOutOfJustStep()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        (BookingImportService service, Mock<IJustStepClient> client, _) = GetService(options);
+
+        await EnableImportAsync(service, location);
+        SetupFetch(client, Booking("8388"), Booking("9107"));
+        await service.RunImportAsync(company.Id, location.Id, BookingImportTrigger.Scheduled);
+
+        // 9107 is gone from Just Step (cancelled there).
+        SetupFetch(client, Booking("8388"));
+        BookingImportRunView second = await service.RunImportAsync(company.Id, location.Id, BookingImportTrigger.Scheduled);
+
+        Assert.AreEqual(1, second.Updated);
+
+        await using ApplicationDbContext ctx = new(options);
+        Assert.AreEqual(PartyBookingStatus.Cancelled, (await ctx.PartyBookings.SingleAsync(p => p.ExternalRef == "9107")).Status);
+        Assert.AreEqual(PartyBookingStatus.Booked, (await ctx.PartyBookings.SingleAsync(p => p.ExternalRef == "8388")).Status);
+    }
+
+    [TestMethod]
+    public async Task RunImport_EmptyReport_DoesNotCancelAnything()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        (BookingImportService service, Mock<IJustStepClient> client, _) = GetService(options);
+
+        await EnableImportAsync(service, location);
+        SetupFetch(client, Booking("8388"), Booking("9107"));
+        await service.RunImportAsync(company.Id, location.Id, BookingImportTrigger.Scheduled);
+
+        // A one-off empty response must not wipe the window.
+        SetupFetch(client);
+        await service.RunImportAsync(company.Id, location.Id, BookingImportTrigger.Scheduled);
+
+        await using ApplicationDbContext ctx = new(options);
+        Assert.AreEqual(2, await ctx.PartyBookings.CountAsync(p => p.Status == PartyBookingStatus.Booked));
     }
 
     [TestMethod]
