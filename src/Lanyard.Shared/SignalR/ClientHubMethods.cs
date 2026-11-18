@@ -54,4 +54,10 @@ public static class ClientHubMethods
     /// audio, DMX, packet capture and WebView2, and returns a <c>KioskSelfTestResultDTO</c>.
     /// </summary>
     public const string RunSelfTest = "RunSelfTest";
+
+    /// <summary>
+    /// Server to kiosk: sends a <c>MusicEqualiserSettings</c> (bass, mid and treble in dB), on every
+    /// connect and whenever staff change the kiosk's equaliser. Kiosks before 1.0.48 ignore it.
+    /// </summary>
+    public const string ReceiveEqualiserSettings = "ReceiveEqualiserSettings";
 }

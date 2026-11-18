@@ -40,6 +40,32 @@ public class ClientAudioSettingsDTO
     public string? PreferredDeviceName { get; set; }
 }
 
+public enum EqualiserApplyStatus
+{
+    // Saved and sent to the kiosk, which is playing with it now.
+    Applied,
+    // Saved; the kiosk is offline and gets it when it reconnects.
+    SavedKioskOffline,
+    // Saved, but the kiosk's version predates the equaliser, so it won't change until it updates.
+    SavedKioskOutdated
+}
+
+// A kiosk's stored equaliser, plus whether a change would reach it right now.
+public class ClientEqualiserStateDTO
+{
+    public Guid ClientId { get; set; }
+    public string ClientName { get; set; } = string.Empty;
+    public Lanyard.Shared.Audio.MusicEqualiserSettings Settings { get; set; } = Lanyard.Shared.Audio.MusicEqualiserSettings.Flat;
+    public bool IsConnected { get; set; }
+    public bool IsSupported { get; set; }
+    public string? ReportedVersion { get; set; }
+
+    public EqualiserApplyStatus Status =>
+        !IsConnected ? EqualiserApplyStatus.SavedKioskOffline
+        : !IsSupported ? EqualiserApplyStatus.SavedKioskOutdated
+        : EqualiserApplyStatus.Applied;
+}
+
 // What a kiosk is set to run and what that resolves to right now.
 public class ClientUpdateTargetDTO
 {

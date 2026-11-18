@@ -9,7 +9,9 @@ using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.VideoDevices;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Shared.Audio;
 using Lanyard.Shared.DTO;
+using Lanyard.Shared.SignalR;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.Clients;
 using Lanyard.Application.SignalR;
@@ -1255,6 +1257,135 @@ namespace Lanyard.Tests.Services.Clients
                 [new() { Id = "{speakers}", Name = "Speakers" }]);
 
             Assert.IsFalse(result.Success);
+        }
+
+        private static (TestableClientService Service, Mock<ISingleClientProxy> Proxy) GetEqualiserService(DbContextOptions<ApplicationDbContext> options, params string[] connectedIds)
+        {
+            var factoryMock = new Mock<IDbContextFactory<ApplicationDbContext>>();
+            factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<System.Threading.CancellationToken>()))
+                .ReturnsAsync(() => new ApplicationDbContext(options));
+
+            Mock<ISingleClientProxy> clientProxyMock = new();
+            Mock<IHubClients> hubClientsMock = new();
+            hubClientsMock.Setup(c => c.Client(It.IsAny<string>())).Returns(clientProxyMock.Object);
+
+            Mock<IHubContext<SignalRControlHub>> hubContextMock = new();
+            hubContextMock.Setup(h => h.Clients).Returns(hubClientsMock.Object);
+
+            TestableClientService service = new(
+                factoryMock.Object,
+                hubContextMock.Object,
+                new Mock<Microsoft.Extensions.Logging.ILogger<ClientService>>().Object,
+                new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
+                connectedIds);
+
+            return (service, clientProxyMock);
+        }
+
+        private static void VerifyEqualiserSent(Mock<ISingleClientProxy> proxy, MusicEqualiserSettings expected, Times times)
+        {
+            proxy.Verify(p => p.SendCoreAsync(ClientHubMethods.ReceiveEqualiserSettings,
+                It.Is<object?[]>(args => args.Length == 1 && Equals(args[0], expected)),
+                It.IsAny<System.Threading.CancellationToken>()), times);
+        }
+
+        [TestMethod]
+        public async Task SetClientEqualiserAsync_SavesAndPushesToAConnectedUpToDateKiosk()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            (TestableClientService service, Mock<ISingleClientProxy> proxy) = GetEqualiserService(options, "connection-1");
+
+            Result<Client?> created = await service.CreateClientAsync(new Client { Name = "Bar", MostRecentConnectionId = "connection-1", ReportedClientVersion = "1.0.48" });
+
+            Result<ClientEqualiserStateDTO> result = await service.SetClientEqualiserAsync(created.Data!.Id, new MusicEqualiserSettings(6, 0, 1));
+
+            Assert.IsTrue(result.Success, result.Error);
+            Assert.AreEqual(EqualiserApplyStatus.Applied, result.Data!.Status);
+            VerifyEqualiserSent(proxy, new MusicEqualiserSettings(6, 0, 1), Times.Once());
+
+            Result<Client?> saved = await service.GetClientFromIdAsync(created.Data.Id);
+            Assert.AreEqual(6, saved.Data!.EqBassDb);
+            Assert.AreEqual(0, saved.Data.EqMidDb);
+            Assert.AreEqual(1, saved.Data.EqTrebleDb);
+        }
+
+        [TestMethod]
+        public async Task SetClientEqualiserAsync_SavesWithoutPushingWhenTheKioskIsOffline()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            (TestableClientService service, Mock<ISingleClientProxy> proxy) = GetEqualiserService(options);
+
+            Result<Client?> created = await service.CreateClientAsync(new Client { Name = "Bar", MostRecentConnectionId = "connection-1", ReportedClientVersion = "1.0.48" });
+
+            Result<ClientEqualiserStateDTO> result = await service.SetClientEqualiserAsync(created.Data!.Id, new MusicEqualiserSettings(3, 1, -2));
+
+            Assert.IsTrue(result.Success, result.Error);
+            Assert.AreEqual(EqualiserApplyStatus.SavedKioskOffline, result.Data!.Status);
+            proxy.Verify(p => p.SendCoreAsync(It.IsAny<string>(), It.IsAny<object?[]>(), It.IsAny<System.Threading.CancellationToken>()), Times.Never);
+
+            Result<ClientEqualiserStateDTO> reloaded = await service.GetClientEqualiserAsync(created.Data.Id);
+            Assert.AreEqual(new MusicEqualiserSettings(3, 1, -2), reloaded.Data!.Settings);
+        }
+
+        [TestMethod]
+        [DataRow(null)]
+        [DataRow("1.0.47")]
+        public async Task SetClientEqualiserAsync_ReportsAnOutdatedKioskWithoutSending(string? version)
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            (TestableClientService service, Mock<ISingleClientProxy> proxy) = GetEqualiserService(options, "connection-1");
+
+            Result<Client?> created = await service.CreateClientAsync(new Client { Name = "Bar", MostRecentConnectionId = "connection-1", ReportedClientVersion = version });
+
+            Result<ClientEqualiserStateDTO> result = await service.SetClientEqualiserAsync(created.Data!.Id, new MusicEqualiserSettings(6, 0, 0));
+
+            Assert.IsTrue(result.Success, result.Error);
+            Assert.AreEqual(EqualiserApplyStatus.SavedKioskOutdated, result.Data!.Status);
+            proxy.Verify(p => p.SendCoreAsync(It.IsAny<string>(), It.IsAny<object?[]>(), It.IsAny<System.Threading.CancellationToken>()), Times.Never);
+        }
+
+        [TestMethod]
+        public async Task SetClientEqualiserAsync_ClampsToTwelveDecibels()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            (TestableClientService service, Mock<ISingleClientProxy> proxy) = GetEqualiserService(options, "connection-1");
+
+            Result<Client?> created = await service.CreateClientAsync(new Client { Name = "Bar", MostRecentConnectionId = "connection-1", ReportedClientVersion = "1.1.0" });
+
+            Result<ClientEqualiserStateDTO> result = await service.SetClientEqualiserAsync(created.Data!.Id, new MusicEqualiserSettings(40, -40, 5));
+
+            Assert.AreEqual(new MusicEqualiserSettings(12, -12, 5), result.Data!.Settings);
+            VerifyEqualiserSent(proxy, new MusicEqualiserSettings(12, -12, 5), Times.Once());
+        }
+
+        [TestMethod]
+        public async Task SetClientEqualiserAsync_FailsForAnUnknownClient()
+        {
+            (TestableClientService service, _) = GetEqualiserService(GetInMemoryOptions());
+
+            Result<ClientEqualiserStateDTO> result = await service.SetClientEqualiserAsync(Guid.NewGuid(), MusicEqualiserSettings.Flat);
+
+            Assert.IsFalse(result.Success);
+        }
+
+        [TestMethod]
+        public async Task UpdateClientAsync_LeavesTheEqualiserAlone()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            (TestableClientService service, _) = GetEqualiserService(options);
+
+            Result<Client?> created = await service.CreateClientAsync(new Client { Name = "Bar" });
+
+            // A settings dialog loaded the client before the Music page turned the bass up...
+            Result<Client?> stale = await service.GetClientFromIdAsync(created.Data!.Id);
+            await service.SetClientEqualiserAsync(created.Data.Id, new MusicEqualiserSettings(6, 0, 0));
+
+            // ...and then saves its copy.
+            stale.Data!.Name = "Bar renamed";
+            await service.UpdateClientAsync(stale.Data);
+
+            Result<ClientEqualiserStateDTO> reloaded = await service.GetClientEqualiserAsync(created.Data.Id);
+            Assert.AreEqual(6, reloaded.Data!.Settings.BassDb);
         }
 
         [TestMethod]
