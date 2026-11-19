@@ -259,3 +259,22 @@
         font-size: 1.2rem;
     }
 }
+
+.roster-heading-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 16px;
+    margin-bottom: 14px;
+}
+
+.roster-heading-row .terminal-heading {
+    margin: 0;
+}
+
+.checklist-open {
+    margin-top: 0;
+    min-height: 56px;
+    touch-action: manipulation;
+}

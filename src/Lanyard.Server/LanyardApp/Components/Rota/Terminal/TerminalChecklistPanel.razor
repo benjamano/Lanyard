@@ -1,0 +1,310 @@
+@* Ticking checklists on the clock-in terminal. Nobody is signed in on the tablet, so a person taps
+   their name and enters their PIN; that gives a short-lived grant (kept only here, in the live page)
+   which every tick is checked against on the server. Leaving it alone ends the grant: a warning
+   with Keep going comes first. *@
+@implements IAsyncDisposable
+
+@using Lanyard.App.Components.Checklists
+@using Lanyard.Application.Services.Checklists
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Checklists
+
+@inject IChecklistRunService _runService
+
+<div class="checklist-panel" role="dialog" aria-modal="true" aria-labelledby="checklist-panel-title">
+    <header class="panel-header">
+        <div class="panel-heading">
+            <h1 id="checklist-panel-title" class="panel-title">Checklists</h1>
+            <span class="panel-sub">
+                @(grantName is null ? "Tap your name, then enter your PIN to tick tasks." : $"Ticking as {grantName}")
+            </span>
+        </div>
+        <div class="panel-actions">
+            @if (grantName is not null)
+            {
+                <button type="button" class="panel-button panel-done" @onclick="FinishAsync">Done</button>
+            }
+            else
+            {
+                <button type="button" class="panel-button" @onclick="CloseAsync">Close</button>
+            }
+        </div>
+    </header>
+
+    @if (message is not null)
+    {
+        <div class="panel-message" role="status">@message</div>
+    }
+
+    <div class="panel-body @(grantName is null ? string.Empty : "is-ticking")">
+        @if (grantName is null)
+        {
+            <section class="panel-people" aria-labelledby="people-heading">
+                <h2 id="people-heading" class="panel-section-title">Who's ticking?</h2>
+                @if (people is null)
+                {
+                    <p class="panel-muted">Loading...</p>
+                }
+                else if (people.Count == 0)
+                {
+                    <p class="panel-muted">Nobody is on the rota here today.</p>
+                }
+                else
+                {
+                    <div class="people-grid">
+                        @foreach (TerminalChecklistPerson person in people)
+                        {
+                            TerminalChecklistPerson current = person;
+                            <button type="button" class="person-button" @onclick="@(() => Pick(current))">@current.DisplayName</button>
+                        }
+                    </div>
+                }
+            </section>
+        }
+
+        <section class="panel-runs" aria-label="Today's checklists">
+            @if (day is null)
+            {
+                <p class="panel-muted">Loading...</p>
+            }
+            else if (day.Runs.Count == 0)
+            {
+                <p class="panel-muted">No checklists today.</p>
+            }
+            else
+            {
+                @foreach (ChecklistRunView run in day.Runs)
+                {
+                    <ChecklistRunCard @key="run.RunId" Run="@run" CurrentUserId="@grantUserId" Interactive="@(grantName is not null)"
+                                      OnTick="@TickAsync" OnUndo="@UndoAsync" />
+                }
+            }
+        </section>
+    </div>
+
+    @if (pinPerson is not null)
+    {
+        <PinPad @ref="pinPad" PersonName="@pinPerson.DisplayName" Busy="@busy"
+                OnSubmit="@SubmitPinAsync" OnCancel="@CancelPin" OnActivity="@MarkActivity" />
+    }
+
+    @if (WarningSecondsLeft is int left)
+    {
+        <IdleWarning What="@(grantName is null ? "Checklists" : $"Ticking as {grantName}")" SecondsLeft="@left" OnKeepGoing="@KeepGoingAsync" />
+    }
+</div>
+
+@code {
+    // Picking a name or typing a PIN gives up after this long untouched, like the clock-in PIN pad.
+    public static readonly TimeSpan ChooseIdle = TimeSpan.FromSeconds(30);
+
+    // Ticking lasts as long as the server-side grant, with a warning for its last 20 seconds.
+    public static readonly TimeSpan TickingIdle = TerminalEphemeralTokenService.ChecklistGrantIdle;
+    public static readonly TimeSpan WarnBefore = TimeSpan.FromSeconds(20);
+
+    [Parameter, EditorRequired]
+    public required Guid TerminalId { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    private List<TerminalChecklistPerson>? people;
+    private ChecklistDayView? day;
+    private TerminalChecklistPerson? pinPerson;
+    private PinPad? pinPad;
+    private string? grantToken;
+    private string? grantUserId;
+    private string? grantName;
+    private string? message;
+    private bool busy;
+    private DateTime lastActivityUtc = DateTime.UtcNow;
+    private DateTime nowUtc = DateTime.UtcNow;
+
+    private TimeSpan IdleLimit => grantToken is null ? ChooseIdle : TickingIdle;
+
+    private int? WarningSecondsLeft
+    {
+        get
+        {
+            TimeSpan left = IdleLimit - (nowUtc - lastActivityUtc);
+            return !busy && left <= WarnBefore && left > TimeSpan.Zero ? (int)Math.Ceiling(left.TotalSeconds) : null;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        MarkActivity();
+        await LoadAsync();
+
+        Result<List<TerminalChecklistPerson>> result = await _runService.GetTerminalPeopleAsync(TerminalId);
+        people = result.Data ?? [];
+    }
+
+    private async Task LoadAsync()
+    {
+        Result<ChecklistDayView> result = await _runService.GetTerminalDayAsync(TerminalId, grantToken);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            message = result.Error;
+            return;
+        }
+
+        day = result.Data;
+    }
+
+    // Called every second by the terminal page.
+    public async Task TickAsync(DateTime now)
+    {
+        nowUtc = now;
+
+        if (!busy && now - lastActivityUtc >= IdleLimit)
+        {
+            if (grantToken is null)
+            {
+                await CloseAsync();
+                return;
+            }
+
+            EndGrant();
+            message = "Ticking ended because the screen was left. Tap your name to carry on.";
+            MarkActivity();
+            await LoadAsync();
+        }
+
+        StateHasChanged();
+    }
+
+    private void MarkActivity()
+    {
+        lastActivityUtc = DateTime.UtcNow;
+        nowUtc = lastActivityUtc;
+    }
+
+    private async Task KeepGoingAsync()
+    {
+        MarkActivity();
+
+        // Reading the day with the grant slides it on, so the server agrees with the countdown.
+        await LoadAsync();
+    }
+
+    private void Pick(TerminalChecklistPerson person)
+    {
+        MarkActivity();
+        message = null;
+
+        if (!person.HasPin)
+        {
+            message = $"{person.DisplayName}, you haven't set a PIN yet. Use Checklists on your phone, or ask a manager to set a PIN for you.";
+            return;
+        }
+
+        pinPerson = person;
+    }
+
+    private void CancelPin()
+    {
+        pinPerson = null;
+        MarkActivity();
+    }
+
+    private async Task SubmitPinAsync(string pin)
+    {
+        if (pinPerson is null)
+        {
+            return;
+        }
+
+        busy = true;
+        MarkActivity();
+        Result<string> result = await _runService.StartTerminalTickingAsync(TerminalId, pinPerson.UserId, pin);
+        busy = false;
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            string error = result.Error ?? "Something went wrong. Try again.";
+
+            if (error.Contains("PIN isn't right", StringComparison.Ordinal))
+            {
+                pinPad?.Reset();
+                message = "That PIN isn't right. Try again.";
+            }
+            else
+            {
+                pinPerson = null;
+                message = error;
+            }
+
+            return;
+        }
+
+        grantToken = result.Data;
+        grantUserId = pinPerson.UserId;
+        grantName = pinPerson.DisplayName;
+        pinPerson = null;
+        message = null;
+        MarkActivity();
+        await LoadAsync();
+    }
+
+    private async Task TickAsync((ChecklistItemView Item, string? Note, decimal? Reading) tick)
+    {
+        MarkActivity();
+        Result<bool> result = await _runService.CompleteOnTerminalAsync(TerminalId, grantToken, tick.Item.ItemId, tick.Note, tick.Reading);
+        await AfterChangeAsync(result, $"{tick.Item.Title} ticked.");
+    }
+
+    private async Task UndoAsync(ChecklistTickView tick)
+    {
+        MarkActivity();
+        Result<bool> result = await _runService.UndoOnTerminalAsync(TerminalId, grantToken, tick.CompletionId);
+        await AfterChangeAsync(result, "Tick taken back.");
+    }
+
+    private async Task AfterChangeAsync(Result<bool> result, string done)
+    {
+        if (!result.IsSuccess)
+        {
+            message = result.Error;
+
+            // The grant lapsed on the server: back to picking a name.
+            if (result.Error?.Contains("PIN again", StringComparison.Ordinal) == true)
+            {
+                EndGrant();
+            }
+        }
+        else
+        {
+            message = done;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task FinishAsync()
+    {
+        EndGrant();
+        await CloseAsync();
+    }
+
+    private void EndGrant()
+    {
+        _runService.EndTerminalTicking(grantToken);
+        grantToken = null;
+        grantUserId = null;
+        grantName = null;
+    }
+
+    private async Task CloseAsync()
+    {
+        EndGrant();
+        await OnClose.InvokeAsync();
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        EndGrant();
+        return ValueTask.CompletedTask;
+    }
+}

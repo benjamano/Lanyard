@@ -1,0 +1,59 @@
+.idle-warning {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    z-index: 40;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    width: min(620px, calc(100% - 32px));
+    padding: 16px 20px;
+    border-radius: 14px;
+    border-left: 8px solid #c19c00;
+    background: var(--colorNeutralBackground1);
+    color: var(--colorNeutralForeground1);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.idle-text {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 1.1rem;
+}
+
+.idle-title {
+    font-weight: 700;
+    font-size: 1.25rem;
+}
+
+/* Spoken instead of the ticking number. */
+.idle-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+}
+
+.idle-keep {
+    flex-shrink: 0;
+    min-height: 56px;
+    padding: 0 24px;
+    border: none;
+    border-radius: 10px;
+    background: var(--colorBrandBackground);
+    color: var(--colorNeutralForegroundOnBrand);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.idle-keep:focus-visible {
+    outline: 3px solid var(--colorStrokeFocus2);
+    outline-offset: 2px;
+}
