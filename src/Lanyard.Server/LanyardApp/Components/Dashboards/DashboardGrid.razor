@@ -187,6 +187,20 @@
                                     <RenderOperationsAlertsWidget Widget="operationsAlertsWidget" />
                                 </div>
                                 break;
+                            case WidgetType.ChecklistsToday:
+                                ChecklistsTodayWidget? checklistsTodayWidget = widget as ChecklistsTodayWidget;
+
+                                if (checklistsTodayWidget == null)
+                                {
+                                    break;
+                                }
+
+                                <div class="dashboard-widget-host"
+                                    @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
+                                    @oncontextmenu:preventDefault="true">
+                                    <RenderChecklistsTodayWidget Widget="checklistsTodayWidget" />
+                                </div>
+                                break;
                             case WidgetType.HallOfFame:
                                 HallOfFameWidget? hallOfFameWidget = widget as HallOfFameWidget;
 
@@ -513,6 +527,9 @@
             case OperationsAlertsWidget operationsAlertsWidget:
                 await ShowConfigureOperationsAlertsDialog(operationsAlertsWidget);
                 break;
+            case ChecklistsTodayWidget checklistsTodayWidget:
+                await ShowConfigureChecklistsTodayDialog(checklistsTodayWidget);
+                break;
             case HallOfFameWidget hallOfFameWidget:
                 await ShowConfigureHallOfFameDialog(hallOfFameWidget);
                 break;
@@ -679,6 +696,20 @@
         {
             options.Modal = true;
             options.Parameters.Add(nameof(ConfigureOperationsAlertsDialog.Widget), operationsAlertsWidget);
+        });
+
+        if (!dialogResult.Cancelled)
+        {
+            StateHasChanged();
+        }
+    }
+
+    private async Task ShowConfigureChecklistsTodayDialog(ChecklistsTodayWidget checklistsTodayWidget)
+    {
+        DialogResult dialogResult = await _dialogService.ShowDialogAsync<ConfigureChecklistsTodayDialog>(options =>
+        {
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfigureChecklistsTodayDialog.Widget), checklistsTodayWidget);
         });
 
         if (!dialogResult.Cancelled)

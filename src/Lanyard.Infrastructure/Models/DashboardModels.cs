@@ -220,6 +220,23 @@ public class OperationsAlertsWidget : DashboardWidget
     public bool AlertOnlyUnacknowledged { get; set; }
 }
 
+// Today's checklists at the location the viewer is signed in to (or clocked in at), with how far
+// each has got. Read-only; shows a sign-in prompt on a signed-out kiosk dashboard.
+public class ChecklistsTodayWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public ChecklistsTodayWidget()
+    {
+        Type = WidgetType.ChecklistsToday;
+
+        GridW = 3;
+        GridH = 3;
+    }
+
+    // Leave out checklists that are already done, so the widget is a "still to do" board.
+    public bool ChecklistsHideComplete { get; set; }
+}
+
 public class AutomationRuleStatusWidget : DashboardWidget
 {
     [SetsRequiredMembers]

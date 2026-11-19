@@ -43,6 +43,7 @@ public static class CompanyFeatureCatalog
         WidgetType.Announcements => CompanyFeature.Announcements,
         WidgetType.DemandStaffing => CompanyFeature.Insights,
         WidgetType.OperationsAlerts => CompanyFeature.OperationsAlerts,
+        WidgetType.ChecklistsToday => CompanyFeature.Checklists,
         _ => null
     };
 

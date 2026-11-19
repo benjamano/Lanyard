@@ -1,0 +1,161 @@
+@using Lanyard.App.Components.Checklists
+@using Lanyard.Application.Services.Checklists
+@using Lanyard.Infrastructure.DTO.Checklists
+@using Lanyard.Infrastructure.DTO.Scheduling
+@implements IDisposable
+
+@inject IChecklistRunService _runService
+
+@* Today's checklists where the viewer is working, with how far each has got. Read-only: the link
+   goes to the page where they're ticked. On a signed-out kiosk dashboard it asks to sign in. *@
+<FluentCard Height="100%">
+    <div class="cl-widget-body">
+        <div class="cl-widget-header">
+            <span class="cl-widget-title">@(Widget.Title ?? "Checklists Today")</span>
+            @if (_day is not null)
+            {
+                <span class="cl-widget-where">@_day.LocationName</span>
+            }
+        </div>
+
+        @if (_error is not null)
+        {
+            <div class="cl-widget-empty">
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">@_error</FluentBadge>
+            </div>
+        }
+        else if (_day is null)
+        {
+            <FluentProgressBar />
+        }
+        else if (Shown.Count == 0)
+        {
+            <div class="cl-widget-empty" role="status">
+                <FluentIcon Value="@(new Icons.Regular.Size20.CheckmarkCircle())" Color="Color.Success" aria-hidden="true" />
+                <span>@(_day.Runs.Count == 0 ? "No checklists today" : "All of today's checklists are done")</span>
+            </div>
+        }
+        else
+        {
+            <ul class="cl-widget-list" aria-label="Today's checklists">
+                @foreach (ChecklistRunView run in Shown)
+                {
+                    <li class="cl-widget-run">
+                        <div class="cl-widget-run-top">
+                            <span class="cl-widget-run-name">@run.Name</span>
+                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="@ChecklistDisplay.StatusColor(run.Status)">
+                                @ChecklistDisplay.StatusLabel(run.Status, true)
+                            </FluentBadge>
+                        </div>
+                        <div class="cl-widget-run-progress">
+                            <progress max="@Math.Max(run.Total, 1)" value="@run.Done" aria-label="@($"{run.Name}: {run.Done} of {run.Total} done")"></progress>
+                            <span>@run.Done/@run.Total@(run.DueUtc is DateTime due ? $" · due {RotaTime.ToVenueLocal(due).ToString("HH:mm", RotaFormat.Uk)}" : "")</span>
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+
+        @if (_day is not null)
+        {
+            <a class="cl-widget-more" href="@MoreLink">@(_isManager ? "Open Checklists Today" : "Open Checklists")</a>
+        }
+    </div>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required ChecklistsTodayWidget Widget { get; set; }
+
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(1);
+
+    private ChecklistDayView? _day;
+    private string? _error;
+    private bool _isManager;
+    private LocationScope? _scope;
+    private string? _userId;
+
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _cancellation;
+
+    private IReadOnlyList<ChecklistRunView> Shown => _day is null
+        ? []
+        : Widget.ChecklistsHideComplete ? [.. _day.Runs.Where(x => x.Status != ChecklistRunStatus.Complete)] : _day.Runs;
+
+    private string MoreLink => _isManager ? $"/manage/checklists/today?location={_day?.LocationId}" : "/checklists";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+        Result<string> user = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scope.IsSuccess || scope.Data is null || !user.IsSuccess || string.IsNullOrEmpty(user.Data))
+        {
+            _error = "Sign in to see checklists";
+            return;
+        }
+
+        _scope = scope.Data;
+        _userId = user.Data;
+
+        await LoadAsync();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender || _scope is null)
+        {
+            return;
+        }
+
+        _cancellation = new CancellationTokenSource();
+        _timer = new PeriodicTimer(RefreshInterval);
+        _ = RunTimerAsync(_timer, _cancellation.Token);
+    }
+
+    private async Task LoadAsync()
+    {
+        if (_scope is null || _userId is null)
+        {
+            return;
+        }
+
+        Result<ChecklistDayView> result = await _runService.GetMyTodayAsync(_userId, _scope);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _error = result.Error ?? "Couldn't load checklists";
+            return;
+        }
+
+        _error = null;
+        _day = result.Data;
+        _isManager = _scope.IsAdmin || (_scope.IsManager && _scope.LocationId == _day.LocationId);
+    }
+
+    private async Task RunTimerAsync(PeriodicTimer timer, CancellationToken token)
+    {
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                await InvokeAsync(async () =>
+                {
+                    await LoadAsync();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+        {
+            // The dashboard closed.
+        }
+    }
+
+    public void Dispose()
+    {
+        _cancellation?.Cancel();
+        _cancellation?.Dispose();
+        _timer?.Dispose();
+    }
+}
