@@ -605,7 +605,7 @@ a.files-crumb:hover {
 }
 
 .files-item-inuse,
-.files-item-shared { left: 0.375rem; }
+.files-item-shared { left: 0.375rem; top: auto; bottom: 0.375rem; }
 
 .files-item-inuse svg,
 .files-item-shared svg {
@@ -1690,5 +1690,167 @@ a.files-crumb:hover {
         max-height: 50vh;
         border-radius: var(--borderRadiusXLarge, 12px) var(--borderRadiusXLarge, 12px) 0 0;
         padding-bottom: env(safe-area-inset-bottom);
+    }
+}
+
+
+/* ---------- Selecting several (4/5) ---------- */
+
+.files-item-check {
+    position: absolute;
+    top: 0.375rem;
+    left: 0.375rem;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: none;
+    border-radius: var(--borderRadiusMedium, 6px);
+    background: var(--colorNeutralBackground1);
+    box-shadow: var(--shadow4);
+    color: var(--colorNeutralForeground2);
+    cursor: pointer;
+    opacity: 0;
+}
+
+.files-item-check svg {
+    fill: var(--colorNeutralForeground2) !important;
+}
+
+.files-item-check.is-on svg {
+    fill: var(--colorBrandForeground1) !important;
+}
+
+.files-item:hover .files-item-check,
+.files-item:focus-within .files-item-check,
+.files.has-selection .files-item-check,
+.files-item-check.is-on {
+    opacity: 1;
+}
+
+.files-item-check:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+    outline-offset: 1px;
+}
+
+@media (hover: none) {
+    /* On a touch screen checkboxes appear once something is selected (⋯ › Select). */
+    .files-item:hover .files-item-check { opacity: 0; }
+    .files.has-selection .files-item-check { opacity: 1; }
+}
+
+.files-grid .files-item.is-checked {
+    border-color: var(--colorBrandStroke1);
+    box-shadow: 0 0 0 2px var(--colorBrandStroke1);
+}
+
+.files-list .files-item.is-checked {
+    background: var(--colorBrandBackground2);
+}
+
+/* In the list, the checkbox sits in front of the icon. */
+.files-list .files-item-check {
+    top: 50%;
+    transform: translateY(-50%);
+    left: 0.25rem;
+    box-shadow: none;
+    background: transparent;
+}
+
+.files-list .files-item-main {
+    padding-left: 2.75rem;
+}
+
+.files-item[draggable="true"] {
+    cursor: grab;
+}
+
+.files-item[draggable="true"]:active {
+    cursor: grabbing;
+}
+
+.files-crumb.is-drop-target {
+    outline: 2px solid var(--colorBrandStroke1);
+    background: var(--colorBrandBackground2);
+}
+
+.files-selection-bar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    padding: 0.375rem 0.5rem;
+    border-radius: var(--borderRadiusLarge, 8px);
+    background: var(--colorBrandBackground2);
+    border: 1px solid var(--colorBrandStroke2, var(--colorBrandStroke1));
+}
+
+.files-selection-count {
+    font-weight: var(--fontWeightSemibold);
+    margin-right: auto;
+}
+
+.files-selection-actions {
+    display: flex;
+    gap: 0.375rem;
+    flex-wrap: wrap;
+}
+
+/* ---------- Undo ---------- */
+
+.files-undo {
+    position: fixed;
+    left: 50%;
+    bottom: 1.5rem;
+    z-index: 860;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    max-width: calc(100vw - 2rem);
+    padding: 0.5rem 0.5rem 0.5rem 1rem;
+    border-radius: var(--borderRadiusLarge, 8px);
+    background: var(--colorNeutralForeground1);
+    color: var(--colorNeutralBackground1);
+    box-shadow: var(--shadow16);
+}
+
+.files-undo-button {
+    padding: 0.25rem 0.625rem;
+    border: none;
+    border-radius: var(--borderRadiusMedium, 6px);
+    background: transparent;
+    color: var(--colorBrandForegroundInverted, #8fd3ff);
+    font: inherit;
+    font-weight: var(--fontWeightSemibold);
+    cursor: pointer;
+}
+
+.files-undo-button:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.files-undo .files-icon-button {
+    color: var(--colorNeutralBackground1);
+}
+
+.files-undo .files-icon-button svg {
+    fill: currentColor !important;
+}
+
+@media (max-width: 760px) {
+    .files-undo {
+        bottom: calc(5rem + env(safe-area-inset-bottom));
+    }
+
+    .files-selection-bar {
+        top: 0;
+        margin: 0 -0.25rem;
     }
 }
