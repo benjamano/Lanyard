@@ -1059,4 +1059,279 @@ public class AutomationRuleServiceTests
         Assert.IsFalse(missingResult.IsSuccess);
         Assert.IsTrue(ownResult.IsSuccess, ownResult.Error);
     }
+
+    private static async Task<AutomationRule> SeedDuplicatableRuleAsync(DbContextOptions<ApplicationDbContext> options, string name = "Winner lights")
+    {
+        Guid kioskId = await SeedKioskAsync(options, companyId: 1);
+
+        AutomationRule rule = BuildRule(kioskId, name: name);
+        rule.CompanyId = 1;
+        rule.TriggerType = AutomationTriggerType.ScoreThreshold;
+        rule.TriggerThreshold = 500;
+        rule.TriggerScoreScope = AutomationScoreScope.Team;
+        rule.TriggerTeam = Team.Red;
+        rule.Actions.Add(new AutomationRuleAction
+        {
+            Id = Guid.NewGuid(),
+            ActionType = RecordingActionExecutor.TestActionType,
+            ParametersJson = "{\"Second\":true}",
+            SortOrder = 1,
+            IsActive = true
+        });
+        rule.Actions.Add(new AutomationRuleAction
+        {
+            Id = Guid.NewGuid(),
+            ActionType = RecordingActionExecutor.TestActionType,
+            ParametersJson = "{\"Removed\":true}",
+            SortOrder = 2,
+            IsActive = false
+        });
+        rule.Conditions =
+        [
+            BuildCondition(
+                AutomationConditionType.TimeWindow,
+                AutomationConditionParameters.Serialize(new TimeWindowConditionParameters(new TimeOnly(9, 0), new TimeOnly(17, 0)))),
+            new AutomationRuleCondition
+            {
+                Id = Guid.NewGuid(),
+                ConditionType = AutomationConditionType.TimeWindow,
+                ParametersJson = AutomationConditionParameters.Serialize(new TimeWindowConditionParameters(new TimeOnly(1, 0), new TimeOnly(2, 0))),
+                IsActive = false
+            }
+        ];
+
+        await SeedRuleDirectlyAsync(options, rule);
+
+        return rule;
+    }
+
+    [TestMethod]
+    public async Task DuplicateRule_CopiesTriggerConditionsAndActionsAsANewDisabledRule()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+        AutomationRule source = await SeedDuplicatableRuleAsync(options);
+
+        Result<AutomationRule> result = await service.DuplicateRuleAsync(source.Id);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+
+        AutomationRule copy = await ctx.AutomationRules
+            .Include(r => r.Actions)
+            .Include(r => r.Conditions)
+            .SingleAsync(r => r.Id == result.Data!.Id);
+
+        Assert.AreNotEqual(source.Id, copy.Id);
+        Assert.AreEqual("Copy of Winner lights", copy.Name);
+        Assert.IsFalse(copy.IsEnabled, "A copy must start switched off.");
+        Assert.IsTrue(copy.IsActive);
+        Assert.AreEqual(1, copy.CompanyId);
+        Assert.AreEqual(source.TriggerClientId, copy.TriggerClientId);
+        Assert.AreEqual(AutomationTriggerType.ScoreThreshold, copy.TriggerType);
+        Assert.AreEqual(500, copy.TriggerThreshold);
+        Assert.AreEqual(AutomationScoreScope.Team, copy.TriggerScoreScope);
+        Assert.AreEqual(Team.Red, copy.TriggerTeam);
+
+        // Only the live children come across, each as a new row.
+        Assert.HasCount(2, copy.Actions);
+        Assert.IsTrue(copy.Actions.All(a => a.IsActive));
+        Assert.IsFalse(copy.Actions.Any(a => source.Actions.Any(s => s.Id == a.Id)));
+        CollectionAssert.AreEqual(new[] { "{}", "{\"Second\":true}" }, copy.Actions.OrderBy(a => a.SortOrder).Select(a => a.ParametersJson).ToArray());
+
+        Assert.HasCount(1, copy.Conditions);
+        Assert.AreNotEqual(source.Conditions[0].Id, copy.Conditions[0].Id);
+        Assert.AreEqual(source.Conditions[0].ParametersJson, copy.Conditions[0].ParametersJson);
+    }
+
+    [TestMethod]
+    public async Task DuplicateRule_LeavesTheOriginalAsItWas()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+        AutomationRule source = await SeedDuplicatableRuleAsync(options);
+
+        await service.DuplicateRuleAsync(source.Id);
+
+        await using ApplicationDbContext ctx = new(options);
+
+        AutomationRule original = await ctx.AutomationRules
+            .Include(r => r.Actions)
+            .Include(r => r.Conditions)
+            .SingleAsync(r => r.Id == source.Id);
+
+        Assert.AreEqual("Winner lights", original.Name);
+        Assert.IsTrue(original.IsEnabled);
+        Assert.HasCount(3, original.Actions);
+        Assert.HasCount(2, original.Conditions);
+        Assert.AreEqual(2, await ctx.AutomationRules.CountAsync());
+    }
+
+    [TestMethod]
+    public async Task DuplicateRule_NumbersASecondCopy()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+        AutomationRule source = await SeedDuplicatableRuleAsync(options);
+
+        Result<AutomationRule> first = await service.DuplicateRuleAsync(source.Id);
+        Result<AutomationRule> second = await service.DuplicateRuleAsync(source.Id);
+        Result<AutomationRule> third = await service.DuplicateRuleAsync(source.Id);
+
+        Assert.AreEqual("Copy of Winner lights", first.Data!.Name);
+        Assert.AreEqual("Copy of Winner lights (2)", second.Data!.Name);
+        Assert.AreEqual("Copy of Winner lights (3)", third.Data!.Name);
+    }
+
+    [TestMethod]
+    public async Task DuplicateRule_ReusesTheNameOfADeletedCopy()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+        AutomationRule source = await SeedDuplicatableRuleAsync(options);
+
+        Result<AutomationRule> first = await service.DuplicateRuleAsync(source.Id);
+        await service.DeleteRuleAsync(first.Data!.Id);
+
+        Result<AutomationRule> again = await service.DuplicateRuleAsync(source.Id);
+
+        Assert.AreEqual("Copy of Winner lights", again.Data!.Name);
+    }
+
+    [TestMethod]
+    public async Task DuplicateRule_FailsForADeletedOrMissingRule()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+        AutomationRule source = await SeedDuplicatableRuleAsync(options);
+        await service.DeleteRuleAsync(source.Id);
+
+        Result<AutomationRule> deleted = await service.DuplicateRuleAsync(source.Id);
+        Result<AutomationRule> missing = await service.DuplicateRuleAsync(Guid.NewGuid());
+
+        Assert.AreEqual("Rule not found.", deleted.Error);
+        Assert.AreEqual("Rule not found.", missing.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        Assert.AreEqual(1, await ctx.AutomationRules.CountAsync());
+    }
+
+    [TestMethod]
+    public async Task DuplicateRule_CannotCopyAnotherCompanysRule()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        AutomationRule source = await SeedDuplicatableRuleAsync(options);
+
+        // A signed-in user of company 2; the rule is company 1's.
+        Mock<IDbContextFactory<ApplicationDbContext>> tenantFactory = new();
+        tenantFactory
+            .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new ApplicationDbContext(options, new FixedTenantProvider(2)));
+
+        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+        AutomationRuleService service = new(tenantFactory.Object, engine);
+
+        Result<AutomationRule> result = await service.DuplicateRuleAsync(source.Id);
+
+        Assert.AreEqual("Rule not found.", result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        Assert.AreEqual(1, await ctx.AutomationRules.IgnoreQueryFilters().CountAsync());
+    }
+
+    [TestMethod]
+    public async Task DuplicateRule_FailsWhenTheRuleNoLongerPassesASave()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+        Guid kioskId = await SeedKioskAsync(options, companyId: 1);
+        Guid sceneId = await SeedDmxSceneAsync(options, kioskId, 1);
+
+        AutomationRule source = BuildRule(kioskId);
+        source.CompanyId = 1;
+        source.Actions.Add(DmxAction(kioskId, sceneId));
+        await SeedRuleDirectlyAsync(options, source);
+
+        // The scene the action plays has been deleted since the rule was saved.
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            Lanyard.Infrastructure.Models.Dmx.DmxScene scene = await ctx.DmxScenes.SingleAsync(s => s.Id == sceneId);
+            scene.IsActive = false;
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<AutomationRule> result = await service.DuplicateRuleAsync(source.Id);
+
+        Assert.AreEqual("A DMX action refers to a scene that isn't on its kiosk.", result.Error);
+
+        await using ApplicationDbContext check = new(options);
+        Assert.AreEqual(1, await check.AutomationRules.CountAsync());
+    }
+
+    [TestMethod]
+    public async Task DuplicateRule_CopyDoesNotFireUntilSwitchedOn()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedEngineEnabledAsync(options);
+        (AutomationRuleService service, AutomationEngineService engine, RecordingActionExecutor executor) = GetService(options);
+        Guid kioskId = await SeedKioskAsync(options, companyId: 1);
+
+        AutomationRule source = BuildRule(kioskId);
+        source.CompanyId = 1;
+        await SeedRuleDirectlyAsync(options, source);
+
+        // Warm the cache with the source only, so the copy has to arrive through invalidation.
+        engine.EnqueueTransition(kioskId, GameStatus.InGame);
+        await DrainAsync(engine);
+        executor.ExecutedActionIds.Clear();
+
+        Result<AutomationRule> copy = await service.DuplicateRuleAsync(source.Id);
+        Assert.IsTrue(copy.IsSuccess, copy.Error);
+
+        engine.EnqueueTransition(kioskId, GameStatus.NotStarted);
+        engine.EnqueueTransition(kioskId, GameStatus.InGame);
+        await DrainAsync(engine);
+
+        CollectionAssert.AreEqual(new[] { source.Actions[0].Id }, executor.ExecutedActionIds, "Only the original runs while the copy is off.");
+
+        await service.SetRuleEnabledAsync(copy.Data!.Id, true);
+        executor.ExecutedActionIds.Clear();
+
+        engine.EnqueueTransition(kioskId, GameStatus.NotStarted);
+        engine.EnqueueTransition(kioskId, GameStatus.InGame);
+        await DrainAsync(engine);
+
+        Assert.HasCount(2, executor.ExecutedActionIds, "Once switched on, the copy runs too.");
+        Assert.Contains(copy.Data!.Actions[0].Id, executor.ExecutedActionIds);
+    }
+
+    [TestMethod]
+    public async Task GetRules_ListsOldestFirstSoACopyComesLast()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+        Guid kioskId = await SeedKioskAsync(options, companyId: 1);
+
+        AutomationRule zebra = BuildRule(kioskId, name: "Zebra");
+        AutomationRule apple = BuildRule(kioskId, name: "Apple");
+        await SeedRuleDirectlyAsync(options, zebra);
+        await Task.Delay(5);
+        await SeedRuleDirectlyAsync(options, apple);
+
+        Result<AutomationRule> copy = await service.DuplicateRuleAsync(zebra.Id);
+        Assert.IsTrue(copy.IsSuccess, copy.Error);
+
+        Result<IEnumerable<AutomationRule>> rules = await service.GetRulesAsync();
+
+        CollectionAssert.AreEqual(new[] { "Zebra", "Apple", "Copy of Zebra" }, rules.Data!.Select(r => r.Name).ToArray());
+    }
+
+    private static async Task DrainAsync(AutomationEngineService engine)
+    {
+        while (engine.Reader.TryRead(out GameStatusTransitionEvent? ev))
+        {
+            await engine.ProcessTransitionAsync(ev, CancellationToken.None);
+        }
+    }
 }
