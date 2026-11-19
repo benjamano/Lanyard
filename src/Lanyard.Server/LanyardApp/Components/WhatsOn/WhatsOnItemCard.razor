@@ -1,0 +1,50 @@
+@* One entry as a card: the phone Day view lists these in time order. *@
+
+<a class="wo-card @(Item.IsCancelled ? "wo-cancelled" : string.Empty)" href="@Item.Href">
+    <div class="wo-card-top">
+        <div class="wo-card-heading">
+            <div class="wo-card-time">@Item.TimeRange()</div>
+            <div class="wo-card-title">@Item.Title</div>
+            @if (Item.Subtitle is not null)
+            {
+                <div class="wo-card-subtitle">@Item.Subtitle</div>
+            }
+        </div>
+        <div class="wo-card-badges">
+            <WhatsOnBadges Item="@Item" />
+        </div>
+    </div>
+
+    <div class="wo-card-facts">
+        <span>@Item.Headcount()</span>
+        @if (Item.Room is not null)
+        {
+            <span>@Item.Room</span>
+        }
+        @if (Item.MenuType is PartyMenuType menu)
+        {
+            <span>@menu.Label()</span>
+        }
+        @foreach (WhatsOnMarker marker in Item.Markers)
+        {
+            <span>@marker.Label @RotaFormat.LocalTime(marker.AtUtc)</span>
+        }
+        @if (Item.Kind == WhatsOnKind.Party)
+        {
+            <span>Host: @(Item.HostName ?? "not set")</span>
+        }
+    </div>
+
+    @if (Item.AllergyNotes is not null)
+    {
+        <div class="wo-card-allergy">
+            <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Color="Color.Warning" />
+            <span>@Item.AllergyNotes</span>
+        </div>
+    }
+</a>
+
+@code {
+    [Parameter, EditorRequired]
+    public WhatsOnItem Item { get; set; } = default!;
+}
