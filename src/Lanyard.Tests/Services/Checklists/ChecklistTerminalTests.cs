@@ -270,6 +270,34 @@ public class ChecklistTerminalTests
     }
 
     [TestMethod]
+    public async Task People_IncludeSomeoneWhoseShiftFinishedEarlierToday()
+    {
+        World w = await SeedAsync();
+        UserProfile tom = await SchedulingTestHelpers.SeedUserAsync(w.Options, w.Ipswich, "Tom");
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            ctx.Shifts.Add(new Shift
+            {
+                Id = Guid.NewGuid(),
+                LocationId = w.Ipswich.Id,
+                UserId = tom.Id,
+                StartUtc = Now.AddHours(-9),
+                EndUtc = Now.AddHours(-5),
+                IsActive = true,
+                PublishedDateUtc = Now.AddDays(-2),
+                CreateByUserId = "manager"
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<List<TerminalChecklistPerson>> people = await w.Service.GetTerminalPeopleAsync(w.IpswichTerminal.Id);
+
+        TerminalChecklistPerson listed = people.Data!.Single(x => x.UserId == tom.Id);
+        Assert.IsFalse(listed.HasPin, "Tom has no PIN, so the terminal tells him to use his phone.");
+    }
+
+    [TestMethod]
     public async Task Manager_NotOnTheRota_CanStillTick_AndTakeBackSomeoneElsesTick()
     {
         World w = await SeedAsync();

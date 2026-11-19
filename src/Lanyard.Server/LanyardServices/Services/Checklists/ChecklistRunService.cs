@@ -425,13 +425,6 @@ public class ChecklistRunService(
     {
         try
         {
-            Result<List<TerminalRosterEntry>> roster = await _timeEntryService.GetTerminalRosterAsync(terminalId);
-
-            if (!roster.IsSuccess || roster.Data is null)
-            {
-                return Result<List<TerminalChecklistPerson>>.Fail(roster.Error ?? "This device has been unpaired.");
-            }
-
             Result<TerminalSession> session = await _terminalService.GetActiveSessionAsync(terminalId);
 
             if (!session.IsSuccess || session.Data is null)
@@ -439,32 +432,55 @@ public class ChecklistRunService(
                 return Result<List<TerminalChecklistPerson>>.Fail(session.Error ?? "This device has been unpaired.");
             }
 
+            int locationId = session.Data.LocationId;
+            DateOnly today = RotaTime.Today(Now);
+            DateTime start = RotaTime.StartOfDayUtc(today);
+            DateTime end = RotaTime.StartOfDayUtc(today.AddDays(1));
+
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            List<TerminalChecklistPerson> people = [.. roster.Data.Select(x => new TerminalChecklistPerson(x.UserId, x.DisplayName, x.HasPin))];
-            HashSet<string> already = [.. people.Select(x => x.UserId)];
+            // The same people ChecklistRunStore.ViewerAsync counts as on the rota - a published shift
+            // here starting today, or clocked in here now - plus the location's Managers. Unlike the
+            // clock-in roster, nobody drops off once their clock-in window has passed.
+            List<string> onRota = await ctx.Shifts
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.IsActive && x.PublishedDateUtc != null && x.UserId != null && x.LocationId == locationId
+                    && x.StartUtc >= start && x.StartUtc < end)
+                .Select(x => x.UserId!)
+                .ToListAsync();
 
-            List<string> managerIds = [.. (await SchedulingRecipients.ManagersOfLocationAsync(ctx, session.Data.LocationId)).Where(x => !already.Contains(x))];
+            List<string> clockedIn = await ctx.TimeEntries
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.IsActive && x.LocationId == locationId && x.ClockOutUtc == null)
+                .Select(x => x.UserId)
+                .ToListAsync();
 
-            if (managerIds.Count > 0)
-            {
-                List<UserProfile> managers = await ctx.Users
-                    .AsNoTracking()
-                    .TagWithCallSite()
-                    .Where(x => managerIds.Contains(x.Id) && (x.LockoutEnd == null || x.LockoutEnd < DateTimeOffset.UtcNow))
-                    .ToListAsync();
+            List<string> managers = await SchedulingRecipients.ManagersOfLocationAsync(ctx, locationId);
 
-                HashSet<string> withPin = [.. await ctx.UserClockInPins
-                    .AsNoTracking()
-                    .TagWithCallSite()
-                    .Where(x => managerIds.Contains(x.UserId))
-                    .Select(x => x.UserId)
-                    .ToListAsync()];
+            List<string> userIds = [.. onRota.Concat(clockedIn).Concat(managers)
+                .Where(x => x != ApplicationDbContext.SystemDeletedUserPlaceholderId)
+                .Distinct()];
 
-                people.AddRange(managers.Select(x => new TerminalChecklistPerson(x.Id, RotaNames.Public(x), withPin.Contains(x.Id))));
-            }
+            DateTimeOffset nowOffset = new(Now, TimeSpan.Zero);
 
-            return Result<List<TerminalChecklistPerson>>.Ok([.. people.OrderBy(x => x.DisplayName)]);
+            List<UserProfile> users = await ctx.Users
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => userIds.Contains(x.Id) && (x.LockoutEnd == null || x.LockoutEnd < nowOffset))
+                .ToListAsync();
+
+            HashSet<string> withPin = [.. await ctx.UserClockInPins
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => userIds.Contains(x.UserId))
+                .Select(x => x.UserId)
+                .ToListAsync()];
+
+            return Result<List<TerminalChecklistPerson>>.Ok([.. users
+                .Select(x => new TerminalChecklistPerson(x.Id, RotaNames.Public(x), withPin.Contains(x.Id)))
+                .OrderBy(x => x.DisplayName)]);
         }
         catch (Exception ex)
         {

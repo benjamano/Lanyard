@@ -34,7 +34,8 @@ public interface IChecklistRunService
     // Today's checklists at the terminal's location; CanTick is for the grant's person, if any.
     Task<Result<ChecklistDayView>> GetTerminalDayAsync(Guid terminalId, string? grantToken);
 
-    // Who can be picked to tick: today's roster at the terminal's location and its Managers.
+    // Who can be picked to tick: anyone with a published shift at the terminal's location today or
+    // clocked in there now, and its Managers.
     Task<Result<List<TerminalChecklistPerson>>> GetTerminalPeopleAsync(Guid terminalId);
 
     // Checks the person's PIN (the same lockout as clocking in, without clocking) and returns a grant.
