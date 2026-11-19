@@ -961,5 +961,15 @@
       "Bookings are matched on their Just Step reference, so later runs update them in place instead of duplicating, and a booking cancelled or removed in Just Step is cancelled in Lanyard too. Confirmed and provisional bookings both come in, with provisional ones marked.",
       "Each import is listed on the page with its result and how many bookings came in. If an import can't run - a wrong password or the site being down - Admins and the location's Managers get one alert on Operations Alerts, which clears itself once an import succeeds again."
     ]
+  },
+  {
+    "version": "1.4.25",
+    "releaseDate": "2026-11-18",
+    "summary": "Copy an automation rule with one click.",
+    "details": [
+      "New Duplicate rule button on Automation: it copies a rule with its trigger, conditions and actions as \"Copy of\" the rule's name, switched off, and opens it so you can change what's different before turning it on.",
+      "The Automation rule list now fits on a phone: each rule's name shows in full with its kiosk and trigger underneath, instead of being cut short with the switch and buttons off the side of the screen.",
+      "The Edit and Delete buttons on Automation, and the rule names in the Execution Log, now work with the keyboard and screen readers and show what they do when you hover over them."
+    ]
   }
 ]
