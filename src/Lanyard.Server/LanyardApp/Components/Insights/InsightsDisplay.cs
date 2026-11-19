@@ -82,6 +82,7 @@ public static class InsightsDisplay
         StaffingFlag.Understaffed => "Busy for the staff on",
         StaffingFlag.Overstaffed => "Quiet for the staff on",
         StaffingFlag.InsufficientData => "Not enough data yet",
+        StaffingFlag.PartyHours => "Mostly parties",
         _ => "About as usual"
     };
 
