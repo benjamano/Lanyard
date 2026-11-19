@@ -54,3 +54,7 @@ public sealed record ChecklistHistoryRow(
     int Total,
     DateTime? DueUtc,
     DateTime? LastTickUtc);
+
+// Someone who can be picked on the clock-in terminal to tick checklists: today's roster there and
+// the location's Managers. Names are the terminal's short form ("Amy C.").
+public sealed record TerminalChecklistPerson(string UserId, string DisplayName, bool HasPin);

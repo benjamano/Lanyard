@@ -26,4 +26,24 @@ public interface IChecklistRunService
     // One row per checklist per day between the dates (at most 62 days, nothing after today), newest
     // first. Days nobody touched show as missed.
     Task<Result<List<ChecklistHistoryRow>>> GetHistoryAsync(LocationScope scope, int locationId, DateOnly from, DateOnly to);
+
+    // The clock-in terminal. It's anonymous (the system tenant), so every call is checked against the
+    // terminal itself: only its own location's checklists, and only the person whose PIN started the
+    // grant can tick. A grant lapses two minutes after its last use.
+
+    // Today's checklists at the terminal's location; CanTick is for the grant's person, if any.
+    Task<Result<ChecklistDayView>> GetTerminalDayAsync(Guid terminalId, string? grantToken);
+
+    // Who can be picked to tick: anyone with a published shift at the terminal's location today or
+    // clocked in there now, and its Managers.
+    Task<Result<List<TerminalChecklistPerson>>> GetTerminalPeopleAsync(Guid terminalId);
+
+    // Checks the person's PIN (the same lockout as clocking in, without clocking) and returns a grant.
+    Task<Result<string>> StartTerminalTickingAsync(Guid terminalId, string userId, string pin);
+
+    Task<Result<bool>> CompleteOnTerminalAsync(Guid terminalId, string? grantToken, Guid runItemId, string? note, decimal? reading);
+
+    Task<Result<bool>> UndoOnTerminalAsync(Guid terminalId, string? grantToken, Guid completionId);
+
+    void EndTerminalTicking(string? grantToken);
 }
