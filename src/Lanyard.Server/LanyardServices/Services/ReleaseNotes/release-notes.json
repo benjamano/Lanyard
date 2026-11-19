@@ -965,13 +965,16 @@
   {
     "version": "1.4.25",
     "releaseDate": "2026-11-19",
-    "summary": "See what's on at your venue each day and week.",
+    "summary": "See what's on at your venue each day and week, and duplicate automation rules.",
     "details": [
       "New What's On page under Management (Admins and Managers): everything booked at a location for one day or one week. For now it shows parties, including ones imported from Just Step Online.",
       "The Day view is a timeline: each party is a block from arrival to finish, with its eating and laser tag times marked, and parties that overlap sit side by side. Today's timeline has a line at the time now. On a phone the day is a list of party cards instead.",
       "The Week view shows Monday to Sunday, side by side on a computer and one under another on a phone, with each day's parties and headcount. Click a day to open its timeline, or a party to open it.",
       "Totals at the top add up the parties, children and adults expected, hot and cold food, parties not paid in full with the balance due, and provisional holds.",
-      "The Day view also lists everyone on the published rota that day, with their times and position."
+      "The Day view also lists everyone on the published rota that day, with their times and position.",
+      "New Duplicate rule button on Automation: it copies a rule with its trigger, conditions and actions as \"Copy of\" the rule's name, switched off, and opens it so you can change what's different before turning it on.",
+      "The Automation rule list now fits on a phone: each rule's name shows in full with its kiosk and trigger underneath, instead of being cut short with the switch and buttons off the side of the screen.",
+      "The Edit and Delete buttons on Automation, and the rule names in the Execution Log, now work with the keyboard and screen readers and show what they do when you hover over them."
     ]
   }
 ]
