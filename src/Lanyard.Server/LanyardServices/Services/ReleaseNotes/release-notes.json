@@ -975,6 +975,8 @@
       "New Rota > Checklists Today page for managers: each of today's checklists with who ticked what and when, Overdue once past its due time, and the last 14 days with anything Missed. Pick a day to see exactly what was done.",
       "Checklists on the clock-in terminal: a Checklists button appears when there's one today. Tap your name, enter your clock-in PIN (it doesn't clock you in) and tick tasks; press Done when finished. Ticks say they were made on the terminal.",
       "The clock-in terminal now warns before it closes the PIN pad or checklists for being left alone: a Still there? message counts down, and Keep going gives you the full time again.",
+      "Missed checklists show up on Operations Alerts: when a checklist goes past its due time with tasks left (or its day ends, if it has no set time), the location's Managers and the company's Admins get one Checklist missed alert and a push. It clears itself if the checklist is finished late.",
+      "New Checklists Today dashboard widget: today's checklists with how many tasks are done and whether each is overdue, with an option to hide the finished ones.",
       "New Duplicate rule button on Automation: it copies a rule with its trigger, conditions and actions as \"Copy of\" the rule's name, switched off, and opens it so you can change what's different before turning it on.",
       "The Automation rule list now fits on a phone: each rule's name shows in full with its kiosk and trigger underneath, instead of being cut short with the switch and buttons off the side of the screen.",
       "The Edit and Delete buttons on Automation, and the rule names in the Execution Log, now work with the keyboard and screen readers and show what they do when you hover over them."
