@@ -9,7 +9,9 @@ public enum InsightsMetric
     Games,
     Players,
     Staff,
-    GamesPerStaffHour
+    GamesPerStaffHour,
+    PartyGames,
+    ExpectedChildren
 }
 
 // Labels and number formats shared by the Insights page and its dashboard widget.
@@ -43,6 +45,10 @@ public static class InsightsDisplay
         return query.Count == 0 ? "/manage/insights" : $"/manage/insights?{string.Join('&', query)}";
     }
 
+    // The party measures only mean something for a company using Parties.
+    public static List<InsightsMetric> MetricsFor(bool hasPartyData) =>
+        [.. Enum.GetValues<InsightsMetric>().Where(x => hasPartyData || x is not (InsightsMetric.PartyGames or InsightsMetric.ExpectedChildren))];
+
     public static string ShortDay(DayOfWeek day) => RotaFormat.Uk.DateTimeFormat.GetAbbreviatedDayName(day);
 
     public static string MetricLabel(InsightsMetric metric) => metric switch
@@ -51,6 +57,8 @@ public static class InsightsDisplay
         InsightsMetric.Players => "Players",
         InsightsMetric.Staff => "Staff on",
         InsightsMetric.GamesPerStaffHour => "Games per staff hour",
+        InsightsMetric.PartyGames => "Party games",
+        InsightsMetric.ExpectedChildren => "Party children",
         _ => metric.ToString()
     };
 
@@ -60,6 +68,8 @@ public static class InsightsDisplay
         InsightsMetric.Players => cell.AveragePlayers,
         InsightsMetric.Staff => cell.AverageStaff,
         InsightsMetric.GamesPerStaffHour => cell.GamesPerStaffHour ?? 0,
+        InsightsMetric.PartyGames => cell.AveragePartyGames,
+        InsightsMetric.ExpectedChildren => cell.AverageExpectedChildren,
         _ => 0
     };
 
@@ -74,6 +84,7 @@ public static class InsightsDisplay
     {
         StaffingFlag.Understaffed => "▲",
         StaffingFlag.Overstaffed => "▼",
+        StaffingFlag.PartyHours => "●",
         _ => null
     };
 
@@ -96,7 +107,9 @@ public static class InsightsDisplay
         string rate = cell.GamesPerStaffHour is decimal r ? $", {Format(r)} games per staff hour" : string.Empty;
         string flag = FlagGlyph(cell.Flag) is null ? string.Empty : $" · {FlagLabel(cell.Flag)}";
         string weeks = cell.Samples == 1 ? "1 week" : $"{cell.Samples} weeks";
+        string parties = cell.PartySamples == 0 ? string.Empty
+            : $" · a party on {cell.PartySamples} of {cell.Samples} weeks, {Format(cell.AveragePartyGames)} party games and {Format(cell.AverageExpectedChildren)} children on average";
 
-        return $"{CellName(cell)}: {Format(cell.AverageGames)} games, {Format(cell.AveragePlayers)} players, {staff}{rate} (average of {weeks}){flag}";
+        return $"{CellName(cell)}: {Format(cell.AverageGames)} games, {Format(cell.AveragePlayers)} players, {staff}{rate} (average of {weeks}){parties}{flag}";
     }
 }

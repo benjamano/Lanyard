@@ -272,12 +272,13 @@ public static class HelpRegistry
 
         new(Insights,
             "Insights",
-            "Comparing games played with staff hours, and the hours where staffing didn't match demand.",
+            "Comparing games and party bookings with staff hours, and the hours where staffing didn't match demand.",
             HelpAudience.Managers,
             () => new Icons.Regular.Size20.DataArea(),
             [
                 new("overview", "Figures"),
-                new("week", "Typical Week & Flags")
+                new("week", "Typical Week & Flags"),
+                new("parties", "Parties")
             ],
             ["/manage/insights"],
             Roles: "Admin,Manager",

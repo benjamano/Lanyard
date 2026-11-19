@@ -1,0 +1,53 @@
+<HelpTab>
+    <FluentText>
+        If your company uses Parties, Insights counts the parties booked at the location alongside the games. Only
+        bookings still marked as booked count. Cancelled parties are left out, and provisional bookings brought in from
+        Just Step Online are counted.
+    </FluentText>
+
+    <HelpSection Title="The party figures">
+        <ul>
+            <li><strong>Parties</strong>: parties starting in the range, counted on the day they start.</li>
+            <li><strong>Party children</strong>: the children expected at those parties, as booked. It's the number on the
+                booking, not a head count on the day.</li>
+            <li>Under <strong>Games</strong>: how many games were played at parties and how many by walk-ins.</li>
+            <li>In <strong>Typical week</strong>, <strong>Shade by</strong> also offers <strong>Party games</strong> and
+                <strong>Party children</strong> (children on site in that hour, on average).</li>
+            <li><strong>Games per day</strong> shows walk-in and party games as separate lines.</li>
+        </ul>
+        <FluentText>
+            Insights shows counts only: no child's name, contact details, allergies or prices. <strong>Export CSV</strong>
+            adds four columns at the end: Walk-in games, Party games, Parties on and Expected children.
+        </FluentText>
+    </HelpSection>
+
+    <HelpSection Title="How a game is matched to a party">
+        <FluentText>
+            Kiosks don't record which party played a game, so Insights works it out from the time. A game counts as a
+            party's if it starts between 10 minutes before and 40 minutes after the party's laser tag time.
+        </FluentText>
+        <ul>
+            <li>If the booking has no laser tag time, the location's <strong>Laser tag (minutes after arrival)</strong>
+                in <a href="/manage/parties/settings">Party settings</a> is used. Bookings imported from Just Step Online
+                never have their own laser tag time, so set this default.</li>
+            <li>A laser tag private hire counts every game during the booking.</li>
+            <li>A play-only private hire doesn't play laser tag, so none of its games count.</li>
+            <li>A party with no laser tag time and no default counts as walk-ins. Insights says how many there were.</li>
+        </ul>
+        <HelpNote>
+            It's a best guess, so treat the split as approximate. Walk-ins who play inside a party's window are counted
+            as the party's. A party starting laser tag more than half an hour late, or playing a third game, has those
+            games counted as walk-ins. The default also applies to parties that don't play laser tag, and a venue with
+            two arenas counts both arenas' games.
+        </HelpNote>
+    </HelpSection>
+
+    <HelpSection Title="Parties and the staffing flags">
+        <FluentText>
+            A party brings its own games and its own party staff, so it would make a normal hour look busy or quiet.
+            Hours with a party on are left out of the typical games per staff hour and aren't flagged. An hour that has
+            a party in at least half of the weeks shows as <strong>● Mostly parties</strong> instead, and is listed
+            under <strong>Hours to look at</strong>.
+        </FluentText>
+    </HelpSection>
+</HelpTab>
