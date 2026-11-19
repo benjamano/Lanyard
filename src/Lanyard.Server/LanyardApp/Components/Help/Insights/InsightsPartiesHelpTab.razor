@@ -23,8 +23,10 @@
 
     <HelpSection Title="How a game is matched to a party">
         <FluentText>
-            Kiosks don't record which party played a game, so Insights works it out from the time. A game counts as a
-            party's if it starts between 10 minutes before and 40 minutes after the party's laser tag time.
+            Kiosks don't record which party played a game, so Insights works it out from the time. A party usually plays
+            two games, so each party is given its first two: the first game starting from 10 minutes before its laser tag
+            time to half an hour after it, and the next game starting within 20 minutes of that. Each game goes to one
+            party only, so two parties playing at the same time each get their own games.
         </FluentText>
         <ul>
             <li>If the booking has no laser tag time, the location's <strong>Laser tag (minutes after arrival)</strong>
@@ -35,10 +37,10 @@
             <li>A party with no laser tag time and no default counts as walk-ins. Insights says how many there were.</li>
         </ul>
         <HelpNote>
-            It's a best guess, so treat the split as approximate. Walk-ins who play inside a party's window are counted
-            as the party's. A party starting laser tag more than half an hour late, or playing a third game, has those
-            games counted as walk-ins. The default also applies to parties that don't play laser tag, and a venue with
-            two arenas counts both arenas' games.
+            It's a best guess, so treat the split as approximate. A party that plays a third game has it counted as a
+            walk-in. A party that doesn't play has the walk-in games nearest its laser tag time counted as its own. The
+            default also applies to parties that don't play laser tag, and a venue with two arenas mixes both arenas'
+            games.
         </HelpNote>
     </HelpSection>
 
