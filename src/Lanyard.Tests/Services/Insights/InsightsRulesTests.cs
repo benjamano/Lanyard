@@ -23,8 +23,16 @@ public class InsightsRulesTests
         IReadOnlyCollection<WorkSpan>? clocked = null,
         IReadOnlyCollection<WorkSpan>? rota = null,
         IReadOnlyCollection<LocationOpeningHours>? hours = null,
-        IReadOnlyCollection<MusicDaypart>? dayparts = null) =>
-        InsightsRules.Calculate(from, to, games ?? [], clocked ?? [], rota ?? [], hours ?? [], dayparts ?? []);
+        IReadOnlyCollection<MusicDaypart>? dayparts = null,
+        IReadOnlyCollection<PartyFact>? parties = null,
+        int? laserTagOffsetMinutes = null) =>
+        InsightsRules.Calculate(from, to, games ?? [], clocked ?? [], rota ?? [], hours ?? [], dayparts ?? [], parties, laserTagOffsetMinutes);
+
+    // A ten-minute game that started at the given time (games are recorded when they end).
+    private static GameFact GameStarting(DateTime startUtc, int players = 6) => new(startUtc.AddMinutes(10), 600, players);
+
+    private static PartyFact Party(DateTime startUtc, DateTime endUtc, DateTime? laserUtc = null, int children = 10, PrivateHireKind? hire = null) =>
+        new(startUtc, endUtc, laserUtc, hire, children);
 
     private static LocationOpeningHours Hours(DayOfWeek day, int opens, int closes) => new()
     {
@@ -38,8 +46,10 @@ public class InsightsRulesTests
     private static List<LocationOpeningHours> EveryDay(int opens, int closes) =>
         [.. Enum.GetValues<DayOfWeek>().Select(d => Hours(d, opens, closes))];
 
-    private static InsightsCell Cell(int samples, int games, decimal clocked) =>
-        new(DayOfWeek.Saturday, 14, samples, games, games * 6, clocked, clocked, StaffingFlag.None);
+    // A cell with no party hours: its rate basis is the whole cell.
+    private static InsightsCell Cell(int samples, int games, decimal clocked, int partySamples = 0) =>
+        new(DayOfWeek.Saturday, 14, samples, games, games * 6, clocked, clocked, StaffingFlag.None,
+            0, partySamples, 0, samples - partySamples, games, clocked);
 
     // ---- Splitting time into hours ----
 
@@ -377,5 +387,285 @@ public class InsightsRulesTests
         Assert.AreEqual(games.Count, figures.Totals.Games);
         Assert.AreEqual(280m, figures.Totals.ClockedHours);
         Assert.AreEqual(280m / games.Count, figures.Totals.LabourHoursPerGame);
+    }
+
+    // ---- Parties ----
+
+    [TestMethod]
+    public void LaserWindow_RunsFromTenMinutesBeforeTheLaserTimeToFortyAfter()
+    {
+        DateTime laser = Local(Monday, 14);
+
+        (DateTime StartUtc, DateTime EndUtc)? window = InsightsRules.LaserWindow(Party(Local(Monday, 13), Local(Monday, 15), laser), null);
+
+        Assert.AreEqual((laser.AddMinutes(-10), laser.AddMinutes(40)), window);
+    }
+
+    [TestMethod]
+    public void LaserWindow_IsTheWholeBookingForALaserTagHire()
+    {
+        PartyFact hire = Party(Local(Monday, 18), Local(Monday, 20), hire: PrivateHireKind.LaserTagOnly);
+
+        Assert.AreEqual((Local(Monday, 18), Local(Monday, 20)), InsightsRules.LaserWindow(hire, 30));
+        Assert.AreEqual((Local(Monday, 18), Local(Monday, 20)),
+            InsightsRules.LaserWindow(hire with { HireKind = PrivateHireKind.LaserTagAndPlay }, null));
+    }
+
+    [TestMethod]
+    public void LaserWindow_FallsBackToTheLocationsDefaultOffset()
+    {
+        PartyFact imported = Party(Local(Monday, 13), Local(Monday, 15));
+
+        Assert.AreEqual((Local(Monday, 13, 20), Local(Monday, 14, 10)), InsightsRules.LaserWindow(imported, 30));
+        Assert.IsFalse(InsightsRules.IsMissingLaserTime(imported, 30));
+    }
+
+    [TestMethod]
+    public void LaserWindow_IsMissingForAKidsPartyWithNoTimeAndNoDefault()
+    {
+        PartyFact imported = Party(Local(Monday, 13), Local(Monday, 15));
+
+        Assert.IsNull(InsightsRules.LaserWindow(imported, null));
+        Assert.IsTrue(InsightsRules.IsMissingLaserTime(imported, null));
+    }
+
+    [TestMethod]
+    public void LaserWindow_IsNeverSetForAPlayOnlyHire_AndThatIsNotMissing()
+    {
+        PartyFact hire = Party(Local(Monday, 13), Local(Monday, 15), hire: PrivateHireKind.PlayOnly);
+
+        Assert.IsNull(InsightsRules.LaserWindow(hire, 30));
+        Assert.IsFalse(InsightsRules.IsMissingLaserTime(hire, 30));
+    }
+
+    [TestMethod]
+    public void Calculate_SplitsPartyGamesFromWalkInsAtTheWindowEdges()
+    {
+        PartyFact party = Party(Local(Monday, 13), Local(Monday, 15), Local(Monday, 14));
+
+        InsightsFigures figures = Calculate(Monday, Monday,
+            games:
+            [
+                GameStarting(Local(Monday, 13, 49)),  // a minute too early: walk-in
+                GameStarting(Local(Monday, 13, 50)),  // party
+                GameStarting(Local(Monday, 14, 39)),  // party
+                GameStarting(Local(Monday, 14, 40))   // window over: walk-in
+            ],
+            parties: [party]);
+
+        Assert.AreEqual(4, figures.Totals.Games);
+        Assert.AreEqual(2, figures.Totals.PartyGames);
+        Assert.AreEqual(2, figures.Totals.WalkInGames);
+
+        InsightsSlot thirteen = figures.Slots.Single(x => x.Hour == 13);
+        Assert.AreEqual(2, thirteen.Games);
+        Assert.AreEqual(1, thirteen.PartyGames);
+        Assert.AreEqual(1, thirteen.WalkInGames);
+        Assert.AreEqual(2, figures.Days.Single().PartyGames);
+    }
+
+    [TestMethod]
+    public void Calculate_CountsAGameInTwoPartiesWindowsOnce()
+    {
+        InsightsFigures figures = Calculate(Monday, Monday,
+            games: [GameStarting(Local(Monday, 14, 5))],
+            parties:
+            [
+                Party(Local(Monday, 13), Local(Monday, 15), Local(Monday, 14)),
+                Party(Local(Monday, 13, 30), Local(Monday, 15, 30), Local(Monday, 14))
+            ]);
+
+        Assert.AreEqual(1, figures.Totals.PartyGames);
+        Assert.AreEqual(2, figures.Totals.Parties);
+    }
+
+    [TestMethod]
+    public void Calculate_PutsAPartyInEveryHourItOverlaps_WithItsChildren()
+    {
+        InsightsFigures figures = Calculate(Monday, Monday,
+            parties:
+            [
+                Party(Local(Monday, 14, 30), Local(Monday, 16, 30), children: 12),
+                Party(Local(Monday, 15), Local(Monday, 17), children: 8)
+            ]);
+
+        Assert.IsFalse(figures.Slots.Any(x => x.Hour == 13));
+        Assert.AreEqual(1, figures.Slots.Single(x => x.Hour == 14).Parties);
+        Assert.AreEqual(12, figures.Slots.Single(x => x.Hour == 14).ExpectedChildren);
+        Assert.AreEqual(2, figures.Slots.Single(x => x.Hour == 15).Parties);
+        Assert.AreEqual(20, figures.Slots.Single(x => x.Hour == 15).ExpectedChildren);
+        Assert.AreEqual(20, figures.Slots.Single(x => x.Hour == 16).ExpectedChildren);
+        Assert.IsFalse(figures.Slots.Any(x => x.Hour == 17));
+
+        Assert.AreEqual(2, figures.Totals.Parties);
+        Assert.AreEqual(20, figures.Totals.ExpectedChildren);
+        Assert.AreEqual(2, figures.Days.Single().Parties);
+        Assert.AreEqual(20, figures.Days.Single().ExpectedChildren);
+    }
+
+    [TestMethod]
+    public void Calculate_CountsAPartyOnTheDayItStarts_EvenPastMidnight()
+    {
+        DateOnly tuesday = Monday.AddDays(1);
+
+        InsightsFigures figures = Calculate(Monday, tuesday,
+            parties: [Party(Local(Monday, 23), Local(tuesday, 1), children: 15)]);
+
+        Assert.AreEqual(1, figures.Days.Single(x => x.Date == Monday).Parties);
+        Assert.AreEqual(0, figures.Days.Single(x => x.Date == tuesday).Parties);
+        Assert.AreEqual(1, figures.Slots.Single(x => x.Date == tuesday && x.Hour == 0).Parties);
+        Assert.AreEqual(1, figures.Totals.Parties);
+    }
+
+    [TestMethod]
+    public void Calculate_LeavesOutOfTheTotalsAPartyThatStartedBeforeTheRange()
+    {
+        DateOnly tuesday = Monday.AddDays(1);
+
+        InsightsFigures figures = Calculate(tuesday, tuesday,
+            parties: [Party(Local(Monday, 23), Local(tuesday, 1))]);
+
+        Assert.AreEqual(0, figures.Totals.Parties);
+        Assert.AreEqual(1, figures.Slots.Single(x => x.Hour == 0).Parties);
+    }
+
+    [TestMethod]
+    public void Calculate_CountsKidsPartiesWithNoLaserTimeToGoOn()
+    {
+        List<PartyFact> parties =
+        [
+            Party(Local(Monday, 11), Local(Monday, 13)),
+            Party(Local(Monday, 13), Local(Monday, 15), Local(Monday, 14)),
+            Party(Local(Monday, 16), Local(Monday, 18), hire: PrivateHireKind.PlayOnly)
+        ];
+
+        Assert.AreEqual(1, Calculate(Monday, Monday, parties: parties).Totals.PartiesWithoutLaserTime);
+        Assert.AreEqual(0, Calculate(Monday, Monday, parties: parties, laserTagOffsetMinutes: 45).Totals.PartiesWithoutLaserTime);
+    }
+
+    [TestMethod]
+    public void Calculate_CountsAPartyOnceInTheRepeatedHourWhenTheClocksGoBack()
+    {
+        // 00:30 to 02:30 BST/GMT: 01:00 happens twice that night.
+        DateTime start = new(2026, 10, 24, 23, 30, 0, DateTimeKind.Utc);
+        DateTime end = new(2026, 10, 25, 2, 30, 0, DateTimeKind.Utc);
+
+        InsightsFigures figures = Calculate(ClocksBack, ClocksBack, parties: [Party(start, end, children: 9)]);
+
+        InsightsSlot one = figures.Slots.Single(x => x.Hour == 1);
+        Assert.AreEqual(1, one.Parties);
+        Assert.AreEqual(9, one.ExpectedChildren);
+        Assert.AreEqual(1, figures.Totals.Parties);
+    }
+
+    // Four Mondays, 14:00, two walk-in games and one person on each week; one Monday also has a
+    // party that played twenty games with three party staff.
+    private static InsightsFigures FourMondays(bool withParty)
+    {
+        DateOnly from = Monday;
+        DateOnly to = Monday.AddDays(27);
+        List<GameFact> games = [];
+        List<WorkSpan> clocked = [];
+
+        for (int week = 0; week < 4; week++)
+        {
+            DateOnly day = Monday.AddDays(week * 7);
+            games.Add(GameStarting(Local(day, 14, 1)));
+            games.Add(GameStarting(Local(day, 14, 45)));
+            clocked.Add(new WorkSpan(Local(day, 14), Local(day, 15)));
+        }
+
+        DateOnly partyDay = Monday.AddDays(14);
+        List<PartyFact> parties = [];
+
+        if (withParty)
+        {
+            games.AddRange(Enumerable.Range(0, 20).Select(i => GameStarting(Local(partyDay, 14, 5 + i))));
+            clocked.AddRange(Enumerable.Range(0, 3).Select(_ => new WorkSpan(Local(partyDay, 14), Local(partyDay, 15))));
+            parties.Add(Party(Local(partyDay, 13, 30), Local(partyDay, 15, 30), Local(partyDay, 14), children: 18));
+        }
+
+        return Calculate(from, to, games, clocked, hours: [Hours(DayOfWeek.Monday, 10, 18)], parties: parties);
+    }
+
+    [TestMethod]
+    public void Calculate_LeavesPartyHoursOutOfTheRateBasis()
+    {
+        InsightsCell cell = FourMondays(withParty: true).Cells.Single(x => x.Hour == 14);
+
+        Assert.AreEqual(4, cell.Samples);
+        Assert.AreEqual(28, cell.Games);
+        // The party's twenty, plus that Monday's 14:01 walk-in, which falls inside its window - a
+        // known miss the attribution rule accepts.
+        Assert.AreEqual(21, cell.PartyGames);
+        Assert.AreEqual(1, cell.PartySamples);
+        Assert.AreEqual(3, cell.RateSamples);
+        Assert.AreEqual(6, cell.RateGames);
+        Assert.AreEqual(3m, cell.RateClockedHours);
+
+        // Two games per person, as on every party-free Monday - not 28 / 7.
+        Assert.AreEqual(2m, cell.GamesPerStaffHour);
+        Assert.AreEqual(18m / 4, cell.AverageExpectedChildren);
+    }
+
+    [TestMethod]
+    public void Calculate_WithNoPartiesUsesEveryHourForTheRate()
+    {
+        InsightsCell cell = FourMondays(withParty: false).Cells.Single(x => x.Hour == 14);
+
+        Assert.AreEqual(cell.Samples, cell.RateSamples);
+        Assert.AreEqual(cell.Games, cell.RateGames);
+        Assert.AreEqual(cell.ClockedHours, cell.RateClockedHours);
+        Assert.AreEqual(cell.Games / cell.ClockedHours, cell.GamesPerStaffHour);
+        Assert.AreEqual(0, cell.PartySamples);
+    }
+
+    [TestMethod]
+    public void Calculate_LeavesPartyHoursOutOfTheMedian()
+    {
+        List<GameFact> games = [];
+        List<WorkSpan> clocked = [];
+        List<PartyFact> parties = [];
+
+        // Three weeks of Mondays, 10:00-14:00: four quiet hours at 6 games per person, and a party
+        // every week at 13:00 with 30 games and one person on.
+        for (int week = 0; week < 3; week++)
+        {
+            DateOnly day = Monday.AddDays(week * 7);
+
+            foreach (int hour in new[] { 10, 11, 12 })
+            {
+                games.AddRange(Enumerable.Range(0, 6).Select(i => GameStarting(Local(day, hour, i * 5))));
+                clocked.Add(new WorkSpan(Local(day, hour), Local(day, hour + 1)));
+            }
+
+            games.AddRange(Enumerable.Range(0, 30).Select(i => GameStarting(Local(day, 13, i))));
+            clocked.Add(new WorkSpan(Local(day, 13), Local(day, 14)));
+            parties.Add(Party(Local(day, 12, 45), Local(day, 14), Local(day, 13, 10)));
+        }
+
+        InsightsFigures figures = Calculate(Monday, Monday.AddDays(20), games, clocked, hours: [Hours(DayOfWeek.Monday, 10, 14)], parties: parties);
+
+        Assert.AreEqual(6m, figures.MedianGamesPerStaffHour);
+        Assert.IsTrue(figures.FlagsAvailable, figures.FlagsUnavailableReason);
+        Assert.AreEqual(StaffingFlag.PartyHours, figures.Cells.Single(x => x.Hour == 13).Flag);
+        Assert.AreEqual(StaffingFlag.PartyHours, figures.Cells.Single(x => x.Hour == 12).Flag);
+        Assert.AreEqual(StaffingFlag.None, figures.Cells.Single(x => x.Hour == 10).Flag);
+        Assert.IsFalse(figures.FlaggedCells().Any());
+    }
+
+    [TestMethod]
+    public void Flag_CallsAnHourMostlyParties_WhenHalfItsOccurrencesHadOne()
+    {
+        Assert.AreEqual(StaffingFlag.PartyHours, InsightsRules.Flag(Cell(4, 40, 4m, partySamples: 2), 2m));
+        Assert.AreEqual(StaffingFlag.Understaffed, InsightsRules.Flag(Cell(4, 40, 4m, partySamples: 1), 2m));
+        Assert.AreEqual(StaffingFlag.InsufficientData, InsightsRules.Flag(Cell(2, 40, 4m, partySamples: 2), 2m));
+    }
+
+    [TestMethod]
+    public void PartyFact_CarriesNoText()
+    {
+        Assert.IsFalse(typeof(PartyFact).GetProperties().Any(x => x.PropertyType == typeof(string)),
+            "Insights must never be able to carry a child's name, contact or allergy note.");
     }
 }
