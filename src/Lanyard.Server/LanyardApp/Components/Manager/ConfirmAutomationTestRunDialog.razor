@@ -1,0 +1,83 @@
+@using Lanyard.Application.Services
+@using Lanyard.Infrastructure.Models
+
+@* Shown before "Run now (test)": every action type changes something real in the venue (music,
+   projection, lights, audio), so the Admin sees exactly what will happen first. *@
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Play())" />
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Test "@Rule.Name" now?</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+            <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                This really runs the actions now, on @KioskName. Anyone in the venue will see and hear it.
+            </FluentMessageBar>
+
+            <div>
+                <FluentText Weight="TextWeight.Semibold">What will happen</FluentText>
+                <ol class="automation-test-actions">
+                    @foreach (AutomationActionDescription action in Actions)
+                    {
+                        <li>@action.Text</li>
+                    }
+                </ol>
+            </div>
+
+            @if (Rule.Conditions.Any(c => c.IsActive))
+            {
+                <FluentCheckbox @bind-Value="_checkConditions"
+                                Label="Check the rule's conditions first" />
+                <div class="automation-test-hint">
+                    @(_checkConditions
+                        ? "If a condition doesn't hold right now, nothing runs and you'll see which one."
+                        : "Left unticked, the actions run whatever the time, opening hours or game status.")
+                </div>
+            }
+
+            @if (!EngineEnabled)
+            {
+                <div class="automation-test-hint">
+                    The automation engine is switched off. The test still runs, but the rule won't run by itself until the engine is on.
+                </div>
+            }
+
+            <div class="automation-test-hint">
+                The test is listed in the Execution Log. It doesn't change when the rule next runs by itself.
+            </div>
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Play())" OnClick="@ConfirmAsync">Run test</FluentButton>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+#nullable enable
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter]
+    public required AutomationRule Rule { get; set; }
+
+    [Parameter]
+    public required string KioskName { get; set; }
+
+    [Parameter]
+    public bool EngineEnabled { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<AutomationActionDescription> Actions { get; set; } = [];
+
+    private bool _checkConditions;
+
+    // The result is whether to check conditions first.
+    private async Task ConfirmAsync() => await Dialog.CloseAsync(_checkConditions);
+
+    private async Task CancelAsync() => await Dialog.CancelAsync();
+}

@@ -965,8 +965,12 @@
   {
     "version": "1.4.25",
     "releaseDate": "2026-11-18",
-    "summary": "Copy an automation rule with one click.",
+    "summary": "Test an automation rule straight away, and copy a rule with one click.",
     "details": [
+      "New Run now (test) button on each Automation rule: it runs the rule's actions straight away and shows whether each one worked and, if not, why. You no longer have to wait for a game, a schedule or a quiet kiosk to find out.",
+      "Before a test runs, Lanyard lists exactly what will happen, such as starting a lighting scene on Arena 1, because the music, lights and screens really change. If the rule has conditions you can choose to check them first.",
+      "Tests show in the Execution Log with a Test badge and who ran them. They don't change when the rule next runs by itself, don't raise Operations Alerts and don't count as the rule's last run on the dashboard widget. Only rules that are switched on can be tested.",
+      "The Execution Log now fits on a phone too, and shows times in UK time.",
       "New Duplicate rule button on Automation: it copies a rule with its trigger, conditions and actions as \"Copy of\" the rule's name, switched off, and opens it so you can change what's different before turning it on.",
       "The Automation rule list now fits on a phone: each rule's name shows in full with its kiosk and trigger underneath, instead of being cut short with the switch and buttons off the side of the screen.",
       "The Edit and Delete buttons on Automation, and the rule names in the Execution Log, now work with the keyboard and screen readers and show what they do when you hover over them.",
