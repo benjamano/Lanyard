@@ -391,65 +391,150 @@ public class InsightsRulesTests
 
     // ---- Parties ----
 
-    [TestMethod]
-    public void LaserWindow_RunsFromTenMinutesBeforeTheLaserTimeToFortyAfter()
+    // The start times claimed by parties, from the given starts (sorted here, as Calculate does).
+    private static List<DateTime> Claimed(IEnumerable<PartyFact> parties, int? offset, params DateTime[] starts)
     {
-        DateTime laser = Local(Monday, 14);
-
-        (DateTime StartUtc, DateTime EndUtc)? window = InsightsRules.LaserWindow(Party(Local(Monday, 13), Local(Monday, 15), laser), null);
-
-        Assert.AreEqual((laser.AddMinutes(-10), laser.AddMinutes(40)), window);
+        List<DateTime> sorted = [.. starts.Order()];
+        bool[] claimed = InsightsRules.ClaimPartyGames(sorted, parties, offset);
+        return [.. sorted.Where((_, i) => claimed[i])];
     }
 
     [TestMethod]
-    public void LaserWindow_IsTheWholeBookingForALaserTagHire()
+    public void LaserTime_IsThePartysOwnTime_OrArrivalPlusTheLocationDefault()
     {
-        PartyFact hire = Party(Local(Monday, 18), Local(Monday, 20), hire: PrivateHireKind.LaserTagOnly);
-
-        Assert.AreEqual((Local(Monday, 18), Local(Monday, 20)), InsightsRules.LaserWindow(hire, 30));
-        Assert.AreEqual((Local(Monday, 18), Local(Monday, 20)),
-            InsightsRules.LaserWindow(hire with { HireKind = PrivateHireKind.LaserTagAndPlay }, null));
-    }
-
-    [TestMethod]
-    public void LaserWindow_FallsBackToTheLocationsDefaultOffset()
-    {
+        PartyFact own = Party(Local(Monday, 13), Local(Monday, 15), Local(Monday, 14));
         PartyFact imported = Party(Local(Monday, 13), Local(Monday, 15));
 
-        Assert.AreEqual((Local(Monday, 13, 20), Local(Monday, 14, 10)), InsightsRules.LaserWindow(imported, 30));
+        Assert.AreEqual(Local(Monday, 14), InsightsRules.LaserTime(own, 30));
+        Assert.AreEqual(Local(Monday, 13, 30), InsightsRules.LaserTime(imported, 30));
         Assert.IsFalse(InsightsRules.IsMissingLaserTime(imported, 30));
     }
 
     [TestMethod]
-    public void LaserWindow_IsMissingForAKidsPartyWithNoTimeAndNoDefault()
+    public void LaserTime_IsMissingForAKidsPartyWithNoTimeAndNoDefault()
     {
         PartyFact imported = Party(Local(Monday, 13), Local(Monday, 15));
 
-        Assert.IsNull(InsightsRules.LaserWindow(imported, null));
+        Assert.IsNull(InsightsRules.LaserTime(imported, null));
         Assert.IsTrue(InsightsRules.IsMissingLaserTime(imported, null));
     }
 
     [TestMethod]
-    public void LaserWindow_IsNeverSetForAPlayOnlyHire_AndThatIsNotMissing()
+    public void LaserTime_IsNeverSetForAHire_AndAPlayOnlyHireIsNotMissingOne()
     {
         PartyFact hire = Party(Local(Monday, 13), Local(Monday, 15), hire: PrivateHireKind.PlayOnly);
 
-        Assert.IsNull(InsightsRules.LaserWindow(hire, 30));
+        Assert.IsNull(InsightsRules.LaserTime(hire, 30));
         Assert.IsFalse(InsightsRules.IsMissingLaserTime(hire, 30));
+        Assert.IsFalse(InsightsRules.IsLaserHire(hire));
+        Assert.AreEqual(0, Claimed([hire], 30, Local(Monday, 13, 30), Local(Monday, 13, 45)).Count);
     }
 
     [TestMethod]
-    public void Calculate_SplitsPartyGamesFromWalkInsAtTheWindowEdges()
+    public void ClaimPartyGames_TakesTheFirstTwoGames_AndLeavesTheRestAsWalkIns()
+    {
+        // Two ten-minute games with a short gap, then the walk-ins carry on.
+        PartyFact party = Party(Local(Monday, 13), Local(Monday, 15), Local(Monday, 14));
+
+        List<DateTime> claimed = Claimed([party], null,
+            Local(Monday, 13, 40), Local(Monday, 14, 2), Local(Monday, 14, 15), Local(Monday, 14, 30), Local(Monday, 14, 45));
+
+        CollectionAssert.AreEqual(new[] { Local(Monday, 14, 2), Local(Monday, 14, 15) }, claimed);
+    }
+
+    [TestMethod]
+    public void ClaimPartyGames_StartsLookingTenMinutesBeforeTheLaserTime()
+    {
+        PartyFact party = Party(Local(Monday, 13), Local(Monday, 15), Local(Monday, 14));
+
+        CollectionAssert.AreEqual(new[] { Local(Monday, 13, 50), Local(Monday, 14, 5) },
+            Claimed([party], null, Local(Monday, 13, 49), Local(Monday, 13, 50), Local(Monday, 14, 5)));
+    }
+
+    [TestMethod]
+    public void ClaimPartyGames_AllowsAFirstGameUpToHalfAnHourLate()
+    {
+        PartyFact party = Party(Local(Monday, 13), Local(Monday, 15), Local(Monday, 14));
+
+        CollectionAssert.AreEqual(new[] { Local(Monday, 14, 29) }, Claimed([party], null, Local(Monday, 14, 29)));
+        Assert.AreEqual(0, Claimed([party], null, Local(Monday, 14, 30)).Count);
+    }
+
+    [TestMethod]
+    public void ClaimPartyGames_NeedsTheSecondGameWithinTwentyMinutesOfTheFirst()
+    {
+        PartyFact party = Party(Local(Monday, 13), Local(Monday, 15), Local(Monday, 14));
+
+        CollectionAssert.AreEqual(new[] { Local(Monday, 14), Local(Monday, 14, 19) },
+            Claimed([party], null, Local(Monday, 14), Local(Monday, 14, 19)));
+        CollectionAssert.AreEqual(new[] { Local(Monday, 14) },
+            Claimed([party], null, Local(Monday, 14), Local(Monday, 14, 20)));
+    }
+
+    [TestMethod]
+    public void ClaimPartyGames_GivesTwoPartiesAtTheSameTimeTheirOwnGames()
+    {
+        List<PartyFact> parties =
+        [
+            Party(Local(Monday, 13, 30), Local(Monday, 15, 30), Local(Monday, 14)),
+            Party(Local(Monday, 13), Local(Monday, 15), Local(Monday, 14))
+        ];
+
+        List<DateTime> claimed = Claimed(parties, null,
+            Local(Monday, 14), Local(Monday, 14, 12), Local(Monday, 14, 24), Local(Monday, 14, 36), Local(Monday, 14, 48));
+
+        // Four games between them, each claimed once; the fifth is a walk-in.
+        CollectionAssert.AreEqual(new[] { Local(Monday, 14), Local(Monday, 14, 12), Local(Monday, 14, 24), Local(Monday, 14, 36) }, claimed);
+    }
+
+    [TestMethod]
+    public void ClaimPartyGames_NeverClaimsAGameTwice()
+    {
+        List<PartyFact> parties =
+        [
+            Party(Local(Monday, 13), Local(Monday, 15), Local(Monday, 14)),
+            Party(Local(Monday, 13, 30), Local(Monday, 15, 30), Local(Monday, 14))
+        ];
+
+        InsightsFigures figures = Calculate(Monday, Monday, games: [GameStarting(Local(Monday, 14, 5))], parties: parties);
+
+        Assert.AreEqual(1, figures.Totals.PartyGames);
+        Assert.AreEqual(2, figures.Totals.Parties);
+    }
+
+    [TestMethod]
+    public void ClaimPartyGames_GivesALaserTagHireEveryGameInTheBooking()
+    {
+        PartyFact hire = Party(Local(Monday, 18), Local(Monday, 20), hire: PrivateHireKind.LaserTagOnly);
+        DateTime[] starts = [Local(Monday, 17, 55), Local(Monday, 18), Local(Monday, 18, 30), Local(Monday, 19), Local(Monday, 19, 45), Local(Monday, 20)];
+
+        Assert.IsTrue(InsightsRules.IsLaserHire(hire));
+        Assert.AreEqual(4, Claimed([hire], null, starts).Count);
+        Assert.AreEqual(4, Claimed([hire with { HireKind = PrivateHireKind.LaserTagAndPlay }], null, starts).Count);
+    }
+
+    [TestMethod]
+    public void ClaimPartyGames_UsesTheLocationDefaultForAPartyWithoutATime()
+    {
+        PartyFact imported = Party(Local(Monday, 13), Local(Monday, 15));
+        DateTime[] starts = [Local(Monday, 13, 10), Local(Monday, 13, 31), Local(Monday, 13, 44), Local(Monday, 14)];
+
+        CollectionAssert.AreEqual(new[] { Local(Monday, 13, 31), Local(Monday, 13, 44) }, Claimed([imported], 30, starts));
+        Assert.AreEqual(0, Claimed([imported], null, starts).Count);
+    }
+
+    [TestMethod]
+    public void Calculate_SplitsPartyGamesFromWalkInsByHourAndDay()
     {
         PartyFact party = Party(Local(Monday, 13), Local(Monday, 15), Local(Monday, 14));
 
         InsightsFigures figures = Calculate(Monday, Monday,
             games:
             [
-                GameStarting(Local(Monday, 13, 49)),  // a minute too early: walk-in
-                GameStarting(Local(Monday, 13, 50)),  // party
-                GameStarting(Local(Monday, 14, 39)),  // party
-                GameStarting(Local(Monday, 14, 40))   // window over: walk-in
+                GameStarting(Local(Monday, 13, 40)),  // walk-in before the party
+                GameStarting(Local(Monday, 13, 55)),  // party, first game
+                GameStarting(Local(Monday, 14, 10)),  // party, second game
+                GameStarting(Local(Monday, 14, 25))   // walk-in after the party
             ],
             parties: [party]);
 
@@ -462,21 +547,6 @@ public class InsightsRulesTests
         Assert.AreEqual(1, thirteen.PartyGames);
         Assert.AreEqual(1, thirteen.WalkInGames);
         Assert.AreEqual(2, figures.Days.Single().PartyGames);
-    }
-
-    [TestMethod]
-    public void Calculate_CountsAGameInTwoPartiesWindowsOnce()
-    {
-        InsightsFigures figures = Calculate(Monday, Monday,
-            games: [GameStarting(Local(Monday, 14, 5))],
-            parties:
-            [
-                Party(Local(Monday, 13), Local(Monday, 15), Local(Monday, 14)),
-                Party(Local(Monday, 13, 30), Local(Monday, 15, 30), Local(Monday, 14))
-            ]);
-
-        Assert.AreEqual(1, figures.Totals.PartyGames);
-        Assert.AreEqual(2, figures.Totals.Parties);
     }
 
     [TestMethod]
@@ -559,7 +629,7 @@ public class InsightsRulesTests
     }
 
     // Four Mondays, 14:00, two walk-in games and one person on each week; one Monday also has a
-    // party that played twenty games with three party staff.
+    // party that played its two games at 14:20 and 14:33 with three party staff.
     private static InsightsFigures FourMondays(bool withParty)
     {
         DateOnly from = Monday;
@@ -580,9 +650,10 @@ public class InsightsRulesTests
 
         if (withParty)
         {
-            games.AddRange(Enumerable.Range(0, 20).Select(i => GameStarting(Local(partyDay, 14, 5 + i))));
+            games.Add(GameStarting(Local(partyDay, 14, 20)));
+            games.Add(GameStarting(Local(partyDay, 14, 33)));
             clocked.AddRange(Enumerable.Range(0, 3).Select(_ => new WorkSpan(Local(partyDay, 14), Local(partyDay, 15))));
-            parties.Add(Party(Local(partyDay, 13, 30), Local(partyDay, 15, 30), Local(partyDay, 14), children: 18));
+            parties.Add(Party(Local(partyDay, 13, 30), Local(partyDay, 15, 30), Local(partyDay, 14, 20), children: 18));
         }
 
         return Calculate(from, to, games, clocked, hours: [Hours(DayOfWeek.Monday, 10, 18)], parties: parties);
@@ -594,16 +665,15 @@ public class InsightsRulesTests
         InsightsCell cell = FourMondays(withParty: true).Cells.Single(x => x.Hour == 14);
 
         Assert.AreEqual(4, cell.Samples);
-        Assert.AreEqual(28, cell.Games);
-        // The party's twenty, plus that Monday's 14:01 walk-in, which falls inside its window - a
-        // known miss the attribution rule accepts.
-        Assert.AreEqual(21, cell.PartyGames);
+        Assert.AreEqual(10, cell.Games);
+        // Its own two: the 14:01 walk-in is before it, and the 14:45 one is a third game.
+        Assert.AreEqual(2, cell.PartyGames);
         Assert.AreEqual(1, cell.PartySamples);
         Assert.AreEqual(3, cell.RateSamples);
         Assert.AreEqual(6, cell.RateGames);
         Assert.AreEqual(3m, cell.RateClockedHours);
 
-        // Two games per person, as on every party-free Monday - not 28 / 7.
+        // Two games per person, as on every party-free Monday - not 10 / 7.
         Assert.AreEqual(2m, cell.GamesPerStaffHour);
         Assert.AreEqual(18m / 4, cell.AverageExpectedChildren);
     }
@@ -627,8 +697,9 @@ public class InsightsRulesTests
         List<WorkSpan> clocked = [];
         List<PartyFact> parties = [];
 
-        // Three weeks of Mondays, 10:00-14:00: four quiet hours at 6 games per person, and a party
-        // every week at 13:00 with 30 games and one person on.
+        // Three weeks of Mondays, 10:00-14:00: three steady hours at 6 games per person, and a party
+        // every week at 13:00, when its two games and a rush of walk-ins make 30 games with one
+        // person on - an hour that would otherwise be flagged busy.
         for (int week = 0; week < 3; week++)
         {
             DateOnly day = Monday.AddDays(week * 7);
