@@ -1854,3 +1854,116 @@ a.files-crumb:hover {
         margin: 0 -0.25rem;
     }
 }
+
+.files-uploads.is-inline {
+    position: static;
+    width: 100%;
+    max-height: 14rem;
+    box-shadow: none;
+    border-radius: var(--borderRadiusMedium, 6px);
+}
+
+/* ---------- File pickers (5/5) ---------- */
+
+.files-picker {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    min-width: 0;
+}
+
+.files-picker-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.files-picker-bar .files-search {
+    flex: 1 1 16rem;
+    max-width: none;
+}
+
+.files-picker-tab {
+    padding: 0.3125rem 0.875rem;
+    border: none;
+    border-radius: var(--borderRadiusSmall, 4px);
+    background: transparent;
+    color: var(--colorNeutralForeground2);
+    font: inherit;
+    font-size: var(--fontSizeBase300);
+    cursor: pointer;
+}
+
+.files-picker-tab:hover {
+    background: var(--colorNeutralBackground1Hover);
+}
+
+.files-picker-tab.is-on {
+    background: var(--colorNeutralBackground1Selected);
+    color: var(--colorNeutralForeground1);
+    font-weight: var(--fontWeightSemibold);
+}
+
+button.files-crumb {
+    border: none;
+    background: none;
+    font: inherit;
+    cursor: pointer;
+}
+
+button.files-crumb:hover:not(.is-current) {
+    background: var(--colorNeutralBackground1Hover);
+    color: var(--colorNeutralForeground1);
+}
+
+.files-picker-path .files-crumb {
+    font-size: var(--fontSizeBase300);
+}
+
+.files-picker-content {
+    max-height: min(52vh, 34rem);
+    overflow-y: auto;
+    padding: 0.125rem;
+}
+
+.files-picker-content .files-grid {
+    grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+}
+
+.files-picker-content .files-empty {
+    padding: 2rem 1rem;
+}
+
+.files-picker-upload {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    flex-wrap: wrap;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--colorNeutralStroke2);
+}
+
+.files-picker-hint {
+    color: var(--colorNeutralForeground3);
+    font-size: var(--fontSizeBase200);
+}
+
+.files-picker-upload .files-uploads {
+    flex-basis: 100%;
+}
+
+.files-picker.is-dragging .files-drop-overlay {
+    inset: 0;
+}
+
+@media (max-width: 760px) {
+    .files-picker-content {
+        max-height: 50vh;
+    }
+
+    .files-picker-content .files-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}

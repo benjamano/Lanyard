@@ -1,5 +1,6 @@
 ﻿@using Lanyard.Infrastructure.Models
 @using Lanyard.App.Components.Files
+@using Lanyard.App.Components.Files.Browser
 
 @inject IFileService FileService
 @inject INotificationService ToastService
@@ -33,90 +34,16 @@
         <TitleTemplate>
             <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
                 <FluentIcon Value="@(new Icons.Regular.Size20.FolderOpen())" />
-                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Select File</FluentText>
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Choose a file</FluentText>
             </FluentStack>
         </TitleTemplate>
         <ChildContent>
-        @if (isLoading)
-        {
-            <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
-                <FluentSpinner />
-            </FluentStack>
-        }
-        else
-        {
-            <div class="file-picker-dialog-body">
-                <FluentStack Orientation="Orientation.Horizontal"
-                             VerticalAlignment="VerticalAlignment.Center"
-                             HorizontalGap="8"
-                             Class="mb-2">
-                    <FluentButton Appearance="ButtonAppearance.Outline"
-                                  Disabled="@(!currentFolderId.HasValue)"
-                                  OnClick="NavigateUpAsync">
-                        Up
-                    </FluentButton>
-                    <FluentText Class="file-picker-current-path">@GetCurrentPathText()</FluentText>
-                </FluentStack>
-
-                <FluentGrid Class="w-100">
-                    <FluentGridItem Xs="4">
-                        <FluentCard Appearance="CardAppearance.Subtle" Height="100%">
-                            <FluentText>Folders</FluentText>
-                            <FluentDivider class="my-1" />
-
-                            @if (folders.Count == 0)
-                            {
-                                <FluentText>No folders</FluentText>
-                            }
-                            else
-                            {
-                                <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
-                                    @foreach (Folder folder in folders)
-                                    {
-                                        <FluentButton Appearance="ButtonAppearance.Subtle"
-                                                      OnClick="@(() => OpenFolderAsync(folder.Id))">
-                                            @folder.Name
-                                        </FluentButton>
-                                    }
-                                </FluentStack>
-                            }
-                        </FluentCard>
-                    </FluentGridItem>
-
-                    <FluentGridItem Xs="8">
-                        <FluentCard Appearance="CardAppearance.Subtle" Height="100%">
-                            <FluentText>Files</FluentText>
-                            <FluentDivider class="my-1" />
-
-                            @if (files.Count == 0)
-                            {
-                                <FluentText>No files in this folder</FluentText>
-                            }
-                            else
-                            {
-                                <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
-                                    @foreach (FileMetadata file in files)
-                                    {
-                                        <FluentButton Appearance="ButtonAppearance.Subtle"
-                                                      OnClick="@(() => SelectFileAsync(file))">
-                                            @file.FileName
-                                        </FluentButton>
-                                    }
-                                </FluentStack>
-                            }
-                        </FluentCard>
-                    </FluentGridItem>
-                </FluentGrid>
-
-                <FluentDivider class="my-2" />
-
-                <FluentText>Or upload a new file here</FluentText>
-                <FileUploader Id="file-picker-uploader" SelectedFolderId="@currentFolderId"
-                              MaximumFileCount="@MaximumFileCount" Label="Upload a file"
-                              Accept="@BuildAcceptAttribute()"
-                              OnFileUploaded="OnFileUploadedAsync" />
-            </div>
-        }
+            @* Rebuilt each time it opens, so it starts in the folder asked for. *@
+            @if (_open)
+            {
+                <FilePickerPanel @key="_openCount" InitialFolderId="currentFolderId" AllowedExtensions="AllowedExtensions"
+                                 MaximumFileCount="MaximumFileCount" OnPicked="OnPickedAsync" />
+            }
         </ChildContent>
         <ActionTemplate>
             <FluentButton Appearance="ButtonAppearance.Default" OnClick="ClosePickerAsync">Close</FluentButton>
@@ -149,21 +76,15 @@
     [Parameter]
     public bool CloseOnSelect { get; set; } = true;
 
-    private readonly HashSet<string> allowedExtensions = [];
-    private readonly Dictionary<Guid, Folder> folderLookup = [];
-
-    private List<FileMetadata> files = [];
-    private List<Folder> folders = [];
     private string? selectedFileId;
     private string selectedFileDisplayName = "No file selected";
     private FluentDialog? _pickerDialog;
-    private bool isLoading;
     private Guid? currentFolderId;
+    private bool _open;
+    private int _openCount;
 
     protected override async Task OnParametersSetAsync()
     {
-        RefreshAllowedExtensions();
-
         if (SelectedFileId == selectedFileId)
         {
             return;
@@ -191,14 +112,11 @@
     // Public so a caller with ShowSelectionSummary="false" can open the dialog from its own
     // trigger button (via @ref) instead of the Browse button this component no longer renders.
     // The optional folder lets a caller land the browser straight in a specific folder (e.g. a
-    // company's standing-attachments folder) instead of always starting at Root - seeded into
-    // folderLookup too, so the breadcrumb and Up button resolve correctly on the very first
-    // render, before that folder has ever appeared in a listing of its own children.
+    // company's standing-attachments folder) instead of always starting at the top.
     public async Task OpenAsync(Folder? folder = null)
     {
         if (folder is not null)
         {
-            folderLookup[folder.Id] = folder;
             currentFolderId = folder.Id;
         }
         else
@@ -215,82 +133,24 @@
 
     private async Task OpenPickerAsync()
     {
+        _open = true;
+        _openCount++;
         await _pickerDialog!.ShowAsync();
-        await LoadFolderContentsAsync(currentFolderId);
+
+        // OpenAsync can be called through @ref from another component's event handler, whose
+        // automatic re-render doesn't cover this component.
+        StateHasChanged();
     }
 
     private async Task ClosePickerAsync()
     {
         await _pickerDialog!.HideAsync();
+        _open = false;
     }
 
-    private async Task LoadFolderContentsAsync(Guid? folderId)
-    {
-        isLoading = true;
-        currentFolderId = folderId;
-
-        Result<IReadOnlyList<Folder>> folderResult = await FileService.ListFoldersAsync(folderId, CancellationToken.None);
-        if (folderResult.Success && folderResult.Data is not null)
-        {
-            folders = folderResult.Data.OrderBy(x => x.Name).ToList();
-            foreach (Folder folder in folders)
-            {
-                folderLookup[folder.Id] = folder;
-            }
-        }
-        else
-        {
-            folders = [];
-            ToastService.ShowError($"Failed to load folders: {folderResult.Error}");
-        }
-
-        Result<IReadOnlyList<FileMetadata>> fileResult = await FileService.ListFilesAsync(folderId, CancellationToken.None);
-        if (fileResult.Success && fileResult.Data is not null)
-        {
-            files = fileResult.Data
-                .Where(IsAllowedFile)
-                .OrderBy(x => x.FileName)
-                .ToList();
-        }
-        else
-        {
-            files = [];
-            ToastService.ShowError($"Failed to load files: {fileResult.Error}");
-        }
-
-        isLoading = false;
-
-        // OpenAsync can be invoked via @ref from a different component's own event handler (e.g.
-        // OnboardingSettingsManager's "Add Attachment" button) - Blazor's automatic post-event
-        // re-render only covers the component that owns the triggering event, not an unrelated
-        // component reached through a stored @ref, so without this explicit call the dialog can
-        // open showing stale content (breadcrumb stuck on "Root") even though currentFolderId/
-        // folders/files are all already correct here.
-        StateHasChanged();
-    }
-
-    private async Task OpenFolderAsync(Guid folderId)
-    {
-        await LoadFolderContentsAsync(folderId);
-    }
-
-    private async Task NavigateUpAsync()
-    {
-        if (!currentFolderId.HasValue)
-        {
-            return;
-        }
-
-        if (!folderLookup.TryGetValue(currentFolderId.Value, out Folder? currentFolder))
-        {
-            await LoadFolderContentsAsync(null);
-            return;
-        }
-
-        await LoadFolderContentsAsync(currentFolder.ParentFolderId);
-    }
-
-    private async Task SelectFileAsync(FileMetadata file)
+    // Picked from the panel, or uploaded through it (it only offers allowed files, and doesn't
+    // choose an upload that isn't allowed here).
+    private async Task OnPickedAsync(Lanyard.Infrastructure.DTO.Files.FileListItem file)
     {
         string newFileId = file.Id.ToString();
 
@@ -303,98 +163,14 @@
 
         if (CloseOnSelect)
         {
-            await _pickerDialog!.HideAsync();
+            await ClosePickerAsync();
         }
     }
-
-    // Uploads straight into whatever folder is currently open and immediately selects the result
-    // - the whole point is that a caller never has to leave this dialog, go to the File Manager,
-    // upload there, and come back to find the file they just added.
-    private async Task OnFileUploadedAsync(FileMetadata file)
-    {
-        // The Accept attribute on the uploader is only a browser-level hint - a caller can still
-        // pick a disallowed file via "All files", drag-and-drop, or a non-browser client. Without
-        // this check it would bypass IsAllowedFile (which the existing Files browse list already
-        // enforces) and become e.g. a video-only parameter's value uncontested.
-        if (!IsAllowedFile(file))
-        {
-            await FileService.DeleteFileAsync(file.Id, CancellationToken.None);
-            ToastService.ShowError($"\"{file.FileName}\" is not an allowed file type here and was not added.");
-            await LoadFolderContentsAsync(currentFolderId);
-            return;
-        }
-
-        await SelectFileAsync(file);
-    }
-
-    // Mirrors allowedExtensions (already normalized to ".ext" form by RefreshAllowedExtensions)
-    // into the format <input accept> expects, so the browser's own file picker steers users away
-    // from disallowed types before they even reach IsAllowedFile's after-the-fact check above.
-    private string? BuildAcceptAttribute() =>
-        allowedExtensions.Count == 0 ? null : string.Join(',', allowedExtensions);
 
     private async Task ClearSelectionAsync()
     {
         selectedFileId = null;
         selectedFileDisplayName = "No file selected";
         await OnFileSelected.InvokeAsync(null);
-    }
-
-    private string GetCurrentPathText()
-    {
-        if (!currentFolderId.HasValue)
-        {
-            return "Root";
-        }
-
-        if (!folderLookup.TryGetValue(currentFolderId.Value, out Folder? currentFolder))
-        {
-            return "Root";
-        }
-
-        List<string> segments = [currentFolder.Name];
-        Guid? parentId = currentFolder.ParentFolderId;
-
-        while (parentId.HasValue && folderLookup.TryGetValue(parentId.Value, out Folder? parentFolder))
-        {
-            segments.Add(parentFolder.Name);
-            parentId = parentFolder.ParentFolderId;
-        }
-
-        segments.Reverse();
-        return $"Root / {string.Join(" / ", segments)}";
-    }
-
-    private void RefreshAllowedExtensions()
-    {
-        allowedExtensions.Clear();
-
-        if (AllowedExtensions is null || AllowedExtensions.Count == 0)
-        {
-            return;
-        }
-
-        foreach (string extension in AllowedExtensions.Where(x => !string.IsNullOrWhiteSpace(x)))
-        {
-            string normalized = extension.Trim().ToLowerInvariant();
-
-            if (!normalized.StartsWith('.'))
-            {
-                normalized = $".{normalized}";
-            }
-
-            allowedExtensions.Add(normalized);
-        }
-    }
-
-    private bool IsAllowedFile(FileMetadata file)
-    {
-        if (allowedExtensions.Count == 0)
-        {
-            return true;
-        }
-
-        string extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-        return allowedExtensions.Contains(extension);
     }
 }
