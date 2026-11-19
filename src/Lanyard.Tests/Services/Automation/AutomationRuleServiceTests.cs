@@ -796,6 +796,119 @@ public class AutomationRuleServiceTests
         Assert.IsTrue(ownResult.IsSuccess, ownResult.Error);
     }
 
+    private static AutomationRuleService TenantService(DbContextOptions<ApplicationDbContext> options, int companyId)
+    {
+        Mock<IDbContextFactory<ApplicationDbContext>> tenantFactory = new();
+        tenantFactory
+            .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new ApplicationDbContext(options, new FixedTenantProvider(companyId)));
+
+        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+
+        return new AutomationRuleService(tenantFactory.Object, engine);
+    }
+
+    private static AutomationRuleAction ActionOf(string actionType, string parametersJson) => new()
+    {
+        Id = Guid.NewGuid(),
+        ActionType = actionType,
+        ParametersJson = parametersJson,
+        SortOrder = 1,
+        IsActive = true
+    };
+
+    [TestMethod]
+    public async Task CreateRule_RejectsMusicProjectionAndAudioActionsAimedAtAnotherCompanysKiosk()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid ownKioskId = await SeedKioskAsync(options, companyId: 1);
+        Guid otherKioskId = await SeedKioskAsync(options, companyId: 2);
+        AutomationRuleService service = TenantService(options, 1);
+
+        (string Type, string Json, string Error)[] cases =
+        [
+            (AutomationActionTypes.MusicControl, $"{{\"TargetClientId\":\"{otherKioskId}\",\"Operation\":\"Pause\"}}", "A music action refers to a kiosk that doesn't exist."),
+            (AutomationActionTypes.StopProjectionProgram, $"{{\"TargetClientId\":\"{otherKioskId}\"}}", "A projection action refers to a kiosk that doesn't exist."),
+            (AutomationActionTypes.PlayAudioClip, $"{{\"TargetClientId\":\"{otherKioskId}\",\"AudioClipId\":\"{Guid.NewGuid()}\"}}", "An audio clip action refers to a kiosk that doesn't exist.")
+        ];
+
+        foreach ((string type, string json, string error) in cases)
+        {
+            AutomationRule rule = BuildRule(ownKioskId);
+            rule.Actions.Add(ActionOf(type, json));
+
+            Result<AutomationRule> result = await service.CreateRuleAsync(rule);
+
+            Assert.AreEqual(error, result.Error, type);
+        }
+    }
+
+    [TestMethod]
+    public async Task CreateRule_RejectsAnotherCompanysPlaylistProgramOrClip_AndAcceptsItsOwn()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid kioskId = await SeedKioskAsync(options, companyId: 1);
+        Guid ownPlaylist = Guid.NewGuid(), otherPlaylist = Guid.NewGuid();
+        Guid ownProgram = Guid.NewGuid(), otherProgram = Guid.NewGuid();
+        Guid ownClip = Guid.NewGuid(), otherClip = Guid.NewGuid();
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Playlists.AddRange(
+                new Playlist { Id = ownPlaylist, CompanyId = 1, Name = "Ours", CreateDate = DateTime.UtcNow },
+                new Playlist { Id = otherPlaylist, CompanyId = 2, Name = "Theirs", CreateDate = DateTime.UtcNow });
+            ctx.ProjectionPrograms.AddRange(
+                new ProjectionProgram { Id = ownProgram, CompanyId = 1, Name = "Ours" },
+                new ProjectionProgram { Id = otherProgram, CompanyId = 2, Name = "Theirs" });
+            ctx.AudioClips.AddRange(
+                new AudioClip { Id = ownClip, CompanyId = 1, Name = "Ours" },
+                new AudioClip { Id = otherClip, CompanyId = 2, Name = "Theirs" });
+            await ctx.SaveChangesAsync();
+        }
+
+        AutomationRuleService service = TenantService(options, 1);
+
+        string Music(Guid playlist) => $"{{\"TargetClientId\":\"{kioskId}\",\"Operation\":\"Play\",\"PlaylistId\":\"{playlist}\"}}";
+        string Program(Guid program) => $"{{\"TargetClientId\":\"{kioskId}\",\"Operation\":\"Start\",\"ProjectionProgramId\":\"{program}\"}}";
+        string Clip(Guid clip) => $"{{\"TargetClientId\":\"{kioskId}\",\"AudioClipId\":\"{clip}\"}}";
+
+        (string Type, string Json, string? Error)[] cases =
+        [
+            (AutomationActionTypes.MusicControl, Music(otherPlaylist), "A music action refers to a playlist that doesn't exist."),
+            (AutomationActionTypes.ProjectionProgramControl, Program(otherProgram), "A projection action refers to a projection program that doesn't exist."),
+            (AutomationActionTypes.StartProjectionProgram, Program(otherProgram), "A projection action refers to a projection program that doesn't exist."),
+            (AutomationActionTypes.PlayAudioClip, Clip(otherClip), "An audio clip action refers to an audio clip that doesn't exist."),
+            (AutomationActionTypes.MusicControl, Music(ownPlaylist), null),
+            (AutomationActionTypes.ProjectionProgramControl, Program(ownProgram), null),
+            (AutomationActionTypes.PlayAudioClip, Clip(ownClip), null)
+        ];
+
+        foreach ((string type, string json, string? error) in cases)
+        {
+            AutomationRule rule = BuildRule(kioskId);
+            rule.Actions.Add(ActionOf(type, json));
+
+            Result<AutomationRule> result = await service.CreateRuleAsync(rule);
+
+            Assert.AreEqual(error, result.Error, $"{type}: {json}");
+        }
+    }
+
+    [TestMethod]
+    public async Task CreateRule_AllowsAnActionWhoseKioskHasntBeenChosenYet()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid kioskId = await SeedKioskAsync(options, companyId: 1);
+        AutomationRuleService service = TenantService(options, 1);
+
+        AutomationRule rule = BuildRule(kioskId);
+        rule.Actions.Add(ActionOf(AutomationActionTypes.MusicControl, "{\"TargetClientId\":\"00000000-0000-0000-0000-000000000000\",\"Operation\":\"Play\"}"));
+
+        Result<AutomationRule> result = await service.CreateRuleAsync(rule);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+    }
+
     [TestMethod]
     public async Task UpdateRule_AddsAnActionAddedWhileEditing()
     {

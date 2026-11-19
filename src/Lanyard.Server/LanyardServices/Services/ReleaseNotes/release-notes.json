@@ -969,7 +969,8 @@
     "details": [
       "New Duplicate rule button on Automation: it copies a rule with its trigger, conditions and actions as \"Copy of\" the rule's name, switched off, and opens it so you can change what's different before turning it on.",
       "The Automation rule list now fits on a phone: each rule's name shows in full with its kiosk and trigger underneath, instead of being cut short with the switch and buttons off the side of the screen.",
-      "The Edit and Delete buttons on Automation, and the rule names in the Execution Log, now work with the keyboard and screen readers and show what they do when you hover over them."
+      "The Edit and Delete buttons on Automation, and the rule names in the Execution Log, now work with the keyboard and screen readers and show what they do when you hover over them.",
+      "Automation rules can now only drive your own company's kiosks, playlists, projection programs, lighting scenes and audio clips. This was already checked for lighting actions; music, projection and audio clip actions are now checked too, both when a rule is saved and every time it runs."
     ]
   }
 ]

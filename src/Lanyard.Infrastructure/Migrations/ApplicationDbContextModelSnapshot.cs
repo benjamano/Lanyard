@@ -585,6 +585,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<DateTime>("ExecutedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("IsTestRun")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("OverallSuccess")
                         .HasColumnType("boolean");
 
@@ -593,6 +596,9 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("SkipReason")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TestRunByUserId")
                         .HasColumnType("text");
 
                     b.Property<Guid>("TriggerClientId")
