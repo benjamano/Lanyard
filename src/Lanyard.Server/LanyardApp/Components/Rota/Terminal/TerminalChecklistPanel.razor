@@ -90,7 +90,7 @@
 
     @if (WarningSecondsLeft is int left)
     {
-        <IdleWarning What="@(grantName is null ? "Checklists" : $"Ticking as {grantName}")" SecondsLeft="@left" OnKeepGoing="@KeepGoingAsync" />
+        <IdleWarning Message="@(grantName is null ? "Checklists close in" : $"Ticking as {grantName} stops in")" SecondsLeft="@left" OnKeepGoing="@KeepGoingAsync" />
     }
 </div>
 

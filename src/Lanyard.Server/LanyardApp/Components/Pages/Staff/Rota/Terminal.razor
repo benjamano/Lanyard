@@ -103,7 +103,7 @@
 
                 @if (PinWarningSecondsLeft is int left)
                 {
-                    <IdleWarning What="The PIN pad" SecondsLeft="@left" OnKeepGoing="@MarkActivity" />
+                    <IdleWarning Message="The PIN pad closes in" SecondsLeft="@left" OnKeepGoing="@MarkActivity" />
                 }
             }
 

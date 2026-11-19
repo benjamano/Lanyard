@@ -4,15 +4,15 @@
 <div class="idle-warning" role="alert">
     <div class="idle-text">
         <span class="idle-title">Still there?</span>
-        <span>@What closes in <span aria-hidden="true">@SecondsLeft s</span><span class="idle-sr">a few seconds</span>.</span>
+        <span>@Message <span aria-hidden="true">@SecondsLeft s</span><span class="idle-sr">a few seconds</span>.</span>
     </div>
     <button type="button" class="idle-keep" @onclick="OnKeepGoing">Keep going</button>
 </div>
 
 @code {
-    // "This", "The PIN pad", "Ticking as Amy C."...
+    // Up to the countdown: "The PIN pad closes in", "Ticking as Amy C. stops in".
     [Parameter]
-    public string What { get; set; } = "This";
+    public string Message { get; set; } = "This closes in";
 
     [Parameter]
     public int SecondsLeft { get; set; }
