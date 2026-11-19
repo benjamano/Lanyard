@@ -1,0 +1,12 @@
+@page "/help/checklists"
+@attribute [Authorize]
+@attribute [RequiresFeature(CompanyFeature.Checklists)]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.Checklists
+
+<HelpPage AreaKey="@HelpRegistry.Checklists">
+    <FluentTab Id="help-overview" Header="Ticking Tasks" IconStart="@(new Icons.Regular.Size16.CheckmarkCircle())">
+        <ChecklistsTickingHelpTab />
+    </FluentTab>
+</HelpPage>

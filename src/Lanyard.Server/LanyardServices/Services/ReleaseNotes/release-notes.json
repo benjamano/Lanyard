@@ -971,6 +971,8 @@
       "Choose the days each checklist runs and when it's due: a number of minutes after opening or before closing (from the location's opening hours), a set time such as 10:00, or no set time. Days the location is closed are skipped.",
       "A checklist task can ask for just a tick, a tick with an optional note, or a number reading with a unit, such as a fridge temperature in °C. Reorder tasks with the up and down arrows.",
       "A checklist can be limited to one position, such as Duty Manager for Closing; otherwise anyone on that day's rota can tick it. Checklists can be switched on or off per company under Companies & Locations.",
+      "New Checklists page for staff: today's checklists where you're working, with each task ticked off on your phone. Your name and the time are recorded, a reading or note can be added where the task asks for one, and you can untick your own mistakes the same day.",
+      "New Rota > Checklists Today page for managers: each of today's checklists with who ticked what and when, Overdue once past its due time, and the last 14 days with anything Missed. Pick a day to see exactly what was done.",
       "New Duplicate rule button on Automation: it copies a rule with its trigger, conditions and actions as \"Copy of\" the rule's name, switched off, and opens it so you can change what's different before turning it on.",
       "The Automation rule list now fits on a phone: each rule's name shows in full with its kiosk and trigger underneath, instead of being cut short with the switch and buttons off the side of the screen.",
       "The Edit and Delete buttons on Automation, and the rule names in the Execution Log, now work with the keyboard and screen readers and show what they do when you hover over them."

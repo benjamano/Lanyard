@@ -1,0 +1,279 @@
+@page "/manage/checklists/today"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.Checklists)]
+
+@using Lanyard.App.Components.Checklists
+@using Lanyard.Application.Services.Checklists
+@using Lanyard.Infrastructure.DTO.Checklists
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@inject IChecklistRunService _runService
+@inject TimeProvider _timeProvider
+
+<PageTitle>Checklists today</PageTitle>
+
+<div class="checklists-today">
+    <div class="today-header">
+        <div class="today-heading">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Checklists today</FluentText>
+            <FluentText Class="today-intro">
+                What has been ticked, by whom and when, and what was missed. <a href="@SetupLink">Set up checklists</a>.
+            </FluentText>
+        </div>
+        <HelpButton AreaKey="@HelpRegistry.ManageChecklists" Topic="today" />
+    </div>
+
+    <div class="today-toolbar">
+        @if (locationOptions.Count > 1)
+        {
+            <FluentSelect TOption="LocationOption" TValue="string" Items="@locationOptions" OptionText="@(x => x.Name)"
+                          OptionValue="@(x => x.Id.ToString())" Value="@locationId?.ToString()" ValueChanged="@OnLocationChanged"
+                          Label="Location" Width="260px" />
+        }
+        <FluentDatePicker TValue="DateTime?" Value="@day.ToDateTime(TimeOnly.MinValue)" ValueChanged="@OnDayChanged"
+                          Label="Day" Culture="@RotaFormat.Uk" />
+        <FluentStack HorizontalGap="4" VerticalAlignment="VerticalAlignment.Center" Class="today-day-buttons">
+            <FluentButton IconStart="@(new Icons.Regular.Size16.ChevronLeft())" Title="Previous day" aria-label="Previous day"
+                          OnClick="@(() => ShowDayAsync(day.AddDays(-1)))" />
+            <FluentButton Disabled="@(day == today)" OnClick="@(() => ShowDayAsync(today))">Today</FluentButton>
+            <FluentButton IconStart="@(new Icons.Regular.Size16.ChevronRight())" Title="Next day" aria-label="Next day"
+                          Disabled="@(day >= today)" OnClick="@(() => ShowDayAsync(day.AddDays(1)))" />
+        </FluentStack>
+    </div>
+
+    @if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else if (board is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" HorizontalGap="8">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else
+    {
+        <FluentText Weight="TextWeight.Semibold" Class="today-day-title">@DayTitle</FluentText>
+
+        @if (board.Runs.Count == 0)
+        {
+            <FluentCard Height="auto">
+                <FluentText>No checklists ran at @board.LocationName on this day.</FluentText>
+            </FluentCard>
+        }
+        else
+        {
+            <div class="today-runs">
+                @foreach (ChecklistRunView run in board.Runs)
+                {
+                    <ChecklistRunCard @key="run.RunId" Run="@run" CurrentUserId="@userId" Interactive="@(day == today)" CanUndoAnyone="true"
+                                      IsToday="@(day == today)" OnTick="@TickAsync" OnUndo="@UndoAsync" />
+                }
+            </div>
+        }
+    }
+
+    <section class="history" aria-labelledby="history-heading">
+        <h2 id="history-heading" class="history-title">Last @HistoryDays days</h2>
+
+        @if (history is null)
+        {
+            <FluentText>Loading...</FluentText>
+        }
+        else if (history.Count == 0)
+        {
+            <FluentText Class="today-intro">No checklists have run here yet.</FluentText>
+        }
+        else
+        {
+            <ul class="history-list" aria-label="Checklist history">
+                @foreach (IGrouping<DateOnly, ChecklistHistoryRow> group in history.GroupBy(x => x.VenueDate))
+                {
+                    DateOnly date = group.Key;
+                    <li class="history-day">
+                        <button type="button" class="history-day-button @(date == day ? "is-current" : "")" aria-current="@(date == day ? "date" : null)"
+                                @onclick="@(() => ShowDayAsync(date))">
+                            <span class="history-date">@date.ToString("ddd d MMM", RotaFormat.Uk)</span>
+                            <span class="history-runs">
+                                @foreach (ChecklistHistoryRow row in group)
+                                {
+                                    <span class="history-run">
+                                        <span>@row.Name</span>
+                                        <FluentBadge Appearance="BadgeAppearance.Tint" Color="@ChecklistDisplay.StatusColor(row.Status)">
+                                            @ChecklistDisplay.StatusLabel(row.Status, row.VenueDate == today) @row.Done/@row.Total
+                                        </FluentBadge>
+                                    </span>
+                                }
+                            </span>
+                        </button>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+</div>
+
+@code {
+    private record LocationOption(int Id, string Name);
+
+    private const int HistoryDays = 14;
+
+    [SupplyParameterFromQuery(Name = "location")]
+    public int? LocationQuery { get; set; }
+
+    private LocationScope? scope;
+    private string? userId;
+    private List<LocationOption> locationOptions = [];
+    private int? locationId;
+    private DateOnly today;
+    private DateOnly day;
+    private ChecklistDayView? board;
+    private List<ChecklistHistoryRow>? history;
+    private string? loadError;
+
+    private string SetupLink => locationId is int id ? $"/manage/checklists?location={id}" : "/manage/checklists";
+
+    private string DayTitle => day == today
+        ? $"Today, {day.ToString("dddd d MMMM", RotaFormat.Uk)}"
+        : day.ToString("dddd d MMMM yyyy", RotaFormat.Uk);
+
+    protected override async Task OnInitializedAsync()
+    {
+        today = RotaTime.Today(_timeProvider.GetUtcNow().UtcDateTime);
+        day = today;
+
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+        Result<string> user = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null || !user.IsSuccess || string.IsNullOrEmpty(user.Data))
+        {
+            loadError = "Couldn't work out who you are - try signing in again.";
+            return;
+        }
+
+        scope = scopeResult.Data;
+        userId = user.Data;
+
+        if (scope.IsAdmin)
+        {
+            Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsAsync();
+
+            locationOptions = locationsResult.IsSuccess && locationsResult.Data is not null
+                ? locationsResult.Data.OrderBy(l => l.GetDisplayName()).Select(l => new LocationOption(l.Id, l.GetDisplayName())).ToList()
+                : [];
+        }
+        else if (scope.LocationId is int own)
+        {
+            locationOptions = [new LocationOption(own, scope.LocationDisplayName ?? "Your location")];
+        }
+
+        locationId = LocationQuery is int requested && locationOptions.Any(l => l.Id == requested)
+            ? requested
+            : scope.LocationId is int signedIn && locationOptions.Any(l => l.Id == signedIn)
+                ? signedIn
+                : locationOptions.FirstOrDefault()?.Id;
+
+        if (locationId is null)
+        {
+            loadError = "There are no active locations to show checklists for yet.";
+            return;
+        }
+
+        await LoadBoardAsync();
+        await LoadHistoryAsync();
+    }
+
+    private async Task LoadBoardAsync()
+    {
+        if (scope is null || userId is null || locationId is not int location)
+        {
+            return;
+        }
+
+        Result<ChecklistDayView> result = await _runService.GetDayBoardAsync(scope, userId, location, day);
+
+        loadError = result.IsSuccess ? null : result.Error;
+        board = result.Data;
+    }
+
+    private async Task LoadHistoryAsync()
+    {
+        if (scope is null || locationId is not int location)
+        {
+            return;
+        }
+
+        Result<List<ChecklistHistoryRow>> result = await _runService.GetHistoryAsync(scope, location, today.AddDays(-(HistoryDays - 1)), today);
+        history = result.Data ?? [];
+    }
+
+    private async Task ShowDayAsync(DateOnly value)
+    {
+        if (value > today)
+        {
+            return;
+        }
+
+        day = value;
+        board = null;
+        await LoadBoardAsync();
+    }
+
+    private async Task OnDayChanged(DateTime? value)
+    {
+        if (value is DateTime picked)
+        {
+            await ShowDayAsync(DateOnly.FromDateTime(picked));
+        }
+    }
+
+    private async Task OnLocationChanged(string? value)
+    {
+        if (int.TryParse(value, out int id) && id != locationId)
+        {
+            locationId = id;
+            board = null;
+            history = null;
+            _navigationManager.NavigateTo($"/manage/checklists/today?location={id}", replace: true);
+            await LoadBoardAsync();
+            await LoadHistoryAsync();
+        }
+    }
+
+    private async Task TickAsync((ChecklistItemView Item, string? Note, decimal? Reading) tick)
+    {
+        if (scope is null || userId is null)
+        {
+            return;
+        }
+
+        Result<bool> result = await _runService.CompleteAsync(userId, scope, tick.Item.ItemId, tick.Note, tick.Reading);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't tick that task.");
+        }
+
+        await LoadBoardAsync();
+        await LoadHistoryAsync();
+    }
+
+    private async Task UndoAsync(ChecklistTickView tick)
+    {
+        if (scope is null || userId is null)
+        {
+            return;
+        }
+
+        Result<bool> result = await _runService.UndoAsync(userId, scope, tick.CompletionId);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't take that tick back.");
+        }
+
+        await LoadBoardAsync();
+        await LoadHistoryAsync();
+    }
+}
