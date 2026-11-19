@@ -961,5 +961,17 @@
       "Bookings are matched on their Just Step reference, so later runs update them in place instead of duplicating, and a booking cancelled or removed in Just Step is cancelled in Lanyard too. Confirmed and provisional bookings both come in, with provisional ones marked.",
       "Each import is listed on the page with its result and how many bookings came in. If an import can't run - a wrong password or the site being down - Admins and the location's Managers get one alert on Operations Alerts, which clears itself once an import succeeds again."
     ]
+  },
+  {
+    "version": "1.4.25",
+    "releaseDate": "2026-11-19",
+    "summary": "See what's on at your venue each day and week.",
+    "details": [
+      "New What's On page under Management (Admins and Managers): everything booked at a location for one day or one week. For now it shows parties, including ones imported from Just Step Online.",
+      "The Day view is a timeline: each party is a block from arrival to finish, with its eating and laser tag times marked, and parties that overlap sit side by side. Today's timeline has a line at the time now. On a phone the day is a list of party cards instead.",
+      "The Week view shows Monday to Sunday, side by side on a computer and one under another on a phone, with each day's parties and headcount. Click a day to open its timeline, or a party to open it.",
+      "Totals at the top add up the parties, children and adults expected, hot and cold food, parties not paid in full with the balance due, and provisional holds.",
+      "The Day view also lists everyone on the published rota that day, with their times and position."
+    ]
   }
 ]
