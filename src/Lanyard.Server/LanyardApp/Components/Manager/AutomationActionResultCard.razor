@@ -1,0 +1,38 @@
+@* One action's outcome: a pass/fail icon, what the action was, and the error if it failed. Shared
+   by the execution log's detail dialog and the test-run result dialog. *@
+
+<div class="automation-action-result">
+    @if (Success)
+    {
+        <FluentIcon Value="@(new Icons.Regular.Size20.CheckmarkCircle())" Color="Color.Success" aria-label="Passed" />
+    }
+    else
+    {
+        <FluentIcon Value="@(new Icons.Regular.Size20.DismissCircle())" Color="Color.Error" aria-label="Failed" />
+    }
+    <div class="automation-action-result-text">
+        <div class="automation-action-result-heading">@Heading</div>
+        @if (!string.IsNullOrEmpty(Detail))
+        {
+            <div class="automation-action-result-detail">@Detail</div>
+        }
+        @if (!Success && !string.IsNullOrEmpty(Error))
+        {
+            <div class="automation-action-result-error">@Error</div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public bool Success { get; set; }
+
+    [Parameter]
+    public required string Heading { get; set; }
+
+    [Parameter]
+    public string? Detail { get; set; }
+
+    [Parameter]
+    public string? Error { get; set; }
+}
