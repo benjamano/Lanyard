@@ -968,7 +968,7 @@
     "summary": "Insights now counts party bookings, and automation rules can be copied with one click.",
     "details": [
       "Insights counts booked parties at the location and the children expected at them, per hour and per day. Cancelled parties are left out; provisional Just Step bookings count.",
-      "Games are split into walk-in games and party games. A game counts as a party's if it starts between 10 minutes before and 40 minutes after the party's laser tag time. Parties with no laser tag time use the location's default from Party settings, and a laser tag private hire counts every game during the booking.",
+      "Games are split into walk-in games and party games. Each party is given its first two games: the first starting from 10 minutes before the party's laser tag time to half an hour after it, and the second within 20 minutes of the first. Parties with no laser tag time use the location's default from Party settings, and a laser tag private hire counts every game during the booking.",
       "Busy and quiet flags, and the typical games per staff hour they are measured against, now leave out hours with a party on, so a party no longer makes a normal hour look understaffed. An hour that has a party most weeks shows as Mostly parties instead of being flagged.",
       "Export CSV has four new columns at the end: Walk-in games, Party games, Parties on and Expected children. Like the rest of the file they are counts only, with no names, contact details, allergies or prices.",
       "Only for companies using Parties. Without it, Insights works as before.",

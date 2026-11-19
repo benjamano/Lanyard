@@ -53,11 +53,15 @@ public static class InsightsRules
     // A game's DurationSeconds is its configured length; anything longer is a bad snapshot.
     public static readonly TimeSpan MaxGameLength = TimeSpan.FromHours(2);
 
-    // A party's laser tag is booked for one time, but nothing records which games it played. Games
-    // starting from a little before that time (the group is briefed and suited early) until 40
-    // minutes after it (two back-to-back games) are put down to the party.
+    // A party's laser tag is booked for one time, but nothing records which games it played. A
+    // party usually plays two games of about ten minutes with under five minutes between them, so
+    // it is given its first two games: the first starting from a little before its laser tag time
+    // (the group is briefed and suited early) up to half an hour after it (a late start), and the
+    // second starting within 20 minutes of the first.
     public static readonly TimeSpan PartyLaserLeadIn = TimeSpan.FromMinutes(10);
-    public static readonly TimeSpan PartyLaserWindow = TimeSpan.FromMinutes(40);
+    public static readonly TimeSpan PartyFirstGameWithin = TimeSpan.FromMinutes(30);
+    public static readonly TimeSpan PartyNextGameWithin = TimeSpan.FromMinutes(20);
+    public const int PartyGamesPerParty = 2;
 
     private readonly record struct SlotKey(DateOnly Date, int Hour);
 
@@ -78,72 +82,112 @@ public static class InsightsRules
         public int ExpectedChildren;
     }
 
-    // When a party's games are expected, or null when none can be told apart from walk-ins:
-    //  1. its own laser tag time;
-    //  2. a laser tag hire has the arena for the whole booking, so every game in it is the hire's;
-    //  3. a kids' party with no time (Just Step imports never have one) uses the location's default
-    //     "laser tag starts N minutes after arrival" from Party settings;
-    //  4. otherwise none. A play-only hire plays no laser tag at all.
-    // Known misses, all accepted for an aggregate: walk-ins playing inside a party's window count as
-    // the party's; a party running over half an hour late, or playing a third game, counts as
-    // walk-ins; the default offset is applied to kids' parties that don't play laser tag too; and a
-    // location with two arenas counts both arenas' games in the window.
-    public static (DateTime StartUtc, DateTime EndUtc)? LaserWindow(PartyFact party, int? laserTagOffsetMinutes)
+    // A laser tag hire has the arena for the whole booking, so every game during it is the hire's.
+    public static bool IsLaserHire(PartyFact party) =>
+        party.HireKind is PrivateHireKind.LaserTagOnly or PrivateHireKind.LaserTagAndPlay;
+
+    // When a kids' party is expected to start laser tag: its own time, or else the location's default
+    // "laser tag starts N minutes after arrival" from Party settings (Just Step imports never have a
+    // time of their own). Null for a private hire, and for a party with neither.
+    public static DateTime? LaserTime(PartyFact party, int? laserTagOffsetMinutes)
     {
+        if (party.HireKind is not null)
+        {
+            return null;
+        }
+
         if (party.LaserTagTimeUtc is DateTime laser)
         {
-            return AroundLaserTime(laser);
+            return laser;
         }
 
-        if (party.HireKind is PrivateHireKind.LaserTagOnly or PrivateHireKind.LaserTagAndPlay)
-        {
-            return party.EndUtc > party.StartUtc ? (party.StartUtc, party.EndUtc) : null;
-        }
-
-        if (party.HireKind is null && laserTagOffsetMinutes is int offset)
-        {
-            return AroundLaserTime(party.StartUtc.AddMinutes(offset));
-        }
-
-        return null;
+        return laserTagOffsetMinutes is int offset ? party.StartUtc.AddMinutes(offset) : null;
     }
 
     // A kids' party whose games can't be found: no laser tag time and no default to go on.
     public static bool IsMissingLaserTime(PartyFact party, int? laserTagOffsetMinutes) =>
-        party.HireKind is null && LaserWindow(party, laserTagOffsetMinutes) is null;
+        party.HireKind is null && LaserTime(party, laserTagOffsetMinutes) is null;
 
-    private static (DateTime StartUtc, DateTime EndUtc) AroundLaserTime(DateTime laserUtc) =>
-        (laserUtc - PartyLaserLeadIn, laserUtc + PartyLaserWindow);
-
-    private static DateTime HourStart(DateTime utc) => new(utc.Year, utc.Month, utc.Day, utc.Hour, 0, 0, DateTimeKind.Utc);
-
-    // Windows filed under each UTC hour they touch, so a game is only checked against the few
-    // windows near it rather than every party in the range.
-    private static Dictionary<DateTime, List<(DateTime StartUtc, DateTime EndUtc)>> IndexWindows(
-        IEnumerable<(DateTime StartUtc, DateTime EndUtc)> windows)
+    // Which games were played by parties, as flags against game start times sorted oldest first.
+    // Each game goes to one party at most. Laser tag hires claim every game during the booking;
+    // then kids' parties, earliest laser time first, each claim the first unclaimed game starting in
+    // [laser - 10 min, laser + 30 min) and the next unclaimed one within 20 minutes of it. A play-only
+    // hire, or a kids' party with no time to go on, claims nothing.
+    // Known misses, accepted for an aggregate: a third game counts as walk-in; a party that didn't
+    // play takes the walk-in games nearest its laser time; the default offset is applied to kids'
+    // parties that don't play laser tag too; and a location with two arenas mixes both arenas' games.
+    public static bool[] ClaimPartyGames(IReadOnlyList<DateTime> sortedStartsUtc, IEnumerable<PartyFact> parties, int? laserTagOffsetMinutes)
     {
-        Dictionary<DateTime, List<(DateTime, DateTime)>> byHour = [];
+        bool[] claimed = new bool[sortedStartsUtc.Count];
+        List<PartyFact> all = [.. parties];
 
-        foreach ((DateTime start, DateTime end) window in windows)
+        foreach (PartyFact hire in all.Where(IsLaserHire))
         {
-            foreach ((DateTime hourStart, _) in SplitIntoHours(window.start, window.end))
+            for (int i = FirstAtOrAfter(sortedStartsUtc, hire.StartUtc); i < sortedStartsUtc.Count && sortedStartsUtc[i] < hire.EndUtc; i++)
             {
-                if (!byHour.TryGetValue(hourStart, out List<(DateTime, DateTime)>? list))
-                {
-                    byHour[hourStart] = list = [];
-                }
-
-                list.Add(window);
+                claimed[i] = true;
             }
         }
 
-        return byHour;
+        foreach ((DateTime laser, PartyFact _) in all
+            .Select(x => (Laser: LaserTime(x, laserTagOffsetMinutes), Party: x))
+            .Where(x => x.Laser is not null)
+            .Select(x => (x.Laser!.Value, x.Party))
+            .OrderBy(x => x.Value)
+            .ThenBy(x => x.Party.StartUtc))
+        {
+            DateTime firstBy = laser + PartyFirstGameWithin;
+            int i = FirstAtOrAfter(sortedStartsUtc, laser - PartyLaserLeadIn);
+
+            while (i < sortedStartsUtc.Count && sortedStartsUtc[i] < firstBy && claimed[i])
+            {
+                i++;
+            }
+
+            if (i >= sortedStartsUtc.Count || sortedStartsUtc[i] >= firstBy)
+            {
+                continue;
+            }
+
+            claimed[i] = true;
+            DateTime previous = sortedStartsUtc[i];
+            int taken = 1;
+
+            for (int j = i + 1; j < sortedStartsUtc.Count && taken < PartyGamesPerParty && sortedStartsUtc[j] < previous + PartyNextGameWithin; j++)
+            {
+                if (!claimed[j])
+                {
+                    claimed[j] = true;
+                    previous = sortedStartsUtc[j];
+                    taken++;
+                }
+            }
+        }
+
+        return claimed;
     }
 
-    // A game in two parties' windows still counts once.
-    private static bool IsInAnyWindow(Dictionary<DateTime, List<(DateTime StartUtc, DateTime EndUtc)>> byHour, DateTime startUtc) =>
-        byHour.TryGetValue(HourStart(startUtc), out List<(DateTime StartUtc, DateTime EndUtc)>? windows)
-        && windows.Any(w => startUtc >= w.StartUtc && startUtc < w.EndUtc);
+    // The index of the first start at or after the given time (Count if there is none).
+    private static int FirstAtOrAfter(IReadOnlyList<DateTime> sorted, DateTime utc)
+    {
+        int low = 0, high = sorted.Count;
+
+        while (low < high)
+        {
+            int mid = (low + high) / 2;
+
+            if (sorted[mid] < utc)
+            {
+                low = mid + 1;
+            }
+            else
+            {
+                high = mid;
+            }
+        }
+
+        return low;
+    }
 
     // The venue-local hour a UTC instant falls in.
     public static (DateOnly Date, int Hour) LocalHour(DateTime utc)
@@ -300,14 +344,15 @@ public static class InsightsRules
             }
         }
 
-        Dictionary<DateTime, List<(DateTime StartUtc, DateTime EndUtc)>> partyWindows = IndexWindows(parties
-            .Select(x => LaserWindow(x, laserTagOffsetMinutes))
-            .Where(x => x is not null)
-            .Select(x => x!.Value));
+        // Every game, by when it started, so parties can claim theirs in order.
+        List<(DateTime StartUtc, int Players)> started = [.. games
+            .Select(x => (StartUtc: EstimatedStartUtc(x), x.Players))
+            .OrderBy(x => x.StartUtc)];
+        bool[] partyGame = ClaimPartyGames([.. started.Select(x => x.StartUtc)], parties, laserTagOffsetMinutes);
 
-        foreach (GameFact game in games)
+        for (int i = 0; i < started.Count; i++)
         {
-            DateTime start = EstimatedStartUtc(game);
+            DateTime start = started[i].StartUtc;
 
             if (start < rangeStartUtc || start >= rangeEndUtc)
             {
@@ -317,9 +362,9 @@ public static class InsightsRules
             (DateOnly date, int hour) = LocalHour(start);
             SlotTotals slot = totals[new SlotKey(date, hour)];
             slot.Games++;
-            slot.Players += game.Players;
+            slot.Players += started[i].Players;
 
-            if (IsInAnyWindow(partyWindows, start))
+            if (partyGame[i])
             {
                 slot.PartyGames++;
             }

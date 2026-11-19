@@ -30,7 +30,7 @@ public record InsightsQuery(int? LocationId, DateOnly From, DateOnly To)
 
 // One venue-local hour (Hour 14 is 14:00-15:00 UK time). Hours are not money: no pay is reported.
 // Games counts every game; PartyGames is the part of it put down to a party (see
-// InsightsRules.LaserWindow). Parties is how many booked parties were on at some point in the hour
+// InsightsRules.ClaimPartyGames). Parties is how many booked parties were on at some point in the hour
 // and ExpectedChildren the children booked for them - counts only, never who.
 public record InsightsSlot(
     DateOnly Date,

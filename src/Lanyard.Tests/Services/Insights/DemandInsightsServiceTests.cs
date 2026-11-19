@@ -450,11 +450,12 @@ public class DemandInsightsServiceTests
     }
 
     [TestMethod]
-    public async Task GetSummary_PutsGamesInTheLaserWindowDownToTheParty()
+    public async Task GetSummary_PutsAGameAtTheLaserTimeDownToTheParty()
     {
         Fixture f = await SeedAsync();
         await AddPartyAsync(f, f.Ipswich, Local(Monday, 13), Local(Monday, 15), laserUtc: Local(Monday, 14));
-        // Recorded ten minutes after they start (DurationSeconds = 600).
+        // Recorded ten minutes after they start (DurationSeconds = 600): 14:05 is the party's, and
+        // 14:50 is too long after it to be its second game.
         await AddGameAsync(f, f.IpswichKiosk, Local(Monday, 14, 15));
         await AddGameAsync(f, f.IpswichKiosk, Local(Monday, 15, 0));
 
@@ -462,6 +463,22 @@ public class DemandInsightsServiceTests
 
         Assert.AreEqual(2, result.Data!.Figures.Totals.Games);
         Assert.AreEqual(1, result.Data.Figures.Totals.PartyGames);
+        Assert.AreEqual(1, result.Data.Figures.Totals.WalkInGames);
+    }
+
+    [TestMethod]
+    public async Task GetSummary_GivesAPartyItsTwoGamesAndNoMore()
+    {
+        Fixture f = await SeedAsync();
+        await AddPartyAsync(f, f.Ipswich, Local(Monday, 13), Local(Monday, 15), laserUtc: Local(Monday, 14));
+        // Games starting 14:00, 14:14 and 14:28, back to back.
+        await AddGameAsync(f, f.IpswichKiosk, Local(Monday, 14, 10));
+        await AddGameAsync(f, f.IpswichKiosk, Local(Monday, 14, 24));
+        await AddGameAsync(f, f.IpswichKiosk, Local(Monday, 14, 38));
+
+        Result<InsightsSummary> result = await ServiceFor(f).GetSummaryAsync(AdminScope(f), Week);
+
+        Assert.AreEqual(2, result.Data!.Figures.Totals.PartyGames);
         Assert.AreEqual(1, result.Data.Figures.Totals.WalkInGames);
     }
 
