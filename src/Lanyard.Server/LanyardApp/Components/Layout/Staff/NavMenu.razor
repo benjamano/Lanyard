@@ -223,6 +223,10 @@
                         <FluentNavItem Href="/manage/rota/terminals">Clock-In Terminals</FluentNavItem>
                         <FluentNavItem Href="/manage/rota/staff">Staff</FluentNavItem>
                         <FluentNavItem Href="/manage/rota/templates">Shift Templates</FluentNavItem>
+                        @if (Has(CompanyFeature.Checklists))
+                        {
+                            <FluentNavItem Href="/manage/checklists">Checklists</FluentNavItem>
+                        }
                         <FluentNavItem Href="/manage/rota/holidays">Holidays</FluentNavItem>
                         <FluentNavItem Href="/manage/rota/positions">Positions</FluentNavItem>
                         <FluentNavItem Href="/manage/rota/settings">Rota Settings</FluentNavItem>
