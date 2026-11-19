@@ -97,7 +97,8 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 12px;
-    align-items: end;
+    /* Top-aligned: the number input's field is a few pixels taller than the select's. */
+    align-items: start;
 }
 
 @media (max-width: 520px) {
