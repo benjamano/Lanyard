@@ -963,7 +963,7 @@
     ]
   },
   {
-    "version": "1.4.25",
+    "version": "1.4.26",
     "releaseDate": "2026-11-19",
     "summary": "See what's on at your venue each day and week.",
     "details": [
@@ -971,7 +971,8 @@
       "The Day view is a timeline: each party is a block from arrival to finish, with its eating and laser tag times marked, and parties that overlap sit side by side. Today's timeline has a line at the time now. On a phone the day is a list of party cards instead.",
       "The Week view shows Monday to Sunday, side by side on a computer and one under another on a phone, with each day's parties and headcount. Click a day to open its timeline, or a party to open it.",
       "Totals at the top add up the parties, children and adults expected, hot and cold food, parties not paid in full with the balance due, and provisional holds.",
-      "The Day view also lists everyone on the published rota that day, with their times and position."
+      "The Day view also lists everyone on the published rota that day, with their times and position.",
+      "New What's On Today dashboard widget (Admins and Managers): today's parties, children and staff on, and the parties still to come, with a link to the day's timeline. Right-click it to choose how many to list and, for Admins, which location."
     ]
   }
 ]
