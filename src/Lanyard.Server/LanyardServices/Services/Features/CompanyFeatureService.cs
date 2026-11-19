@@ -35,6 +35,10 @@ public class CompanyFeatureService(
 
     private static string CacheKey(int companyId) => $"company-features-disabled:{companyId}";
 
+    // For writers that change a company's feature settings without going through this service
+    // (the demo reset deletes them directly).
+    public static void Evict(IMemoryCache cache, int companyId) => cache.Remove(CacheKey(companyId));
+
     public async Task<Result<List<CompanyFeatureState>>> GetFeaturesAsync(int companyId)
     {
         try

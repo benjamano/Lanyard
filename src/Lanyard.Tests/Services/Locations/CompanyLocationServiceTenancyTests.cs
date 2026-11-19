@@ -5,6 +5,7 @@ using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Tests.Services.Scheduling;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Lanyard.Tests.Services.Locations;
@@ -48,7 +49,7 @@ public class CompanyLocationServiceTenancyTests
     }
 
     private static CompanyLocationService ServiceFor(Fixture f, ITenantContext tenant) =>
-        new(SchedulingTestHelpers.GetFactory(f.Options), tenant);
+        new(SchedulingTestHelpers.GetFactory(f.Options), new MemoryCache(new MemoryCacheOptions()), tenant);
 
     [TestMethod]
     public async Task CompanyAdmin_OnlySeesTheirOwnCompanyAndLocations()

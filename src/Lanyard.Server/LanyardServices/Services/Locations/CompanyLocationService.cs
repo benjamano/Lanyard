@@ -3,6 +3,7 @@ using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using System.Text.RegularExpressions;
 
 namespace Lanyard.Application.Services.Locations;
@@ -11,11 +12,15 @@ namespace Lanyard.Application.Services.Locations;
 // company boundary is enforced here instead: a signed-in user may only see and manage their own
 // company's locations and memberships, and only platform admins can create, deactivate or reach
 // other companies. A null tenant (tests, system callers) is unrestricted.
-public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> factory, ITenantContext? tenant = null) : ICompanyLocationService
+//
+// Branding is read on every page, every new circuit and every logo request, so it is cached per
+// company (see BrandingCache) and evicted by every write in here that changes it.
+public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> factory, IMemoryCache cache, ITenantContext? tenant = null) : ICompanyLocationService
 {
     private const string NoAccessToCompany = "You do not have access to that company.";
 
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly IMemoryCache _cache = cache;
     private readonly ITenantContext? _tenant = tenant;
 
     private int? ManageableCompanyId => _tenant?.ManageableCompanyId;
@@ -122,6 +127,8 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
 
             await ctx.SaveChangesAsync();
 
+            await EvictCompanyAsync(ctx, target.Id);
+
             return Result<Company>.Ok(target);
         }
         catch (Exception ex)
@@ -152,6 +159,8 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
             company.UpdateDate = DateTime.UtcNow;
 
             await ctx.SaveChangesAsync();
+
+            await EvictCompanyAsync(ctx, companyId);
 
             return Result<bool>.Ok(true);
         }
@@ -254,6 +263,8 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
 
             await ctx.SaveChangesAsync();
 
+            _cache.Remove(BrandingCache.LocationScope(target.Id));
+
             return Result<Location>.Ok(target);
         }
         catch (Exception ex)
@@ -284,6 +295,8 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
             location.UpdateDate = DateTime.UtcNow;
 
             await ctx.SaveChangesAsync();
+
+            _cache.Remove(BrandingCache.LocationScope(locationId));
 
             return Result<bool>.Ok(true);
         }
@@ -393,6 +406,8 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
 
             await ctx.SaveChangesAsync();
 
+            _cache.Remove(BrandingCache.UserCompany(userId));
+
             return Result<bool>.Ok(true);
         }
         catch (Exception ex)
@@ -423,6 +438,8 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
 
             ctx.UserLocationMemberships.Remove(membership);
             await ctx.SaveChangesAsync();
+
+            _cache.Remove(BrandingCache.UserCompany(userId));
 
             return Result<bool>.Ok(true);
         }
@@ -477,19 +494,30 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
     {
         try
         {
+            if (_cache.TryGetValue(BrandingCache.Branding(companyId), out CompanyBrandingInfo? cached) && cached is not null)
+            {
+                return Result<CompanyBrandingInfo>.Ok(cached);
+            }
+
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            Company? company = await ctx.Companies
+            CompanyBrandingInfo? branding = await ctx.Companies
                 .AsNoTracking()
                 .TagWithCallSite()
-                .FirstOrDefaultAsync(x => x.Id == companyId && x.IsActive);
+                .Where(x => x.Id == companyId && x.IsActive)
+                .Select(x => new CompanyBrandingInfo(x.Id, x.Name, x.ThemeColorHex, x.LogoFileId, x.BackgroundImageFileId, x.SeasonalThemeSetting))
+                .FirstOrDefaultAsync();
 
-            if (company is null)
+            // Only hits are cached: anonymous callers choose the id (?company= on the login page,
+            // the logo URLs), so caching misses would let anyone fill memory with junk ids.
+            if (branding is null)
             {
                 return Result<CompanyBrandingInfo>.Fail("Company not found.");
             }
 
-            return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(company.Id, company.Name, company.ThemeColorHex, company.LogoFileId, company.BackgroundImageFileId, company.SeasonalThemeSetting));
+            _cache.Set(BrandingCache.Branding(companyId), branding, BrandingCache.Ttl);
+
+            return Result<CompanyBrandingInfo>.Ok(branding);
         }
         catch (Exception ex)
         {
@@ -501,32 +529,36 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
     {
         try
         {
-            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
-
-            List<Company> companies = await ctx.UserLocationMemberships
-                .AsNoTracking()
-                .TagWithCallSite()
-                .Where(x => x.UserId == userId && x.Location!.IsActive && x.Location.Company!.IsActive)
-                .Select(x => x.Location!.Company!)
-                .Distinct()
-                .ToListAsync();
-
-            if (companies.Count == 0)
+            if (!_cache.TryGetValue(BrandingCache.UserCompany(userId), out int companyId))
             {
-                return Result<CompanyBrandingInfo>.Fail("User does not belong to an active company.");
+                await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+                List<int> companyIds = await ctx.UserLocationMemberships
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .Where(x => x.UserId == userId && x.Location!.IsActive && x.Location.Company!.IsActive)
+                    .Select(x => x.Location!.CompanyId)
+                    .Distinct()
+                    .Take(2)
+                    .ToListAsync();
+
+                if (companyIds.Count == 0)
+                {
+                    return Result<CompanyBrandingInfo>.Fail("User does not belong to an active company.");
+                }
+
+                // Belonging to two companies at once has no single right answer, so rather than
+                // pick one arbitrarily the caller is told to fall back to another signal.
+                if (companyIds.Count > 1)
+                {
+                    return Result<CompanyBrandingInfo>.Fail("User belongs to more than one company.");
+                }
+
+                companyId = companyIds[0];
+                _cache.Set(BrandingCache.UserCompany(userId), companyId, BrandingCache.UserCompanyTtl);
             }
 
-            // Belonging to two companies at once has no single right answer, so rather than
-            // pick one arbitrarily the caller is told to fall back to another signal.
-            if (companies.Count > 1)
-            {
-                return Result<CompanyBrandingInfo>.Fail("User belongs to more than one company.");
-            }
-
-            Company company = companies[0];
-
-            return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(
-                company.Id, company.Name, company.ThemeColorHex, company.LogoFileId, company.BackgroundImageFileId, company.SeasonalThemeSetting));
+            return await GetCompanyBrandingAsync(companyId);
         }
         catch (Exception ex)
         {
@@ -540,23 +572,38 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            Location? location = await ctx.Locations
+            int? companyId = await ctx.Locations
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Include(x => x.Company)
-                .FirstOrDefaultAsync(x => x.Id == locationId && x.IsActive && x.Company!.IsActive);
+                .Where(x => x.Id == locationId && x.IsActive && x.Company!.IsActive)
+                .Select(x => (int?)x.CompanyId)
+                .FirstOrDefaultAsync();
 
-            if (location?.Company is null)
+            if (companyId is null)
             {
                 return Result<CompanyBrandingInfo>.Fail("Location or company not found.");
             }
 
-            return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(location.Company.Id, location.Company.Name, location.Company.ThemeColorHex, location.Company.LogoFileId, location.Company.BackgroundImageFileId, location.Company.SeasonalThemeSetting));
+            return await GetCompanyBrandingAsync(companyId.Value);
         }
         catch (Exception ex)
         {
             return Result<CompanyBrandingInfo>.Fail($"Failed to retrieve company branding for location: {ex.Message}");
         }
+    }
+
+    // After a company write: its branding, and its locations' scope details (they carry the
+    // company name). Only ever called once SaveChanges has succeeded.
+    private async Task EvictCompanyAsync(ApplicationDbContext ctx, int companyId)
+    {
+        List<int> locationIds = await ctx.Locations
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => x.CompanyId == companyId)
+            .Select(x => x.Id)
+            .ToListAsync();
+
+        BrandingCache.EvictCompany(_cache, companyId, locationIds);
     }
 
     public async Task<Result<List<LoginLocationOption>>> GetLoginLocationOptionsAsync(int? companyId = null)
@@ -568,7 +615,6 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
             IQueryable<Location> query = ctx.Locations
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Include(x => x.Company)
                 .Where(x => x.IsActive && x.Company!.IsActive);
 
             if (companyId.HasValue)
@@ -576,12 +622,14 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 query = query.Where(x => x.CompanyId == companyId.Value);
             }
 
-            List<Location> locations = await query
+            var locations = await query
                 .OrderBy(x => x.Company!.Name).ThenBy(x => x.Name)
+                .Select(x => new { x.Id, x.Name, x.CompanyId, CompanyName = x.Company!.Name, x.Company.ThemeColorHex, x.Company.LogoFileId })
                 .ToListAsync();
 
+            // Same display name as Location.GetDisplayName(), without loading the whole company row.
             List<LoginLocationOption> options = [.. locations.Select(x => new LoginLocationOption(
-                x.Id, x.GetDisplayName(), x.CompanyId, x.Company!.ThemeColorHex, x.Company!.LogoFileId))];
+                x.Id, $"{x.CompanyName} {x.Name}".Trim(), x.CompanyId, x.ThemeColorHex, x.LogoFileId))];
 
             return Result<List<LoginLocationOption>>.Ok(options);
         }
@@ -597,17 +645,15 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            List<Company> companies = await ctx.Companies
+            List<LoginCompanyOption> options = await ctx.Companies
                 .AsNoTracking()
                 .TagWithCallSite()
                 // The demo company is reached from the homepage's one-click demo buttons, not by
                 // picking it and typing a password.
                 .Where(x => x.IsActive && !x.IsDemo && x.Locations.Any(l => l.IsActive))
                 .OrderBy(x => x.Name)
+                .Select(x => new LoginCompanyOption(x.Id, x.Name, x.ThemeColorHex, x.LogoFileId, x.BackgroundImageFileId))
                 .ToListAsync();
-
-            List<LoginCompanyOption> options = [.. companies.Select(x =>
-                new LoginCompanyOption(x.Id, x.Name, x.ThemeColorHex, x.LogoFileId, x.BackgroundImageFileId))];
 
             return Result<List<LoginCompanyOption>>.Ok(options);
         }

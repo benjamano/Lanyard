@@ -1,11 +1,17 @@
 using Lanyard.Application.Services.Demo;
+using Lanyard.Application.Services.Features;
+using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Tests.Services.Scheduling;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
@@ -13,6 +19,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Moq;
 
 namespace Lanyard.Tests.Services.Demo;
 
@@ -25,6 +32,7 @@ public class DemoResetServiceTests
     private SqliteConnection _connection = null!;
     private DbContextOptions<ApplicationDbContext> _options = null!;
     private ServiceProvider _provider = null!;
+    private readonly MemoryCache _cache = new(new MemoryCacheOptions());
 
     private sealed class TestHostEnvironment : IHostEnvironment
     {
@@ -86,6 +94,7 @@ public class DemoResetServiceTests
         Options.Create(new DemoOptions { Enabled = enabled }),
         new DemoDirectory(new SystemDbContextFactory(_options), TimeProvider.System),
         TimeProvider.System,
+        _cache,
         NullLogger<DemoResetService>.Instance);
 
     private async Task<int> DemoCompanyIdAsync()
@@ -172,6 +181,42 @@ public class DemoResetServiceTests
             List<int> demoLocationIds = await ctx.Locations.Where(x => x.CompanyId == demoId).Select(x => x.Id).ToListAsync();
             Assert.AreEqual(7 * demoLocationIds.Count, await ctx.LocationOpeningHours.CountAsync(x => demoLocationIds.Contains(x.LocationId)));
         }
+    }
+
+    [TestMethod]
+    public async Task Reset_ClearsTheDemoCompanysCachedBrandingAndFeatures()
+    {
+        // The seeder writes the company row and deletes its feature settings directly, so the reset
+        // itself has to clear what CompanyLocationService and CompanyFeatureService have cached.
+        DemoResetService service = BuildService();
+        Assert.IsTrue((await service.ResetAsync()).IsSuccess);
+        int demoId = await DemoCompanyIdAsync();
+
+        CompanyLocationService companies = new(SchedulingTestHelpers.GetFactory(_options), _cache);
+        CompanyFeatureService features = new(
+            SchedulingTestHelpers.GetFactory(_options),
+            new Mock<ICurrentLocationContext>().Object,
+            new Mock<AuthenticationStateProvider>().Object,
+            _cache,
+            TimeProvider.System,
+            NullLogger<CompanyFeatureService>.Instance);
+
+        // A visitor rebrands the demo and switches Training off; both answers get cached.
+        await using (ApplicationDbContext ctx = new(_options))
+        {
+            Company demo = await ctx.Companies.SingleAsync(x => x.Id == demoId);
+            demo.ThemeColorHex = "#00FF00";
+            ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = demoId, Feature = CompanyFeature.Training, IsEnabled = false });
+            await ctx.SaveChangesAsync();
+        }
+
+        Assert.AreEqual("#00FF00", (await companies.GetCompanyBrandingAsync(demoId)).Data!.ThemeColorHex);
+        Assert.IsFalse(await features.IsEnabledForCompanyAsync(demoId, CompanyFeature.Training));
+
+        Assert.IsTrue((await service.ResetAsync()).IsSuccess);
+
+        Assert.AreEqual("#6D28D9", (await companies.GetCompanyBrandingAsync(demoId)).Data!.ThemeColorHex);
+        Assert.IsTrue(await features.IsEnabledForCompanyAsync(demoId, CompanyFeature.Training));
     }
 
     [TestMethod]
