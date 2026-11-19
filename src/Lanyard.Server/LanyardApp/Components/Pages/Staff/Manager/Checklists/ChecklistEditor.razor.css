@@ -1,0 +1,198 @@
+.checklist-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 8px;
+    max-width: 760px;
+}
+
+.editor-back a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    color: var(--colorNeutralForeground2);
+    text-decoration: none;
+}
+
+.editor-back a:hover,
+.editor-back a:focus-visible {
+    color: var(--colorBrandForeground1);
+    text-decoration: underline;
+}
+
+.editor-header,
+.tasks-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.editor-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+}
+
+.editor-section-title {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.editor-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.editor-label {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.day-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* Real buttons with aria-pressed, 44px so a thumb can hit them. */
+.day-chip {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 10px;
+    border-radius: 22px;
+    border: 1px solid var(--colorNeutralStroke1);
+    background: var(--colorNeutralBackground1);
+    color: var(--colorNeutralForeground1);
+    font: inherit;
+    cursor: pointer;
+}
+
+.day-chip.is-on {
+    background: var(--colorBrandBackground);
+    border-color: var(--colorBrandBackground);
+    color: var(--colorNeutralForegroundOnBrand);
+}
+
+.day-chip:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+    outline-offset: 2px;
+}
+
+.day-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.editor-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    align-items: end;
+}
+
+@media (max-width: 520px) {
+    .editor-pair {
+        grid-template-columns: 1fr;
+    }
+}
+
+.editor-hint,
+.checklist-editor ::deep .editor-hint {
+    margin-top: -6px;
+    font-size: 0.85rem;
+    color: var(--colorNeutralForeground3);
+}
+
+.editor-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.task-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+}
+
+.task-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.task-item:last-child {
+    border-bottom: none;
+}
+
+.task-number {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--colorNeutralBackground3);
+    font-variant-numeric: tabular-nums;
+    font-size: 0.85rem;
+}
+
+.task-info {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.task-title {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.task-detail {
+    overflow-wrap: anywhere;
+    color: var(--colorNeutralForeground2);
+}
+
+.task-response {
+    font-size: 0.85rem;
+    color: var(--colorNeutralForeground3);
+}
+
+.task-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+/* On a phone the four buttons go under the task, not squeezed beside it. */
+@media (max-width: 520px) {
+    .task-item {
+        flex-wrap: wrap;
+    }
+
+    .task-actions {
+        width: 100%;
+        justify-content: flex-start;
+        padding-left: 38px;
+    }
+}

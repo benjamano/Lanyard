@@ -1,0 +1,15 @@
+@page "/help/manage-checklists"
+@attribute [Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.Checklists)]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.Checklists
+
+<HelpPage AreaKey="@HelpRegistry.ManageChecklists">
+    <FluentTab Id="help-overview" Header="Overview" IconStart="@(new Icons.Regular.Size16.TaskListLtr())">
+        <ChecklistsOverviewHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-setup" Header="Setting Up" IconStart="@(new Icons.Regular.Size16.Settings())" DeferredLoading="true">
+        <ChecklistsSetupHelpTab />
+    </FluentTab>
+</HelpPage>

@@ -28,7 +28,9 @@ public static class CompanyFeatureCatalog
         new(CompanyFeature.AudioClips, "Audio clips",
             "Short recordings played over the kiosk music, clip schedules and the Play Audio Clip automation action."),
         new(CompanyFeature.OperationsAlerts, "Operations alerts",
-            "One list of kiosk, automation and staff problems for Admins and Managers, with the Operations alerts widget.")
+            "One list of kiosk, automation and staff problems for Admins and Managers, with the Operations alerts widget."),
+        new(CompanyFeature.Checklists, "Checklists",
+            "Opening, closing and other checklists staff tick off on their phone or the clock-in terminal, with today's and past results for managers. Needs shift management.")
     ];
 
     // The module a dashboard widget belongs to, or null for widgets every company gets.
