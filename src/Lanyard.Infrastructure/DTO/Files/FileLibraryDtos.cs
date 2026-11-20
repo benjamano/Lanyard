@@ -26,7 +26,10 @@ public sealed record FileListItem(
     string FolderPath,
     TimeSpan? Duration,
     bool IsInUse,
-    bool IsSharedWithStaff);
+    bool IsSharedWithStaff,
+    bool HasThumbnail = false,
+    int? Width = null,
+    int? Height = null);
 
 public enum FileSort
 {

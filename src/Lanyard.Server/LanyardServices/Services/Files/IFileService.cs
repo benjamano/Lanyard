@@ -12,7 +12,12 @@ namespace Lanyard.Application.Services;
 // the owning feature's services call those.
 // IsSystemFile: the file belongs to a feature that manages it on its own page (an audio clip's
 // sound). It is served by id like any other file but never shows when browsing Files.
-public sealed record FileUploadOptions(bool AddAudioToMusicLibrary = true, bool IsRestricted = false, bool IsSystemFile = false);
+// Media and Poster: what the browser worked out before uploading (Files' upload queue): a picture's or
+// video's size, a video's or song's length, and a frame from a video to make its thumbnail from.
+public sealed record FileUploadOptions(bool AddAudioToMusicLibrary = true, bool IsRestricted = false, bool IsSystemFile = false,
+    UploadedMedia? Media = null, IFormFile? Poster = null);
+
+public sealed record UploadedMedia(int? Width, int? Height, double? DurationSeconds);
 
 public interface IFileService
 {
@@ -58,5 +63,11 @@ public interface IFileService
 
     /// <summary>Removes a restricted file, e.g. when the record it was uploaded for couldn't be saved.</summary>
     Task<Result<bool>> DeleteRestrictedFileAsync(Guid fileId, CancellationToken cancellationToken);
+    /// <summary>The small WebP Files shows in its grid, when the file has one.</summary>
+    Task<Result<Stream>> OpenThumbnailAsync(Guid fileId, CancellationToken cancellationToken);
+
+    /// <summary>Makes the thumbnail for a file uploaded before thumbnails existed. False when there can't be one.</summary>
+    Task<Result<bool>> CreateMissingThumbnailAsync(Guid fileId, CancellationToken cancellationToken);
+
     Task<Result<FileMetadata>> MoveFileAsync(Guid fileId, Guid? destinationFolderId, CancellationToken cancellationToken);
 }

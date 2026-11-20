@@ -16,9 +16,13 @@ public sealed class FileLibraryService(
     ICurrentUserAccessor currentUserAccessor,
     ILogger<FileLibraryService> logger,
     IDemoGuard? demoGuard = null,
-    Microsoft.AspNetCore.Http.IHttpContextAccessor? httpContextAccessor = null) : IFileLibraryService
+    Microsoft.AspNetCore.Http.IHttpContextAccessor? httpContextAccessor = null,
+    Lanyard.Infrastructure.DataAccess.Tenancy.ITenantProvider? tenant = null,
+    Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider? authState = null) : IFileLibraryService
 {
     private const string DemoRefusal = "Changing files isn't available in the demo.";
+
+    private const string ManagersOnly = "Only people who manage files can do that.";
 
     // ---------- Reading ----------
 
@@ -262,6 +266,31 @@ public sealed class FileLibraryService(
         }
     }
 
+    public async Task<Result<IReadOnlyList<Guid>>> GetFileIdsInFoldersAsync(IReadOnlyCollection<Guid> folderIds, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (folderIds.Count == 0)
+                return Result<IReadOnlyList<Guid>>.Ok([]);
+
+            await using ApplicationDbContext db = await dbFactory.CreateDbContextAsync(cancellationToken);
+            FolderGraph graph = await FolderGraph.LoadAsync(db, cancellationToken);
+            List<Guid> subtree = folderIds.SelectMany(graph.SubtreeOf).Distinct().ToList();
+
+            List<Guid> ids = await Library(db).AsNoTracking()
+                .Where(x => x.FolderId != null && subtree.Contains(x.FolderId.Value))
+                .Select(x => x.Id)
+                .ToListAsync(cancellationToken);
+
+            return Result<IReadOnlyList<Guid>>.Ok(ids);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to list the files in {Count} folders", folderIds.Count);
+            return Result<IReadOnlyList<Guid>>.Fail("Couldn't check what's in those folders.");
+        }
+    }
+
     // ---------- Organising ----------
 
     public async Task<Result<BulkOperationResult>> MoveAsync(IReadOnlyCollection<Guid> fileIds, IReadOnlyCollection<Guid> folderIds, Guid? destinationFolderId, CancellationToken cancellationToken)
@@ -270,6 +299,9 @@ public sealed class FileLibraryService(
         {
             if (await IsDemoAsync())
                 return Result<BulkOperationResult>.Fail(DemoRefusal);
+
+            if (!await CanManageAsync())
+                return Result<BulkOperationResult>.Fail(ManagersOnly);
 
             await using ApplicationDbContext db = await dbFactory.CreateDbContextAsync(cancellationToken);
             FolderGraph graph = await FolderGraph.LoadAsync(db, cancellationToken);
@@ -366,6 +398,9 @@ public sealed class FileLibraryService(
             if (await IsDemoAsync())
                 return Result<FolderNode>.Fail(DemoRefusal);
 
+            if (!await CanManageAsync())
+                return Result<FolderNode>.Fail(ManagersOnly);
+
             await using ApplicationDbContext db = await dbFactory.CreateDbContextAsync(cancellationToken);
             FolderGraph graph = await FolderGraph.LoadAsync(db, cancellationToken);
 
@@ -395,6 +430,9 @@ public sealed class FileLibraryService(
     {
         try
         {
+            if (!await CanManageAsync())
+                return Result<IReadOnlyList<BinItem>>.Fail(ManagersOnly);
+
             await using ApplicationDbContext db = await dbFactory.CreateDbContextAsync(cancellationToken);
             return Result<IReadOnlyList<BinItem>>.Ok(await LoadBinAsync(db, cancellationToken));
         }
@@ -411,6 +449,9 @@ public sealed class FileLibraryService(
         {
             if (await IsDemoAsync())
                 return Result<BulkOperationResult>.Fail(DemoRefusal);
+
+            if (!await CanManageAsync())
+                return Result<BulkOperationResult>.Fail(ManagersOnly);
 
             string? userId = await CurrentUserIdAsync();
             DateTime now = DateTime.UtcNow;
@@ -475,6 +516,9 @@ public sealed class FileLibraryService(
         {
             if (await IsDemoAsync())
                 return Result<BulkOperationResult>.Fail(DemoRefusal);
+
+            if (!await CanManageAsync())
+                return Result<BulkOperationResult>.Fail(ManagersOnly);
 
             await using ApplicationDbContext db = await dbFactory.CreateDbContextAsync(cancellationToken);
             FolderGraph graph = await FolderGraph.LoadAsync(db, cancellationToken);
@@ -588,6 +632,9 @@ public sealed class FileLibraryService(
         if (await IsDemoAsync())
             return Result<BulkOperationResult>.Fail(DemoRefusal);
 
+        if (!await CanManageAsync())
+            return Result<BulkOperationResult>.Fail(ManagersOnly);
+
         return await DeleteForeverCoreAsync(fileIds, folderIds, cancellationToken);
     }
 
@@ -597,6 +644,9 @@ public sealed class FileLibraryService(
         {
             if (await IsDemoAsync())
                 return Result<BulkOperationResult>.Fail(DemoRefusal);
+
+            if (!await CanManageAsync())
+                return Result<BulkOperationResult>.Fail(ManagersOnly);
 
             List<BinItem> bin;
 
@@ -844,13 +894,13 @@ public sealed class FileLibraryService(
     private sealed record FileRow(
         Guid Id, string FileName, long FileSize, string? ContentType, DateTime UploadedAt, string? UploadedBy,
         Guid? FolderId, TimeSpan? Duration, bool IsActive, DateTime? DeletedAt, string? DeletedByUserId,
-        bool IsRestricted, bool IsSystemFile);
+        bool IsRestricted, bool IsSystemFile, bool HasThumbnail = false, int? Width = null, int? Height = null);
 
     private static IQueryable<FileRow> SelectRows(IQueryable<FileMetadata> files) =>
         files.AsNoTracking().Select(x => new FileRow(
             x.Id, x.FileName, x.FileSize, x.ContentType, x.UploadedAt, x.UploadedBy,
             x.FolderId, x.VideoLength, x.IsActive, x.DeletedAt, x.DeletedByUserId,
-            x.IsRestricted, x.IsSystemFile));
+            x.IsRestricted, x.IsSystemFile, x.ThumbnailPath != null && x.ThumbnailPath != "", x.Width, x.Height));
 
     private static FileTypeGroup GroupOf(FileRow row)
     {
@@ -914,7 +964,10 @@ public sealed class FileLibraryService(
             graph.PathOf(x.FolderId),
             x.Duration,
             usages.Data?.TryGetValue(x.Id, out IReadOnlyList<FileUsage>? list) == true && list.Any(u => u.BlocksPermanentDelete),
-            x.FolderId is Guid f && graph.IsShared(f))).ToList();
+            x.FolderId is Guid f && graph.IsShared(f),
+            x.HasThumbnail,
+            x.Width,
+            x.Height)).ToList();
     }
 
     // UploadedBy holds a user id (or, for uploads through the old API, a username).
@@ -969,6 +1022,31 @@ public sealed class FileLibraryService(
     }
 
     private async Task<bool> IsDemoAsync() => demoGuard is not null && await demoGuard.IsDemoSessionAsync();
+
+    // Defence in depth: the API and the Files page already only offer these to Admins and
+    // CanManageFiles, but every caller (pickers included) gets the same answer here. Background
+    // work (the purge sweep, nobody signed in) is the system and may.
+    private async Task<bool> CanManageAsync()
+    {
+        if (tenant is null || tenant.IsSystem)
+            return true;
+
+        System.Security.Claims.ClaimsPrincipal? user = httpContextAccessor?.HttpContext?.User;
+
+        if (user?.Identity?.IsAuthenticated != true && authState is not null)
+        {
+            try
+            {
+                user = (await authState.GetAuthenticationStateAsync()).User;
+            }
+            catch (InvalidOperationException)
+            {
+                // No Blazor auth state in this scope.
+            }
+        }
+
+        return user is not null && (user.IsInRole("Admin") || user.IsInRole("CanManageFiles"));
+    }
 
     private async Task<string?> CurrentUserIdAsync()
     {

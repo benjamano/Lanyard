@@ -1,4 +1,4 @@
-﻿using Lanyard.Application.Services.Demo;
+using Lanyard.Application.Services.Demo;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Files;
@@ -27,6 +27,7 @@ public class FileService : IFileService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _dbFactory;
     private readonly IDemoGuard? _demoGuard;
+    private readonly IFileUsageService? _usage;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly ISongAnalysisQueue _analysisQueue;
     private readonly string _storageRoot;
@@ -48,11 +49,13 @@ public class FileService : IFileService
         IWebHostEnvironment environment,
         IAmazonS3? s3Client = null,
         IDemoGuard? demoGuard = null,
-        ILogger<FileService>? logger = null)
+        ILogger<FileService>? logger = null,
+        IFileUsageService? usage = null)
     {
         _dbFactory = dbFactory;
         _logger = logger ?? NullLogger<FileService>.Instance;
         _demoGuard = demoGuard;
+        _usage = usage;
         _storageRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Lanyard", "UploadedFiles");
         _currentUserAccessor = currentUserAccessor;
         _analysisQueue = analysisQueue;
@@ -228,6 +231,11 @@ public class FileService : IFileService
 
             await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
+            // The grid's thumbnail: the picture itself, or the frame the browser took from a video.
+            (string? thumbnailPath, int? sourceWidth, int? sourceHeight) = await StoreThumbnailForUploadAsync(fileId, file, contentType, options.Poster, cancellationToken);
+
+            double? duration = options.Media?.DurationSeconds is > 0 ? options.Media.DurationSeconds : durationSeconds > 0 ? durationSeconds : null;
+
             FileMetadata metadata = new()
             {
                 Id = fileId,
@@ -240,7 +248,11 @@ public class FileService : IFileService
                 FolderId = folderId,
                 IsActive = true,
                 IsRestricted = options.IsRestricted,
-                IsSystemFile = options.IsSystemFile
+                IsSystemFile = options.IsSystemFile,
+                Width = options.Media?.Width is > 0 ? options.Media.Width : sourceWidth,
+                Height = options.Media?.Height is > 0 ? options.Media.Height : sourceHeight,
+                VideoLength = duration is double seconds ? TimeSpan.FromSeconds(Math.Round(seconds, 1)) : null,
+                ThumbnailPath = thumbnailPath
             };
 
             db.FileMetadata.Add(metadata);
@@ -269,6 +281,23 @@ public class FileService : IFileService
             }
 
             await db.SaveChangesAsync(cancellationToken);
+
+            // The name was made unique before the bytes went up; another upload of the same name
+            // into the same folder (a second tab) may have landed meanwhile. Check again now both
+            // rows exist, and the later one takes the next number.
+            if (browsable)
+            {
+                string lowered = metadata.FileName.ToLower();
+                bool clash = await db.FileMetadata.AsNoTracking()
+                    .AnyAsync(x => x.FolderId == folderId && x.IsActive && !x.IsRestricted && !x.IsSystemFile
+                        && x.Id != metadata.Id && x.FileName.ToLower() == lowered && x.UploadedAt <= metadata.UploadedAt, cancellationToken);
+
+                if (clash)
+                {
+                    metadata.FileName = FileNameRules.MakeUnique(metadata.FileName, await TakenFileNamesAsync(db, folderId, metadata.Id, cancellationToken));
+                    await db.SaveChangesAsync(cancellationToken);
+                }
+            }
 
             // Queue BPM analysis only after the row is committed - the background
             // worker loads the song by ID from a fresh context.
@@ -392,6 +421,9 @@ public class FileService : IFileService
             await db.SaveChangesAsync(cancellationToken);
 
             await DeleteStoredFileAsync(file.FilePath);
+
+            if (!string.IsNullOrEmpty(file.ThumbnailPath))
+                await DeleteStoredFileAsync(file.ThumbnailPath);
 
             return Result<bool>.Ok(true);
         }
@@ -654,6 +686,9 @@ public class FileService : IFileService
                 .TagWithCallSite()
                 .FirstOrDefaultAsync(f => f.Id == fileId && !f.IsRestricted, cancellationToken);
 
+            if (file != null && await IsDeletedAndUnusedAsync(db, file, cancellationToken))
+                file = null;
+
             if (_isDevelopment)
             {
                 if (file == null || !File.Exists(file.FilePath))
@@ -703,7 +738,7 @@ public class FileService : IFileService
                 .TagWithCallSite()
                 .FirstOrDefaultAsync(f => f.Id == fileId && f.IsRestricted == restricted, cancellationToken);
 
-            if (file == null)
+            if (file == null || await IsDeletedAndUnusedAsync(db, file, cancellationToken))
                 return Result<FileContent>.Fail("File not found.");
 
             if (_isDevelopment)
@@ -762,6 +797,187 @@ public class FileService : IFileService
         {
             _logger.LogError(ex, "Failed to open file");
             return Result<FileContent>.Fail("Failed to open file.");
+        }
+    }
+
+    // A file in the Recycle bin (or inside a folder that is) is still served while something uses
+    // it, so the logo or a projection video doesn't vanish mid-show. Otherwise deleting it means
+    // it can't be opened any more, even by someone who kept the link.
+    private async Task<bool> IsDeletedAndUnusedAsync(ApplicationDbContext db, FileMetadata file, CancellationToken cancellationToken)
+    {
+        if (_usage is null)
+            return false;
+
+        bool binned = !file.IsActive;
+        Guid? folderId = file.FolderId;
+
+        for (int depth = 0; !binned && folderId is Guid current && depth < 64; depth++)
+        {
+            var folder = await db.Folders.AsNoTracking().TagWithCallSite()
+                .Where(x => x.Id == current)
+                .Select(x => new { x.IsActive, x.ParentFolderId })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (folder is null)
+                break;
+
+            binned = !folder.IsActive;
+            folderId = folder.ParentFolderId;
+        }
+
+        if (!binned)
+            return false;
+
+        Result<IReadOnlyDictionary<Guid, IReadOnlyList<FileUsage>>> usages = await _usage.GetUsagesAsync([file.Id], cancellationToken);
+
+        // If the check itself fails, keep serving rather than break something that uses it.
+        return usages.IsSuccess && usages.Data is not null && !usages.Data.ContainsKey(file.Id);
+    }
+
+    // ---------- Thumbnails ----------
+
+    private static string ThumbnailKey(Guid fileId) => $"thumbs/{fileId}.webp";
+
+    private async Task<(string? Path, int? Width, int? Height)> StoreThumbnailForUploadAsync(Guid fileId, IFormFile file, string contentType, IFormFile? poster, CancellationToken cancellationToken)
+    {
+        try
+        {
+            RenderedThumbnail? rendered = null;
+
+            if (contentType.StartsWith("image/", StringComparison.Ordinal) && contentType != "image/svg+xml")
+            {
+                await using Stream source = file.OpenReadStream();
+                rendered = ThumbnailRenderer.Render(source);
+            }
+            else if (contentType.StartsWith("video/", StringComparison.Ordinal) && poster is { Length: > 0 and < 5 * 1024 * 1024 })
+            {
+                await using Stream source = poster.OpenReadStream();
+                rendered = ThumbnailRenderer.Render(source);
+            }
+
+            if (rendered is null)
+                return (contentType.StartsWith("image/", StringComparison.Ordinal) ? string.Empty : null, null, null);
+
+            string path = await WriteObjectAsync(ThumbnailKey(fileId), new MemoryStream(rendered.WebP), "image/webp", cancellationToken);
+
+            // A poster frame's size is the video's size.
+            return (path, rendered.SourceWidth, rendered.SourceHeight);
+        }
+        catch (Exception ex)
+        {
+            // A missing thumbnail only means Files shows an icon; never fail the upload over it.
+            _logger.LogWarning(ex, "Couldn't make a thumbnail for {FileId}", fileId);
+            return (null, null, null);
+        }
+    }
+
+    // Writes bytes that aren't a library file in their own right (a thumbnail) and returns where they went.
+    private async Task<string> WriteObjectAsync(string key, Stream content, string contentType, CancellationToken cancellationToken)
+    {
+        if (_isDevelopment)
+        {
+            string path = Path.Combine(_storageRoot, key.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+            await using FileStream stream = new(path, FileMode.Create);
+            await content.CopyToAsync(stream, cancellationToken);
+            return path;
+        }
+
+        EnsureS3Configured();
+
+        await _s3Client!.PutObjectAsync(new PutObjectRequest
+        {
+            BucketName = _bucketName,
+            Key = key,
+            InputStream = content,
+            ContentType = contentType,
+            AutoCloseStream = true
+        }, cancellationToken);
+
+        return key;
+    }
+
+    public async Task<Result<Stream>> OpenThumbnailAsync(Guid fileId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+
+            FileMetadata? file = await db.FileMetadata.AsNoTracking().TagWithCallSite()
+                .FirstOrDefaultAsync(f => f.Id == fileId && !f.IsRestricted, cancellationToken);
+
+            string? path = file?.ThumbnailPath;
+
+            if (file is null || string.IsNullOrEmpty(path) || await IsDeletedAndUnusedAsync(db, file, cancellationToken))
+                return Result<Stream>.Fail("No thumbnail.");
+
+            if (_isDevelopment)
+            {
+                return File.Exists(path)
+                    ? Result<Stream>.Ok(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+                    : Result<Stream>.Fail("No thumbnail.");
+            }
+
+            EnsureS3Configured();
+
+            GetObjectResponse response = await _s3Client!.GetObjectAsync(new GetObjectRequest { BucketName = _bucketName, Key = path }, cancellationToken);
+            return Result<Stream>.Ok(response.ResponseStream);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Couldn't open the thumbnail for {FileId}", fileId);
+            return Result<Stream>.Fail("No thumbnail.");
+        }
+    }
+
+    public async Task<Result<bool>> CreateMissingThumbnailAsync(Guid fileId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+
+            FileMetadata? file = await db.FileMetadata.FirstOrDefaultAsync(f => f.Id == fileId, cancellationToken);
+
+            if (file is null || file.ThumbnailPath is not null)
+                return Result<bool>.Ok(false);
+
+            RenderedThumbnail? rendered = null;
+
+            if (file.ContentType?.StartsWith("image/", StringComparison.Ordinal) == true && file.ContentType != "image/svg+xml")
+            {
+                Result<FileContent> content = await OpenFileContentAsync(fileId, null, cancellationToken);
+
+                if (content.IsSuccess && content.Data is not null)
+                {
+                    await using FileContent opened = content.Data;
+
+                    // SKCodec wants to seek; the bucket stream can't.
+                    await using MemoryStream buffer = new();
+                    await opened.Stream.CopyToAsync(buffer, cancellationToken);
+                    buffer.Position = 0;
+                    rendered = ThumbnailRenderer.Render(buffer);
+                }
+            }
+
+            if (rendered is null)
+            {
+                file.ThumbnailPath = string.Empty;
+            }
+            else
+            {
+                file.ThumbnailPath = await WriteObjectAsync(ThumbnailKey(fileId), new MemoryStream(rendered.WebP), "image/webp", cancellationToken);
+                file.Width ??= rendered.SourceWidth;
+                file.Height ??= rendered.SourceHeight;
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+            return Result<bool>.Ok(rendered is not null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Couldn't make a thumbnail for {FileId}", fileId);
+            return Result<bool>.Fail("Couldn't make a thumbnail.");
         }
     }
 

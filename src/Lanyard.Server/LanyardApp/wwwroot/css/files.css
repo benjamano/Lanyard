@@ -1487,3 +1487,208 @@ a.files-crumb:hover {
 .files-details-play svg { width: 32px !important; height: 32px; }
 .files-item-inuse svg,
 .files-item-shared svg { width: 12px !important; }
+
+/* A video's tile shows its poster frame with a play mark. */
+.files-item-play {
+    position: absolute;
+    display: inline-flex;
+    padding: 0.375rem;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+.files-item-thumb .files-item-play svg {
+    width: 20px !important;
+    fill: #fff !important;
+}
+
+.files-list .files-item-play {
+    display: none;
+}
+
+/* ---------- Dropping files (fileUploads.js) ---------- */
+
+.files {
+    position: relative;
+}
+
+.files-drop-overlay {
+    display: none;
+    position: absolute;
+    inset: -0.5rem;
+    z-index: 700;
+    border: 2px dashed var(--colorBrandStroke1);
+    border-radius: var(--borderRadiusXLarge, 12px);
+    background: color-mix(in srgb, var(--colorBrandBackground2) 70%, transparent);
+    pointer-events: none;
+}
+
+.files.is-dragging .files-drop-overlay {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 2rem;
+}
+
+.files-drop-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1.25rem;
+    border-radius: 999px;
+    background: var(--colorBrandBackground);
+    color: var(--colorNeutralForegroundOnBrand);
+    font-weight: var(--fontWeightSemibold);
+    box-shadow: var(--shadow16);
+}
+
+.files-drop-icon {
+    font-size: 1.25rem;
+    line-height: 1;
+}
+
+.files-item.is-drop-target,
+.file-tree-row.is-drop-target {
+    outline: 2px solid var(--colorBrandStroke1);
+    outline-offset: 1px;
+    background: var(--colorBrandBackground2);
+}
+
+/* ---------- Upload tray ---------- */
+
+.files-uploads {
+    position: fixed;
+    right: 1.25rem;
+    bottom: 1.25rem;
+    z-index: 850;
+    width: min(380px, calc(100vw - 2rem));
+    max-height: min(60vh, 28rem);
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--borderRadiusXLarge, 12px);
+    border: 1px solid var(--colorNeutralStroke2);
+    background: var(--colorNeutralBackground1);
+    box-shadow: var(--shadow28);
+    overflow: hidden;
+}
+
+.files-uploads-header {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.375rem 0.25rem 0;
+    background: var(--colorNeutralBackground2);
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.files-uploads.is-collapsed .files-uploads-header {
+    border-bottom: none;
+}
+
+.files-uploads-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0.5rem 0.75rem;
+    border: none;
+    background: none;
+    color: var(--colorNeutralForeground1);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.files-uploads-title {
+    flex: 0 1 auto;
+    font-weight: var(--fontWeightSemibold);
+    white-space: nowrap;
+}
+
+.files-uploads-bar,
+.files-upload-progress {
+    display: block;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--colorNeutralBackground5, var(--colorNeutralStroke2));
+    overflow: hidden;
+}
+
+.files-uploads-bar {
+    flex: 1 1 auto;
+}
+
+.files-uploads-bar > span,
+.files-upload-progress > span {
+    display: block;
+    height: 100%;
+    background: var(--colorBrandBackground);
+    transition: width 0.2s linear;
+}
+
+.files-uploads-list {
+    margin: 0;
+    padding: 0.25rem 0;
+    list-style: none;
+    overflow-y: auto;
+}
+
+.files-upload {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.375rem 0.625rem 0.375rem 0.75rem;
+}
+
+.files-upload-icon {
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+.files-upload-icon svg {
+    width: 20px !important;
+    fill: var(--files-accent) !important;
+}
+
+.files-upload-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.files-upload-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--fontSizeBase300);
+}
+
+.files-upload-meta {
+    color: var(--colorNeutralForeground3);
+    font-size: var(--fontSizeBase200);
+    overflow-wrap: anywhere;
+}
+
+.files-upload.is-failed .files-upload-meta {
+    color: var(--colorPaletteRedForeground1, #c50f1f);
+}
+
+.files-upload.is-done .files-upload-name::after {
+    content: " ✓";
+    color: var(--colorPaletteGreenForeground1, #107c10);
+}
+
+@media (max-width: 760px) {
+    .files-uploads {
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        max-height: 50vh;
+        border-radius: var(--borderRadiusXLarge, 12px) var(--borderRadiusXLarge, 12px) 0 0;
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+}
