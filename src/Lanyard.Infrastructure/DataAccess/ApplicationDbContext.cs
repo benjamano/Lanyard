@@ -465,6 +465,15 @@ namespace Lanyard.Infrastructure.DataAccess
                 .IsUnique()
                 .HasFilter("\"LocationId\" IS NOT NULL");
 
+            // Files browses one folder at a time, and the bin and the purge sweep look for
+            // inactive rows. Names aren't unique in the database (older rows already have
+            // duplicates); FileNameRules keeps new names unique per folder instead.
+            modelBuilder.Entity<FileMetadata>()
+                .HasIndex(x => new { x.CompanyId, x.FolderId, x.IsActive });
+
+            modelBuilder.Entity<Folder>()
+                .HasIndex(x => new { x.CompanyId, x.ParentFolderId, x.IsActive });
+
             // FileMetadata is shared across unrelated features (folders, logos, video devices,
             // staff documents, onboarding attachments). The default convention-based FK behavior
             // for a required reference is Cascade, which would let deleting a file from the

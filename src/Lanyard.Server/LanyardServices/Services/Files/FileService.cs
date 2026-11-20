@@ -1,6 +1,7 @@
-using Lanyard.Application.Services.Demo;
+﻿using Lanyard.Application.Services.Demo;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO.Files;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Amazon;
@@ -72,11 +73,23 @@ public class FileService : IFileService
             throw new InvalidOperationException("R2 storage is not configured.");
     }
 
-    private static string BuildR2Key(Guid? folderId, Guid fileId, string fileName)
-    {
-        string prefix = folderId.HasValue ? folderId.Value.ToString() : "root";
-        return $"{prefix}/{fileId}{fileName}";
-    }
+    // Where a new upload's bytes live. Deliberately not tied to the folder: a file can move
+    // between folders (and in and out of the Recycle bin) without its bytes moving. Older uploads
+    // were stored under "{folderId}/..." and keep the key saved in their FilePath.
+    private static string BuildR2Key(Guid fileId, string fileName) => $"files/{fileId}{Path.GetExtension(fileName).ToLowerInvariant()}";
+
+    // The names already used by live, browsable files in a folder, which a new name must avoid.
+    private static Task<List<string>> TakenFileNamesAsync(ApplicationDbContext db, Guid? folderId, Guid? exceptFileId, CancellationToken cancellationToken) =>
+        db.FileMetadata.AsNoTracking().TagWithCallSite()
+            .Where(x => x.FolderId == folderId && x.IsActive && !x.IsRestricted && !x.IsSystemFile && x.Id != exceptFileId)
+            .Select(x => x.FileName)
+            .ToListAsync(cancellationToken);
+
+    private static Task<List<string>> TakenFolderNamesAsync(ApplicationDbContext db, Guid? parentFolderId, Guid? exceptFolderId, CancellationToken cancellationToken) =>
+        db.Folders.AsNoTracking().TagWithCallSite()
+            .Where(x => x.ParentFolderId == parentFolderId && x.IsActive && x.Id != exceptFolderId)
+            .Select(x => x.Name)
+            .ToListAsync(cancellationToken);
 
     private static (double durationSeconds, string albumName) TryReadAudioMetadata(IFormFile file, string fileName)
     {
@@ -148,6 +161,9 @@ public class FileService : IFileService
             if (FileUploadPolicy.Check(fileName, file.Length) is string refusal)
                 return Result<FileMetadata>.Fail(refusal);
 
+            if (FileNameRules.Validate(fileName, "file name") is string badName)
+                return Result<FileMetadata>.Fail(badName);
+
             string contentType = FileUploadPolicy.ContentTypeFor(fileName);
 
             // The tenant filter hides other companies' folders, so this also stops a folder id
@@ -156,8 +172,18 @@ public class FileService : IFileService
             {
                 await using ApplicationDbContext folderCheck = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
-                if (!await folderCheck.Folders.AnyAsync(x => x.Id == folderId.Value, cancellationToken))
+                // A folder in the Recycle bin can't take new files either.
+                if (!await folderCheck.Folders.AnyAsync(x => x.Id == folderId.Value && x.IsActive, cancellationToken))
                     return Result<FileMetadata>.Fail("Folder not found.");
+            }
+
+            bool browsable = !options.IsRestricted && !options.IsSystemFile;
+
+            // Uploads never fail over a name clash: "poster.png" becomes "poster (2).png".
+            if (browsable)
+            {
+                await using ApplicationDbContext nameCheck = await _dbFactory.CreateDbContextAsync(cancellationToken);
+                fileName = FileNameRules.MakeUnique(fileName, await TakenFileNamesAsync(nameCheck, folderId, null, cancellationToken));
             }
 
             Guid fileId = Guid.NewGuid();
@@ -170,9 +196,7 @@ public class FileService : IFileService
 
             if (_isDevelopment)
             {
-                string folderPath = folderId.HasValue
-                    ? Path.Combine(_storageRoot, folderId.Value.ToString())
-                    : _storageRoot;
+                string folderPath = Path.Combine(_storageRoot, "files");
 
                 Directory.CreateDirectory(folderPath);
 
@@ -187,7 +211,7 @@ public class FileService : IFileService
             {
                 EnsureS3Configured();
 
-                string key = BuildR2Key(folderId, fileId, fileName);
+                string key = BuildR2Key(fileId, fileName);
 
                 PutObjectRequest putRequest = new()
                 {
@@ -215,7 +239,8 @@ public class FileService : IFileService
                 UploadedBy = uploadedBy,
                 FolderId = folderId,
                 IsActive = true,
-                IsRestricted = options.IsRestricted
+                IsRestricted = options.IsRestricted,
+                IsSystemFile = options.IsSystemFile
             };
 
             db.FileMetadata.Add(metadata);
@@ -265,15 +290,20 @@ public class FileService : IFileService
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(newName))
-                return Result<FileMetadata>.Fail("New name is required.");
+            if (FileNameRules.Validate(newName, "file name") is string badName)
+                return Result<FileMetadata>.Fail(badName);
+
+            newName = FileNameRules.Clean(newName);
 
             await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
             FileMetadata? file = await db.FileMetadata.FirstOrDefaultAsync(x => x.Id == fileId, cancellationToken);
 
-            if (file == null || file.IsRestricted)
+            if (file == null || file.IsRestricted || !file.IsActive)
                 return Result<FileMetadata>.Fail("File not found.");
+
+            if (!file.IsSystemFile && (await TakenFileNamesAsync(db, file.FolderId, file.Id, cancellationToken)).Any(x => FileNameRules.SameName(x, newName)))
+                return Result<FileMetadata>.Fail($"There's already a file called \"{newName}\" here.");
 
             file.FileName = newName;
 
@@ -428,7 +458,8 @@ public class FileService : IFileService
             List<FileMetadata> files = await db.FileMetadata
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(f => f.FolderId == folderId && !f.IsRestricted)
+                .Where(f => f.FolderId == folderId && f.IsActive && !f.IsRestricted && !f.IsSystemFile)
+                .OrderBy(f => f.FileName)
                 .ToListAsync(cancellationToken);
 
             return Result<IReadOnlyList<FileMetadata>>.Ok(files);
@@ -456,13 +487,18 @@ public class FileService : IFileService
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(name))
-                return Result<Folder>.Fail("Folder name is required.");
+            if (FileNameRules.Validate(name, "folder name") is string badName)
+                return Result<Folder>.Fail(badName);
+
+            name = FileNameRules.Clean(name);
 
             await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
-            if (parentFolderId.HasValue && !await db.Folders.AnyAsync(x => x.Id == parentFolderId.Value, cancellationToken))
+            if (parentFolderId.HasValue && !await db.Folders.AnyAsync(x => x.Id == parentFolderId.Value && x.IsActive, cancellationToken))
                 return Result<Folder>.Fail("Parent folder not found.");
+
+            if ((await TakenFolderNamesAsync(db, parentFolderId, null, cancellationToken)).Any(x => FileNameRules.SameName(x, name)))
+                return Result<Folder>.Fail($"There's already a folder called \"{name}\" here.");
 
             Folder folder = new()
             {
@@ -478,11 +514,6 @@ public class FileService : IFileService
 
             await db.SaveChangesAsync(cancellationToken);
 
-            if (_isDevelopment)
-            {
-                Directory.CreateDirectory(Path.Combine(_storageRoot, folder.Id.ToString()));
-            }
-
             return Result<Folder>.Ok(folder);
         }
         catch (Exception ex)
@@ -496,15 +527,20 @@ public class FileService : IFileService
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(newName))
-                return Result<Folder>.Fail("New name is required.");
+            if (FileNameRules.Validate(newName, "folder name") is string badName)
+                return Result<Folder>.Fail(badName);
+
+            newName = FileNameRules.Clean(newName);
 
             await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
-            Folder? folder = await db.Folders.FirstOrDefaultAsync(x => x.Id == folderId, cancellationToken);
+            Folder? folder = await db.Folders.FirstOrDefaultAsync(x => x.Id == folderId && x.IsActive, cancellationToken);
 
             if (folder == null)
                 return Result<Folder>.Fail("Folder not found.");
+
+            if ((await TakenFolderNamesAsync(db, folder.ParentFolderId, folder.Id, cancellationToken)).Any(x => FileNameRules.SameName(x, newName)))
+                return Result<Folder>.Fail($"There's already a folder called \"{newName}\" here.");
 
             folder.Name = newName;
 
@@ -571,7 +607,8 @@ public class FileService : IFileService
             List<Folder> folders = await db.Folders
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(f => f.ParentFolderId == parentFolderId)
+                .Where(f => f.ParentFolderId == parentFolderId && f.IsActive)
+                .OrderBy(f => f.Name)
                 .ToListAsync(cancellationToken);
 
             return Result<IReadOnlyList<Folder>>.Ok(folders);
@@ -592,7 +629,7 @@ public class FileService : IFileService
             Folder? folder = await db.Folders
                 .AsNoTracking()
                 .TagWithCallSite()
-                .FirstOrDefaultAsync(f => f.Id == folderId, cancellationToken);
+                .FirstOrDefaultAsync(f => f.Id == folderId && f.IsActive, cancellationToken);
 
             if (folder == null)
                 return Result<Folder>.Fail("Folder not found.");
@@ -754,16 +791,22 @@ public class FileService : IFileService
 
             FileMetadata? file = await db.FileMetadata.FirstOrDefaultAsync(x => x.Id == fileId, cancellationToken);
 
-            if (file == null || file.IsRestricted)
+            if (file == null || file.IsRestricted || !file.IsActive)
                 return Result<FileMetadata>.Fail("File not found.");
+
+            if (file.FolderId == destinationFolderId)
+                return Result<FileMetadata>.Ok(file);
 
             if (destinationFolderId.HasValue)
             {
-                Folder? destinationFolder = await db.Folders.FirstOrDefaultAsync(x => x.Id == destinationFolderId.Value, cancellationToken);
+                Folder? destinationFolder = await db.Folders.FirstOrDefaultAsync(x => x.Id == destinationFolderId.Value && x.IsActive, cancellationToken);
 
                 if (destinationFolder == null)
                     return Result<FileMetadata>.Fail("Destination folder not found.");
             }
+
+            if (!file.IsSystemFile && (await TakenFileNamesAsync(db, destinationFolderId, file.Id, cancellationToken)).Any(x => FileNameRules.SameName(x, file.FileName)))
+                return Result<FileMetadata>.Fail($"There's already a file called \"{file.FileName}\" there.");
 
             file.FolderId = destinationFolderId;
 

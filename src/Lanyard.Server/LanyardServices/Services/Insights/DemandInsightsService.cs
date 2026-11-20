@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Features;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Application.Services.Tenancy;
@@ -11,8 +12,8 @@ using Microsoft.Extensions.Logging;
 
 namespace Lanyard.Application.Services.Insights;
 
-// Demand (games played on the location's kiosks) against staffing (clocked and rota hours) for one
-// location, bucketed by UK venue hour. The sums live in InsightsRules; this class only decides who
+// Demand (games played on the location's kiosks, and booked parties) against staffing (clocked and
+// rota hours) for one location, bucketed by UK venue hour. The sums live in InsightsRules; this class only decides who
 // may ask and loads the facts.
 //
 // Same access shape as ComplianceService: the widget that calls this can sit on a kiosk dashboard,
@@ -82,6 +83,19 @@ public class DemandInsightsService(
             }
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync(cancellationToken);
+
+            // Admins keep every feature, as on the page itself; a Manager whose company has
+            // Insights switched off is refused here too, so a saved dashboard widget can't reach it.
+            HashSet<CompanyFeature> disabled = await CompanyFeatureQueries.GetDisabledAsync(ctx, companyId);
+
+            if (!scope.IsAdmin && disabled.Contains(CompanyFeature.Insights))
+            {
+                return Result<InsightsSummary>.Fail("Insights is switched off for your company.");
+            }
+
+            // Party figures follow the company's switch for everyone, Admins included, the same way
+            // the rota auto-build only adds party staff for a company using Parties.
+            bool partiesEnabled = !disabled.Contains(CompanyFeature.Parties);
 
             List<Location> companyLocations = await ctx.Locations
                 .AsNoTracking()
@@ -177,7 +191,40 @@ public class DemandInsightsService(
                 .Where(x => x.MusicSchedule!.LocationId == location.Id && x.IsActive)
                 .ToListAsync(cancellationToken);
 
-            InsightsFigures figures = InsightsRules.Calculate(query.From, query.To, games, clocked, rota, openingHours, dayparts);
+            List<PartyFact> parties = [];
+            int? laserTagOffsetMinutes = null;
+
+            if (partiesEnabled)
+            {
+                // Booked only: cancelling is a party's soft delete. Provisional imports still count;
+                // Just Step cancels a hold that's dropped. Only times, hire kind and the number of
+                // children are read - never the child, contact, allergy or price columns.
+                parties = await ctx.PartyBookings
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .Where(x => x.CompanyId == companyId
+                        && x.LocationId == location.Id
+                        && x.Status == PartyBookingStatus.Booked
+                        && x.StartUtc >= shiftsFromUtc
+                        && x.StartUtc < rangeEndUtc
+                        && x.EndUtc > rangeStartUtc)
+                    .Select(x => new PartyFact(x.StartUtc, x.EndUtc, x.LaserTagTimeUtc, x.HireKind, x.ExpectedChildren))
+                    .ToListAsync(cancellationToken);
+
+                // The location's default laser tag time is only needed for kids' parties without one.
+                if (parties.Any(x => x.LaserTagTimeUtc is null && x.HireKind is null))
+                {
+                    laserTagOffsetMinutes = await ctx.PartyLocationSettings
+                        .AsNoTracking()
+                        .TagWithCallSite()
+                        .Where(x => x.LocationId == location.Id)
+                        .Select(x => x.LaserTagOffsetMinutes)
+                        .FirstOrDefaultAsync(cancellationToken);
+                }
+            }
+
+            InsightsFigures figures = InsightsRules.Calculate(query.From, query.To, games, clocked, rota, openingHours, dayparts,
+                parties, laserTagOffsetMinutes);
 
             return Result<InsightsSummary>.Ok(new InsightsSummary(
                 location.Id,
@@ -188,7 +235,8 @@ public class DemandInsightsService(
                 unassignedKioskCount,
                 openingHours.Count > 0,
                 dayparts.Count > 0,
-                figures));
+                figures,
+                partiesEnabled));
         }
         catch (Exception ex)
         {
