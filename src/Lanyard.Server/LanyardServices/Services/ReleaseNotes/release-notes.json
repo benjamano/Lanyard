@@ -982,6 +982,18 @@
     ]
   },
   {
+    "version": "1.4.25",
+    "releaseDate": "2026-11-18",
+    "summary": "A tidier side menu, grouped by what you're doing.",
+    "details": [
+      "Home, Chat and Dashboards sit at the top. Your own shifts, time off, training and music are under a new My Work heading.",
+      "Management is regrouped: Operations Alerts, Insights and File Manager first, then Rota, Parties, People (users, roles, onboarding, staff documents and compliance), Training and Communication (announcements, chat channels and chat reports). The old catch-all Manage group is gone.",
+      "Rota and Parties list their day-to-day pages first and their set-up pages after.",
+      "Kiosks, projection, automation and DMX are under a new Venue heading, and Companies & Locations and Lanyard Feedback under Admin. People with the DMX role but not Admin now see DMX Control in the menu.",
+      "The Communication group shows a count when chat reports are waiting, like Rota does, so it's visible even while the group is closed."
+    ]
+  },
+  {
     "version": "1.4.27",
     "releaseDate": "2026-11-19",
     "summary": "Insights counts party bookings, What's On shows venue schedules, and automation rules can be copied.",
