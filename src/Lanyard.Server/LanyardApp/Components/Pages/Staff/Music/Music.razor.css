@@ -1,60 +1,1226 @@
+/* The Music page. One layout for every screen size, changed by how wide the page itself is
+   (a container query, so the side nav being open or closed is taken into account):
+     wide    kiosk strip / [player | playlists | songs]
+     medium  kiosk strip / player / playlist chips / songs
+     narrow  the same, with two-line song rows, and a compact player once the full one scrolls away
+   Child components' markup is styled from here with ::deep; this file's root carries the scope. */
+
 .music-page {
+    container-type: inline-size;
+    container-name: music;
     display: flex;
     flex-direction: column;
-    height: calc(100%);
-    overflow: hidden;
-    min-height: 0;
+    gap: 1rem;
+    padding-bottom: 5rem;
+    min-width: 0;
 }
 
-.music-content {
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
+/* ---------- Header ---------- */
+
+.music-page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
 }
 
-.music-panes {
+.music-page-title {
+    margin: 0;
+    font-size: var(--fontSizeBase600);
+    line-height: var(--lineHeightBase600);
+    font-weight: var(--fontWeightSemibold);
+}
+
+.music-page-links {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+}
+
+.music-page-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: 999px;
+    color: var(--colorNeutralForeground2);
+    text-decoration: none;
+    font-size: var(--fontSizeBase200);
+    border: 1px solid var(--colorNeutralStroke2);
+}
+
+.music-page-link:hover {
+    background: var(--colorNeutralBackground1Hover);
+    color: var(--colorNeutralForeground1);
+}
+
+/* ---------- Loading / empty ---------- */
+
+.music-loading {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.music-skeleton {
+    border-radius: 12px;
+    background: linear-gradient(90deg, var(--colorNeutralBackground3) 0%, var(--colorNeutralBackground2) 50%, var(--colorNeutralBackground3) 100%);
+    background-size: 200% 100%;
+    animation: music-shimmer 1.4s ease-in-out infinite;
+}
+
+.music-skeleton.is-strip { height: 58px; }
+.music-skeleton.is-card { height: 360px; }
+.music-skeleton.is-list { height: 480px; }
+
+@keyframes music-shimmer {
+    from { background-position: 100% 0; }
+    to { background-position: -100% 0; }
+}
+
+.music-page-empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--colorNeutralForeground3);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.music-page-empty h2 {
+    margin: 0.5rem 0 0;
+    font-size: var(--fontSizeBase500);
+    color: var(--colorNeutralForeground1);
+}
+
+.music-page-empty p {
+    max-width: 30rem;
+    margin: 0;
+}
+
+/* ---------- Layout ---------- */
+
+.music-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+    align-items: start;
+}
+
+.music-player-column,
+.music-library-column {
+    min-width: 0;
+}
+
+.music-library-column {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+    align-items: start;
+}
+
+@container music (min-width: 1080px) {
+    .music-layout {
+        grid-template-columns: minmax(320px, 360px) minmax(0, 1fr);
+    }
+
+    .music-player-column {
+        position: sticky;
+        top: 1rem;
+    }
+
+    .music-library-column {
+        grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
+    }
+}
+
+/* ---------- Shared bits ---------- */
+
+.music-page ::deep .music-section-label {
+    font-size: var(--fontSizeBase100, 10px);
+    font-weight: var(--fontWeightSemibold);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--colorNeutralForeground3);
+}
+
+.music-page ::deep .music-status-dot {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--colorNeutralForeground4, #999);
+}
+
+.music-page ::deep .music-status-dot.is-playing {
+    background: var(--colorPaletteGreenForeground1, #107c10);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--colorPaletteGreenForeground1, #107c10) 25%, transparent);
+}
+
+.music-page ::deep .music-status-dot.is-idle {
+    background: var(--colorPaletteDarkOrangeForeground1, #ca5010);
+}
+
+.music-page ::deep .music-status-dot.is-offline {
+    background: transparent;
+    box-shadow: inset 0 0 0 2px var(--colorNeutralForeground4, #999);
+}
+
+.music-page ::deep .music-icon-button {
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 0;
+    background: transparent;
+    color: var(--colorNeutralForeground2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+}
+
+.music-page ::deep .music-icon-button.is-large {
+    width: 48px;
+    height: 48px;
+}
+
+.music-page ::deep .music-icon-button:hover:not(:disabled) {
+    background: var(--colorNeutralBackground1Hover);
+    color: var(--colorNeutralForeground1);
+}
+
+.music-page ::deep .music-icon-button:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.music-page ::deep .music-icon-button.is-on {
+    color: var(--colorBrandForeground1);
+}
+
+/* A dot under a toggle that's switched on, so it's not told apart by colour alone. */
+.music-page ::deep .music-icon-button.is-on::after {
+    content: "";
+    position: absolute;
+    bottom: 4px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.music-page ::deep .music-icon-button:focus-visible,
+.music-page ::deep .music-play-button:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+    outline-offset: 2px;
+}
+
+.music-page ::deep .music-play-button {
+    flex: 0 0 auto;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    border: 0;
+    background: var(--colorBrandBackground);
+    color: var(--colorNeutralForegroundOnBrand, #fff);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--colorBrandBackground) 35%, transparent);
+    transition: transform 120ms, background 120ms;
+}
+
+.music-page ::deep .music-play-button:hover:not(:disabled) {
+    background: var(--colorBrandBackgroundHover);
+    transform: scale(1.04);
+}
+
+.music-page ::deep .music-play-button:active:not(:disabled) {
+    transform: scale(0.97);
+}
+
+.music-page ::deep .music-play-button:disabled {
+    opacity: 0.4;
+    cursor: default;
+    box-shadow: none;
+}
+
+.music-page ::deep .music-play-button.is-small {
+    width: 44px;
+    height: 44px;
+    box-shadow: none;
+}
+
+.music-page ::deep .music-dot-sep {
+    margin: 0 0.375rem;
+}
+
+/* ---------- Kiosk strip ---------- */
+
+.music-page ::deep .music-kiosk-strip-scroll {
     display: flex;
     gap: 0.5rem;
-    height: 100%;
-    min-height: 0;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    padding: 2px 2px 6px;
+    scrollbar-width: thin;
 }
 
-.music-pane {
-    min-height: 0;
-    overflow: hidden;
+.music-page ::deep .music-kiosk-chip {
+    scroll-snap-align: start;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    min-width: 11rem;
+    max-width: 16rem;
+    padding: 0.5rem 0.875rem;
+    border-radius: 12px;
+    border: 1px solid var(--colorNeutralStroke2);
+    background: var(--colorNeutralBackground1);
+    color: var(--colorNeutralForeground1);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 120ms, background 120ms;
 }
 
-::deep .music-seek-stack {
-    width: 100%;
-    max-width: 600px;
+.music-page ::deep .music-kiosk-chip:hover {
+    background: var(--colorNeutralBackground1Hover);
 }
 
-/* FluentTabs (mobile layout) sizes itself to its content by default, so the
-   Songs tab's list grows past the viewport instead of scrolling within it -
-   same underlying issue as .music-pane above, just on the narrow-viewport
-   branch. */
-::deep .music-mobile-tabs {
+.music-page ::deep .music-kiosk-chip.is-selected {
+    border-color: var(--colorBrandStroke1);
+    box-shadow: inset 0 0 0 1px var(--colorBrandStroke1);
+    background: color-mix(in srgb, var(--colorBrandBackground) 8%, var(--colorNeutralBackground1));
+}
+
+.music-page ::deep .music-kiosk-chip.is-offline .music-kiosk-chip-song {
+    font-style: italic;
+}
+
+.music-page ::deep .music-kiosk-chip:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+    outline-offset: 2px;
+}
+
+.music-page ::deep .music-kiosk-chip-text {
     display: flex;
     flex-direction: column;
-    height: 100%;
-    min-height: 0;
+    min-width: 0;
+}
+
+.music-page ::deep .music-kiosk-chip-name {
+    font-weight: var(--fontWeightSemibold);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.music-page ::deep .music-kiosk-chip-song {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ---------- Now playing ---------- */
+
+.music-page ::deep .music-now-playing {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.25rem;
+    border-radius: 16px;
+    background:
+        linear-gradient(180deg, color-mix(in srgb, var(--colorBrandBackground) 10%, transparent), transparent 55%),
+        var(--colorNeutralBackground1);
+    border: 1px solid var(--colorNeutralStroke2);
+}
+
+.music-page ::deep .music-now-playing-kiosk {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}
+
+.music-page ::deep .music-now-playing-kiosk-name {
+    font-weight: var(--fontWeightSemibold);
+    color: var(--colorNeutralForeground2);
+}
+
+.music-page ::deep .music-now-playing-kiosk-state::before {
+    content: "·";
+    margin-right: 0.5rem;
+}
+
+.music-page ::deep .music-now-playing-track {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.music-page ::deep .music-now-playing-text {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.music-page ::deep .music-now-playing-title {
+    font-size: var(--fontSizeBase500);
+    font-weight: 700;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
 }
 
-::deep .music-mobile-tabs .fluent-tab-panel {
-    flex: 1;
-    min-height: 0;
+.music-page ::deep .music-now-playing-title.is-muted {
+    color: var(--colorNeutralForeground3);
+}
+
+.music-page ::deep .music-now-playing-meta {
+    font-size: var(--fontSizeBase300);
+    color: var(--colorNeutralForeground3);
+    overflow-wrap: anywhere;
+}
+
+.music-page ::deep .music-now-playing-meta strong {
+    color: var(--colorNeutralForeground2);
+    font-weight: var(--fontWeightSemibold);
+}
+
+.music-page ::deep .music-transport {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.music-page ::deep .music-now-playing-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.music-page ::deep .music-now-playing-chips {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.music-page ::deep .music-now-playing-empty {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    padding: 1rem 0;
+    color: var(--colorNeutralForeground3);
+}
+
+.music-page ::deep .music-now-playing-empty-title {
+    font-weight: var(--fontWeightSemibold);
+    color: var(--colorNeutralForeground1);
+    font-size: var(--fontSizeBase400);
+}
+
+.music-page ::deep .music-up-next {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--colorNeutralStroke2);
+}
+
+.music-page ::deep .music-up-next-pending {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground2);
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    background: var(--colorNeutralBackground3);
+}
+
+.music-page ::deep .music-up-next-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    counter-reset: up-next;
+}
+
+.music-page ::deep .music-up-next-list li {
+    counter-increment: up-next;
+    display: grid;
+    grid-template-columns: 1.5rem 1fr auto;
+    gap: 0.5rem;
+    padding: 0.3rem 0;
+    font-size: var(--fontSizeBase300);
+}
+
+.music-page ::deep .music-up-next-list li::before {
+    content: counter(up-next);
+    color: var(--colorNeutralForeground3);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+.music-page ::deep .music-up-next-name {
     overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.music-page ::deep .music-up-next-length {
+    color: var(--colorNeutralForeground3);
+    font-variant-numeric: tabular-nums;
+}
+
+/* On a medium-width page the player spreads across: artwork and title on the left, controls on
+   the right. */
+@container music (min-width: 700px) and (max-width: 1079px) {
+    .music-page ::deep .music-now-playing {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+        grid-template-areas:
+            "kiosk kiosk"
+            "track transport"
+            "progress progress"
+            "footer footer"
+            "next next";
+        column-gap: 1.5rem;
+    }
+
+    .music-page ::deep .music-now-playing-kiosk { grid-area: kiosk; }
+    .music-page ::deep .music-now-playing-track { grid-area: track; }
+    .music-page ::deep .music-transport { grid-area: transport; justify-content: flex-end; }
+    .music-page ::deep .music-now-playing > .music-progress { grid-area: progress; }
+    .music-page ::deep .music-now-playing-footer { grid-area: footer; }
+    .music-page ::deep .music-up-next { grid-area: next; }
+    .music-page ::deep .music-now-playing-empty { grid-column: 1 / -1; }
+
+    /* Two columns, read down each one (1-3, then 4-5). */
+    .music-page ::deep .music-up-next-list {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: repeat(3, auto);
+        grid-auto-flow: column;
+        column-gap: 1.5rem;
+    }
+}
+
+/* ---------- Playlists ---------- */
+
+.music-page ::deep .music-playlists {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding: 2px 2px 6px;
+    scrollbar-width: thin;
+}
+
+.music-page ::deep .music-playlist-item {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.375rem 0.875rem 0.375rem 0.375rem;
+    border-radius: 999px;
+    border: 1px solid var(--colorNeutralStroke2);
+    background: var(--colorNeutralBackground1);
+    color: var(--colorNeutralForeground1);
+    text-align: left;
+    cursor: pointer;
+    max-width: 16rem;
+}
+
+.music-page ::deep .music-playlist-item:hover {
+    background: var(--colorNeutralBackground1Hover);
+}
+
+.music-page ::deep .music-playlist-item.is-selected {
+    background: var(--colorNeutralForeground1);
+    border-color: var(--colorNeutralForeground1);
+    color: var(--colorNeutralBackground1);
+}
+
+.music-page ::deep .music-playlist-item.is-selected .music-playlist-meta {
+    color: inherit;
+    opacity: 0.75;
+}
+
+.music-page ::deep .music-playlist-item:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+    outline-offset: 2px;
+}
+
+.music-page ::deep .music-playlist-item .music-artwork {
+    --art-size: 32px;
+    border-radius: 50%;
+}
+
+.music-page ::deep .music-playlist-item.is-new {
+    border-style: dashed;
+    color: var(--colorNeutralForeground2);
+}
+
+.music-page ::deep .music-playlist-add {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--colorNeutralBackground3);
+}
+
+.music-page ::deep .music-playlist-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.music-page ::deep .music-playlist-name {
+    font-weight: var(--fontWeightSemibold);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.music-page ::deep .music-playlist-meta {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+    white-space: nowrap;
+}
+
+/* Wide: a column of rows rather than chips. */
+@container music (min-width: 1080px) {
+    .music-page ::deep .music-playlists {
+        flex-direction: column;
+        overflow: visible;
+        gap: 2px;
+        position: sticky;
+        top: 1rem;
+    }
+
+    .music-page ::deep .music-playlist-item {
+        max-width: none;
+        border-radius: 10px;
+        border-color: transparent;
+        background: transparent;
+        padding: 0.5rem;
+    }
+
+    .music-page ::deep .music-playlist-item .music-artwork {
+        --art-size: 40px;
+        border-radius: 8px;
+    }
+
+    .music-page ::deep .music-playlist-item.is-selected {
+        background: var(--colorNeutralBackground3);
+        border-color: transparent;
+        color: var(--colorNeutralForeground1);
+    }
+
+    .music-page ::deep .music-playlist-item.is-selected .music-playlist-meta {
+        color: var(--colorNeutralForeground3);
+        opacity: 1;
+    }
+
+    .music-page ::deep .music-playlist-item.is-new {
+        border: 1px dashed var(--colorNeutralStroke2);
+        margin-top: 0.5rem;
+    }
+
+    .music-page ::deep .music-playlist-add {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+    }
+}
+
+/* ---------- Songs ---------- */
+
+.music-page ::deep .music-tracks {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-width: 0;
+    padding: 1.25rem;
+    border-radius: 16px;
+    border: 1px solid var(--colorNeutralStroke2);
+    background: var(--colorNeutralBackground1);
+}
+
+.music-page ::deep .music-tracks-header {
+    display: flex;
+    gap: 1.25rem;
+    align-items: flex-end;
+}
+
+.music-page ::deep .music-tracks-heading {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.music-page ::deep .music-tracks-title {
+    margin: 0;
+    font-size: var(--fontSizeBase600);
+    line-height: 1.2;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.music-page ::deep .music-tracks-description {
+    margin: 0;
+    color: var(--colorNeutralForeground3);
+    font-size: var(--fontSizeBase300);
+}
+
+.music-page ::deep .music-tracks-meta {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}
+
+.music-page ::deep .music-tracks-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 0.5rem;
+}
+
+.music-page ::deep .music-tracks-search {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0 0.75rem;
+    height: 40px;
+    border-radius: 8px;
+    border: 1px solid var(--colorNeutralStroke1);
+    background: var(--colorNeutralBackground1);
+    color: var(--colorNeutralForeground3);
+}
+
+.music-page ::deep .music-tracks-search:focus-within {
+    border-color: var(--colorBrandStroke1);
+    box-shadow: 0 0 0 1px var(--colorBrandStroke1);
+}
+
+.music-page ::deep .music-tracks-search input {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--colorNeutralForeground1);
+    font: inherit;
+    font-size: 16px; /* 16px stops iOS zooming in on focus */
+}
+
+.music-page ::deep .music-tracks-hint {
+    margin: 0;
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+}
+
+.music-page ::deep .music-track-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.music-page ::deep .music-track {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-height: 60px;
+    border-radius: 8px;
+    position: relative;
+}
+
+.music-page ::deep .music-track:hover {
+    background: var(--colorNeutralBackground1Hover);
+}
+
+.music-page ::deep .music-track.is-current .music-track-name {
+    color: var(--colorBrandForeground1);
+}
+
+.music-page ::deep .music-track.is-dragging {
+    opacity: 0.4;
+}
+
+.music-page ::deep .music-track.drop-before {
+    box-shadow: inset 0 2px 0 var(--colorBrandStroke1);
+}
+
+.music-page ::deep .music-track.drop-after {
+    box-shadow: inset 0 -2px 0 var(--colorBrandStroke1);
+}
+
+.music-page ::deep .music-track.is-placeholder::before {
+    content: "";
+    flex: 1;
+    height: 14px;
+    margin: 0 1rem;
+    border-radius: 7px;
+    background: var(--colorNeutralBackground3);
+}
+
+.music-page ::deep .music-track-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 2.5rem minmax(0, 1fr) 7rem 3.5rem;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.25rem 0.5rem 0.5rem;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 8px;
+    font: inherit;
+}
+
+.music-page ::deep .music-track-main:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+}
+
+.music-page ::deep .music-track-index {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--colorNeutralForeground3);
+    font-variant-numeric: tabular-nums;
+    height: 24px;
+    color: var(--colorBrandForeground1);
+}
+
+.music-page ::deep .music-track-number {
+    color: var(--colorNeutralForeground3);
+}
+
+.music-page ::deep .music-track-play-hint {
+    display: none;
+}
+
+.music-page ::deep .music-track-main:hover .music-track-number,
+.music-page ::deep .music-track-main:focus-visible .music-track-number {
+    display: none;
+}
+
+.music-page ::deep .music-track-main:hover .music-track-play-hint,
+.music-page ::deep .music-track-main:focus-visible .music-track-play-hint {
+    display: inline-block;
+}
+
+.music-page ::deep .music-track-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.music-page ::deep .music-track-name {
+    font-weight: var(--fontWeightSemibold);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.music-page ::deep .music-track-album {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.music-page ::deep .music-track-inline-length {
+    display: none;
+}
+
+.music-page ::deep .music-track-added,
+.music-page ::deep .music-track-length {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.music-page ::deep .music-track-length {
+    text-align: right;
+}
+
+.music-page ::deep .music-track-handle {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--colorNeutralForeground3);
+    cursor: grab;
+    opacity: 0;
+}
+
+.music-page ::deep .music-track:hover .music-track-handle,
+.music-page ::deep .music-track:focus-within .music-track-handle {
+    opacity: 1;
+}
+
+.music-page ::deep .music-track-more {
+    opacity: 0.7;
+}
+
+.music-page ::deep .music-track:hover .music-track-more {
+    opacity: 1;
+}
+
+.music-page ::deep .music-equaliser {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 14px;
+}
+
+.music-page ::deep .music-equaliser i {
+    display: block;
+    width: 3px;
+    height: 100%;
+    border-radius: 1px;
+    background: currentColor;
+    animation: music-track-eq 900ms ease-in-out infinite;
+    transform-origin: bottom;
+}
+
+.music-page ::deep .music-equaliser i:nth-child(2) { animation-delay: -300ms; }
+.music-page ::deep .music-equaliser i:nth-child(3) { animation-delay: -600ms; }
+
+@keyframes music-track-eq {
+    0%, 100% { transform: scaleY(0.3); }
+    50% { transform: scaleY(1); }
+}
+
+.music-page ::deep .music-tracks-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 2.5rem 1rem;
+    text-align: center;
+    color: var(--colorNeutralForeground3);
+}
+
+.music-page ::deep .music-tracks-empty-hint {
+    font-size: var(--fontSizeBase200);
+    max-width: 26rem;
+}
+
+/* Narrow: two-line rows, length beside the album, no date column, actions always visible. */
+@container music (max-width: 699px) {
+    .music-page ::deep .music-tracks {
+        padding: 1rem 0.75rem;
+        border-radius: 12px;
+    }
+
+    /* Artwork beside the title, the buttons on a full-width row underneath. */
+    .music-page ::deep .music-tracks-header {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        column-gap: 1rem;
+        row-gap: 0.125rem;
+        align-items: center;
+    }
+
+    .music-page ::deep .music-tracks-header > .music-artwork {
+        grid-row: 1 / span 4;
+    }
+
+    .music-page ::deep .music-tracks-heading {
+        display: contents;
+    }
+
+    .music-page ::deep .music-tracks-actions {
+        grid-column: 1 / -1;
+        margin-top: 0.75rem;
+    }
+
+    .music-page ::deep .music-tracks-actions > fluent-button:nth-child(-n + 2) {
+        flex: 1 1 0;
+    }
+
+    .music-page ::deep .music-tracks-header .music-artwork {
+        --art-size: 72px;
+    }
+
+    .music-page ::deep .music-tracks-title {
+        font-size: var(--fontSizeBase500);
+    }
+
+    .music-page ::deep .music-track-main {
+        grid-template-columns: 2rem minmax(0, 1fr);
+        gap: 0.625rem;
+    }
+
+    .music-page ::deep .music-track-added,
+    .music-page ::deep .music-track-length {
+        display: none;
+    }
+
+    .music-page ::deep .music-track-inline-length {
+        display: inline;
+    }
+
+    .music-page ::deep .music-track-handle {
+        display: none;
+    }
+
+    /* No dragging on a narrow page (the handle's hidden); the ⋯ menu moves songs instead. */
+    .music-page ::deep .music-tracks-hint {
+        display: none;
+    }
+
+    /* Keep the songs in reach: three of what's next is plenty on a phone. */
+    .music-page ::deep .music-up-next-list li:nth-child(n + 4) {
+        display: none;
+    }
+
+    .music-page ::deep .music-track-more {
+        opacity: 1;
+    }
+
+    .music-page ::deep .music-now-playing {
+        padding: 1rem;
+    }
+
+    .music-page ::deep .music-now-playing-track .music-artwork {
+        --art-size: 72px;
+    }
+
+    .music-page ::deep .music-now-playing-title {
+        font-size: var(--fontSizeBase400);
+    }
+
+    .music-page ::deep .music-transport {
+        justify-content: space-between;
+    }
+
+    .music-page ::deep .music-now-playing-footer .music-volume {
+        max-width: none;
+        flex-basis: 100%;
+    }
+}
+
+/* ---------- Row menu (a sheet along the bottom on phones) ---------- */
+
+.music-page ::deep .music-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+}
+
+.music-page ::deep .music-menu {
+    position: fixed;
+    z-index: 1000;
+    min-width: 220px;
+    padding: 0.375rem;
+    border-radius: 10px;
+    background: var(--colorNeutralBackground1);
+    border: 1px solid var(--colorNeutralStroke2);
+    box-shadow: var(--shadow16, 0 8px 24px rgb(0 0 0 / 0.2));
+    display: flex;
+    flex-direction: column;
+}
+
+.music-page ::deep .music-menu-title {
+    display: none;
+}
+
+.music-page ::deep .music-menu button {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    min-height: 40px;
+    padding: 0 0.75rem;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--colorNeutralForeground1);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.music-page ::deep .music-menu button:hover:not(:disabled),
+.music-page ::deep .music-menu button:focus-visible {
+    background: var(--colorNeutralBackground1Hover);
+    outline: none;
+}
+
+.music-page ::deep .music-menu button:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.music-page ::deep .music-menu button.is-danger {
+    color: var(--colorPaletteRedForeground1);
+}
+
+.music-page ::deep .music-menu .music-menu-cancel {
+    display: none;
 }
 
 @media (max-width: 599px) {
-    ::deep .music-bottom-controls-stack {
-        flex-direction: column;
-        height: auto;
+    .music-page ::deep .music-menu-backdrop {
+        background: rgb(0 0 0 / 0.4);
     }
 
-    .music-volume-wrapper,
-    .music-client-controls {
-        width: 100%;
+    .music-page ::deep .music-menu {
+        top: auto !important;
+        left: 0 !important;
+        right: 0;
+        bottom: 0;
+        border-radius: 16px 16px 0 0;
+        padding: 0.75rem 0.75rem calc(0.75rem + env(safe-area-inset-bottom));
+        animation: music-sheet-up 180ms ease-out;
+    }
+
+    .music-page ::deep .music-menu-title {
+        display: block;
+        padding: 0.25rem 0.75rem 0.75rem;
+        font-weight: var(--fontWeightSemibold);
+        border-bottom: 1px solid var(--colorNeutralStroke2);
+        margin-bottom: 0.375rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .music-page ::deep .music-menu button {
+        min-height: 48px;
+        font-size: var(--fontSizeBase400);
+    }
+
+    .music-page ::deep .music-menu .music-menu-cancel {
+        display: flex;
+        justify-content: center;
+        margin-top: 0.375rem;
+        border-top: 1px solid var(--colorNeutralStroke2);
+        border-radius: 0;
+    }
+}
+
+@keyframes music-sheet-up {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+
+/* ---------- Compact player ---------- */
+
+.music-page ::deep .music-compact-bar {
+    position: fixed;
+    left: 50%;
+    bottom: calc(0.75rem + env(safe-area-inset-bottom));
+    width: min(560px, calc(100vw - 1.5rem));
+    transform: translate(-50%, calc(100% + 2rem));
+    z-index: 900;
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--colorNeutralBackground1);
+    border: 1px solid var(--colorNeutralStroke2);
+    box-shadow: var(--shadow16, 0 8px 24px rgb(0 0 0 / 0.2));
+    transition: transform 200ms ease;
+}
+
+.music-page ::deep .music-compact-bar.is-visible {
+    transform: translate(-50%, 0);
+}
+
+.music-page ::deep .music-compact-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem 0.5rem 0.5rem;
+}
+
+.music-page ::deep .music-compact-bar-info {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    padding: 0;
+    font: inherit;
+}
+
+.music-page ::deep .music-compact-bar-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.music-page ::deep .music-compact-bar-title {
+    font-weight: var(--fontWeightSemibold);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.music-page ::deep .music-compact-bar-kiosk {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}
+
+/* Below 768px the app's own tab bar (MobileNavMenu, 58px) is fixed along the bottom; sit above it. */
+@media (max-width: 767.98px) {
+    .music-page ::deep .music-compact-bar {
+        bottom: calc(58px + 0.5rem + env(safe-area-inset-bottom));
+    }
+}
+
+/* On a wide page the full player stays on screen (it's sticky), so the compact one isn't needed. */
+@container music (min-width: 1080px) {
+    .music-page ::deep .music-compact-bar {
+        display: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .music-skeleton,
+    .music-page ::deep .music-equaliser i,
+    .music-page ::deep .music-menu {
+        animation: none;
+    }
+
+    .music-page ::deep .music-compact-bar {
+        transition: none;
     }
 }

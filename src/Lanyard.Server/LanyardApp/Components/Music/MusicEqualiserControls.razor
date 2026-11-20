@@ -1,0 +1,89 @@
+@using Lanyard.Shared.Audio
+
+@* Bass / Mid / Treble sliders and the preset buttons. Raises ValueChanged on every move, so the
+   owner decides whether to save live (the Music page dialog) or on Save (kiosk settings). *@
+<div class="eq-controls">
+    <div class="eq-presets" role="group" aria-label="Equaliser presets">
+        @foreach (MusicEqualiserPreset preset in MusicEqualiserSettings.Presets)
+        {
+            bool active = preset.Settings == Value;
+            <button type="button" class="eq-preset @(active ? "is-active" : null)" aria-pressed="@(active ? "true" : "false")"
+                    disabled="@Disabled" @onclick="() => SetAsync(preset.Settings)">
+                @preset.Name
+            </button>
+        }
+    </div>
+
+    @foreach (Band band in Bands)
+    {
+        int db = band.Get(Value);
+        string id = $"eq-{band.Key}-{_idSuffix}";
+        <div class="eq-band">
+            <label class="eq-band-label" for="@id">
+                <span class="eq-band-name">@band.Name</span>
+                <span class="eq-band-hint">@band.Hint</span>
+            </label>
+            <input id="@id" type="range" class="eq-band-range" min="@MusicEqualiserSettings.MinDb" max="@MusicEqualiserSettings.MaxDb" step="1"
+                   value="@db" disabled="@Disabled" style="@FillStyle(db)"
+                   aria-valuetext="@FormatDb(db)"
+                   @oninput="e => OnBandInput(band, e)" />
+            <span class="eq-band-value @(db == 0 ? "is-zero" : null)" aria-hidden="true">@FormatDb(db)</span>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public MusicEqualiserSettings Value { get; set; } = MusicEqualiserSettings.Flat;
+    [Parameter] public EventCallback<MusicEqualiserSettings> ValueChanged { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+
+    // Both the dialog and the settings tab can be open; keep the label/input ids unique.
+    private readonly string _idSuffix = Guid.NewGuid().ToString("N")[..6];
+
+    private sealed record Band(string Key, string Name, string Hint, Func<MusicEqualiserSettings, int> Get, Func<MusicEqualiserSettings, int, MusicEqualiserSettings> With);
+
+    private static readonly Band[] Bands =
+    [
+        new("bass", "Bass", "Below 100 Hz", s => s.BassDb, (s, db) => s with { BassDb = db }),
+        new("mid", "Mid", "Around 1 kHz, voices", s => s.MidDb, (s, db) => s with { MidDb = db }),
+        new("treble", "Treble", "Above 8 kHz", s => s.TrebleDb, (s, db) => s with { TrebleDb = db }),
+    ];
+
+    public static string FormatDb(int db) => db switch
+    {
+        > 0 => $"+{db} dB",
+        < 0 => $"−{-db} dB",
+        _ => "0 dB"
+    };
+
+    // Fills the track from the centre (0 dB) out to the thumb, so a cut reads differently from a boost.
+    private static string FillStyle(int db)
+    {
+        double span = MusicEqualiserSettings.MaxDb - MusicEqualiserSettings.MinDb;
+        double position = (db - MusicEqualiserSettings.MinDb) / span * 100;
+        double from = Math.Min(50, position);
+        double to = Math.Max(50, position);
+        return FormattableString.Invariant($"--eq-from: {from:0.##}%; --eq-to: {to:0.##}%;");
+    }
+
+    private Task OnBandInput(Band band, ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out int db))
+        {
+            return Task.CompletedTask;
+        }
+
+        return SetAsync(band.With(Value, MusicEqualiserSettings.ClampDb(db)));
+    }
+
+    private async Task SetAsync(MusicEqualiserSettings settings)
+    {
+        if (settings == Value)
+        {
+            return;
+        }
+
+        Value = settings;
+        await ValueChanged.InvokeAsync(settings);
+    }
+}

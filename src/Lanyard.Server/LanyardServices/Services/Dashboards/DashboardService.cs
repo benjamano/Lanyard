@@ -338,6 +338,10 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 case KioskHealthWidget existingKioskHealth when widget is KioskHealthWidget incomingKioskHealth:
                     existingKioskHealth.OnlyShowOffline = incomingKioskHealth.OnlyShowOffline;
                     break;
+                case OperationsAlertsWidget existingAlerts when widget is OperationsAlertsWidget incomingAlerts:
+                    existingAlerts.AlertMinimumSeverity = incomingAlerts.AlertMinimumSeverity;
+                    existingAlerts.AlertOnlyUnacknowledged = incomingAlerts.AlertOnlyUnacknowledged;
+                    break;
                 case HallOfFameWidget existingHallOfFame when widget is HallOfFameWidget incomingHallOfFame:
                     existingHallOfFame.Period = incomingHallOfFame.Period;
                     existingHallOfFame.ShowTopScore = incomingHallOfFame.ShowTopScore;
@@ -377,6 +381,10 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 case DemandStaffingWidget existingDemand when widget is DemandStaffingWidget incomingDemand:
                     existingDemand.RangeDays = incomingDemand.RangeDays;
                     existingDemand.LocationId = incomingDemand.LocationId;
+                    break;
+                case WhatsOnTodayWidget existingWhatsOn when widget is WhatsOnTodayWidget incomingWhatsOn:
+                    existingWhatsOn.MaxItems = incomingWhatsOn.MaxItems;
+                    existingWhatsOn.LocationId = incomingWhatsOn.LocationId;
                     break;
             }
 
@@ -717,6 +725,11 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             {
                 OnlyShowOffline = kioskHealthWidget.OnlyShowOffline
             },
+            OperationsAlertsWidget alertsWidget => new OperationsAlertsWidget
+            {
+                AlertMinimumSeverity = alertsWidget.AlertMinimumSeverity,
+                AlertOnlyUnacknowledged = alertsWidget.AlertOnlyUnacknowledged
+            },
             HallOfFameWidget hallOfFameWidget => new HallOfFameWidget
             {
                 Period = hallOfFameWidget.Period,
@@ -769,6 +782,11 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             {
                 RangeDays = demandWidget.RangeDays,
                 LocationId = demandWidget.LocationId
+            },
+            WhatsOnTodayWidget whatsOnWidget => new WhatsOnTodayWidget
+            {
+                MaxItems = whatsOnWidget.MaxItems,
+                LocationId = whatsOnWidget.LocationId
             },
             _ => throw new InvalidOperationException("Unsupported widget type.")
         };
@@ -852,6 +870,13 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             return;
         }
 
+        if (target is OperationsAlertsWidget targetAlerts && source is OperationsAlertsWidget sourceAlerts)
+        {
+            targetAlerts.AlertMinimumSeverity = sourceAlerts.AlertMinimumSeverity;
+            targetAlerts.AlertOnlyUnacknowledged = sourceAlerts.AlertOnlyUnacknowledged;
+            return;
+        }
+
         if (target is HallOfFameWidget targetHallOfFame && source is HallOfFameWidget sourceHallOfFame)
         {
             targetHallOfFame.Period = sourceHallOfFame.Period;
@@ -903,6 +928,12 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         {
             targetDemand.RangeDays = sourceDemand.RangeDays;
             targetDemand.LocationId = sourceDemand.LocationId;
+        }
+
+        if (target is WhatsOnTodayWidget targetWhatsOn && source is WhatsOnTodayWidget sourceWhatsOn)
+        {
+            targetWhatsOn.MaxItems = sourceWhatsOn.MaxItems;
+            targetWhatsOn.LocationId = sourceWhatsOn.LocationId;
         }
 
         if (target is ProjectionStatusWidget targetProjectionStatus && source is ProjectionStatusWidget sourceProjectionStatus)

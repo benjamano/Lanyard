@@ -1,0 +1,57 @@
+@inject ISeasonalThemeService SeasonalThemeService
+@inject SeasonalThemeState SeasonalThemeState
+
+<FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Start" VerticalGap="8" Width="100%">
+    <FluentText>
+        At Christmas and Halloween, Lanyard dresses up with falling snow or jack-o'-lanterns. Turn this off if you'd
+        rather keep things plain. It only changes what you see.
+    </FluentText>
+
+    @if (_isLoading)
+    {
+        <FluentSpinner />
+    }
+    else
+    {
+        <FluentSwitch Value="@_show" ValueChanged="@SetShowAsync" Label="Show seasonal themes" />
+    }
+</FluentStack>
+
+@code {
+    private string? _userId;
+    private bool _show = true;
+    private bool _isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<string> userIdResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (userIdResult.IsSuccess && !string.IsNullOrEmpty(userIdResult.Data))
+        {
+            _userId = userIdResult.Data;
+            Result<bool> current = await SeasonalThemeService.GetUserOptInAsync(_userId);
+            _show = !current.IsSuccess || current.Data;
+        }
+
+        _isLoading = false;
+    }
+
+    private async Task SetShowAsync(bool value)
+    {
+        if (_userId is null)
+        {
+            return;
+        }
+
+        Result<bool> saved = await SeasonalThemeService.SetUserOptInAsync(_userId, value);
+
+        if (!saved.IsSuccess)
+        {
+            _toastService.ShowError(saved.Error ?? "Couldn't save that setting.");
+            return;
+        }
+
+        _show = value;
+        await SeasonalThemeState.NotifyChangedAsync();
+    }
+}

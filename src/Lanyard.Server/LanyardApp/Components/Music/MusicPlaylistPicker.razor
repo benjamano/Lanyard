@@ -1,0 +1,69 @@
+@* The library's playlists. A column beside the songs on a wide screen; a row of chips above
+   them on anything narrower (same markup, CSS decides). *@
+<div class="music-playlists" role="listbox" aria-label="Playlists">
+    <button type="button" role="option" class="music-playlist-item @(SelectedPlaylistId is null ? "is-selected" : "")"
+            aria-selected="@(SelectedPlaylistId is null ? "true" : "false")" @onclick="() => OnSelect.InvokeAsync(null)">
+        <MusicArtwork Seed="AllSongsSeed" Icon="@(new Icons.Regular.Size20.MusicNote2())" Size="MusicArtwork.ArtworkSize.Small" />
+        <span class="music-playlist-text">
+            <span class="music-playlist-name">All songs</span>
+            <span class="music-playlist-meta">Everything in the library</span>
+        </span>
+    </button>
+
+    @foreach (PlaylistOverview playlist in Playlists)
+    {
+        bool selected = playlist.Id == SelectedPlaylistId;
+        bool playing = playlist.Id == PlayingPlaylistId;
+
+        <button type="button" role="option" @key="playlist.Id"
+                class="music-playlist-item @(selected ? "is-selected" : "")"
+                aria-selected="@(selected ? "true" : "false")" @onclick="() => OnSelect.InvokeAsync(playlist.Id)">
+            <MusicArtwork Seed="playlist.Id" Title="@playlist.Name" IsPlaying="playing" Size="MusicArtwork.ArtworkSize.Small" />
+            <span class="music-playlist-text">
+                <span class="music-playlist-name">@playlist.Name</span>
+                <span class="music-playlist-meta">@SongCount(playlist.SongCount)@(playing ? " · playing" : "")</span>
+            </span>
+        </button>
+    }
+
+    @if (CanEdit)
+    {
+        <button type="button" class="music-playlist-item is-new" @onclick="OnCreate">
+            <span class="music-playlist-add" aria-hidden="true">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Add())" Color="Color.Default" />
+            </span>
+            <span class="music-playlist-text">
+                <span class="music-playlist-name">New playlist</span>
+            </span>
+        </button>
+    }
+</div>
+
+@code {
+    private static readonly Guid AllSongsSeed = new("6b1d3c5e-0000-4000-8000-000000000001");
+
+    [Parameter, EditorRequired] public IReadOnlyList<PlaylistOverview> Playlists { get; set; } = [];
+    [Parameter] public Guid? SelectedPlaylistId { get; set; }
+    [Parameter] public Guid? PlayingPlaylistId { get; set; }
+    [Parameter] public bool CanEdit { get; set; }
+    [Parameter] public EventCallback<Guid?> OnSelect { get; set; }
+    [Parameter] public EventCallback OnCreate { get; set; }
+
+    // Re-render only when something shown here changed, not whenever the page does (e.g. a
+    // volume change on the kiosk).
+    private (IReadOnlyList<PlaylistOverview>, Guid?, Guid?, bool)? _shown;
+
+    protected override bool ShouldRender()
+    {
+        var now = (Playlists, SelectedPlaylistId, PlayingPlaylistId, CanEdit);
+        if (_shown == now)
+        {
+            return false;
+        }
+
+        _shown = now;
+        return true;
+    }
+
+    public static string SongCount(int count) => count == 1 ? "1 song" : $"{count} songs";
+}

@@ -1,0 +1,738 @@
+@page "/dmx/scenes/{SceneId:guid}"
+
+@using Lanyard.App.Components.Dmx
+@using Lanyard.App.Components.Dialogs
+@using Lanyard.Infrastructure.DTO.Dmx
+@using Lanyard.Infrastructure.Models.Dmx
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.JSInterop
+
+@attribute [Authorize(Roles = "Admin, CanManageDmxSystems")]
+
+@implements IAsyncDisposable
+
+@inject IDmxDeskService _dmxDesk
+@inject IDmxFixtureService _dmxFixtureService
+@inject IDmxSceneService _dmxSceneService
+@inject IJSRuntime JS
+
+<PageTitle>@(scene?.Name ?? "Scene") - DMX</PageTitle>
+
+@* Saves anything still waiting before leaving, wherever the user goes. *@
+<NavigationLock OnBeforeInternalNavigation="OnLeavingAsync" />
+
+<DmxSurface Class="dmx-editor">
+    <div class="dmx-toolbar" role="toolbar" aria-label="Scene">
+        <a class="dmx-back" href="@BackLink">
+            <FluentIcon Value="new Icons.Regular.Size20.ArrowLeft()" Color="Color.Default" /> DMX desk
+        </a>
+
+        @if (scene != null)
+        {
+            <input class="dmx-editor-name" aria-label="Scene name" maxlength="@DmxSceneService.MaxSceneNameLength"
+                   value="@scene.Name" disabled="@state.IsLocked" @onchange="RenameSceneAsync" />
+
+            <span class="dmx-editor-saved" aria-live="polite">@(state.IsSaving ? "Saving…" : "Saved")</span>
+
+            <FluentButton Appearance="@(isRunning ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                          IconStart="@(isRunning ? new Icons.Filled.Size20.Stop() : new Icons.Regular.Size20.Play())"
+                          Disabled="@(steps.Count == 0)"
+                          OnClick="ToggleRunAsync"
+                          Title="@(isRunning ? "Stop it on the kiosk" : "Run it on the kiosk")">
+                <span class="dmx-toolbar-label">@(isRunning ? "Stop" : "Run on kiosk")</span>
+            </FluentButton>
+
+            <FluentButton Appearance="@(preview.IsActive ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                          IconStart="new Icons.Regular.Size20.Eye()"
+                          Disabled="@(steps.Count == 0)"
+                          OnClick="TogglePreview"
+                          Title="Play the scene on screen only">
+                <span class="dmx-toolbar-label">@(preview.IsActive ? "Stop preview" : "Preview")</span>
+            </FluentButton>
+
+            <div class="dmx-segmented" role="radiogroup" aria-label="Lights while editing">
+                <button type="button" role="radio" aria-checked="@(state.Output == DmxDeskOutput.Blind)"
+                        class="@(state.Output == DmxDeskOutput.Blind ? "is-active is-blind" : null)"
+                        @onclick="() => SetOutputAsync(DmxDeskOutput.Blind)" title="Edit without the lights changing">
+                    Blind
+                </button>
+                <button type="button" role="radio" aria-checked="@(state.Output == DmxDeskOutput.Live)"
+                        class="@(state.Output == DmxDeskOutput.Live ? "is-active is-live" : null)"
+                        @onclick="() => SetOutputAsync(DmxDeskOutput.Live)" title="Show the selected step on the lights">
+                    <span class="dmx-dot" aria-hidden="true"></span> Show on lights
+                </button>
+            </div>
+
+            <FluentButton Appearance="@(state.IsLocked ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                          IconStart="@(state.IsLocked ? new Icons.Filled.Size20.LockClosed() : new Icons.Regular.Size20.LockOpen())"
+                          OnClick="ToggleLock"
+                          Title="@(state.IsLocked ? "Unlock" : "Lock")"
+                          aria-pressed="@(state.IsLocked ? "true" : "false")">
+                <span class="dmx-toolbar-label">@(state.IsLocked ? "Locked" : "Lock")</span>
+            </FluentButton>
+
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="new Icons.Regular.Size20.Delete()"
+                          Disabled="@state.IsLocked" OnClick="DeleteSceneAsync" Title="Delete this scene">
+                <span class="dmx-toolbar-label">Delete</span>
+            </FluentButton>
+
+            <HelpButton AreaKey="@HelpRegistry.Dmx" Topic="scenes" Compact="true" />
+        }
+    </div>
+
+    @if (loadError != null)
+    {
+        <div class="dmx-empty">
+            <FluentText Weight="TextWeight.Semibold">Scene not found</FluentText>
+            <FluentText>@loadError</FluentText>
+            <a href="/dmx">Back to the DMX desk</a>
+        </div>
+    }
+    else if (scene == null)
+    {
+        <div class="dmx-empty"><FluentSpinner Size="SpinnerSize.Small" /> Loading the scene…</div>
+    }
+    else
+    {
+        @if (isRunning)
+        {
+            <div class="dmx-banner dmx-banner--info" role="status">
+                <span><strong>This scene is running on the kiosk.</strong> Changing a step stops it, so it never plays an old version. Press Run on kiosk again to see the changes.</span>
+            </div>
+        }
+
+        @if (state.Output == DmxDeskOutput.Live)
+        {
+            <div class="dmx-banner dmx-banner--warning" role="status">
+                <span><strong>Showing on the lights.</strong> The kiosk shows the selected step as you edit it.</span>
+            </div>
+        }
+
+        @if (preview.IsActive)
+        {
+            <div class="dmx-banner dmx-banner--preview" role="status">
+                <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small"
+                              IconStart="@(preview.IsPlaying ? new Icons.Regular.Size20.Pause() : new Icons.Regular.Size20.Play())"
+                              OnClick="preview.TogglePlay" aria-label="@(preview.IsPlaying ? "Pause preview" : "Play preview")" />
+                <span><strong>Preview</strong> on screen only · step @(preview.StepIndex + 1) of @preview.Steps.Count</span>
+                <input type="range" class="dmx-preview-scrub" min="0" max="@(preview.Steps.Count - 1)" value="@preview.StepIndex"
+                       aria-label="Preview step" @oninput="OnScrub" />
+                <FluentButton Appearance="ButtonAppearance.Outline" Size="ButtonSize.Small" OnClick="preview.Stop">Stop preview</FluentButton>
+            </div>
+        }
+
+        <div class="dmx-tabs" role="tablist" aria-label="Scene">
+            <button type="button" role="tab" aria-selected="@(tab == EditorTab.Steps)" class="@(tab == EditorTab.Steps ? "is-active" : null)" @onclick="() => tab = EditorTab.Steps">Steps</button>
+            <button type="button" role="tab" aria-selected="@(tab == EditorTab.Settings)" class="@(tab == EditorTab.Settings ? "is-active" : null)" @onclick="() => tab = EditorTab.Settings">Settings</button>
+        </div>
+
+        @if (tab == EditorTab.Settings)
+        {
+            <div class="dmx-main">
+                <DmxSceneSettings OpenScene="@scene" OtherSceneKeys="@otherSceneKeys" Disabled="@state.IsLocked" OnSceneEdited="OnSettingsSaved" />
+            </div>
+        }
+        else
+        {
+            <ol class="dmx-steps" aria-label="Steps">
+                @for (int i = 0; i < steps.Count; i++)
+                {
+                    DmxSceneStep step = steps[i];
+                    int index = i;
+                    bool selected = step.Id == state.EditingStep?.Id;
+
+                    <li @key="step.Id"
+                        class="dmx-step @(selected ? "is-selected" : null) @(dragIndex == index ? "is-dragging" : null) @(preview.IsActive && preview.StepIndex == index ? "is-previewing" : null)"
+                        draggable="@(state.IsLocked ? "false" : "true")"
+                        @ondragstart="() => dragIndex = index"
+                        @ondragover:preventDefault="true"
+                        @ondrop="() => DropOnAsync(index)"
+                        @ondragend="() => dragIndex = null">
+                        <button type="button" class="dmx-step-button" aria-pressed="@(selected ? "true" : "false")" @onclick="() => SelectStepAsync(step)">
+                            <span class="dmx-step-number">@(index + 1)</span>
+                            <span class="dmx-step-name">@step.Name</span>
+                            <span class="dmx-step-time">@StepTime(step)@(step.FadeTime > TimeSpan.Zero ? $" · fade {step.FadeTime.TotalSeconds:0.##} s" : null)</span>
+                            <span class="dmx-step-swatches" aria-hidden="true">
+                                @foreach (string colour in SwatchesFor(step))
+                                {
+                                    <span style="background: @colour;"></span>
+                                }
+                            </span>
+                        </button>
+                    </li>
+                }
+                <li class="dmx-step dmx-step--add">
+                    <button type="button" class="dmx-step-button" disabled="@state.IsLocked" @onclick="AddStepAsync">
+                        <FluentIcon Value="new Icons.Regular.Size20.Add()" Color="Color.Default" />
+                        <span>Add step</span>
+                    </button>
+                </li>
+            </ol>
+
+            @if (steps.Count == 0)
+            {
+                <div class="dmx-empty">
+                    <FluentText Weight="TextWeight.Semibold">No steps yet</FluentText>
+                    <FluentText>A step is one look: the levels the lights go to, and how long they hold. Press <strong>Add step</strong>, then set the lights below.</FluentText>
+                </div>
+            }
+            else if (state.EditingStep is DmxSceneStep selectedStep)
+            {
+                <div class="dmx-step-details">
+                    <label class="dmx-field">
+                        <span>Name</span>
+                        <input type="text" maxlength="@DmxSceneService.MaxStepNameLength" value="@selectedStep.Name"
+                               disabled="@state.IsLocked" @onchange="e => RenameStepAsync(selectedStep, e)" />
+                    </label>
+
+                    @if (scene.BpmSyncEnabled)
+                    {
+                        <label class="dmx-field">
+                            <span>Beats</span>
+                            <input type="number" min="0.25" max="64" step="0.25" value="@selectedStep.Beats.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                   disabled="@state.IsLocked" @onchange="e => SetBeatsAsync(selectedStep, e)" />
+                        </label>
+                    }
+
+                    <label class="dmx-field">
+                        <span>@(scene.BpmSyncEnabled ? "Seconds (no music)" : "Seconds")</span>
+                        <input type="number" min="0.05" max="3600" step="0.05" value="@selectedStep.Duration.TotalSeconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)"
+                               disabled="@state.IsLocked" @onchange="e => SetDurationAsync(selectedStep, e)" />
+                    </label>
+
+                    <label class="dmx-field" title="How long the step takes to fade in from the step before. 0 snaps straight to it. It's part of the step's length, not added to it.">
+                        <span>Fade in (s)</span>
+                        <input type="number" min="0" max="3600" step="0.05" value="@selectedStep.FadeTime.TotalSeconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)"
+                               disabled="@state.IsLocked" @onchange="e => SetFadeAsync(selectedStep, e)" />
+                    </label>
+
+                    <div class="dmx-step-actions">
+                        <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="new Icons.Regular.Size20.ArrowLeft()"
+                                      Disabled="@(state.IsLocked || StepIndexOf(selectedStep) == 0)" OnClick="() => MoveAsync(selectedStep, -1)"
+                                      Title="Move earlier" aria-label="Move step earlier" />
+                        <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="new Icons.Regular.Size20.ArrowRight()"
+                                      Disabled="@(state.IsLocked || StepIndexOf(selectedStep) == steps.Count - 1)" OnClick="() => MoveAsync(selectedStep, 1)"
+                                      Title="Move later" aria-label="Move step later" />
+                        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="new Icons.Regular.Size20.Copy()"
+                                      Disabled="@state.IsLocked" OnClick="() => DuplicateAsync(selectedStep)">Duplicate</FluentButton>
+                        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="new Icons.Regular.Size20.Camera()"
+                                      Disabled="@state.IsLocked" OnClick="CaptureLiveAsync"
+                                      Title="Make this step look like the lights do right now">Capture lights</FluentButton>
+                        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="new Icons.Regular.Size20.Delete()"
+                                      Disabled="@state.IsLocked" OnClick="() => DeleteStepAsync(selectedStep)">Delete step</FluentButton>
+                    </div>
+                </div>
+
+                <section class="dmx-main">
+                    <div class="dmx-tabs" role="tablist" aria-label="Step view">
+                        <button type="button" role="tab" aria-selected="@(!showChannels)" class="@(!showChannels ? "is-active" : null)" @onclick="() => showChannels = false">Fixtures</button>
+                        <button type="button" role="tab" aria-selected="@showChannels" class="@(showChannels ? "is-active" : null)" @onclick="() => showChannels = true">Channels</button>
+                    </div>
+
+                    @if (showChannels)
+                    {
+                        <p class="dmx-hint">Dimmed faders aren't in this step: it leaves those channels as they are. Move one to add it, or press × to take a channel out.</p>
+                        <DmxChannelsView State="@state" Version="@(state.Version + previewVersion)"
+                                         OverrideValues="@(preview.IsActive ? preview.Values : null)"
+                                         Disabled="@(state.IsLocked || preview.IsActive)" />
+                    }
+                    else
+                    {
+                        <DmxFixturesView State="@state" Version="@(state.Version + previewVersion)"
+                                         OverrideValues="@(preview.IsActive ? preview.Values : null)"
+                                         OverrideView="@(preview.IsActive ? preview.ValuesView : null)"
+                                         Disabled="@state.IsLocked"
+                                         OnManageFixtures="@(() => _navigationManager.NavigateTo(BackLink))" />
+                    }
+                </section>
+            }
+        }
+    }
+</DmxSurface>
+
+@code {
+    [Parameter]
+    public Guid SceneId { get; set; }
+
+    private enum EditorTab { Steps, Settings }
+
+    private DmxDeskState state = null!;
+    private DmxScenePreview preview = null!;
+    private int previewVersion;
+
+    private DmxSceneDTO? scene;
+    private List<DmxSceneStep> steps = [];
+    private string? loadError;
+    private EditorTab tab = EditorTab.Steps;
+    private bool showChannels;
+    private int? dragIndex;
+    private bool isRunning;
+
+    // Keys other scenes on this kiosk already use, for the keybind clash warning: key -> scene name.
+    private Dictionary<string, string> otherSceneKeys = new(StringComparer.OrdinalIgnoreCase);
+
+    private IDisposable? _sceneSubscription;
+    private Timer? _renderTimer;
+    private int _renderPending;
+
+    private string BackLink => scene == null ? "/dmx" : $"/dmx?client={scene.ClientId}";
+
+    protected override void OnInitialized()
+    {
+        state = new DmxDeskState(_dmxDesk, _dmxFixtureService, _dmxSceneService,
+            work => InvokeAsync(work),
+            message => _toastService.ShowError(message));
+        preview = new DmxScenePreview(work => InvokeAsync(work));
+
+        state.Changed += ScheduleRender;
+        preview.Changed += OnPreviewChanged;
+
+        _renderTimer = new Timer(_ =>
+        {
+            Interlocked.Exchange(ref _renderPending, 0);
+            _ = InvokeAsync(StateHasChanged);
+        }, null, Timeout.Infinite, Timeout.Infinite);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (scene?.Id == SceneId)
+        {
+            return;
+        }
+
+        // Loaded through the tenant-filtered service: another company's scene is simply not found.
+        Result<DmxSceneDTO> result = await _dmxSceneService.GetSceneByIdAsync(SceneId);
+
+        if (!result.IsSuccess || result.Data == null)
+        {
+            loadError = "It may have been deleted, or it belongs to another company.";
+            return;
+        }
+
+        scene = result.Data;
+        isRunning = scene.IsRunning;
+
+        await state.SetClientAsync(scene.ClientId);
+
+        // Editing starts Blind: the lights don't change until the operator chooses Show on lights.
+        await state.SetOutputAsync(DmxDeskOutput.Blind);
+
+        Result<IDisposable> subscription = await _dmxDesk.SubscribeToScenesAsync(scene.ClientId, new DmxSceneEventHandlers(
+            Started: id => _ = InvokeAsync(() => { if (id == SceneId) { isRunning = true; StateHasChanged(); } }),
+            Stopped: id => _ = InvokeAsync(() => { if (id == SceneId) { isRunning = false; StateHasChanged(); } }),
+            StepAdvanced: (_, _) => { },
+            Failed: (id, reason) => _ = InvokeAsync(() => { if (id == SceneId) _toastService.ShowError($"The scene stopped: {reason}"); })));
+
+        _sceneSubscription = subscription.IsSuccess ? subscription.Data : null;
+
+        await LoadOtherSceneKeysAsync();
+        await LoadStepsAsync(selectId: null);
+    }
+
+    private async Task LoadOtherSceneKeysAsync()
+    {
+        Result<IEnumerable<DmxSceneDTO>> others = await _dmxSceneService.GetScenesForClientAsync(scene!.ClientId);
+
+        otherSceneKeys = new(StringComparer.OrdinalIgnoreCase);
+
+        foreach (DmxSceneDTO other in others.Data ?? [])
+        {
+            if (other.Id == SceneId)
+            {
+                continue;
+            }
+
+            foreach (string key in other.KeyBindings)
+            {
+                otherSceneKeys.TryAdd(key, other.Name);
+            }
+        }
+    }
+
+    private async Task LoadStepsAsync(Guid? selectId)
+    {
+        await state.FlushStepSavesAsync();
+
+        Result<List<DmxSceneStep>> result = await _dmxSceneService.GetSceneStepsAsync(SceneId);
+
+        if (!result.IsSuccess || result.Data == null)
+        {
+            _toastService.ShowError($"Couldn't load the steps: {result.Error}");
+            return;
+        }
+
+        steps = result.Data;
+
+        DmxSceneStep? select = steps.FirstOrDefault(s => s.Id == (selectId ?? state.EditingStep?.Id)) ?? steps.FirstOrDefault();
+
+        await state.EditStepAsync(scene, select, keepOutput: true);
+    }
+
+    private void OnPreviewChanged()
+    {
+        previewVersion++;
+        ScheduleRender();
+    }
+
+    private void ScheduleRender()
+    {
+        if (Interlocked.Exchange(ref _renderPending, 1) == 0)
+        {
+            try
+            {
+                _renderTimer?.Change(50, Timeout.Infinite);
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+    }
+
+    private int StepIndexOf(DmxSceneStep step) => steps.FindIndex(s => s.Id == step.Id);
+
+    private string StepTime(DmxSceneStep step) =>
+        scene?.BpmSyncEnabled == true ? $"{step.Beats:0.##} beat{(step.Beats == 1 ? "" : "s")}" : FormatSeconds(step.Duration);
+
+    private static string FormatSeconds(TimeSpan duration) =>
+        duration.TotalSeconds < 60 ? $"{duration.TotalSeconds:0.##} s" : $"{(int)duration.TotalMinutes}m {duration.Seconds:00}s";
+
+    // A dot per fixture in the step's colour, so the strip reads like a storyboard.
+    private IEnumerable<string> SwatchesFor(DmxSceneStep step)
+    {
+        if (state.Fixtures.Count == 0)
+        {
+            return [];
+        }
+
+        byte[] values = new byte[DmxDeskState.UniverseSize + 1];
+
+        foreach (DmxSceneStepChannelValue value in step.ChannelValues)
+        {
+            if (value.ChannelNumber is >= 1 and <= DmxDeskState.UniverseSize)
+            {
+                values[value.ChannelNumber] = value.Value;
+            }
+        }
+
+        DmxUniverseView view = new(values);
+
+        return state.Fixtures.Take(6).Select(f =>
+        {
+            DmxFixtureColorMapper.FixtureColor c = DmxFixtureColorMapper.GetColor(f, view);
+            double scale = c.Brightness / 255.0;
+            return $"rgb({Math.Round(c.Red * scale)}, {Math.Round(c.Green * scale)}, {Math.Round(c.Blue * scale)})";
+        });
+    }
+
+    private async Task SelectStepAsync(DmxSceneStep step)
+    {
+        if (preview.IsActive)
+        {
+            preview.ScrubTo(StepIndexOf(step));
+        }
+
+        await state.EditStepAsync(scene, step, keepOutput: true);
+    }
+
+    private async Task AddStepAsync()
+    {
+        Result<DmxSceneStep> result = await _dmxSceneService.CreateSceneStepAsync(SceneId);
+
+        if (!result.IsSuccess || result.Data == null)
+        {
+            _toastService.ShowError($"Couldn't add a step: {result.Error}");
+            return;
+        }
+
+        await LoadStepsAsync(result.Data.Id);
+    }
+
+    private async Task DuplicateAsync(DmxSceneStep step)
+    {
+        await state.FlushStepSavesAsync();
+
+        Result<DmxSceneStep> result = await _dmxSceneService.DuplicateStepAsync(step.Id);
+
+        if (!result.IsSuccess || result.Data == null)
+        {
+            _toastService.ShowError($"Couldn't duplicate the step: {result.Error}");
+            return;
+        }
+
+        await LoadStepsAsync(result.Data.Id);
+    }
+
+    private async Task DeleteStepAsync(DmxSceneStep step)
+    {
+        DialogResult confirm = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Delete step";
+            options.Width = "min(450px, calc(100vw - 32px))";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message), $"Delete '{step.Name}'? This can't be undone.");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Delete");
+        });
+
+        if (confirm.Cancelled)
+        {
+            return;
+        }
+
+        int index = StepIndexOf(step);
+        Result<bool> result = await _dmxSceneService.DeleteSceneStepAsync(step.Id);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Couldn't delete the step: {result.Error}");
+            return;
+        }
+
+        Guid? next = steps.Where(s => s.Id != step.Id).Skip(Math.Max(index - 1, 0)).Select(s => (Guid?)s.Id).FirstOrDefault();
+        await state.EditStepAsync(null, null, keepOutput: true);
+        await LoadStepsAsync(next);
+    }
+
+    private Task MoveAsync(DmxSceneStep step, int offset)
+    {
+        int from = StepIndexOf(step);
+        int to = Math.Clamp(from + offset, 0, steps.Count - 1);
+
+        return ReorderAsync(from, to);
+    }
+
+    private async Task DropOnAsync(int to)
+    {
+        if (dragIndex is int from && from != to && !state.IsLocked)
+        {
+            await ReorderAsync(from, to);
+        }
+
+        dragIndex = null;
+    }
+
+    private async Task ReorderAsync(int from, int to)
+    {
+        if (from == to)
+        {
+            return;
+        }
+
+        List<DmxSceneStep> reordered = [.. steps];
+        DmxSceneStep moved = reordered[from];
+        reordered.RemoveAt(from);
+        reordered.Insert(to, moved);
+
+        // Shown straight away; put back if the save fails.
+        List<DmxSceneStep> before = steps;
+        steps = reordered;
+
+        Result<bool> result = await _dmxSceneService.ReorderStepsAsync(SceneId, reordered.Select(s => s.Id).ToList());
+
+        if (!result.IsSuccess)
+        {
+            steps = before;
+            _toastService.ShowError($"Couldn't move the step: {result.Error}");
+        }
+    }
+
+    private async Task RenameStepAsync(DmxSceneStep step, ChangeEventArgs e)
+    {
+        string name = e.Value?.ToString() ?? string.Empty;
+        Result<bool> result = await _dmxSceneService.RenameStepAsync(step.Id, name);
+
+        if (result.IsSuccess)
+        {
+            step.Name = name.Trim();
+        }
+        else
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't rename the step.");
+        }
+    }
+
+    private async Task SetDurationAsync(DmxSceneStep step, ChangeEventArgs e)
+    {
+        if (!double.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double seconds))
+        {
+            return;
+        }
+
+        TimeSpan duration = TimeSpan.FromMilliseconds(Math.Round(seconds * 1000));
+        Result<bool> result = await _dmxSceneService.UpdateSceneStepDurationAsync(step.Id, duration);
+
+        if (result.IsSuccess)
+        {
+            step.Duration = duration;
+        }
+        else
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't change the step's length.");
+        }
+    }
+
+    private async Task SetFadeAsync(DmxSceneStep step, ChangeEventArgs e)
+    {
+        if (!double.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double seconds))
+        {
+            return;
+        }
+
+        TimeSpan fade = TimeSpan.FromMilliseconds(Math.Round(Math.Max(seconds, 0) * 1000));
+        Result<bool> result = await _dmxSceneService.UpdateSceneStepFadeAsync(step.Id, fade);
+
+        if (result.IsSuccess)
+        {
+            step.FadeTime = fade;
+
+            if (!scene!.BpmSyncEnabled && fade > step.Duration)
+            {
+                _toastService.ShowWarning($"The fade is longer than the step, so it will only fade for {step.Duration.TotalSeconds:0.##} s.");
+            }
+        }
+        else
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't change the fade.");
+        }
+    }
+
+    private async Task SetBeatsAsync(DmxSceneStep step, ChangeEventArgs e)
+    {
+        if (!double.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double beats))
+        {
+            return;
+        }
+
+        Result<bool> result = await _dmxSceneService.UpdateSceneStepBeatsAsync(step.Id, beats);
+
+        if (result.IsSuccess)
+        {
+            step.Beats = beats;
+        }
+        else
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't change the beats.");
+        }
+    }
+
+    private async Task CaptureLiveAsync()
+    {
+        if (await state.CaptureLiveIntoStepAsync())
+        {
+            _toastService.ShowSuccess("The step now matches the lights.");
+        }
+    }
+
+    private async Task RenameSceneAsync(ChangeEventArgs e)
+    {
+        string previous = scene!.Name;
+        scene.Name = e.Value?.ToString()?.Trim() ?? string.Empty;
+
+        Result<bool> result = await _dmxSceneService.UpdateSceneAsync(scene);
+
+        if (!result.IsSuccess)
+        {
+            scene.Name = previous;
+            _toastService.ShowError(result.Error ?? "Couldn't rename the scene.");
+        }
+    }
+
+    private void OnSettingsSaved(DmxScene saved)
+    {
+        // The step strip shows beats or seconds depending on BPM sync.
+        StateHasChanged();
+    }
+
+    private async Task ToggleRunAsync()
+    {
+        await state.FlushStepSavesAsync();
+
+        Result<bool> result = isRunning
+            ? await _dmxDesk.StopSceneAsync(scene!.ClientId, SceneId)
+            : await _dmxDesk.StartSceneAsync(scene!.ClientId, SceneId);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Couldn't {(isRunning ? "stop" : "run")} the scene: {result.Error}");
+        }
+    }
+
+    private void TogglePreview()
+    {
+        if (preview.IsActive)
+        {
+            preview.Stop();
+        }
+        else
+        {
+            preview.Start(SceneId, steps, scene!.Loop);
+        }
+    }
+
+    private void OnScrub(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int index))
+        {
+            preview.ScrubTo(index);
+        }
+    }
+
+    private Task SetOutputAsync(DmxDeskOutput output) => state.SetOutputAsync(output);
+
+    private void ToggleLock() => state.IsLocked = !state.IsLocked;
+
+    private async Task DeleteSceneAsync()
+    {
+        Result<IReadOnlyList<string>> rules = await _dmxSceneService.GetAutomationRulesUsingSceneAsync(SceneId);
+        IReadOnlyList<string> ruleNames = rules.Data ?? [];
+
+        string message = ruleNames.Count == 0
+            ? $"Delete '{scene!.Name}'? This can't be undone."
+            : $"Delete '{scene!.Name}'? These automation rules run it and will stop working: {string.Join(", ", ruleNames)}.";
+
+        DialogResult confirm = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Delete scene";
+            options.Width = "min(480px, calc(100vw - 32px))";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message), message);
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Delete scene");
+        });
+
+        if (confirm.Cancelled)
+        {
+            return;
+        }
+
+        Result<bool> result = await _dmxSceneService.DeleteSceneAsync(SceneId);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Couldn't delete the scene: {result.Error}");
+            return;
+        }
+
+        _toastService.ShowSuccess($"Deleted '{scene.Name}'.");
+        _navigationManager.NavigateTo(BackLink);
+    }
+
+    private async Task OnLeavingAsync(LocationChangingContext context)
+    {
+        await state.FlushStepSavesAsync();
+
+        // Leaving with "Show on lights" on would leave the kiosk on this step's look;
+        // that's fine (it's what the operator chose), but the preview loop must stop.
+        preview.Stop();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        state.Changed -= ScheduleRender;
+        preview.Changed -= OnPreviewChanged;
+        _renderTimer?.Dispose();
+        _sceneSubscription?.Dispose();
+        preview.Dispose();
+
+        await state.DisposeAsync();
+    }
+}

@@ -19,17 +19,20 @@ public class GdprService : IGdprService
     private readonly IDbContextFactory<ApplicationDbContext> _factory;
     private readonly UserManager<UserProfile> _userManager;
     private readonly ISecurityService _securityService;
+    private readonly IFileService _fileService;
     private readonly ILogger<GdprService> _logger;
 
     public GdprService(
         IDbContextFactory<ApplicationDbContext> factory,
         UserManager<UserProfile> userManager,
         ISecurityService securityService,
+        IFileService fileService,
         ILogger<GdprService> logger)
     {
         _factory = factory;
         _userManager = userManager;
         _securityService = securityService;
+        _fileService = fileService;
         _logger = logger;
     }
 
@@ -70,6 +73,13 @@ public class GdprService : IGdprService
             if (!auditResult.IsSuccess)
             {
                 return Result<bool>.Fail($"Failed to record erasure audit trail: {auditResult.Error}");
+            }
+
+            Result<bool> documentsResult = await RemoveStaffDocumentsAsync(userId);
+
+            if (!documentsResult.IsSuccess)
+            {
+                return Result<bool>.Fail($"Failed to remove staff documents: {documentsResult.Error}");
             }
 
             Result<bool> anonymizeResult = await AnonymizeAttributionAsync(userId);
@@ -125,6 +135,74 @@ public class GdprService : IGdprService
             });
 
             await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    // Their right-to-work checks, ID and certificates: the rows and the files behind them.
+    // Deleting the user would cascade the rows away on its own, but the files would be left
+    // behind with nothing pointing at them (Security Issue 9.8). The rows are deactivated
+    // first because FileService refuses to delete a file an active staff document still uses,
+    // then each file goes through FileService, which removes the bytes from storage and the
+    // now-inactive rows with them. Every step is safe to repeat if an earlier attempt failed.
+    private async Task<Result<bool>> RemoveStaffDocumentsAsync(string userId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<StaffDocument> documents = await ctx.StaffDocuments
+                .Where(x => x.UserId == userId)
+                .ToListAsync();
+
+            if (documents.Count == 0)
+            {
+                return Result<bool>.Ok(true);
+            }
+
+            foreach (StaffDocument document in documents)
+            {
+                document.IsActive = false;
+            }
+
+            await ctx.SaveChangesAsync();
+
+            foreach (Guid fileId in documents.Select(x => x.FileMetadataId).Distinct())
+            {
+                Result<bool> deleted = await _fileService.DeleteRestrictedFileAsync(fileId, CancellationToken.None);
+
+                if (deleted.IsSuccess)
+                {
+                    continue;
+                }
+
+                // Uploaded before staff documents were made restricted and somehow missed by the
+                // migration that flagged them, or already deleted by an earlier attempt.
+                if (await ctx.FileMetadata.AsNoTracking().AnyAsync(x => x.Id == fileId && !x.IsRestricted))
+                {
+                    deleted = await _fileService.DeleteFileAsync(fileId, CancellationToken.None);
+                }
+                else if (!await ctx.FileMetadata.AsNoTracking().AnyAsync(x => x.Id == fileId))
+                {
+                    continue;
+                }
+
+                if (!deleted.IsSuccess)
+                {
+                    _logger.LogWarning("Could not delete staff document file {FileId} while erasing {UserId}: {Error}", fileId, userId, deleted.Error);
+                    return Result<bool>.Fail(deleted.Error ?? "A staff document's file couldn't be deleted.");
+                }
+            }
+
+            // FileService removes the rows that pointed at each file; this catches any it didn't.
+            await using ApplicationDbContext cleanup = await _factory.CreateDbContextAsync();
+            cleanup.StaffDocuments.RemoveRange(await cleanup.StaffDocuments.Where(x => x.UserId == userId).ToListAsync());
+            await cleanup.SaveChangesAsync();
 
             return Result<bool>.Ok(true);
         }
@@ -295,6 +373,17 @@ public class GdprService : IGdprService
                 assignment.AssignedByUserId = null;
             }
 
+            // Documents they uploaded for other people stay with those people; only the
+            // uploader's name is taken off them.
+            List<StaffDocument> documentsUploaded = await ctx.StaffDocuments
+                .Where(x => x.UploadedByUserId == userId)
+                .ToListAsync();
+
+            foreach (StaffDocument document in documentsUploaded)
+            {
+                document.UploadedByUserId = ApplicationDbContext.SystemDeletedUserPlaceholderId;
+            }
+
             List<FileMetadata> uploadedFiles = await ctx.FileMetadata
                 .Where(x => x.UploadedBy == userId)
                 .ToListAsync();
@@ -338,6 +427,87 @@ public class GdprService : IGdprService
             foreach (StaffAvailability availability in availabilitySetByUser)
             {
                 availability.UpdatedByUserId = null;
+            }
+
+            List<StaffWorkPreference> preferencesSetByUser = await ctx.StaffWorkPreferences
+                .Where(x => x.UpdatedByUserId == userId)
+                .ToListAsync();
+
+            foreach (StaffWorkPreference preference in preferencesSetByUser)
+            {
+                preference.UpdatedByUserId = null;
+            }
+
+            List<PartyStaffingRule> staffingRulesSetByUser = await ctx.PartyStaffingRules
+                .Where(x => x.UpdatedByUserId == userId)
+                .ToListAsync();
+
+            foreach (PartyStaffingRule rule in staffingRulesSetByUser)
+            {
+                rule.UpdatedByUserId = null;
+            }
+
+            // Operations alerts they acknowledged or resolved stay as history, without their name.
+            // Every company's: the alert rows aren't theirs, only the attribution.
+            List<OperationsAlert> alertsHandledByUser = await ctx.OperationsAlerts
+                .IgnoreQueryFilters()
+                .Where(x => x.AcknowledgedByUserId == userId || x.ResolvedByUserId == userId)
+                .ToListAsync();
+
+            foreach (OperationsAlert alert in alertsHandledByUser)
+            {
+                if (alert.AcknowledgedByUserId == userId)
+                {
+                    alert.AcknowledgedByUserId = null;
+                }
+
+                if (alert.ResolvedByUserId == userId)
+                {
+                    alert.ResolvedByUserId = null;
+                }
+            }
+
+            List<TemplateSuggestionRun> runsDismissedByUser = await ctx.TemplateSuggestionRuns
+                .Where(x => x.DismissedByUserId == userId)
+                .ToListAsync();
+
+            foreach (TemplateSuggestionRun run in runsDismissedByUser)
+            {
+                run.DismissedByUserId = null;
+            }
+
+            List<ShiftTemplate> templatesTouchedByUser = await ctx.ShiftTemplates
+                .Where(x => x.CreateByUserId == userId || x.UpdateByUserId == userId)
+                .ToListAsync();
+
+            foreach (ShiftTemplate template in templatesTouchedByUser)
+            {
+                if (template.CreateByUserId == userId)
+                {
+                    template.CreateByUserId = null;
+                }
+
+                if (template.UpdateByUserId == userId)
+                {
+                    template.UpdateByUserId = null;
+                }
+            }
+
+            List<RotaHoliday> holidaysTouchedByUser = await ctx.RotaHolidays
+                .Where(x => x.CreateByUserId == userId || x.UpdateByUserId == userId)
+                .ToListAsync();
+
+            foreach (RotaHoliday holiday in holidaysTouchedByUser)
+            {
+                if (holiday.CreateByUserId == userId)
+                {
+                    holiday.CreateByUserId = null;
+                }
+
+                if (holiday.UpdateByUserId == userId)
+                {
+                    holiday.UpdateByUserId = null;
+                }
             }
 
             // Decisions and records this person made on other people's time off keep their
@@ -438,6 +608,15 @@ public class GdprService : IGdprService
 
             ctx.TimeOffRequests.RemoveRange(timeOffRequests);
 
+            // Alerts about them (a missed clock-in, overdue training, an expiring document) say
+            // something about that person, so they go rather than being anonymised.
+            List<OperationsAlert> alertsAboutUser = await ctx.OperationsAlerts
+                .IgnoreQueryFilters()
+                .Where(x => x.SubjectUserId == userId)
+                .ToListAsync();
+
+            ctx.OperationsAlerts.RemoveRange(alertsAboutUser);
+
             // Product feedback they sent: their own words, so it goes with them.
             List<UserFeedback> feedback = await ctx.UserFeedback
                 .Where(x => x.UserId == userId)
@@ -454,6 +633,8 @@ public class GdprService : IGdprService
             // When they said they can and can't work is theirs too. Every company's - the whole
             // account is going.
             ctx.StaffAvailabilities.RemoveRange(await ctx.StaffAvailabilities.IgnoreQueryFilters().Where(x => x.UserId == userId).ToListAsync());
+            ctx.StaffWorkPreferences.RemoveRange(await ctx.StaffWorkPreferences.IgnoreQueryFilters().Where(x => x.UserId == userId).ToListAsync());
+            ctx.ShiftTemplateSlotRegulars.RemoveRange(await ctx.ShiftTemplateSlotRegulars.IgnoreQueryFilters().Where(x => x.UserId == userId).ToListAsync());
 
             // Their devices and notification choices exist only for them.
             ctx.PushSubscriptions.RemoveRange(await ctx.PushSubscriptions.Where(x => x.UserId == userId).ToListAsync());

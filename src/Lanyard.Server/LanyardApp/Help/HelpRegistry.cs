@@ -79,7 +79,11 @@ public static class HelpRegistry
     public const string Automation = "automation";
     public const string Dmx = "dmx";
     public const string Kiosks = "kiosks";
+    public const string OperationsAlerts = "operations-alerts";
     public const string Insights = "insights";
+    public const string WhatsOn = "whats-on";
+    public const string Parties = "parties";
+    public const string BookingImport = "booking-import";
     public const string Feedback = "feedback";
 
     public static IReadOnlyList<HelpArea> Areas { get; } =
@@ -204,7 +208,7 @@ public static class HelpRegistry
 
         new(Music,
             "Music & Audio Clips",
-            "Playing music on a kiosk, the music schedule for each time of day, and audio clips over the music.",
+            "Playing music on a kiosk and setting its equaliser, the music schedule for each time of day, and audio clips over the music.",
             HelpAudience.Managers,
             () => new Icons.Regular.Size20.MusicNote2(),
             [
@@ -213,7 +217,7 @@ public static class HelpRegistry
                 new("clips", "Audio Clips")
             ],
             ["/music", "/manage/music-schedule", "/manage/audio-clips"],
-            Roles: "Admin,Manager,CanControlMusic,CanPlayAudioClips"),
+            Roles: "Admin,Manager,CanControlMusic,CanManagePlaylists,CanPlayAudioClips"),
 
         new(Projection,
             "Projection",
@@ -280,6 +284,47 @@ public static class HelpRegistry
             Roles: "Admin,Manager",
             Feature: CompanyFeature.Insights),
 
+        new(WhatsOn,
+            "What's On",
+            "A day timeline and a week view of the parties booked at a location, with totals and who's on the rota.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.CalendarAgenda(),
+            [
+                new("day", "Day View"),
+                new("week", "Week View"),
+                new("staff", "Totals & Staff")
+            ],
+            ["/manage/whats-on"],
+            Roles: "Admin,Manager",
+            Feature: CompanyFeature.Parties),
+
+        new(Parties,
+            "Parties",
+            "Booking parties, deposits and payments, printing the party documents, and the menus and printouts behind them.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.Balloon(),
+            [
+                new("bookings", "Booking a Party"),
+                new("payments", "Payments & Cancelling"),
+                new("printing", "Printing"),
+                new("settings", "Settings & Printouts")
+            ],
+            ["/manage/parties"],
+            Roles: "Admin,Manager",
+            Feature: CompanyFeature.Parties),
+
+        new(BookingImport,
+            "Booking Import",
+            "Bringing party bookings in automatically from Just Step Online, per location, and the record of each import run.",
+            HelpAudience.Admins,
+            () => new Icons.Regular.Size20.CloudArrowDown(),
+            [
+                new("setup", "Setting It Up"),
+                new("runs", "Import Runs & Alerts")
+            ],
+            ["/manage/booking-import"],
+            Roles: "Admin"),
+
         new(Feedback,
             "Lanyard Feedback",
             "Reading and replying to the thumbs and star ratings staff send about Lanyard.",
@@ -305,6 +350,21 @@ public static class HelpRegistry
             ],
             ["/manage/users", "/manage/roles", "/manage/companies-locations"],
             Roles: "Admin,Manager"),
+
+        new(OperationsAlerts,
+            "Operations Alerts",
+            "One list of what needs attention: kiosks, automation rules, missed clock-ins, overdue training and expiring documents.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.Alert(),
+            [
+                new("overview", "Overview"),
+                new("handling", "Acknowledge & Resolve"),
+                new("types", "Alert Types"),
+                new("widget", "On a Dashboard")
+            ],
+            ["/manage/alerts"],
+            Roles: "Admin,Manager",
+            Feature: CompanyFeature.OperationsAlerts),
 
         new(Compliance,
             "Compliance",

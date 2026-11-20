@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Hosting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -30,6 +32,7 @@ public class FileService : IFileService
     private readonly bool _isDevelopment;
     private readonly string? _bucketName;
     private readonly IAmazonS3? _s3Client;
+    private readonly ILogger<FileService> _logger;
     private static readonly string[] _audioExtensions = [".mp3", ".wav", ".flac", ".ogg", ".aac", ".m4a", ".wma"];
 
     public const string RangeNotSatisfiableError = "Requested range not satisfiable.";
@@ -43,9 +46,11 @@ public class FileService : IFileService
         ISongAnalysisQueue analysisQueue,
         IWebHostEnvironment environment,
         IAmazonS3? s3Client = null,
-        IDemoGuard? demoGuard = null)
+        IDemoGuard? demoGuard = null,
+        ILogger<FileService>? logger = null)
     {
         _dbFactory = dbFactory;
+        _logger = logger ?? NullLogger<FileService>.Instance;
         _demoGuard = demoGuard;
         _storageRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Lanyard", "UploadedFiles");
         _currentUserAccessor = currentUserAccessor;
@@ -139,6 +144,22 @@ public class FileService : IFileService
                 return Result<FileMetadata>.Fail("Uploading files isn't available in the demo.");
 
             string fileName = Path.GetFileName(file.FileName);
+
+            if (FileUploadPolicy.Check(fileName, file.Length) is string refusal)
+                return Result<FileMetadata>.Fail(refusal);
+
+            string contentType = FileUploadPolicy.ContentTypeFor(fileName);
+
+            // The tenant filter hides other companies' folders, so this also stops a folder id
+            // from another company being used as the destination (and as the storage prefix).
+            if (folderId.HasValue)
+            {
+                await using ApplicationDbContext folderCheck = await _dbFactory.CreateDbContextAsync(cancellationToken);
+
+                if (!await folderCheck.Folders.AnyAsync(x => x.Id == folderId.Value, cancellationToken))
+                    return Result<FileMetadata>.Fail("Folder not found.");
+            }
+
             Guid fileId = Guid.NewGuid();
             string filePath;
 
@@ -173,7 +194,7 @@ public class FileService : IFileService
                     BucketName = _bucketName,
                     Key = key,
                     InputStream = file.OpenReadStream(),
-                    ContentType = file.ContentType,
+                    ContentType = contentType,
                     AutoCloseStream = true
                 };
 
@@ -189,11 +210,12 @@ public class FileService : IFileService
                 FileName = fileName,
                 FilePath = filePath,
                 FileSize = file.Length,
-                ContentType = file.ContentType,
+                ContentType = contentType,
                 UploadedAt = DateTime.UtcNow,
                 UploadedBy = uploadedBy,
                 FolderId = folderId,
-                IsActive = true
+                IsActive = true,
+                IsRestricted = options.IsRestricted
             };
 
             db.FileMetadata.Add(metadata);
@@ -234,7 +256,8 @@ public class FileService : IFileService
         }
         catch (Exception ex)
         {
-            return Result<FileMetadata>.Fail($"Failed to upload file: {ex.Message}");
+            _logger.LogError(ex, "Failed to upload file");
+            return Result<FileMetadata>.Fail("Failed to upload file.");
         }
     }
 
@@ -247,9 +270,9 @@ public class FileService : IFileService
 
             await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
-            FileMetadata? file = await db.FileMetadata.FindAsync(new object[] { fileId }, cancellationToken);
+            FileMetadata? file = await db.FileMetadata.FirstOrDefaultAsync(x => x.Id == fileId, cancellationToken);
 
-            if (file == null)
+            if (file == null || file.IsRestricted)
                 return Result<FileMetadata>.Fail("File not found.");
 
             file.FileName = newName;
@@ -260,25 +283,30 @@ public class FileService : IFileService
         }
         catch (Exception ex)
         {
-            return Result<FileMetadata>.Fail($"Failed to rename file: {ex.Message}");
+            _logger.LogError(ex, "Failed to rename file");
+            return Result<FileMetadata>.Fail("Failed to rename file.");
         }
     }
 
-    public async Task<Result<bool>> DeleteFileAsync(Guid fileId, CancellationToken cancellationToken)
+    public Task<Result<bool>> DeleteFileAsync(Guid fileId, CancellationToken cancellationToken) =>
+        DeleteFileCoreAsync(fileId, restricted: false, cancellationToken);
+
+    public Task<Result<bool>> DeleteRestrictedFileAsync(Guid fileId, CancellationToken cancellationToken) =>
+        DeleteFileCoreAsync(fileId, restricted: true, cancellationToken);
+
+    private async Task<Result<bool>> DeleteFileCoreAsync(Guid fileId, bool restricted, CancellationToken cancellationToken)
     {
         try
         {
             await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
-            FileMetadata? file = await db.FileMetadata.FindAsync(new object[] { fileId }, cancellationToken);
+            FileMetadata? file = await db.FileMetadata.FirstOrDefaultAsync(x => x.Id == fileId, cancellationToken);
 
-            if (file == null)
+            if (file == null || file.IsRestricted != restricted)
                 return Result<bool>.Fail("File not found.");
 
-            // Checked before touching storage, not just relying on the FK's Restrict behavior at
-            // SaveChangesAsync - the physical delete below happens first and can't be rolled back,
-            // so catching this only at the DB step would still lose the bytes while leaving the
-            // referencing StaffDocument/attachment row pointing at nothing.
+            // Checked up front for a clear message rather than leaving it to the FK's Restrict
+            // behaviour at SaveChangesAsync.
             bool isReferenced = await db.StaffDocuments.AnyAsync(x => x.FileMetadataId == file.Id && x.IsActive, cancellationToken)
                 || await db.CompanyOnboardingStandingAttachments.AnyAsync(x => x.FileMetadataId == file.Id && x.IsActive, cancellationToken);
 
@@ -314,24 +342,6 @@ public class FileService : IFileService
                 .ToListAsync(cancellationToken);
             db.CompanyOnboardingStandingAttachments.RemoveRange(inactiveStandingAttachments);
 
-            if (_isDevelopment)
-            {
-                if (File.Exists(file.FilePath))
-                    File.Delete(file.FilePath);
-            }
-            else
-            {
-                EnsureS3Configured();
-
-                DeleteObjectRequest deleteRequest = new()
-                {
-                    BucketName = _bucketName,
-                    Key = file.FilePath
-                };
-
-                await _s3Client!.DeleteObjectAsync(deleteRequest, cancellationToken);
-            }
-
             // Retire the song backed by this file (if any) so it drops out of the library.
             // Done before the file row is removed; the FK is configured to null on delete.
             List<Song> songs = await db.Songs
@@ -345,13 +355,42 @@ public class FileService : IFileService
 
             db.FileMetadata.Remove(file);
 
+            // The rows go first and the bytes after (Security Issue 9.4). If the save fails -
+            // a reference added meanwhile, or a write the tenant check refuses - nothing has
+            // been lost; if the storage delete fails afterwards, the worst case is unreferenced
+            // bytes, which is logged, never a row pointing at a file that no longer exists.
             await db.SaveChangesAsync(cancellationToken);
+
+            await DeleteStoredFileAsync(file.FilePath);
 
             return Result<bool>.Ok(true);
         }
         catch (Exception ex)
         {
-            return Result<bool>.Fail($"Failed to delete file: {ex.Message}");
+            _logger.LogError(ex, "Failed to delete file");
+            return Result<bool>.Fail("Failed to delete file.");
+        }
+    }
+
+    private async Task DeleteStoredFileAsync(string filePath)
+    {
+        try
+        {
+            if (_isDevelopment)
+            {
+                if (File.Exists(filePath))
+                    File.Delete(filePath);
+
+                return;
+            }
+
+            EnsureS3Configured();
+
+            await _s3Client!.DeleteObjectAsync(new DeleteObjectRequest { BucketName = _bucketName, Key = filePath }, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Deleted the file row but couldn't remove {FilePath} from storage; the bytes are left unreferenced", filePath);
         }
     }
 
@@ -364,7 +403,7 @@ public class FileService : IFileService
             FileMetadata? file = await db.FileMetadata
                 .AsNoTracking()
                 .TagWithCallSite()
-                .FirstOrDefaultAsync(f => f.Id == fileId, cancellationToken);
+                .FirstOrDefaultAsync(f => f.Id == fileId && !f.IsRestricted, cancellationToken);
 
             if (file == null)
                 return Result<FileMetadata>.Fail("File not found.");
@@ -373,7 +412,8 @@ public class FileService : IFileService
         }
         catch (Exception ex)
         {
-            return Result<FileMetadata>.Fail($"Failed to get file metadata: {ex.Message}");
+            _logger.LogError(ex, "Failed to get file metadata");
+            return Result<FileMetadata>.Fail("Failed to get file metadata.");
         }
     }
 
@@ -388,14 +428,15 @@ public class FileService : IFileService
             List<FileMetadata> files = await db.FileMetadata
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(f => f.FolderId == folderId)
+                .Where(f => f.FolderId == folderId && !f.IsRestricted)
                 .ToListAsync(cancellationToken);
 
             return Result<IReadOnlyList<FileMetadata>>.Ok(files);
         }
         catch (Exception ex)
         {
-            return Result<IReadOnlyList<FileMetadata>>.Fail($"Failed to list files: {ex.Message}");
+            _logger.LogError(ex, "Failed to list files");
+            return Result<IReadOnlyList<FileMetadata>>.Fail("Failed to list files.");
         }
     }
 
@@ -420,6 +461,9 @@ public class FileService : IFileService
 
             await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
+            if (parentFolderId.HasValue && !await db.Folders.AnyAsync(x => x.Id == parentFolderId.Value, cancellationToken))
+                return Result<Folder>.Fail("Parent folder not found.");
+
             Folder folder = new()
             {
                 Id = Guid.NewGuid(),
@@ -443,7 +487,8 @@ public class FileService : IFileService
         }
         catch (Exception ex)
         {
-            return Result<Folder>.Fail($"Failed to create folder: {ex.Message}");
+            _logger.LogError(ex, "Failed to create folder");
+            return Result<Folder>.Fail("Failed to create folder.");
         }
     }
 
@@ -456,7 +501,7 @@ public class FileService : IFileService
 
             await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
-            Folder? folder = await db.Folders.FindAsync(new object[] { folderId }, cancellationToken);
+            Folder? folder = await db.Folders.FirstOrDefaultAsync(x => x.Id == folderId, cancellationToken);
 
             if (folder == null)
                 return Result<Folder>.Fail("Folder not found.");
@@ -469,75 +514,50 @@ public class FileService : IFileService
         }
         catch (Exception ex)
         {
-            return Result<Folder>.Fail($"Failed to rename folder: {ex.Message}");
+            _logger.LogError(ex, "Failed to rename folder");
+            return Result<Folder>.Fail("Failed to rename folder.");
         }
     }
 
+    // Only an empty folder can be deleted. Its storage prefix is never wiped: moving a file
+    // changes its FolderId but not where its bytes live, so files moved out of this folder still
+    // sit under its prefix, and deleting the prefix used to destroy them (Security Issue 9.4).
     public async Task<Result<bool>> DeleteFolderAsync(Guid folderId, CancellationToken cancellationToken)
     {
         try
         {
             await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
-            Folder? folder = await db.Folders.FindAsync(new object[] { folderId }, cancellationToken);
+            Folder? folder = await db.Folders.FirstOrDefaultAsync(x => x.Id == folderId, cancellationToken);
 
             if (folder == null)
                 return Result<bool>.Fail("Folder not found.");
 
+            bool hasContents = await db.FileMetadata.AnyAsync(x => x.FolderId == folderId, cancellationToken)
+                || await db.Folders.AnyAsync(x => x.ParentFolderId == folderId, cancellationToken);
+
+            if (hasContents)
+                return Result<bool>.Fail("Only an empty folder can be deleted. Move or delete what's in it first.");
+
+            db.Folders.Remove(folder);
+
+            await db.SaveChangesAsync(cancellationToken);
+
             if (_isDevelopment)
             {
-                db.Folders.Remove(folder);
-
-                await db.SaveChangesAsync(cancellationToken);
-
                 string folderPath = Path.Combine(_storageRoot, folderId.ToString());
 
-                if (Directory.Exists(folderPath))
-                    Directory.Delete(folderPath, true);
-            }
-            else
-            {
-                EnsureS3Configured();
-
-                string prefix = folderId + "/";
-                string? continuationToken = null;
-
-                do
-                {
-                    ListObjectsV2Request listRequest = new()
-                    {
-                        BucketName = _bucketName,
-                        Prefix = prefix,
-                        ContinuationToken = continuationToken
-                    };
-
-                    ListObjectsV2Response listResponse = await _s3Client!.ListObjectsV2Async(listRequest, cancellationToken);
-
-                    if (listResponse.S3Objects.Count > 0)
-                    {
-                        DeleteObjectsRequest deleteRequest = new()
-                        {
-                            BucketName = _bucketName,
-                            Objects = listResponse.S3Objects.Select(o => new KeyVersion { Key = o.Key }).ToList()
-                        };
-
-                        await _s3Client.DeleteObjectsAsync(deleteRequest, cancellationToken);
-                    }
-
-                    continuationToken = listResponse.IsTruncated == true ? listResponse.NextContinuationToken : null;
-                }
-                while (!string.IsNullOrWhiteSpace(continuationToken));
-
-                db.Folders.Remove(folder);
-
-                await db.SaveChangesAsync(cancellationToken);
+                // Not recursive, for the same reason as above.
+                if (Directory.Exists(folderPath) && !Directory.EnumerateFileSystemEntries(folderPath).Any())
+                    Directory.Delete(folderPath);
             }
 
             return Result<bool>.Ok(true);
         }
         catch (Exception ex)
         {
-            return Result<bool>.Fail($"Failed to delete folder: {ex.Message}");
+            _logger.LogError(ex, "Failed to delete folder {FolderId}", folderId);
+            return Result<bool>.Fail("Failed to delete folder.");
         }
     }
 
@@ -558,7 +578,8 @@ public class FileService : IFileService
         }
         catch (Exception ex)
         {
-            return Result<IReadOnlyList<Folder>>.Fail($"Failed to list folders: {ex.Message}");
+            _logger.LogError(ex, "Failed to list folders");
+            return Result<IReadOnlyList<Folder>>.Fail("Failed to list folders.");
         }
     }
 
@@ -580,7 +601,8 @@ public class FileService : IFileService
         }
         catch (Exception ex)
         {
-            return Result<Folder>.Fail($"Failed to get folder: {ex.Message}");
+            _logger.LogError(ex, "Failed to get folder");
+            return Result<Folder>.Fail("Failed to get folder.");
         }
     }
 
@@ -593,7 +615,7 @@ public class FileService : IFileService
             FileMetadata? file = await db.FileMetadata
                 .AsNoTracking()
                 .TagWithCallSite()
-                .FirstOrDefaultAsync(f => f.Id == fileId, cancellationToken);
+                .FirstOrDefaultAsync(f => f.Id == fileId && !f.IsRestricted, cancellationToken);
 
             if (_isDevelopment)
             {
@@ -622,11 +644,18 @@ public class FileService : IFileService
         }
         catch (Exception ex)
         {
-            return Result<Stream>.Fail($"Failed to download file: {ex.Message}");
+            _logger.LogError(ex, "Failed to download file");
+            return Result<Stream>.Fail("Failed to download file.");
         }
     }
 
-    public async Task<Result<FileContent>> OpenFileContentAsync(Guid fileId, FileByteRange? range, CancellationToken cancellationToken)
+    public Task<Result<FileContent>> OpenFileContentAsync(Guid fileId, FileByteRange? range, CancellationToken cancellationToken) =>
+        OpenFileContentCoreAsync(fileId, range, restricted: false, cancellationToken);
+
+    public Task<Result<FileContent>> OpenRestrictedFileContentAsync(Guid fileId, FileByteRange? range, CancellationToken cancellationToken) =>
+        OpenFileContentCoreAsync(fileId, range, restricted: true, cancellationToken);
+
+    private async Task<Result<FileContent>> OpenFileContentCoreAsync(Guid fileId, FileByteRange? range, bool restricted, CancellationToken cancellationToken)
     {
         try
         {
@@ -635,7 +664,7 @@ public class FileService : IFileService
             FileMetadata? file = await db.FileMetadata
                 .AsNoTracking()
                 .TagWithCallSite()
-                .FirstOrDefaultAsync(f => f.Id == fileId, cancellationToken);
+                .FirstOrDefaultAsync(f => f.Id == fileId && f.IsRestricted == restricted, cancellationToken);
 
             if (file == null)
                 return Result<FileContent>.Fail("File not found.");
@@ -694,7 +723,8 @@ public class FileService : IFileService
         }
         catch (Exception ex)
         {
-            return Result<FileContent>.Fail($"Failed to open file: {ex.Message}");
+            _logger.LogError(ex, "Failed to open file");
+            return Result<FileContent>.Fail("Failed to open file.");
         }
     }
 
@@ -722,14 +752,14 @@ public class FileService : IFileService
         {
             await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
-            FileMetadata? file = await db.FileMetadata.FindAsync(new object[] { fileId }, cancellationToken);
+            FileMetadata? file = await db.FileMetadata.FirstOrDefaultAsync(x => x.Id == fileId, cancellationToken);
 
-            if (file == null)
+            if (file == null || file.IsRestricted)
                 return Result<FileMetadata>.Fail("File not found.");
 
             if (destinationFolderId.HasValue)
             {
-                Folder? destinationFolder = await db.Folders.FindAsync(new object[] { destinationFolderId.Value }, cancellationToken);
+                Folder? destinationFolder = await db.Folders.FirstOrDefaultAsync(x => x.Id == destinationFolderId.Value, cancellationToken);
 
                 if (destinationFolder == null)
                     return Result<FileMetadata>.Fail("Destination folder not found.");
@@ -743,7 +773,8 @@ public class FileService : IFileService
         }
         catch (Exception ex)
         {
-            return Result<FileMetadata>.Fail($"Failed to move file: {ex.Message}");
+            _logger.LogError(ex, "Failed to move file");
+            return Result<FileMetadata>.Fail("Failed to move file.");
         }
     }
 }

@@ -1,0 +1,104 @@
+.menu-section {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.menu-section-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.menu-section-heading h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.menu-section-hint,
+.menu-empty {
+    color: var(--colorNeutralForeground3);
+    font-size: 0.9rem;
+}
+
+.menu-items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.menu-item {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 6px;
+}
+
+.menu-item-editing {
+    display: block;
+    border-color: var(--colorBrandStroke1);
+}
+
+.menu-item-text {
+    min-width: 0;
+    padding-top: 4px;
+}
+
+.menu-item-name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.menu-item-description {
+    font-weight: 400;
+    color: var(--colorNeutralForeground3);
+    margin-left: 4px;
+}
+
+.menu-item-allergens {
+    font-size: 0.85rem;
+    color: var(--colorNeutralForeground2);
+    overflow-wrap: anywhere;
+}
+
+.menu-item-missing {
+    font-style: italic;
+    color: var(--colorNeutralForeground3);
+}
+
+.menu-item-actions {
+    display: flex;
+    flex-shrink: 0;
+}
+
+.menu-edit {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.menu-edit ::deep fluent-field {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.menu-edit ::deep .menu-full,
+.menu-edit ::deep .menu-full fluent-text-input,
+.menu-edit ::deep .menu-full fluent-textarea {
+    width: 100%;
+    max-width: none;
+}
+
+.menu-edit-actions {
+    display: flex;
+    gap: 8px;
+}

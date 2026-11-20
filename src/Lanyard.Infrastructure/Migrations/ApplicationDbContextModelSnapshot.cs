@@ -19,7 +19,7 @@ namespace Lanyard.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.11")
+                .HasAnnotation("ProductVersion", "10.0.15")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -77,9 +77,15 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<bool>("PromiscuousCapture")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("SourceIp")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<bool>("UseCaptureFilter")
+                        .HasColumnType("boolean");
 
                     b.Property<int>("ZoneScoreboardVersion")
                         .HasColumnType("integer");
@@ -605,6 +611,109 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("AutomationRuleExecutions");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.BookingImportRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("BookingsSeen")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("Failed")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Imported")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Skipped")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Trigger")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Updated")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("StartedAtUtc");
+
+                    b.HasIndex("LocationId", "StartedAtUtc");
+
+                    b.ToTable("BookingImportRuns");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.BookingImportSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ActiveEndHour")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ActiveStartHour")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("FrequencyHours")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PasswordProtected")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("LocationId")
+                        .IsUnique();
+
+                    b.ToTable("BookingImportSettings");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.CalendarFeedToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -972,6 +1081,15 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Property<DateTime>("CreateDate")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("EqBassDb")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EqMidDb")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EqTrebleDb")
+                        .HasColumnType("integer");
 
                     b.Property<int?>("LastAuthMethod")
                         .HasColumnType("integer");
@@ -1582,6 +1700,9 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("SeasonalThemeSetting")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ThemeColorHex")
                         .HasColumnType("text");
 
@@ -1737,6 +1858,9 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Property<decimal>("HoursPerDay")
                         .HasColumnType("numeric");
+
+                    b.Property<int>("MissedClockInAlertMinutes")
+                        .HasColumnType("integer");
 
                     b.Property<int>("PayPeriod")
                         .HasColumnType("integer");
@@ -2177,6 +2301,31 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("ClientAvailableDmxDevices");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxClientOutputState", b =>
+                {
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte>("GrandMaster")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((byte)255);
+
+                    b.Property<bool>("IsBlackout")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("UpdatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<byte[]>("Values")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.HasKey("ClientId");
+
+                    b.ToTable("DmxClientOutputStates");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxFixture", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2593,6 +2742,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<TimeSpan>("Duration")
                         .HasColumnType("interval");
 
+                    b.Property<TimeSpan>("FadeTime")
+                        .HasColumnType("interval");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -2652,9 +2804,10 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.HasIndex("CreateByUserId");
 
-                    b.HasIndex("SceneStepId");
-
                     b.HasIndex("UpdateByUserId");
+
+                    b.HasIndex("SceneStepId", "ChannelNumber")
+                        .IsUnique();
 
                     b.ToTable("DmxSceneStepChannelValues");
                 });
@@ -2689,6 +2842,9 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsRestricted")
                         .HasColumnType("boolean");
 
                     b.Property<DateTime>("UploadedAt")
@@ -3005,6 +3161,399 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("NotificationPreferences");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.OperationsAlert", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("AcknowledgedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AcknowledgedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DedupKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Detail")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime>("LastSeenAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LinkUrl")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<int?>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("OccurrenceCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("RaisedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("Resolution")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ResolutionNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("ResolvedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ResolvedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Severity")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("SubjectClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SubjectRuleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SubjectUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AcknowledgedByUserId");
+
+                    b.HasIndex("LocationId");
+
+                    b.HasIndex("ResolvedAtUtc");
+
+                    b.HasIndex("ResolvedByUserId");
+
+                    b.HasIndex("SubjectUserId");
+
+                    b.HasIndex("CompanyId", "DedupKey")
+                        .IsUnique()
+                        .HasFilter("\"Status\" <> 3");
+
+                    b.HasIndex("CompanyId", "Status", "LocationId");
+
+                    b.ToTable("OperationsAlerts");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.PartyBooking", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AllergyNotes")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("BalancePaidUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("ChildAgeTurning")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ChildName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ContactEmail")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContactName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContactPhone")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("CreateByUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("DepositAmount")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<DateTime?>("DepositPaidUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("EatTimeUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("EndUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("ExpectedAdults")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ExpectedChildren")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("ExternalIsProvisional")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ExternalLastImportedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExternalRef")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ExternalSource")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("HireKind")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LaserTagTimeUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MenuType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PartyHostUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PartyType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PaymentNotes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Room")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("StartUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("TotalPrice")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<string>("UpdateByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("PartyHostUserId");
+
+                    b.HasIndex("LocationId", "StartUtc");
+
+                    b.HasIndex("LocationId", "ExternalSource", "ExternalRef")
+                        .IsUnique();
+
+                    b.ToTable("PartyBookings");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.PartyDocumentTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ArtworkFileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Document")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FieldsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Font")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("HeightMm")
+                        .HasPrecision(6, 1)
+                        .HasColumnType("numeric(6,1)");
+
+                    b.Property<DateTime>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("VoucherValidityMonths")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("WidthMm")
+                        .HasPrecision(6, 1)
+                        .HasColumnType("numeric(6,1)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "Document")
+                        .IsUnique();
+
+                    b.ToTable("PartyDocumentTemplates");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.PartyLocationSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DefaultLengthMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("EatTimeOffsetMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("LaserTagOffsetMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LocationId")
+                        .IsUnique();
+
+                    b.ToTable("PartyLocationSettings");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.PartyMenuItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AllergenText")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UpdateByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LocationId", "Kind", "SortOrder");
+
+                    b.ToTable("PartyMenuItems");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.PartyStaffingRule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("HireKind")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PartyType")
+                        .HasColumnType("text");
+
+                    b.Property<int>("StaffCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("StaffPositionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("LocationId");
+
+                    b.HasIndex("StaffPositionId");
+
+                    b.ToTable("PartyStaffingRules");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Playlist", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3064,13 +3613,16 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<DateTime?>("DeleteDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
                     b.HasKey("SongId", "PlaylistId");
 
                     b.HasIndex("CreateByUserId");
 
                     b.HasIndex("DeleteByUserId");
 
-                    b.HasIndex("PlaylistId");
+                    b.HasIndex("PlaylistId", "Position");
 
                     b.ToTable("PlaylistSongMembers");
                 });
@@ -3214,6 +3766,59 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("ProjectionProgramStepTemplateParameters");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.RotaHoliday", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CreateByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int?>("StaffLike")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("UpdateByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("LocationId", "StartDate");
+
+                    b.ToTable("RotaHolidays");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Shift", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3241,6 +3846,9 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Property<string>("Notes")
                         .HasColumnType("text");
+
+                    b.Property<Guid?>("PartyBookingId")
+                        .HasColumnType("uuid");
 
                     b.Property<int?>("PublishedBreakMinutes")
                         .HasColumnType("integer");
@@ -3282,6 +3890,8 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PartyBookingId");
 
                     b.HasIndex("StaffPositionId");
 
@@ -3345,6 +3955,118 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("ShiftClaims");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ShiftTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("BreakMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CreateByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("EffectiveFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("EffectiveTo")
+                        .HasColumnType("date");
+
+                    b.Property<TimeOnly>("EndTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Runs")
+                        .HasColumnType("integer");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<string>("UpdateByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("LocationId", "DayOfWeek");
+
+                    b.ToTable("ShiftTemplates");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ShiftTemplateSlot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Headcount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ShiftTemplateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("StaffPositionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StaffPositionId");
+
+                    b.HasIndex("ShiftTemplateId", "StaffPositionId")
+                        .IsUnique();
+
+                    b.ToTable("ShiftTemplateSlots");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ShiftTemplateSlotRegular", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ShiftTemplateSlotId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("ShiftTemplateSlotId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("ShiftTemplateSlotRegulars");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Song", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3397,9 +4119,9 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.HasIndex("BpmAnalysisStatus");
 
-                    b.HasIndex("CompanyId");
-
                     b.HasIndex("FileMetadataId");
+
+                    b.HasIndex("CompanyId", "IsActive", "Name");
 
                     b.ToTable("Songs");
                 });
@@ -3600,6 +4322,87 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("StaffPositionRequiredCourses");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.StaffWorkPreference", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("MaxHoursPerWeek")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<int?>("MaxShiftsPerWeek")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("CompanyId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("StaffWorkPreferences");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.TemplateSuggestionRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DismissedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DismissedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("FirstSetup")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateOnly>("From")
+                        .HasColumnType("date");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MatchPercent")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("RunUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Suggestions")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("To")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("LocationId", "RunUtc");
+
+                    b.ToTable("TemplateSuggestionRuns");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.TimeEntry", b =>
@@ -4071,6 +4874,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<bool>("ShowMessagePreviews")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("ShowSeasonalThemes")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("boolean");
 
@@ -4507,6 +5313,19 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasDiscriminator().HasValue(11);
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.OperationsAlertsWidget", b =>
+                {
+                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
+
+                    b.Property<int?>("AlertMinimumSeverity")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("AlertOnlyUnacknowledged")
+                        .HasColumnType("boolean");
+
+                    b.HasDiscriminator().HasValue(20);
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.PendingTimeOffWidget", b =>
                 {
                     b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
@@ -4551,6 +5370,21 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.HasDiscriminator().HasValue(2);
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.WhatsOnTodayWidget", b =>
+                {
+                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
+
+                    b.Property<int?>("LocationId")
+                        .HasColumnType("integer")
+                        .HasColumnName("WhatsOnTodayWidget_LocationId");
+
+                    b.Property<int>("MaxItems")
+                        .HasColumnType("integer")
+                        .HasColumnName("WhatsOnTodayWidget_MaxItems");
+
+                    b.HasDiscriminator().HasValue(21);
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.WhoIsOnTodayWidget", b =>
@@ -4805,6 +5639,44 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("AutomationRule");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.BookingImportRun", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Location");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.BookingImportSettings", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Location");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.CalendarFeedToken", b =>
@@ -5329,6 +6201,17 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("Client");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxClientOutputState", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxFixture", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
@@ -5626,6 +6509,129 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.OperationsAlert", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "AcknowledgedByUser")
+                        .WithMany()
+                        .HasForeignKey("AcknowledgedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "ResolvedByUser")
+                        .WithMany()
+                        .HasForeignKey("ResolvedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "SubjectUser")
+                        .WithMany()
+                        .HasForeignKey("SubjectUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("AcknowledgedByUser");
+
+                    b.Navigation("Location");
+
+                    b.Navigation("ResolvedByUser");
+
+                    b.Navigation("SubjectUser");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.PartyBooking", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "PartyHost")
+                        .WithMany()
+                        .HasForeignKey("PartyHostUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Location");
+
+                    b.Navigation("PartyHost");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.PartyDocumentTemplate", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.PartyLocationSettings", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Location");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.PartyMenuItem", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Location");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.PartyStaffingRule", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.StaffPosition", "StaffPosition")
+                        .WithMany()
+                        .HasForeignKey("StaffPositionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Location");
+
+                    b.Navigation("StaffPosition");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Playlist", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.Company", null)
@@ -5736,6 +6742,25 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("Template");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.RotaHoliday", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Location");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Shift", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
@@ -5743,6 +6768,11 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasForeignKey("LocationId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.PartyBooking", "PartyBooking")
+                        .WithMany()
+                        .HasForeignKey("PartyBookingId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("Lanyard.Infrastructure.Models.StaffPosition", "StaffPosition")
                         .WithMany()
@@ -5755,6 +6785,8 @@ namespace Lanyard.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Location");
+
+                    b.Navigation("PartyBooking");
 
                     b.Navigation("StaffPosition");
 
@@ -5790,6 +6822,63 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("ParentClaim");
 
                     b.Navigation("Shift");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ShiftTemplate", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Location");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ShiftTemplateSlot", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.ShiftTemplate", "ShiftTemplate")
+                        .WithMany("Slots")
+                        .HasForeignKey("ShiftTemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.StaffPosition", "StaffPosition")
+                        .WithMany()
+                        .HasForeignKey("StaffPositionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ShiftTemplate");
+
+                    b.Navigation("StaffPosition");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ShiftTemplateSlotRegular", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.ShiftTemplateSlot", "ShiftTemplateSlot")
+                        .WithMany("Regulars")
+                        .HasForeignKey("ShiftTemplateSlotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ShiftTemplateSlot");
 
                     b.Navigation("User");
                 });
@@ -5901,6 +6990,44 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("Course");
 
                     b.Navigation("StaffPosition");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.StaffWorkPreference", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.TemplateSuggestionRun", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Location");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.TimeEntry", b =>
@@ -6144,7 +7271,9 @@ namespace Lanyard.Infrastructure.Migrations
 
                             b1.ToTable("AspNetUserPasskeys");
 
-                            b1.ToJson("Data");
+                            b1
+                                .ToJson("Data")
+                                .HasColumnType("jsonb");
 
                             b1.WithOwner()
                                 .HasForeignKey("IdentityUserPasskeyCredentialId");
@@ -6301,6 +7430,16 @@ namespace Lanyard.Infrastructure.Migrations
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgramStepTemplate", b =>
                 {
                     b.Navigation("Parameters");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ShiftTemplate", b =>
+                {
+                    b.Navigation("Slots");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ShiftTemplateSlot", b =>
+                {
+                    b.Navigation("Regulars");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.StaffPosition", b =>

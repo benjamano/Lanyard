@@ -6,10 +6,35 @@
 
     <HelpSection Title="Making a scene">
         <ol>
-            <li>Create a new scene and give it a <strong>Scene name</strong>.</li>
-            <li>Turn on edit mode, then add steps. Set the sliders for each step and its <strong>Duration</strong> (hh:mm:ss).</li>
-            <li>Use the save button to keep the step, or cancel to undo it.</li>
+            <li>On the desk, press <strong>New scene</strong> and give it a name. Its editor opens. (The pencil next to
+                a scene opens the editor later.)</li>
+            <li>Press <strong>Add step</strong>. A step is one look: the levels the lights go to, and how long they hold.</li>
+            <li>Set the step with the fixture cards or the <strong>Channels</strong> faders below. Everything saves as
+                you go; the top bar says <strong>Saved</strong>.</li>
+            <li>Set how long the step lasts in <strong>Seconds</strong> (fractions work, such as 0.25 for a fast chase), and
+                give it a <strong>Name</strong> if you like.</li>
+            <li>To blend into a step instead of snapping to it, set <strong>Fade in (s)</strong>. The fade is part of the
+                step's length, not extra: a 2 second step with a 1 second fade fades for 1 second, then holds for 1. A fade
+                longer than the step is cut to fit.</li>
+            <li>Add more steps. Each step shows small coloured blocks for how the lights will look.</li>
         </ol>
+    </HelpSection>
+
+    <HelpSection Title="Working on steps">
+        <ul>
+            <li>Drag a step to move it, or use the arrows. <strong>Duplicate</strong> copies a step to just after itself,
+                and <strong>Delete step</strong> removes it.</li>
+            <li><strong>Capture lights</strong> makes the step look exactly like the lights do right now, so you can set
+                a look on the desk first and then save it into a step.</li>
+            <li>On the <strong>Channels</strong> tab, dimmed faders aren't part of the step: when it plays, those channels
+                are left as they are (which is different from 0). Move a fader to add it; press <strong>×</strong> to
+                take a channel out.</li>
+            <li>The editor starts <strong>Blind</strong>, so the lights don't change while you work. Choose
+                <strong>Show on lights</strong> to see the selected step on the kiosk.</li>
+            <li><strong>Preview</strong> plays the scene on screen only. <strong>Run on kiosk</strong> plays it for real.
+                Changing a running scene stops it, so it never plays an old version.</li>
+            <li><strong>Delete</strong> at the top removes the whole scene, and tells you first if an automation rule runs it.</li>
+        </ul>
     </HelpSection>
 
     <HelpSection Title="Scene settings">
@@ -18,14 +43,19 @@
             <li><strong>Momentary</strong>: the scene only runs while you hold its play button down, like a flash button.</li>
             <li><strong>BPM sync</strong>: change steps on the beat of the song that's playing. Each step then lasts its
                 <strong>Beats</strong>. When nothing is playing, steps use their fixed duration.</li>
-            <li><strong>Keybinds</strong>: keyboard keys that run the scene from the desk.</li>
+            <li><strong>Keybinds</strong>: keyboard keys that run the scene while the desk is open. If another scene
+                already uses the key you press, the editor says so (pressing it then runs both). Tab and Enter can't be used.</li>
         </ul>
     </HelpSection>
 
     <HelpSection Title="Running scenes">
         <FluentText>
-            Run a scene from the desk, from an automation rule's <strong>DMX Scene Control</strong> action (for
-            example a team's colours when it wins), or with its keybind.
+            Press <strong>Run</strong> (or <strong>Stop</strong>) next to a scene. A momentary scene has a
+            <strong>Hold</strong> button instead: it runs while you hold it. A bar shows how far through a running
+            scene is, and if a scene stops because of a problem the reason shows under its name.
+            <strong>Stop all</strong> stops every scene on the kiosk. Scenes also run from an automation rule's
+            <strong>DMX Scene Control</strong> action (for example a team's colours when it wins), or with their
+            keybind, shown on the scene as a key.
         </FluentText>
     </HelpSection>
 </HelpTab>

@@ -3,6 +3,7 @@
 
 @inject INotificationService ToastService
 @inject Lanyard.Application.Services.Tenancy.ITenantContext Tenant
+@inject SeasonalThemeState SeasonalThemeState
 
 <div class="company-location-manager">
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16" Width="100%" Margin="@Margin.Bottom2">
@@ -45,6 +46,21 @@
                                 A login background image is set. Upload a file to replace it, or clear it.
                             </FluentText>
                         }
+
+                        @* FluentSelect doesn't redraw its chosen option when Value changes from code, so
+                           @key rebuilds it whenever a different company is loaded into the form. *@
+                        <FluentSelect @key="@(selectedCompany?.Id ?? 0)" TOption="string" TValue="string" Label="Seasonal themes"
+                                      @bind-Value="SeasonalThemesValue" Class="clm-full-width">
+                            <FluentOption TValue="string" Value="@nameof(SeasonalThemeSetting.Automatic)">Automatic (follow the calendar)</FluentOption>
+                            <FluentOption TValue="string" Value="@nameof(SeasonalThemeSetting.Off)">Off</FluentOption>
+                            <FluentOption TValue="string" Value="@nameof(SeasonalThemeSetting.Christmas)">Christmas (always on)</FluentOption>
+                            <FluentOption TValue="string" Value="@nameof(SeasonalThemeSetting.Halloween)">Halloween (always on)</FluentOption>
+                        </FluentSelect>
+                        <FluentText Class="clm-empty-note">
+                            Automatic shows snow from 1 to 26 December and jack-o'-lanterns from 24 to 31 October. Pick a
+                            season to preview it now; set it back to Automatic afterwards. Staff can turn it off for
+                            themselves on their account page.
+                        </FluentText>
 
                         <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
                             @if (selectedCompany is not null)
@@ -152,6 +168,13 @@
     // fields, so a save always sends the full state back (see SaveCompanyAsync's update branch).
     private string companyName = string.Empty;
     private string companyThemeColor = string.Empty;
+    private SeasonalThemeSetting companySeasonalThemes = SeasonalThemeSetting.Automatic;
+
+    private string? SeasonalThemesValue
+    {
+        get => companySeasonalThemes.ToString();
+        set => companySeasonalThemes = Enum.TryParse(value, out SeasonalThemeSetting parsed) ? parsed : SeasonalThemeSetting.Automatic;
+    }
     private Guid? companyLogoFileId;
     private string? companyLogoPreviewUrl;
     private Guid? companyBackgroundImageFileId;
@@ -218,7 +241,8 @@
             Name = companyName,
             ThemeColorHex = companyThemeColor,
             LogoFileId = companyLogoFileId,
-            BackgroundImageFileId = companyBackgroundImageFileId
+            BackgroundImageFileId = companyBackgroundImageFileId,
+            SeasonalThemeSetting = companySeasonalThemes
         });
 
         if (!result.IsSuccess)
@@ -228,6 +252,9 @@
         }
 
         await LoadCompaniesAsync();
+
+        // Lets the layout pick up a changed seasonal theme straight away.
+        await SeasonalThemeState.NotifyChangedAsync();
 
         if (isEdit)
         {
@@ -264,6 +291,7 @@
         companyLogoPreviewUrl = null;
         companyBackgroundImageFileId = null;
         companyBackgroundImagePreviewUrl = null;
+        companySeasonalThemes = SeasonalThemeSetting.Automatic;
     }
 
     private void PopulateFormFrom(Company company)
@@ -273,6 +301,7 @@
         companyLogoFileId = company.LogoFileId;
         companyLogoPreviewUrl = company.LogoFileId is Guid logoFileId ? $"/api/files/download/{logoFileId}" : null;
         companyBackgroundImageFileId = company.BackgroundImageFileId;
+        companySeasonalThemes = company.SeasonalThemeSetting;
         companyBackgroundImagePreviewUrl = company.BackgroundImageFileId is Guid backgroundImageFileId
             ? $"/api/files/download/{backgroundImageFileId}"
             : null;

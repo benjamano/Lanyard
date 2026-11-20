@@ -25,7 +25,11 @@ public class AutomationRuleService(
                 .Where(r => r.IsActive)
                 .Include(r => r.Actions.Where(a => a.IsActive))
                 .Include(r => r.Conditions.Where(c => c.IsActive))
+                // Oldest first, so the list doesn't reshuffle between loads and a copy lands at the end.
+                .OrderBy(r => r.CreateDate)
+                .ThenBy(r => r.Name)
                 .AsNoTracking()
+                .TagWithCallSite()
                 .ToListAsync();
             return Result<IEnumerable<AutomationRule>>.Ok(rules);
         }
@@ -278,6 +282,128 @@ public class AutomationRuleService(
         }
     }
 
+    public async Task<Result<AutomationRule>> DuplicateRuleAsync(Guid id)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            // Tenant-filtered, so another company's rule is simply not found.
+            AutomationRule? source = await ctx.AutomationRules
+                .Where(r => r.Id == id && r.IsActive)
+                .Include(r => r.Actions.Where(a => a.IsActive))
+                .Include(r => r.Conditions.Where(c => c.IsActive))
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync();
+
+            if (source == null)
+            {
+                return Result<AutomationRule>.Fail("Rule not found.");
+            }
+
+            string name = await NextCopyNameAsync(ctx, source.Name);
+
+            // A brand-new graph rather than the loaded entities with their keys changed, so EF
+            // never confuses the copy's rows with the source's.
+            Guid copyId = Guid.NewGuid();
+
+            AutomationRule copy = new()
+            {
+                Id = copyId,
+                CompanyId = source.CompanyId,
+                Name = name,
+                TriggerClientId = source.TriggerClientId,
+                TriggerType = source.TriggerType,
+                TriggerEvent = source.TriggerEvent,
+                IdleThresholdMinutes = source.IdleThresholdMinutes,
+                ScheduledTimeOfDay = source.ScheduledTimeOfDay,
+                ScheduledDaysOfWeek = source.ScheduledDaysOfWeek,
+                TriggerThreshold = source.TriggerThreshold,
+                TriggerScoreScope = source.TriggerScoreScope,
+                TriggerTeam = source.TriggerTeam,
+                // Off until someone checks it, so a copy can't fire alongside its original.
+                IsEnabled = false,
+                IsActive = true,
+                CreateDate = DateTime.UtcNow,
+                Actions = source.Actions
+                    .OrderBy(a => a.SortOrder)
+                    .Select(a => new AutomationRuleAction
+                    {
+                        Id = Guid.NewGuid(),
+                        AutomationRuleId = copyId,
+                        ActionType = a.ActionType,
+                        ParametersJson = a.ParametersJson,
+                        SortOrder = a.SortOrder,
+                        IsActive = true
+                    })
+                    .ToList(),
+                Conditions = source.Conditions
+                    .OrderBy(c => c.SortOrder)
+                    .Select(c => new AutomationRuleCondition
+                    {
+                        Id = Guid.NewGuid(),
+                        AutomationRuleId = copyId,
+                        ConditionType = c.ConditionType,
+                        ParametersJson = c.ParametersJson,
+                        SortOrder = c.SortOrder,
+                        IsActive = true
+                    })
+                    .ToList()
+            };
+
+            // The source may have gone stale since it was saved (a kiosk or scene removed), and a
+            // copy that couldn't be saved by hand shouldn't be created this way either.
+            string? validationError = await ValidateRuleAsync(ctx, copy, source.CompanyId);
+
+            if (validationError != null)
+            {
+                return Result<AutomationRule>.Fail(validationError);
+            }
+
+            ctx.AutomationRules.Add(copy);
+            await ctx.SaveChangesAsync();
+
+            // Disabled, so the engine wouldn't pick it up anyway, but the cache is only ever
+            // trusted when nothing has changed under it.
+            _engineService.InvalidateRuleCache();
+
+            return Result<AutomationRule>.Ok(copy);
+        }
+        catch (Exception ex)
+        {
+            return Result<AutomationRule>.Fail($"Couldn't copy the rule: {ex.Message}");
+        }
+    }
+
+    // "Copy of X", then "Copy of X (2)", "(3)"... among the company's live rules.
+    private static async Task<string> NextCopyNameAsync(ApplicationDbContext ctx, string sourceName)
+    {
+        string baseName = $"Copy of {sourceName}";
+
+        HashSet<string> taken = (await ctx.AutomationRules
+            .Where(r => r.IsActive && r.Name.StartsWith(baseName))
+            .Select(r => r.Name)
+            .AsNoTracking()
+            .TagWithCallSite()
+            .ToListAsync())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (!taken.Contains(baseName))
+        {
+            return baseName;
+        }
+
+        int n = 2;
+
+        while (taken.Contains($"{baseName} ({n})"))
+        {
+            n++;
+        }
+
+        return $"{baseName} ({n})";
+    }
+
     // A rule with a misconfigured trigger or condition can never fire, and nothing downstream
     // would report that - ProcessIdleRulesAsync/ProcessScheduledRulesAsync simply skip it - so
     // reject it at the point of saving instead.
@@ -295,6 +421,18 @@ public class AutomationRuleService(
         if (conditionError != null)
         {
             return conditionError;
+        }
+
+        // The kiosk that fires the rule, under the same company rule as the condition kiosks below.
+        bool triggerClientFound = await ctx.Clients
+            .Where(c => c.Id == rule.TriggerClientId && (ruleCompanyId == null || c.CompanyId == ruleCompanyId))
+            .AsNoTracking()
+            .TagWithCallSite()
+            .AnyAsync();
+
+        if (!triggerClientFound)
+        {
+            return "The kiosk this rule is for doesn't exist.";
         }
 
         List<Guid> conditionClientIds = rule.Conditions
@@ -341,6 +479,50 @@ public class AutomationRuleService(
             if (foundCount != conditionLocationIds.Count)
             {
                 return "An opening hours condition refers to a location that doesn't exist.";
+            }
+        }
+
+        return await ValidateDmxActionsAsync(ctx, rule, ruleCompanyId);
+    }
+
+    // A DMX action's kiosk and scene come from ParametersJson, which the scene runner trusts, so
+    // they must be the rule's own company's (and the scene must be on that kiosk).
+    private static async Task<string?> ValidateDmxActionsAsync(ApplicationDbContext ctx, AutomationRule rule, int? ruleCompanyId)
+    {
+        foreach (AutomationRuleAction action in rule.Actions.Where(a => a.IsActive && a.ActionType == AutomationActionTypes.DmxSceneControl))
+        {
+            if (!DmxSceneControlActionExecutor.TryReadTargets(action.ParametersJson, out Guid clientId, out Guid? sceneId))
+            {
+                return "A DMX action couldn't be read. Remove it and add it again.";
+            }
+
+            // Not configured yet: the executor reports that when it runs, as it always has.
+            if (clientId == Guid.Empty)
+            {
+                continue;
+            }
+
+            bool clientFound = await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
+                .AnyAsync(c => c.Id == clientId && (ruleCompanyId == null || c.CompanyId == ruleCompanyId));
+
+            if (!clientFound)
+            {
+                return "A DMX action refers to a kiosk that doesn't exist.";
+            }
+
+            if (sceneId is Guid id && id != Guid.Empty)
+            {
+                bool sceneFound = await ctx.DmxScenes
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .AnyAsync(s => s.Id == id && s.ClientId == clientId && s.IsActive);
+
+                if (!sceneFound)
+                {
+                    return "A DMX action refers to a scene that isn't on its kiosk.";
+                }
             }
         }
 
