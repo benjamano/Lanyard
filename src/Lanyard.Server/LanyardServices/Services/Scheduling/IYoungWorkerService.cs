@@ -21,6 +21,11 @@ public interface IYoungWorkerService
     // the staff list and the rota.
     Task<Result<Dictionary<string, YoungWorkerStatus>>> GetForCompanyAsync(LocationScope scope, DateOnly today);
 
+    // The young worker limits this draft shift (not yet saved) would break for draft.UserId, for the
+    // shift dialog's warning. Empty for an open shift or anyone who isn't a young worker. Managers
+    // of the shift's location only.
+    Task<Result<List<YoungWorkerBreach>>> CheckShiftAsync(LocationScope scope, Shift draft);
+
     // True if the person is a young worker on `today` - all staff learn is that the limits apply
     // to them, never the dates.
     Task<Result<bool>> IsYoungWorkerAsync(string userId, int companyId, DateOnly today);
