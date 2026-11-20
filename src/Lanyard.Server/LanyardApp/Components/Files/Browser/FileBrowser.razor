@@ -6,13 +6,15 @@
 @inject INotificationService _toast
 @inject NavigationManager _navigation
 @inject IJSRuntime _js
+@inject IFileLibraryEvents _events
+@inject Lanyard.Infrastructure.DataAccess.Tenancy.ITenantProvider _tenant
 @implements IAsyncDisposable
 
 @* The Files browser. Three panes on a wide screen (folders | contents | details); on a phone the
    folder tree gives way to drill-down, Quick access becomes a row of chips and details open as a
    sheet from the bottom. Managers see everything and can change it; other staff see folders shared
    with staff, read-only. Where it is lives in the address bar (see FilesLocation). *@
-<div class="files @(_details is not null ? "has-details" : "")" @ref="_root">
+<div class="files @(_details is not null ? "has-details" : "") @(SelectionCount > 0 ? "has-selection" : "")" @ref="_root">
     <aside class="files-rail" aria-label="Files navigation">
         <nav class="files-quick" aria-label="Quick access">
             @QuickLink(FilesLocation.Home, CanManage ? "All files" : "Shared files", new Icons.Regular.Size20.Folder(), Location.View == FilesView.Folder && Location.FolderId is null)
@@ -121,7 +123,7 @@
                             }
                             else
                             {
-                                <a class="files-crumb" href="@FilesLocation.Home.ToUrl()" @onclick="() => GoAsync(FilesLocation.Home)" @onclick:preventDefault>@(CanManage ? "Files" : "Shared files")</a>
+                                <a class="files-crumb" href="@FilesLocation.Home.ToUrl()" data-drop-folder="" data-drop-name="Files" @onclick="() => GoAsync(FilesLocation.Home)" @onclick:preventDefault>@(CanManage ? "Files" : "Shared files")</a>
                             }
                         </li>
                         @foreach (FolderNode crumb in _path)
@@ -142,7 +144,7 @@
                                 else
                                 {
                                     FilesLocation to = new(FilesView.Folder, crumb.Id);
-                                    <a class="files-crumb" href="@to.ToUrl()" @onclick="() => GoAsync(to)" @onclick:preventDefault>@crumb.Name</a>
+                                    <a class="files-crumb" href="@to.ToUrl()" data-drop-folder="@crumb.Id" data-drop-name="@crumb.Name" @onclick="() => GoAsync(to)" @onclick:preventDefault>@crumb.Name</a>
                                 }
                             </li>
                         }
@@ -180,6 +182,28 @@
                 </div>
             }
         </div>
+
+        @if (SelectionCount > 0)
+        {
+            <div class="files-selection-bar" role="region" aria-label="Selection">
+                <button type="button" class="files-icon-button" aria-label="Clear selection" title="Clear selection (Esc)" @onclick="ClearSelection">
+                    <FluentIcon Value="@(new Icons.Regular.Size20.Dismiss())" Color="Color.Default" />
+                </button>
+                <span class="files-selection-count" role="status">@SelectionCount selected</span>
+                <span class="files-selection-actions">
+                    <FluentButton IconStart="@(new Icons.Regular.Size20.ArrowDownload())" OnClick="DownloadSelectionAsync">Download</FluentButton>
+                    @if (CanManage)
+                    {
+                        <FluentButton IconStart="@(new Icons.Regular.Size20.ArrowMove())" OnClick="MoveSelectionAsync">Move</FluentButton>
+                        <FluentButton IconStart="@(new Icons.Regular.Size20.Delete())" OnClick="DeleteSelectionAsync">Delete</FluentButton>
+                    }
+                    @if (SelectionCount < OrderedItems.Count)
+                    {
+                        <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="SelectAll">Select all</FluentButton>
+                    }
+                </span>
+            </div>
+        }
 
         <div class="files-content" aria-busy="@(_loading ? "true" : "false")">
             @if (_error is not null)
@@ -254,6 +278,17 @@
         </div>
     }
 
+    @if (_undo is not null)
+    {
+        <div class="files-undo" role="status" aria-live="polite">
+            <span>@_undo.Message</span>
+            <button type="button" class="files-undo-button" @onclick="UndoAsync">Undo</button>
+            <button type="button" class="files-icon-button is-small" aria-label="Dismiss" @onclick="() => _undo = null">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Color="Color.Default" />
+            </button>
+        </div>
+    }
+
     @if (CanManage)
     {
         <UploadTray Items="_uploads" OnCancel="CancelUploadAsync" OnRetry="RetryUploadAsync" OnClear="ClearUploadsAsync" OnShow="ShowUploadAsync" />
@@ -290,6 +325,20 @@
     private MenuState? _menu;
 
     private ElementReference _root;
+
+    // Several items picked with the checkboxes, Ctrl/⌘-click or Shift-click (_details is the one
+    // item whose details are open).
+    private readonly HashSet<Guid> _selectedFiles = [];
+    private readonly HashSet<Guid> _selectedFolders = [];
+    private int? _anchor;
+
+    private sealed record UndoState(string Message, Func<Task> Undo);
+    private UndoState? _undo;
+    private CancellationTokenSource? _undoTimer;
+
+    private int _companyId;
+    private DateTime _lastRefreshUtc;
+    private CancellationTokenSource? _remoteRefresh;
     private IJSObjectReference? _uploadModule;
     private IJSObjectReference? _uploader;
     private DotNetObjectReference<FileBrowser>? _self;
@@ -362,8 +411,11 @@
         await RestorePreferencesAsync();
         _ready = true;
 
-        if (CanManage)
-            await AttachUploaderAsync();
+        await AttachUploaderAsync();
+
+        // Other people's changes (and other tabs') show up without a reload.
+        _companyId = _tenant.CompanyId ?? 0;
+        _events.Changed += OnLibraryChanged;
         await Task.WhenAll(LoadTreeAsync(), LoadStorageAsync());
         await LoadContentAsync();
         StateHasChanged();
@@ -400,14 +452,23 @@
         _storage = (await _library.GetStorageSummaryAsync(CancellationToken.None)).Data;
     }
 
-    private async Task LoadContentAsync()
+    // keep: a refresh of the same view (after a change here or elsewhere), so the selection and
+    // the open details stay as they were where the items still exist.
+    private async Task LoadContentAsync(bool keep = false)
     {
         FilesLocation location = Location;
         _loadedLocation = location;
         _loading = true;
         _error = null;
-        _details = null;
-        _menu = null;
+
+        if (!keep)
+        {
+            _details = null;
+            _menu = null;
+            _selectedFiles.Clear();
+            _selectedFolders.Clear();
+            _anchor = null;
+        }
 
         try
         {
@@ -447,6 +508,9 @@
 
             _result = result.Data;
 
+            if (keep && _result is not null)
+                KeepSelectionInStep(_result);
+
             _path = location.View == FilesView.Folder && location.FolderId is Guid folderId
                 ? (await _library.GetPathAsync(folderId, SharedOnly, CancellationToken.None)).Data ?? []
                 : [];
@@ -462,7 +526,8 @@
     private async Task RefreshAsync(bool tree = true)
     {
         _loadedLocation = null;
-        List<Task> work = [LoadContentAsync(), LoadStorageAsync()];
+        _lastRefreshUtc = DateTime.UtcNow;
+        List<Task> work = [LoadContentAsync(keep: true), LoadStorageAsync()];
 
         if (tree)
             work.Add(LoadTreeAsync());
@@ -654,6 +719,9 @@
         if (Location.View != FilesView.Folder)
             actions.Add(new("Show in folder", new Icons.Regular.Size20.FolderOpen(), () => GoAsync(new FilesLocation(FilesView.Folder, file.FolderId))));
 
+        actions.Add(new("Copy link", new Icons.Regular.Size20.Link(), () => CopyLinkAsync(file)));
+        actions.Add(new("Select", new Icons.Regular.Size20.CheckboxChecked(), () => { Toggle(false, file.Id, PositionOf(false, file.Id)); return Task.CompletedTask; }));
+
         if (CanManage)
         {
             actions.Add(new("Rename", new Icons.Regular.Size20.Rename(), () => RenameFileAsync(file)));
@@ -669,6 +737,8 @@
         List<MenuAction> actions =
         [
             new("Open", new Icons.Regular.Size20.FolderOpen(), () => GoAsync(new FilesLocation(FilesView.Folder, folder.Id))),
+            new("Download as .zip", new Icons.Regular.Size20.FolderZip(), () => DownloadZipAsync([], [folder.Id])),
+            new("Select", new Icons.Regular.Size20.CheckboxChecked(), () => { Toggle(true, folder.Id, PositionOf(true, folder.Id)); return Task.CompletedTask; }),
         ];
 
         if (CanManage)
@@ -686,6 +756,9 @@
     {
         switch (e.Key)
         {
+            case "Delete" when CanManage && SelectionCount > 0:
+                await DeleteSelectionAsync();
+                break;
             case "Delete" when CanManage:
                 if (selection is FileSelection f)
                     await DeleteAsync([f.File.Id], [], [f.File.FileName]);
@@ -782,7 +855,7 @@
             _uploadModule = await _js.InvokeAsync<IJSObjectReference>("import", "./js/fileUploads.js");
             _self = DotNetObjectReference.Create(this);
             _uploader = await _uploadModule.InvokeAsync<IJSObjectReference>("attach", _root, _self,
-                new { folderId = CurrentFolderId?.ToString(), folderName = CurrentFolderName });
+                new { folderId = CurrentFolderId?.ToString(), folderName = CurrentFolderName, canUpload = CanManage });
         }
         catch (Exception ex) when (ex is JSException or InvalidOperationException or TaskCanceledException)
         {
@@ -896,6 +969,11 @@
 
     public async ValueTask DisposeAsync()
     {
+        _events.Changed -= OnLibraryChanged;
+        _remoteRefresh?.Cancel();
+        _remoteRefresh?.Dispose();
+        _undoTimer?.Cancel();
+        _undoTimer?.Dispose();
         _uploadRefresh?.Cancel();
         _uploadRefresh?.Dispose();
         _searchDelay?.Cancel();
@@ -1008,10 +1086,37 @@
         if (result.Cancelled || result.Value is not MoveItemsDialog.MoveTarget target)
             return;
 
-        Result<BulkOperationResult> moved = await _library.MoveAsync(fileIds, folderIds, target.FolderId, CancellationToken.None);
-        string destination = target.FolderId is Guid id ? _tree!.FirstOrDefault(x => x.Id == id)?.Name ?? "the folder" : "Files";
+        await DoMoveAsync(fileIds, folderIds, target.FolderId);
+    }
 
-        ReportBulk(moved, $"Moved to {destination}");
+    // Moves, then offers Undo, which puts everything back where it came from.
+    private async Task DoMoveAsync(IReadOnlyList<Guid> fileIds, IReadOnlyList<Guid> folderIds, Guid? destinationId)
+    {
+        Dictionary<Guid, Guid?> fileOrigins = fileIds.ToDictionary(id => id, id => _result?.Files.FirstOrDefault(x => x.Id == id)?.FolderId);
+        Dictionary<Guid, Guid?> folderOrigins = folderIds.ToDictionary(id => id, id => _tree?.FirstOrDefault(x => x.Id == id)?.ParentFolderId);
+
+        Result<BulkOperationResult> moved = await _library.MoveAsync(fileIds, folderIds, destinationId, CancellationToken.None);
+        string destination = destinationId is Guid id ? _tree?.FirstOrDefault(x => x.Id == id)?.Name ?? "the folder" : "Files";
+        int count = fileIds.Count + folderIds.Count;
+
+        if (moved.IsSuccess && moved.Data is { Succeeded: > 0, Failures.Count: 0 })
+        {
+            ShowUndo(count == 1 ? $"Moved to {destination}" : $"Moved {count} items to {destination}", async () =>
+            {
+                foreach (IGrouping<Guid?, KeyValuePair<Guid, Guid?>> group in fileOrigins.Concat(folderOrigins).GroupBy(x => x.Value))
+                {
+                    List<Guid> files = group.Where(x => fileOrigins.ContainsKey(x.Key)).Select(x => x.Key).ToList();
+                    List<Guid> folders = group.Where(x => folderOrigins.ContainsKey(x.Key)).Select(x => x.Key).ToList();
+                    await _library.MoveAsync(files, folders, group.Key, CancellationToken.None);
+                }
+            });
+        }
+        else
+        {
+            ReportBulk(moved, $"Moved to {destination}");
+        }
+
+        ClearSelection();
         await RefreshAsync();
     }
 
@@ -1032,7 +1137,14 @@
             return;
 
         Result<BulkOperationResult> deleted = await _library.MoveToBinAsync(fileIds, folderIds, CancellationToken.None);
-        ReportBulk(deleted, names.Count == 1 ? $"\"{names[0]}\" is in the Recycle bin" : $"{names.Count} items are in the Recycle bin");
+        string done = names.Count == 1 ? $"\"{names[0]}\" is in the Recycle bin" : $"{names.Count} items are in the Recycle bin";
+
+        if (deleted.IsSuccess && deleted.Data is { Succeeded: > 0, Failures.Count: 0 })
+            ShowUndo(done, () => _library.RestoreAsync(fileIds, folderIds, CancellationToken.None));
+        else
+            ReportBulk(deleted, done);
+
+        ClearSelection();
 
         // Deleting the folder that's open takes you to the one above it.
         if (Location.FolderId is Guid open && folderIds.Contains(open))
@@ -1097,6 +1209,248 @@
         await RefreshAsync();
     }
 
+    // ---------- Selecting several ----------
+
+    private int SelectionCount => _selectedFiles.Count + _selectedFolders.Count;
+
+    // Folders first, then files: the order on screen, for Shift-click ranges.
+    private List<(bool IsFolder, Guid Id)> OrderedItems =>
+        _result is null || Location.View == FilesView.Bin
+            ? []
+            : [.. _result.Folders.Select(x => (true, x.Id)), .. _result.Files.Select(x => (false, x.Id))];
+
+    private int PositionOf(bool isFolder, Guid id) => OrderedItems.FindIndex(x => x.IsFolder == isFolder && x.Id == id);
+
+    private bool IsChecked(bool isFolder, Guid id) => isFolder ? _selectedFolders.Contains(id) : _selectedFiles.Contains(id);
+
+    private void Toggle(bool isFolder, Guid id, int position)
+    {
+        HashSet<Guid> set = isFolder ? _selectedFolders : _selectedFiles;
+
+        if (!set.Remove(id))
+            set.Add(id);
+
+        _anchor = position;
+        _details = null;
+        _menu = null;
+    }
+
+    private void SelectRange(int to)
+    {
+        List<(bool IsFolder, Guid Id)> items = OrderedItems;
+        int from = Math.Clamp(_anchor ?? to, 0, items.Count - 1);
+
+        for (int i = Math.Min(from, to); i <= Math.Max(from, to) && i < items.Count; i++)
+            (items[i].IsFolder ? _selectedFolders : _selectedFiles).Add(items[i].Id);
+
+        _details = null;
+        _menu = null;
+    }
+
+    // Ctrl/⌘-click toggles, Shift-click selects a range, and once anything is selected a plain
+    // click toggles too (that's how a phone selects: ⋯ › Select, then tap the rest).
+    private async Task OnItemClickAsync(MouseEventArgs e, bool isFolder, Guid id, int position, Func<Task> plain)
+    {
+        if (e.ShiftKey && _anchor is not null)
+            SelectRange(position);
+        else if (e.CtrlKey || e.MetaKey || SelectionCount > 0)
+            Toggle(isFolder, id, position);
+        else
+            await plain();
+    }
+
+    [JSInvokable]
+    public Task SelectAll()
+    {
+        foreach ((bool isFolder, Guid id) in OrderedItems)
+            (isFolder ? _selectedFolders : _selectedFiles).Add(id);
+
+        _details = null;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public Task ClearSelection()
+    {
+        _selectedFiles.Clear();
+        _selectedFolders.Clear();
+        _anchor = null;
+        _menu = null;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    // After a refresh, keep what's still there selected, and the open details up to date.
+    private void KeepSelectionInStep(FileQueryResult result)
+    {
+        _selectedFiles.IntersectWith(result.Files.Select(x => x.Id));
+        _selectedFolders.IntersectWith(result.Folders.Select(x => x.Id));
+
+        _details = _details switch
+        {
+            FileSelection f when result.Files.Select((x, i) => (x, i)).FirstOrDefault(x => x.x.Id == f.File.Id) is { x: not null } hit => new FileSelection(hit.x, hit.i),
+            FolderSelection d when result.Folders.FirstOrDefault(x => x.Id == d.Folder.Id) is FolderNode folder => new FolderSelection(folder),
+            _ => null,
+        };
+    }
+
+    private Task DownloadSelectionAsync() => DownloadZipAsync([.. _selectedFiles], [.. _selectedFolders]);
+
+    private Task MoveSelectionAsync()
+    {
+        int count = SelectionCount;
+        return MoveAsync([.. _selectedFiles], [.. _selectedFolders], FileBrowserFormat.Plural(count, "item"), CurrentFolderId);
+    }
+
+    private Task DeleteSelectionAsync()
+    {
+        List<string> names =
+        [
+            .. _result?.Folders.Where(x => _selectedFolders.Contains(x.Id)).Select(x => x.Name) ?? [],
+            .. _result?.Files.Where(x => _selectedFiles.Contains(x.Id)).Select(x => x.FileName) ?? [],
+        ];
+
+        return DeleteAsync([.. _selectedFiles], [.. _selectedFolders], names);
+    }
+
+    // ---------- Dragging onto a folder ----------
+
+    [JSInvokable]
+    public Task OnItemDragStart(string key)
+    {
+        if (!CanManage || key.Split(':') is not [string kind, string raw] || !Guid.TryParse(raw, out Guid id))
+            return Task.CompletedTask;
+
+        bool isFolder = kind == "folder";
+
+        // Dragging something that isn't selected moves just that.
+        if (!IsChecked(isFolder, id))
+        {
+            _selectedFiles.Clear();
+            _selectedFolders.Clear();
+            (isFolder ? _selectedFolders : _selectedFiles).Add(id);
+        }
+
+        _menu = null;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public Task OnItemsDropped(string? folderId)
+    {
+        if (!CanManage || SelectionCount == 0)
+            return Task.CompletedTask;
+
+        Guid? target = Guid.TryParse(folderId, out Guid parsed) ? parsed : null;
+
+        // Dropped back where they are (or a folder onto itself): nothing to do.
+        if ((target is Guid t && _selectedFolders.Contains(t))
+            || (_selectedFolders.Count == 0 && _result?.Files.Where(x => _selectedFiles.Contains(x.Id)).All(x => x.FolderId == target) == true))
+        {
+            return Task.CompletedTask;
+        }
+
+        return InvokeAsync(() => DoMoveAsync([.. _selectedFiles], [.. _selectedFolders], target));
+    }
+
+    // ---------- Undo ----------
+
+    private void ShowUndo(string message, Func<Task> undo)
+    {
+        _undo = new UndoState(message, undo);
+        _undoTimer?.Cancel();
+        _undoTimer?.Dispose();
+        _undoTimer = new CancellationTokenSource();
+        CancellationToken token = _undoTimer.Token;
+
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(10), token);
+                _undo = null;
+                StateHasChanged();
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+            {
+            }
+        });
+    }
+
+    private async Task UndoAsync()
+    {
+        if (_undo is not UndoState undo)
+            return;
+
+        _undo = null;
+        _undoTimer?.Cancel();
+        await undo.Undo();
+        _toast.ShowSuccess("Undone");
+        await RefreshAsync();
+    }
+
+    // ---------- Zip and links ----------
+
+    private async Task DownloadZipAsync(IReadOnlyList<Guid> fileIds, IReadOnlyList<Guid> folderIds)
+    {
+        if (_uploadModule is null)
+            return;
+
+        try
+        {
+            string? error = await _uploadModule.InvokeAsync<string?>("downloadZip", fileIds, folderIds);
+
+            if (error is not null)
+                _toast.ShowWarning(error);
+            else
+                _toast.ShowInfo("Your download is starting");
+        }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException or TaskCanceledException)
+        {
+            _toast.ShowWarning("Couldn't start the download.");
+        }
+    }
+
+    private async Task CopyLinkAsync(FileListItem file)
+    {
+        string url = _navigation.ToAbsoluteUri(FileBrowserFormat.DownloadUrl(file.Id)).ToString();
+        bool copied = _uploadModule is not null && await _uploadModule.InvokeAsync<bool>("copyText", url);
+
+        if (copied)
+            _toast.ShowSuccess("Link copied. Anyone signed in to Lanyard can open it.");
+        else
+            _toast.ShowInfo(url);
+    }
+
+    // ---------- Changes made elsewhere ----------
+
+    private void OnLibraryChanged(int companyId)
+    {
+        if (companyId != _companyId)
+            return;
+
+        _remoteRefresh?.Cancel();
+        _remoteRefresh?.Dispose();
+        _remoteRefresh = new CancellationTokenSource();
+        CancellationToken token = _remoteRefresh.Token;
+
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await Task.Delay(800, token);
+
+                // This page's own change has already refreshed it.
+                if (DateTime.UtcNow - _lastRefreshUtc < TimeSpan.FromSeconds(1.5))
+                    return;
+
+                await RefreshAsync();
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+            {
+            }
+        });
+    }
+
     private void ReportBulk(Result<BulkOperationResult> result, string success)
     {
         if (!result.IsSuccess || result.Data is null)
@@ -1139,13 +1493,17 @@
     {
         FolderSelection selection = new(folder);
         bool selected = _details is FolderSelection s && s.Folder.Id == folder.Id;
+        bool isChecked = _selectedFolders.Contains(folder.Id);
+        int position = PositionOf(true, folder.Id);
         FilesLocation open = new(FilesView.Folder, folder.Id);
 
-        <div class="files-item is-folder @(selected ? "is-selected" : "")" role="listitem" @key="folder.Id"
+        <div class="files-item is-folder @(selected ? "is-selected" : "") @(isChecked ? "is-checked" : "")" role="listitem" @key="folder.Id"
              data-drop-folder="@(CanManage ? folder.Id.ToString() : null)" data-drop-name="@folder.Name"
+             draggable="@(CanManage ? "true" : null)" data-drag-item="@(CanManage ? $"folder:{folder.Id}" : null)"
              @oncontextmenu="e => OpenMenu(e, folder.Name, FolderActions(folder))" @oncontextmenu:preventDefault>
-            <a class="files-item-main" href="@open.ToUrl()" title="@folder.Name"
-               @onclick="() => GoAsync(open)" @onclick:preventDefault
+            @Checkbox(true, folder.Id, folder.Name, position, isChecked)
+            <a class="files-item-main" href="@open.ToUrl()" title="@folder.Name" draggable="false"
+               @onclick="e => OnItemClickAsync(e, true, folder.Id, position, () => GoAsync(open))" @onclick:preventDefault
                @onkeydown="e => OnItemKeyDownAsync(e, selection)">
                 <span class="files-item-thumb is-folder">
                     <FluentIcon Value="@(new Icons.Filled.Size24.Folder())" Color="Color.Default" />
@@ -1182,16 +1540,21 @@
     {
         FileSelection selection = new(file, index);
         bool selected = _details is FileSelection s && s.File.Id == file.Id;
+        bool isChecked = _selectedFiles.Contains(file.Id);
+        int position = (_result?.Folders.Count ?? 0) + index;
 
-        <div class="files-item @(selected ? "is-selected" : "")" role="listitem" @key="file.Id"
+        <div class="files-item @(selected ? "is-selected" : "") @(isChecked ? "is-checked" : "")" role="listitem" @key="file.Id"
+             draggable="@(CanManage ? "true" : null)" data-drag-item="@(CanManage ? $"file:{file.Id}" : null)"
              @oncontextmenu="e => OpenMenu(e, file.FileName, FileActions(file, index))" @oncontextmenu:preventDefault>
+            @Checkbox(false, file.Id, file.FileName, position, isChecked)
             <button type="button" class="files-item-main" title="@file.FileName"
-                    @onclick="() => Select(selection)" @ondblclick="() => PreviewAsync(index)"
+                    @onclick="e => OnItemClickAsync(e, false, file.Id, position, () => { Select(selection); return Task.CompletedTask; })"
+                    @ondblclick="() => PreviewAsync(index)"
                     @onkeydown="e => OnItemKeyDownAsync(e, selection)">
                 <span class="files-item-thumb @FileBrowserFormat.TypeClass(file.TypeGroup)">
                     @if (FileBrowserFormat.TileImageUrl(file) is string tile)
                     {
-                        <img src="@tile" alt="" loading="lazy" decoding="async" />
+                        <img src="@tile" alt="" loading="lazy" decoding="async" draggable="false" />
                         @if (file.TypeGroup == FileTypeGroup.Video)
                         {
                             <span class="files-item-play"><FluentIcon Value="@(new Icons.Filled.Size24.Play())" Color="Color.Default" /></span>
@@ -1232,6 +1595,15 @@
                 <FluentIcon Value="@(new Icons.Regular.Size20.MoreHorizontal())" Color="Color.Default" />
             </button>
         </div>
+    };
+
+    private RenderFragment Checkbox(bool isFolder, Guid id, string name, int position, bool isChecked) => __builder =>
+    {
+        <button type="button" class="files-item-check @(isChecked ? "is-on" : "")" role="checkbox" aria-checked="@(isChecked ? "true" : "false")"
+                aria-label="@($"Select {name}")" title="Select"
+                @onclick="e => { if (e.ShiftKey && _anchor is not null) SelectRange(position); else Toggle(isFolder, id, position); }">
+            <FluentIcon Value="@(isChecked ? (Icon)new Icons.Filled.Size20.CheckboxChecked() : new Icons.Regular.Size20.CheckboxUnchecked())" Color="Color.Default" />
+        </button>
     };
 
     private RenderFragment RenderEmpty() => __builder =>
@@ -1340,6 +1712,7 @@
                                   OnShowFolder="() => GoAsync(new FilesLocation(FilesView.Folder, file.FolderId))"
                                   ShowFolderLink="Location.View != FilesView.Folder"
                                   OnRename="() => RenameFileAsync(file)"
+                                  OnCopyLink="() => CopyLinkAsync(file)"
                                   OnMove="() => MoveAsync([file.Id], [], file.FileName, file.FolderId)"
                                   OnDelete="() => DeleteAsync([file.Id], [], [file.FileName])" />
                 break;
@@ -1378,6 +1751,7 @@
 
                     <div class="files-details-actions">
                         <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.FolderOpen())" OnClick="() => GoAsync(new FilesLocation(FilesView.Folder, folder.Id))">Open</FluentButton>
+                        <FluentButton IconStart="@(new Icons.Regular.Size20.FolderZip())" OnClick="() => DownloadZipAsync([], [folder.Id])">Download .zip</FluentButton>
                         @if (CanManage)
                         {
                             <FluentButton IconStart="@(new Icons.Regular.Size20.Rename())" OnClick="() => RenameFolderAsync(folder)">Rename</FluentButton>

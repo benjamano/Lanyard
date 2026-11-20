@@ -4,7 +4,7 @@
    progress, and what happened to it. The uploading itself is fileUploads.js. *@
 @if (Items.Count > 0)
 {
-    <section class="files-uploads @(_collapsed ? "is-collapsed" : "")" aria-label="Uploads">
+    <section class="files-uploads @(_collapsed ? "is-collapsed" : "") @(Inline ? "is-inline" : "")" aria-label="Uploads">
         <header class="files-uploads-header">
             <button type="button" class="files-uploads-toggle" aria-expanded="@(_collapsed ? "false" : "true")" @onclick="() => _collapsed = !_collapsed">
                 <span class="files-uploads-title" role="status" aria-live="polite">@Title</span>
@@ -71,6 +71,9 @@
     public sealed record UploadItem(int Id, string Name, string? RelativeDir, string? FolderId, string Status, long Loaded, long Total, string? Error, string? FinalName, string? FileId);
 
     [Parameter, EditorRequired] public IReadOnlyList<UploadItem> Items { get; set; } = [];
+
+    /// <summary>In the page's flow rather than pinned to the corner (inside a picker dialog).</summary>
+    [Parameter] public bool Inline { get; set; }
 
     [Parameter] public EventCallback<int> OnCancel { get; set; }
 
