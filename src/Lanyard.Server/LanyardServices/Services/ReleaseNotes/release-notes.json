@@ -959,6 +959,8 @@
       "Select several files and folders in Files at once: tick their boxes, Ctrl-click or Shift-click, or press Ctrl+A. Then download them as one .zip, move them or delete them together. A folder can be downloaded as a .zip from its ⋯ menu.",
       "Drag files and folders onto another folder to move them, and press Undo straight after a move or delete if it was a mistake.",
       "Copy link in Files copies a link to a file for a chat or a course, and Files now updates by itself when someone else changes something.",
+      "Choosing a file elsewhere in Lanyard now looks and works like Files: the course editor's picture button, a projection step's video and onboarding email attachments show thumbnails, can search every folder and have a Recent list. People who manage files can drop or upload straight into the open folder.",
+      "A projection step's video picker now only offers videos. It used to list every kind of file.",
       "Parties > Printouts and party documents: the PDFs are no longer kept by the browser, so Preview saved version and each party's printouts always show what's saved now. Before, some browsers (Firefox especially) kept showing the old artwork, even after a reload.",
       "Parties > Printouts: Save now waits until new artwork has finished uploading. Before, saving during the upload kept the old artwork.",
       "On the Music page, the new EQ button next to the volume opens the kiosk's equaliser: Bass, Mid and Treble sliders from -12 to +12 dB, with the change playing on the kiosk as you drag.",
