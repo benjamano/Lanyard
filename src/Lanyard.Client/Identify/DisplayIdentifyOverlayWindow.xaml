@@ -1,0 +1,33 @@
+<Window x:Class="Lanyard.Client.Identify.DisplayIdentifyOverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Identify displays"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowActivated="False"
+        ShowInTaskbar="False"
+        Focusable="False"
+        IsHitTestVisible="False">
+    <!-- Click-through and never activated (see the code-behind), so the projection underneath keeps
+         playing and keeps focus. The dark wash keeps the text readable over any program. -->
+    <Grid Background="#D9000000">
+        <Viewbox Stretch="Uniform" Margin="60">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Width="1200">
+                <Border Background="#FFC857" CornerRadius="40" HorizontalAlignment="Center" Padding="80,10" Margin="0,0,0,24">
+                    <TextBlock x:Name="NumberText" Text="1" Foreground="#111111" FontSize="300" FontWeight="Bold"
+                               HorizontalAlignment="Center" />
+                </Border>
+                <TextBlock x:Name="TitleText" Text="Screen 1" Foreground="White" FontSize="80" FontWeight="SemiBold"
+                           HorizontalAlignment="Center" Margin="0,0,0,16" />
+                <TextBlock x:Name="DetailText" Foreground="#DDDDDD" FontSize="44" TextWrapping="Wrap" TextAlignment="Center"
+                           FontFamily="Consolas, Cascadia Mono, Courier New" HorizontalAlignment="Center" Margin="0,0,0,24" />
+                <TextBlock x:Name="ProgramText" Foreground="White" FontSize="52" TextWrapping="Wrap" TextAlignment="Center"
+                           HorizontalAlignment="Center" Margin="0,0,0,40" />
+                <TextBlock Text="Lanyard · Identify displays" Foreground="#AAAAAA" FontSize="30" HorizontalAlignment="Center" />
+            </StackPanel>
+        </Viewbox>
+    </Grid>
+</Window>

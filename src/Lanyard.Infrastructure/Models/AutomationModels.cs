@@ -127,6 +127,14 @@ public class AutomationRuleExecution
     // Set to null if the booking is ever deleted.
     public Guid? PartyBookingId { get; set; }
 
+    // Set when an Admin ran the rule by hand with "Run now (test)" rather than its trigger firing.
+    // A test row stays in the log but is never "the last time the rule ran": the scheduled
+    // reseed and the dashboard widget's last run both leave it out.
+    public bool IsTestRun { get; set; }
+
+    // Who ran the test (AspNetUsers.Id), when IsTestRun is set. No FK, like the other audit ids.
+    public string? TestRunByUserId { get; set; }
+
     public virtual List<AutomationRuleActionExecution> ActionExecutions { get; set; } = [];
 }
 

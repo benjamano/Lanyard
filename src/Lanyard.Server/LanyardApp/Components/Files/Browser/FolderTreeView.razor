@@ -94,7 +94,7 @@
                 bool selected = !RootSelected && SelectedFolderId == folder.Id;
 
                 <li role="treeitem" aria-selected="@(selected ? "true" : "false")" aria-expanded="@(hasChildren ? (expanded ? "true" : "false") : null)" @key="folder.Id">
-                    <div class="file-tree-row @(selected ? "is-selected" : "")" style="--depth:@depth" data-folder-id="@folder.Id">
+                    <div class="file-tree-row @(selected ? "is-selected" : "")" style="--depth:@depth" data-drop-folder="@folder.Id" data-drop-name="@folder.Name">
                         @if (hasChildren)
                         {
                             <button type="button" class="file-tree-chevron" aria-label="@(expanded ? $"Collapse {folder.Name}" : $"Expand {folder.Name}")"

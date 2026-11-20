@@ -116,5 +116,31 @@ namespace Lanyard.Tests.Services.Automation
             Assert.IsTrue(result.IsSuccess);
             Assert.AreEqual(3, result.Data!.Count());
         }
+    
+        [TestMethod]
+        public async Task GetLatestExecutionForRule_IgnoresManualTests_ButTheLogShowsThem()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            Guid ruleId = Guid.NewGuid();
+            Guid realRunId = Guid.NewGuid();
+
+            await using (ApplicationDbContext ctx = new ApplicationDbContext(options))
+            {
+                ctx.AutomationRules.Add(new AutomationRule { Id = ruleId, Name = "TestRule", IsActive = true, CreateDate = DateTime.UtcNow });
+                ctx.AutomationRuleExecutions.AddRange(
+                    new AutomationRuleExecution { Id = realRunId, AutomationRuleId = ruleId, RuleName = "TestRule", ExecutedAt = DateTime.UtcNow.AddHours(-2), TriggerEvent = "InGame", OverallSuccess = false },
+                    new AutomationRuleExecution { Id = Guid.NewGuid(), AutomationRuleId = ruleId, RuleName = "TestRule", ExecutedAt = DateTime.UtcNow, TriggerEvent = "Manual test by Sam", OverallSuccess = true, IsTestRun = true, TestRunByUserId = "u1" });
+                await ctx.SaveChangesAsync();
+            }
+
+            AutomationLogService service = GetService(options);
+
+            Result<AutomationRuleExecution?> latest = await service.GetLatestExecutionForRuleAsync(ruleId);
+            Result<IEnumerable<AutomationRuleExecution>> recent = await service.GetRecentExecutionsAsync(50);
+
+            Assert.AreEqual(realRunId, latest.Data!.Id, "A passing test mustn't hide that the rule last failed for real.");
+            Assert.AreEqual(2, recent.Data!.Count());
+            Assert.IsTrue(recent.Data!.First().IsTestRun);
+        }
     }
 }

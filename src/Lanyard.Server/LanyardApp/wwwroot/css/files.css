@@ -605,7 +605,7 @@ a.files-crumb:hover {
 }
 
 .files-item-inuse,
-.files-item-shared { left: 0.375rem; }
+.files-item-shared { left: 0.375rem; top: auto; bottom: 0.375rem; }
 
 .files-item-inuse svg,
 .files-item-shared svg {
@@ -1487,3 +1487,483 @@ a.files-crumb:hover {
 .files-details-play svg { width: 32px !important; height: 32px; }
 .files-item-inuse svg,
 .files-item-shared svg { width: 12px !important; }
+
+/* A video's tile shows its poster frame with a play mark. */
+.files-item-play {
+    position: absolute;
+    display: inline-flex;
+    padding: 0.375rem;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+.files-item-thumb .files-item-play svg {
+    width: 20px !important;
+    fill: #fff !important;
+}
+
+.files-list .files-item-play {
+    display: none;
+}
+
+/* ---------- Dropping files (fileUploads.js) ---------- */
+
+.files {
+    position: relative;
+}
+
+.files-drop-overlay {
+    display: none;
+    position: absolute;
+    inset: -0.5rem;
+    z-index: 700;
+    border: 2px dashed var(--colorBrandStroke1);
+    border-radius: var(--borderRadiusXLarge, 12px);
+    background: color-mix(in srgb, var(--colorBrandBackground2) 70%, transparent);
+    pointer-events: none;
+}
+
+.files.is-dragging .files-drop-overlay {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 2rem;
+}
+
+.files-drop-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1.25rem;
+    border-radius: 999px;
+    background: var(--colorBrandBackground);
+    color: var(--colorNeutralForegroundOnBrand);
+    font-weight: var(--fontWeightSemibold);
+    box-shadow: var(--shadow16);
+}
+
+.files-drop-icon {
+    font-size: 1.25rem;
+    line-height: 1;
+}
+
+.files-item.is-drop-target,
+.file-tree-row.is-drop-target {
+    outline: 2px solid var(--colorBrandStroke1);
+    outline-offset: 1px;
+    background: var(--colorBrandBackground2);
+}
+
+/* ---------- Upload tray ---------- */
+
+.files-uploads {
+    position: fixed;
+    right: 1.25rem;
+    bottom: 1.25rem;
+    z-index: 850;
+    width: min(380px, calc(100vw - 2rem));
+    max-height: min(60vh, 28rem);
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--borderRadiusXLarge, 12px);
+    border: 1px solid var(--colorNeutralStroke2);
+    background: var(--colorNeutralBackground1);
+    box-shadow: var(--shadow28);
+    overflow: hidden;
+}
+
+.files-uploads-header {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.375rem 0.25rem 0;
+    background: var(--colorNeutralBackground2);
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.files-uploads.is-collapsed .files-uploads-header {
+    border-bottom: none;
+}
+
+.files-uploads-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0.5rem 0.75rem;
+    border: none;
+    background: none;
+    color: var(--colorNeutralForeground1);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.files-uploads-title {
+    flex: 0 1 auto;
+    font-weight: var(--fontWeightSemibold);
+    white-space: nowrap;
+}
+
+.files-uploads-bar,
+.files-upload-progress {
+    display: block;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--colorNeutralBackground5, var(--colorNeutralStroke2));
+    overflow: hidden;
+}
+
+.files-uploads-bar {
+    flex: 1 1 auto;
+}
+
+.files-uploads-bar > span,
+.files-upload-progress > span {
+    display: block;
+    height: 100%;
+    background: var(--colorBrandBackground);
+    transition: width 0.2s linear;
+}
+
+.files-uploads-list {
+    margin: 0;
+    padding: 0.25rem 0;
+    list-style: none;
+    overflow-y: auto;
+}
+
+.files-upload {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.375rem 0.625rem 0.375rem 0.75rem;
+}
+
+.files-upload-icon {
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+.files-upload-icon svg {
+    width: 20px !important;
+    fill: var(--files-accent) !important;
+}
+
+.files-upload-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.files-upload-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--fontSizeBase300);
+}
+
+.files-upload-meta {
+    color: var(--colorNeutralForeground3);
+    font-size: var(--fontSizeBase200);
+    overflow-wrap: anywhere;
+}
+
+.files-upload.is-failed .files-upload-meta {
+    color: var(--colorPaletteRedForeground1, #c50f1f);
+}
+
+.files-upload.is-done .files-upload-name::after {
+    content: " ✓";
+    color: var(--colorPaletteGreenForeground1, #107c10);
+}
+
+@media (max-width: 760px) {
+    .files-uploads {
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        max-height: 50vh;
+        border-radius: var(--borderRadiusXLarge, 12px) var(--borderRadiusXLarge, 12px) 0 0;
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+}
+
+
+/* ---------- Selecting several (4/5) ---------- */
+
+.files-item-check {
+    position: absolute;
+    top: 0.375rem;
+    left: 0.375rem;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: none;
+    border-radius: var(--borderRadiusMedium, 6px);
+    background: var(--colorNeutralBackground1);
+    box-shadow: var(--shadow4);
+    color: var(--colorNeutralForeground2);
+    cursor: pointer;
+    opacity: 0;
+}
+
+.files-item-check svg {
+    fill: var(--colorNeutralForeground2) !important;
+}
+
+.files-item-check.is-on svg {
+    fill: var(--colorBrandForeground1) !important;
+}
+
+.files-item:hover .files-item-check,
+.files-item:focus-within .files-item-check,
+.files.has-selection .files-item-check,
+.files-item-check.is-on {
+    opacity: 1;
+}
+
+.files-item-check:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+    outline-offset: 1px;
+}
+
+@media (hover: none) {
+    /* On a touch screen checkboxes appear once something is selected (⋯ › Select). */
+    .files-item:hover .files-item-check { opacity: 0; }
+    .files.has-selection .files-item-check { opacity: 1; }
+}
+
+.files-grid .files-item.is-checked {
+    border-color: var(--colorBrandStroke1);
+    box-shadow: 0 0 0 2px var(--colorBrandStroke1);
+}
+
+.files-list .files-item.is-checked {
+    background: var(--colorBrandBackground2);
+}
+
+/* In the list, the checkbox sits in front of the icon. */
+.files-list .files-item-check {
+    top: 50%;
+    transform: translateY(-50%);
+    left: 0.25rem;
+    box-shadow: none;
+    background: transparent;
+}
+
+.files-list .files-item-main {
+    padding-left: 2.75rem;
+}
+
+.files-item[draggable="true"] {
+    cursor: grab;
+}
+
+.files-item[draggable="true"]:active {
+    cursor: grabbing;
+}
+
+.files-crumb.is-drop-target {
+    outline: 2px solid var(--colorBrandStroke1);
+    background: var(--colorBrandBackground2);
+}
+
+.files-selection-bar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    padding: 0.375rem 0.5rem;
+    border-radius: var(--borderRadiusLarge, 8px);
+    background: var(--colorBrandBackground2);
+    border: 1px solid var(--colorBrandStroke2, var(--colorBrandStroke1));
+}
+
+.files-selection-count {
+    font-weight: var(--fontWeightSemibold);
+    margin-right: auto;
+}
+
+.files-selection-actions {
+    display: flex;
+    gap: 0.375rem;
+    flex-wrap: wrap;
+}
+
+/* ---------- Undo ---------- */
+
+.files-undo {
+    position: fixed;
+    left: 50%;
+    bottom: 1.5rem;
+    z-index: 860;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    max-width: calc(100vw - 2rem);
+    padding: 0.5rem 0.5rem 0.5rem 1rem;
+    border-radius: var(--borderRadiusLarge, 8px);
+    background: var(--colorNeutralForeground1);
+    color: var(--colorNeutralBackground1);
+    box-shadow: var(--shadow16);
+}
+
+.files-undo-button {
+    padding: 0.25rem 0.625rem;
+    border: none;
+    border-radius: var(--borderRadiusMedium, 6px);
+    background: transparent;
+    color: var(--colorBrandForegroundInverted, #8fd3ff);
+    font: inherit;
+    font-weight: var(--fontWeightSemibold);
+    cursor: pointer;
+}
+
+.files-undo-button:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.files-undo .files-icon-button {
+    color: var(--colorNeutralBackground1);
+}
+
+.files-undo .files-icon-button svg {
+    fill: currentColor !important;
+}
+
+@media (max-width: 760px) {
+    .files-undo {
+        bottom: calc(5rem + env(safe-area-inset-bottom));
+    }
+
+    .files-selection-bar {
+        top: 0;
+        margin: 0 -0.25rem;
+    }
+}
+
+.files-uploads.is-inline {
+    position: static;
+    width: 100%;
+    max-height: 14rem;
+    box-shadow: none;
+    border-radius: var(--borderRadiusMedium, 6px);
+}
+
+/* ---------- File pickers (5/5) ---------- */
+
+.files-picker {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    min-width: 0;
+}
+
+.files-picker-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.files-picker-bar .files-search {
+    flex: 1 1 16rem;
+    max-width: none;
+}
+
+.files-picker-tab {
+    padding: 0.3125rem 0.875rem;
+    border: none;
+    border-radius: var(--borderRadiusSmall, 4px);
+    background: transparent;
+    color: var(--colorNeutralForeground2);
+    font: inherit;
+    font-size: var(--fontSizeBase300);
+    cursor: pointer;
+}
+
+.files-picker-tab:hover {
+    background: var(--colorNeutralBackground1Hover);
+}
+
+.files-picker-tab.is-on {
+    background: var(--colorNeutralBackground1Selected);
+    color: var(--colorNeutralForeground1);
+    font-weight: var(--fontWeightSemibold);
+}
+
+button.files-crumb {
+    border: none;
+    background: none;
+    font: inherit;
+    cursor: pointer;
+}
+
+button.files-crumb:hover:not(.is-current) {
+    background: var(--colorNeutralBackground1Hover);
+    color: var(--colorNeutralForeground1);
+}
+
+.files-picker-path .files-crumb {
+    font-size: var(--fontSizeBase300);
+}
+
+.files-picker-content {
+    max-height: min(52vh, 34rem);
+    overflow-y: auto;
+    padding: 0.125rem;
+}
+
+.files-picker-content .files-grid {
+    grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+}
+
+.files-picker-content .files-empty {
+    padding: 2rem 1rem;
+}
+
+.files-picker-upload {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    flex-wrap: wrap;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--colorNeutralStroke2);
+}
+
+.files-picker-hint {
+    color: var(--colorNeutralForeground3);
+    font-size: var(--fontSizeBase200);
+}
+
+.files-picker-upload .files-uploads {
+    flex-basis: 100%;
+}
+
+.files-picker.is-dragging .files-drop-overlay {
+    inset: 0;
+}
+
+@media (max-width: 760px) {
+    .files-picker-content {
+        max-height: 50vh;
+    }
+
+    .files-picker-content .files-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}

@@ -13,6 +13,14 @@ public static class FileBrowserFormat
 
     public static string DownloadUrl(Guid fileId) => $"api/files/download/{fileId}";
 
+    public static string ThumbnailUrl(Guid fileId) => $"api/files/thumb/{fileId}";
+
+    /// <summary>What to show in a tile: the thumbnail, the picture itself (no thumbnail yet), or nothing (an icon).</summary>
+    public static string? TileImageUrl(FileListItem file) =>
+        file.HasThumbnail ? ThumbnailUrl(file.Id)
+        : file.TypeGroup == FileTypeGroup.Image ? DownloadUrl(file.Id)
+        : null;
+
     // One size: CSS scales the svg up for grid tiles and previews (not every icon comes in 48).
     public static Icon IconFor(FileTypeGroup group, string fileName, bool large = false)
     {

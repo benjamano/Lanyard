@@ -1,5 +1,6 @@
 @using Lanyard.Infrastructure.DTO.Files
 @inject IFileUsageService _usage
+@inject IFileLibraryService _library
 
 @* Confirms sending files and folders to the Recycle bin, and warns about anything that uses them.
    In the bin they keep working where they're used; they just can't be deleted for good until
@@ -58,7 +59,7 @@
                             <li>and @(_usages.Count - 8) more</li>
                         }
                     </ul>
-                    <p>It keeps working there while it's in the bin, but it can't be deleted for good until nothing uses it.</p>
+                    <p>@(FolderIds.Count > 0 ? "Files in the folder are still used elsewhere. They keep working" : "It keeps working") there while in the bin, but can't be deleted for good until nothing uses them.</p>
                 </div>
             }
         </div>
@@ -78,19 +79,27 @@
 
     [Parameter] public int FolderCount { get; set; }
 
+    /// <summary>The folders being deleted: what's inside them is checked for usage too.</summary>
+    [Parameter] public IReadOnlyCollection<Guid> FolderIds { get; set; } = [];
+
     [CascadingParameter] public required IDialogInstance Dialog { get; set; }
 
     private List<FileUsage>? _usages;
 
     protected override async Task OnInitializedAsync()
     {
-        if (FileIds.Count == 0)
+        List<Guid> files = [.. FileIds];
+
+        if (FolderIds.Count > 0)
+            files.AddRange((await _library.GetFileIdsInFoldersAsync(FolderIds, CancellationToken.None)).Data ?? []);
+
+        if (files.Count == 0)
         {
             _usages = [];
             return;
         }
 
-        Result<IReadOnlyDictionary<Guid, IReadOnlyList<FileUsage>>> found = await _usage.GetUsagesAsync(FileIds, CancellationToken.None);
+        Result<IReadOnlyDictionary<Guid, IReadOnlyList<FileUsage>>> found = await _usage.GetUsagesAsync(files, CancellationToken.None);
 
         _usages = found.Data?.Values.SelectMany(x => x).Where(x => x.BlocksPermanentDelete).ToList() ?? [];
     }
