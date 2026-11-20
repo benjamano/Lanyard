@@ -22,4 +22,7 @@ public static class ChartPalette
     // in that fixed order, so they're always told apart the same way.
     public static readonly string Clocked = BrandConstants.ChartCategoricalLight[0];
     public static readonly string Rota = BrandConstants.ChartCategoricalLight[1];
+
+    // Insights' games chart: walk-in games keep the accent, party games take the violet slot.
+    public static readonly string PartyGames = BrandConstants.ChartCategoricalLight[6];
 }
