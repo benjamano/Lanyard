@@ -18,7 +18,8 @@ public sealed class FileLibraryService(
     IDemoGuard? demoGuard = null,
     Microsoft.AspNetCore.Http.IHttpContextAccessor? httpContextAccessor = null,
     Lanyard.Infrastructure.DataAccess.Tenancy.ITenantProvider? tenant = null,
-    Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider? authState = null) : IFileLibraryService
+    Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider? authState = null,
+    IFileLibraryEvents? events = null) : IFileLibraryService
 {
     private const string DemoRefusal = "Changing files isn't available in the demo.";
 
@@ -381,6 +382,7 @@ public sealed class FileLibraryService(
 
             await db.SaveChangesAsync(cancellationToken);
 
+            Changed();
             logger.LogInformation("Moved {Succeeded} items to folder {FolderId}; {Failed} couldn't move", succeeded, destinationFolderId, failures.Count);
             return Result<BulkOperationResult>.Ok(new BulkOperationResult(succeeded, failures, []));
         }
@@ -412,6 +414,7 @@ public sealed class FileLibraryService(
             folder.IsSharedWithStaff = isShared;
             await db.SaveChangesAsync(cancellationToken);
 
+            Changed();
             logger.LogInformation("Folder {FolderId} is now {Sharing}", folderId, isShared ? "shared with staff" : "for file managers only");
 
             graph = await FolderGraph.LoadAsync(db, cancellationToken);
@@ -500,6 +503,7 @@ public sealed class FileLibraryService(
 
             await db.SaveChangesAsync(cancellationToken);
 
+            Changed();
             logger.LogInformation("Moved {Succeeded} items to the Recycle bin", succeeded);
             return Result<BulkOperationResult>.Ok(new BulkOperationResult(succeeded, failures, []));
         }
@@ -617,6 +621,7 @@ public sealed class FileLibraryService(
 
             await db.SaveChangesAsync(cancellationToken);
 
+            Changed();
             logger.LogInformation("Restored {Succeeded} items from the Recycle bin", succeeded);
             return Result<BulkOperationResult>.Ok(new BulkOperationResult(succeeded, failures, notes));
         }
@@ -830,6 +835,7 @@ public sealed class FileLibraryService(
                 succeeded++;
             }
 
+            Changed();
             logger.LogInformation("Deleted {Succeeded} items for good; {Failed} were kept", succeeded, failures.Count);
             return Result<BulkOperationResult>.Ok(new BulkOperationResult(succeeded, failures, []));
         }
@@ -1022,6 +1028,14 @@ public sealed class FileLibraryService(
     }
 
     private async Task<bool> IsDemoAsync() => demoGuard is not null && await demoGuard.IsDemoSessionAsync();
+
+    // Tells open Files pages in the caller's company to refresh. The purge sweep runs as the
+    // system, across companies, and doesn't need to: nothing visible changes.
+    private void Changed()
+    {
+        if (events is not null && tenant is { IsSystem: false, CompanyId: int companyId })
+            events.Publish(companyId);
+    }
 
     // Defence in depth: the API and the Files page already only offer these to Admins and
     // CanManageFiles, but every caller (pickers included) gets the same answer here. Background
