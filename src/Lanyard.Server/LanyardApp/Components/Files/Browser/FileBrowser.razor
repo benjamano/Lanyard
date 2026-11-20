@@ -1,0 +1,1212 @@
+@using Lanyard.Infrastructure.DTO.Files
+@using Lanyard.App.Components.Dialogs
+@inject IFileLibraryService _library
+@inject IFileUsageService _usageService
+@inject IFileService _fileService
+@inject INotificationService _toast
+@inject NavigationManager _navigation
+@inject IJSRuntime _js
+
+@* The Files browser. Three panes on a wide screen (folders | contents | details); on a phone the
+   folder tree gives way to drill-down, Quick access becomes a row of chips and details open as a
+   sheet from the bottom. Managers see everything and can change it; other staff see folders shared
+   with staff, read-only. Where it is lives in the address bar (see FilesLocation). *@
+<div class="files @(_details is not null ? "has-details" : "")">
+    <aside class="files-rail" aria-label="Files navigation">
+        <nav class="files-quick" aria-label="Quick access">
+            @QuickLink(FilesLocation.Home, CanManage ? "All files" : "Shared files", new Icons.Regular.Size20.Folder(), Location.View == FilesView.Folder && Location.FolderId is null)
+            @QuickLink(new FilesLocation(FilesView.Recent), "Recent", new Icons.Regular.Size20.History(), Location.View == FilesView.Recent)
+            @foreach (FileTypeGroup group in QuickGroups)
+            {
+                @QuickLink(new FilesLocation(FilesView.Type, Type: group), FileBrowserFormat.GroupLabel(group), FileBrowserFormat.IconFor(group, ""), Location.View == FilesView.Type && Location.Type == group)
+            }
+            @if (CanManage)
+            {
+                @QuickLink(new FilesLocation(FilesView.Bin), BinLabel, new Icons.Regular.Size20.Delete(), Location.View == FilesView.Bin)
+            }
+        </nav>
+
+        <div class="files-rail-tree">
+            <div class="files-rail-heading">Folders</div>
+            @if (_tree is null)
+            {
+                <div class="files-skeleton is-tree"></div>
+            }
+            else if (_tree.Count == 0)
+            {
+                <p class="files-rail-empty">@(CanManage ? "No folders yet." : "Nothing has been shared with staff yet.")</p>
+            }
+            else
+            {
+                <FolderTreeView Folders="_tree" SelectedFolderId="Location.FolderId" RootSelected="false" ShowRoot="false"
+                                RootLabel="@(CanManage ? "Files" : "Shared files")"
+                                OnSelect="id => GoAsync(new FilesLocation(FilesView.Folder, id))" />
+            }
+        </div>
+
+        @if (CanManage && _storage is not null)
+        {
+            <div class="files-storage" title="@StorageTitle">
+                <div class="files-storage-text">
+                    <strong>@FileTypeInfo.FormatSize(_storage.TotalBytes)</strong> in @FileBrowserFormat.Plural(_storage.FileCount, "file")
+                </div>
+                <div class="files-storage-bar" role="img" aria-label="@StorageTitle">
+                    @foreach ((FileTypeGroup group, long bytes) in _storage.BytesByGroup.Where(x => x.Value > 0))
+                    {
+                        <span class="files-storage-segment @FileBrowserFormat.TypeClass(group)" style="flex-grow:@bytes"></span>
+                    }
+                </div>
+            </div>
+        }
+    </aside>
+
+    <section class="files-main" aria-label="@Heading">
+        <header class="files-toolbar">
+            <div class="files-search">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Search())" Color="Color.Default" />
+                <input type="search" class="files-search-input" placeholder="@(CanManage ? "Search all files" : "Search shared files")"
+                       aria-label="Search files" value="@_searchText" @oninput="OnSearchInput" @onkeydown="OnSearchKeyDown" />
+                @if (!string.IsNullOrEmpty(_searchText))
+                {
+                    <button type="button" class="files-icon-button is-small" aria-label="Clear search" @onclick="ClearSearchAsync">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Color="Color.Default" />
+                    </button>
+                }
+            </div>
+
+            <div class="files-toolbar-actions">
+                @if (CanManage && Location.View == FilesView.Folder)
+                {
+                    <FluentButton IconStart="@(new Icons.Regular.Size20.FolderAdd())" OnClick="NewFolderAsync" Class="files-toolbar-new-folder">New folder</FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ArrowUpload())" OnClick="UploadAsync">Upload</FluentButton>
+                }
+                @if (CanManage && Location.View == FilesView.Bin && _bin?.Count > 0)
+                {
+                    <FluentButton IconStart="@(new Icons.Regular.Size20.DeleteDismiss())" OnClick="EmptyBinAsync">Empty bin</FluentButton>
+                }
+                <HelpButton AreaKey="@HelpRegistry.Files" />
+            </div>
+        </header>
+
+        @* Phone: Quick access as chips under the search box. *@
+        <nav class="files-chips" aria-label="Quick access">
+            @Chip(FilesLocation.Home, CanManage ? "All" : "Shared", Location.View == FilesView.Folder)
+            @Chip(new FilesLocation(FilesView.Recent), "Recent", Location.View == FilesView.Recent)
+            @foreach (FileTypeGroup group in QuickGroups)
+            {
+                @Chip(new FilesLocation(FilesView.Type, Type: group), FileBrowserFormat.GroupLabel(group), Location.View == FilesView.Type && Location.Type == group)
+            }
+            @if (CanManage)
+            {
+                @Chip(new FilesLocation(FilesView.Bin), BinLabel, Location.View == FilesView.Bin)
+            }
+        </nav>
+
+        <div class="files-heading-row">
+            @if (Location.View == FilesView.Folder)
+            {
+                <nav class="files-breadcrumb" aria-label="Folder path">
+                    @if (Location.FolderId is not null)
+                    {
+                        <button type="button" class="files-icon-button files-up" aria-label="Up one folder" title="Up one folder" @onclick="GoUpAsync">
+                            <FluentIcon Value="@(new Icons.Regular.Size20.ArrowUp())" Color="Color.Default" />
+                        </button>
+                    }
+                    <ol>
+                        <li>
+                            @if (Location.FolderId is null)
+                            {
+                                <span class="files-crumb is-current" aria-current="page">@(CanManage ? "Files" : "Shared files")</span>
+                            }
+                            else
+                            {
+                                <a class="files-crumb" href="@FilesLocation.Home.ToUrl()" @onclick="() => GoAsync(FilesLocation.Home)" @onclick:preventDefault>@(CanManage ? "Files" : "Shared files")</a>
+                            }
+                        </li>
+                        @foreach (FolderNode crumb in _path)
+                        {
+                            bool last = crumb.Id == Location.FolderId;
+                            <li>
+                                <FluentIcon Value="@(new Icons.Regular.Size12.ChevronRight())" Color="Color.Default" Class="files-crumb-sep" />
+                                @if (last)
+                                {
+                                    <span class="files-crumb is-current" aria-current="page">@crumb.Name</span>
+                                    @if (crumb.IsSharedEffective)
+                                    {
+                                        <span class="files-badge is-shared" title="Every staff member can see this folder">
+                                            <FluentIcon Value="@(new Icons.Regular.Size12.People())" Color="Color.Default" /> Shared
+                                        </span>
+                                    }
+                                }
+                                else
+                                {
+                                    FilesLocation to = new(FilesView.Folder, crumb.Id);
+                                    <a class="files-crumb" href="@to.ToUrl()" @onclick="() => GoAsync(to)" @onclick:preventDefault>@crumb.Name</a>
+                                }
+                            </li>
+                        }
+                    </ol>
+                </nav>
+            }
+            else
+            {
+                <h1 class="files-heading">@Heading</h1>
+            }
+
+            @if (Location.View != FilesView.Bin)
+            {
+                <div class="files-view-controls">
+                    @if (Location.View != FilesView.Recent)
+                    {
+                    <label class="files-sort">
+                        <span class="files-visually-hidden">Sort by</span>
+                        <select @onchange="OnSortChanged" aria-label="Sort by">
+                            @foreach ((string value, string label) in SortOptions)
+                            {
+                                <option value="@value" selected="@(value == SortValue)">@label</option>
+                            }
+                        </select>
+                    </label>
+                    }
+                    <div class="files-view-toggle" role="group" aria-label="View">
+                        <button type="button" class="files-icon-button @(_grid ? "is-on" : "")" aria-pressed="@(_grid ? "true" : "false")" title="Grid" aria-label="Grid view" @onclick="() => SetGridAsync(true)">
+                            <FluentIcon Value="@(new Icons.Regular.Size20.Grid())" Color="Color.Default" />
+                        </button>
+                        <button type="button" class="files-icon-button @(!_grid ? "is-on" : "")" aria-pressed="@(!_grid ? "true" : "false")" title="List" aria-label="List view" @onclick="() => SetGridAsync(false)">
+                            <FluentIcon Value="@(new Icons.Regular.Size20.TextBulletListLtr())" Color="Color.Default" />
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="files-content" aria-busy="@(_loading ? "true" : "false")">
+            @if (_error is not null)
+            {
+                <div class="files-empty is-error">
+                    <FluentIcon Value="@(new Icons.Regular.Size24.FolderProhibited())" Color="Color.Default" />
+                    <h2>@_error</h2>
+                    <FluentButton OnClick="() => GoAsync(FilesLocation.Home)">Back to @(CanManage ? "Files" : "Shared files")</FluentButton>
+                </div>
+            }
+            else if (Location.View == FilesView.Bin)
+            {
+                @RenderBin()
+            }
+            else if (_result is null)
+            {
+                <div class="files-skeleton-grid">
+                    @for (int i = 0; i < 8; i++)
+                    {
+                        <div class="files-skeleton is-tile"></div>
+                    }
+                </div>
+            }
+            else if (_result.Folders.Count == 0 && _result.Files.Count == 0)
+            {
+                @RenderEmpty()
+            }
+            else
+            {
+                @if (Location.View == FilesView.Search)
+                {
+                    <p class="files-result-count" role="status">@ResultSummary</p>
+                }
+                <div class="@(_grid ? "files-grid" : "files-list")" role="list">
+                    @foreach (FolderNode folder in _result.Folders)
+                    {
+                        @RenderFolder(folder)
+                    }
+                    @for (int i = 0; i < _result.Files.Count; i++)
+                    {
+                        @RenderFile(_result.Files[i], i)
+                    }
+                </div>
+                @if (_result.TotalFiles > _result.Files.Count)
+                {
+                    <p class="files-result-count">Showing the first @_result.Files.Count of @_result.TotalFiles. Search or filter to narrow it down.</p>
+                }
+            }
+        </div>
+    </section>
+
+    @if (_details is not null)
+    {
+        <div class="files-details-backdrop" @onclick="CloseDetails"></div>
+        <aside class="files-details" aria-label="Details">
+            @RenderDetails()
+        </aside>
+    }
+
+    @if (_menu is not null)
+    {
+        <div class="files-menu-backdrop" @onclick="CloseMenu" @oncontextmenu="CloseMenu" @oncontextmenu:preventDefault></div>
+        <div class="files-menu" role="menu" aria-label="@_menu.Title" style="@_menu.Style" @onkeydown="OnMenuKeyDown">
+            <div class="files-menu-title">@_menu.Title</div>
+            @foreach (MenuAction action in _menu.Actions)
+            {
+                <button type="button" role="menuitem" class="files-menu-item @(action.Danger ? "is-danger" : "")" @onclick="() => RunMenuAsync(action)">
+                    <FluentIcon Value="@action.Icon" Color="Color.Default" />
+                    <span>@action.Label</span>
+                </button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>Admin or CanManageFiles. Everyone else gets the read-only, shared-folders-only view.</summary>
+    [Parameter] public bool CanManage { get; set; }
+
+    [Parameter, EditorRequired] public FilesLocation Location { get; set; } = FilesLocation.Home;
+
+    private static readonly FileTypeGroup[] QuickGroups = [FileTypeGroup.Image, FileTypeGroup.Video, FileTypeGroup.Audio, FileTypeGroup.Document];
+
+    private IReadOnlyList<FolderNode>? _tree;
+    private IReadOnlyList<FolderNode> _path = [];
+    private FileQueryResult? _result;
+    private IReadOnlyList<BinItem>? _bin;
+    private StorageSummary? _storage;
+    private string? _error;
+    private bool _loading;
+    private bool _ready;
+
+    private FilesLocation? _loadedLocation;
+    private string _searchText = "";
+    private CancellationTokenSource? _searchDelay;
+
+    private FileSort _sort = FileSort.Name;
+    private bool _descending;
+    private bool _grid = true;
+
+    private Selection? _details;
+    private MenuState? _menu;
+
+    private bool SharedOnly => !CanManage;
+
+    private abstract record Selection;
+    private sealed record FileSelection(FileListItem File, int Index) : Selection;
+    private sealed record FolderSelection(FolderNode Folder) : Selection;
+
+    private sealed record MenuAction(string Label, Icon Icon, Func<Task> Run, bool Danger = false);
+    private sealed record MenuState(string Title, IReadOnlyList<MenuAction> Actions, string Style);
+
+    private string BinLabel => _storage?.BinCount > 0 ? $"Recycle bin ({_storage.BinCount})" : "Recycle bin";
+
+    private string Heading => Location.View switch
+    {
+        FilesView.Recent => "Recent",
+        FilesView.Type => FileBrowserFormat.GroupLabel(Location.Type ?? FileTypeGroup.Other),
+        FilesView.Search => $"Search: {Location.Search}",
+        FilesView.Bin => "Recycle bin",
+        _ => _path.LastOrDefault()?.Name ?? (CanManage ? "Files" : "Shared files"),
+    };
+
+    private string StorageTitle => _storage is null ? "" : string.Join(", ",
+        _storage.BytesByGroup.Where(x => x.Value > 0).Select(x => $"{FileBrowserFormat.GroupLabel(x.Key)} {FileTypeInfo.FormatSize(x.Value)}"));
+
+    private string ResultSummary
+    {
+        get
+        {
+            int count = (_result?.Files.Count ?? 0) + (_result?.Folders.Count ?? 0);
+            return $"{FileBrowserFormat.Plural(count, "result")} for “{Location.Search}”";
+        }
+    }
+
+    private static readonly (string Value, string Label)[] SortOptions =
+    [
+        ("name", "Name A–Z"),
+        ("name-desc", "Name Z–A"),
+        ("uploaded-desc", "Newest first"),
+        ("uploaded", "Oldest first"),
+        ("size-desc", "Largest first"),
+        ("size", "Smallest first"),
+        ("type", "Type"),
+    ];
+
+    private string SortValue => (_sort, _descending) switch
+    {
+        (FileSort.Name, true) => "name-desc",
+        (FileSort.Uploaded, true) => "uploaded-desc",
+        (FileSort.Uploaded, false) => "uploaded",
+        (FileSort.Size, true) => "size-desc",
+        (FileSort.Size, false) => "size",
+        (FileSort.Type, _) => "type",
+        _ => "name",
+    };
+
+    // ---------- Loading ----------
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Loaded after the first render: the page is prerendered, and the remembered view lives in
+        // the browser.
+        if (!firstRender)
+            return;
+
+        await RestorePreferencesAsync();
+        _ready = true;
+        await Task.WhenAll(LoadTreeAsync(), LoadStorageAsync());
+        await LoadContentAsync();
+        StateHasChanged();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _searchText = Location.View == FilesView.Search ? Location.Search ?? "" : "";
+
+        if (_ready && Location != _loadedLocation)
+            await LoadContentAsync();
+    }
+
+    private async Task LoadTreeAsync()
+    {
+        Result<IReadOnlyList<FolderNode>> tree = await _library.GetTreeAsync(SharedOnly, CancellationToken.None);
+        _tree = tree.Data ?? [];
+    }
+
+    private async Task LoadStorageAsync()
+    {
+        if (!CanManage)
+            return;
+
+        _storage = (await _library.GetStorageSummaryAsync(CancellationToken.None)).Data;
+    }
+
+    private async Task LoadContentAsync()
+    {
+        FilesLocation location = Location;
+        _loadedLocation = location;
+        _loading = true;
+        _error = null;
+        _details = null;
+        _menu = null;
+
+        try
+        {
+            if (location.View == FilesView.Bin)
+            {
+                if (!CanManage)
+                {
+                    _error = "Only people who manage files can see the Recycle bin.";
+                    return;
+                }
+
+                Result<IReadOnlyList<BinItem>> bin = await _library.ListBinAsync(CancellationToken.None);
+                _bin = bin.Data;
+                _error = bin.IsSuccess ? null : bin.Error;
+                return;
+            }
+
+            FileQuery query = location.View switch
+            {
+                FilesView.Recent => new FileQuery { AllFolders = true, Sort = FileSort.Uploaded, Descending = true, Take = 60 },
+                FilesView.Type => new FileQuery { AllFolders = true, TypeGroup = location.Type, Sort = _sort, Descending = _descending },
+                FilesView.Search => new FileQuery { AllFolders = true, Search = location.Search, TypeGroup = location.Type, Sort = _sort, Descending = _descending },
+                _ => new FileQuery { FolderId = location.FolderId, Sort = _sort, Descending = _descending },
+            };
+
+            Result<FileQueryResult> result = await _library.QueryAsync(query with { SharedOnly = SharedOnly }, CancellationToken.None);
+
+            if (location != Location)
+                return; // Moved on while this was loading.
+
+            if (!result.IsSuccess)
+            {
+                _result = null;
+                _error = result.Error == "Folder not found." ? "That folder doesn't exist any more, or you can't see it." : result.Error;
+                return;
+            }
+
+            _result = result.Data;
+
+            _path = location.View == FilesView.Folder && location.FolderId is Guid folderId
+                ? (await _library.GetPathAsync(folderId, SharedOnly, CancellationToken.None)).Data ?? []
+                : [];
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task RefreshAsync(bool tree = true)
+    {
+        _loadedLocation = null;
+        List<Task> work = [LoadContentAsync(), LoadStorageAsync()];
+
+        if (tree)
+            work.Add(LoadTreeAsync());
+
+        await Task.WhenAll(work);
+        StateHasChanged();
+    }
+
+    // ---------- Navigation ----------
+
+    private Task GoAsync(FilesLocation location)
+    {
+        _menu = null;
+        _navigation.NavigateTo(location.ToUrl());
+        return Task.CompletedTask;
+    }
+
+    private Task GoUpAsync()
+    {
+        Guid? parent = _path.Count >= 2 ? _path[^2].Id : null;
+        return GoAsync(new FilesLocation(FilesView.Folder, parent));
+    }
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        _searchText = e.Value?.ToString() ?? "";
+        _searchDelay?.Cancel();
+        _searchDelay = new CancellationTokenSource();
+        CancellationToken token = _searchDelay.Token;
+
+        try
+        {
+            await Task.Delay(350, token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
+        SearchNow(replace: Location.View == FilesView.Search);
+    }
+
+    private void OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _searchDelay?.Cancel();
+            SearchNow(replace: Location.View == FilesView.Search);
+        }
+        else if (e.Key == "Escape" && _searchText.Length > 0)
+        {
+            _ = ClearSearchAsync();
+        }
+    }
+
+    private void SearchNow(bool replace)
+    {
+        string text = _searchText.Trim();
+
+        FilesLocation to = text.Length == 0
+            ? FilesLocation.Home
+            : new FilesLocation(FilesView.Search, Search: text);
+
+        if (to != Location)
+            _navigation.NavigateTo(to.ToUrl(), replace: replace);
+    }
+
+    private Task ClearSearchAsync()
+    {
+        _searchDelay?.Cancel();
+        _searchText = "";
+        return Location.View == FilesView.Search ? GoAsync(FilesLocation.Home) : Task.CompletedTask;
+    }
+
+    private async Task OnSortChanged(ChangeEventArgs e)
+    {
+        (_sort, _descending) = (e.Value?.ToString()) switch
+        {
+            "name-desc" => (FileSort.Name, true),
+            "uploaded-desc" => (FileSort.Uploaded, true),
+            "uploaded" => (FileSort.Uploaded, false),
+            "size-desc" => (FileSort.Size, true),
+            "size" => (FileSort.Size, false),
+            "type" => (FileSort.Type, false),
+            _ => (FileSort.Name, false),
+        };
+
+        await SavePreferenceAsync("lanyard.files.sort", SortValue);
+        _loadedLocation = null;
+        await LoadContentAsync();
+    }
+
+    private async Task SetGridAsync(bool grid)
+    {
+        _grid = grid;
+        await SavePreferenceAsync("lanyard.files.view", grid ? "grid" : "list");
+    }
+
+    private async Task RestorePreferencesAsync()
+    {
+        try
+        {
+            string? view = await _js.InvokeAsync<string?>("localStorage.getItem", "lanyard.files.view");
+            string? sort = await _js.InvokeAsync<string?>("localStorage.getItem", "lanyard.files.sort");
+
+            _grid = view != "list";
+
+            if (sort is not null)
+                await OnSortChangedSilently(sort);
+        }
+        catch (Exception ex) when (ex is JSException or InvalidOperationException or TaskCanceledException)
+        {
+            // Private browsing or blocked storage: the defaults are fine.
+        }
+    }
+
+    private Task OnSortChangedSilently(string value)
+    {
+        (_sort, _descending) = value switch
+        {
+            "name-desc" => (FileSort.Name, true),
+            "uploaded-desc" => (FileSort.Uploaded, true),
+            "uploaded" => (FileSort.Uploaded, false),
+            "size-desc" => (FileSort.Size, true),
+            "size" => (FileSort.Size, false),
+            "type" => (FileSort.Type, false),
+            _ => (FileSort.Name, false),
+        };
+
+        return Task.CompletedTask;
+    }
+
+    private async Task SavePreferenceAsync(string key, string value)
+    {
+        try
+        {
+            await _js.InvokeVoidAsync("localStorage.setItem", key, value);
+        }
+        catch (Exception ex) when (ex is JSException or InvalidOperationException or TaskCanceledException)
+        {
+        }
+    }
+
+    // ---------- Selection, details and menus ----------
+
+    private void Select(Selection selection)
+    {
+        _menu = null;
+        _details = selection;
+    }
+
+    private void CloseDetails() => _details = null;
+
+    private void CloseMenu() => _menu = null;
+
+    private void OnMenuKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+            _menu = null;
+    }
+
+    private async Task RunMenuAsync(MenuAction action)
+    {
+        _menu = null;
+        await action.Run();
+    }
+
+    // Opened from the ⋯ button or a right-click, beside the pointer. On a phone it's a sheet from
+    // the bottom instead (CSS), so the position only matters on a wide screen.
+    private void OpenMenu(MouseEventArgs e, string title, IReadOnlyList<MenuAction> actions)
+    {
+        double left = Math.Max(8, e.ClientX - 8);
+        double top = Math.Max(8, e.ClientY + 4);
+        _menu = new MenuState(title, actions, $"--menu-left:{left:0}px;--menu-top:{top:0}px");
+    }
+
+    private List<MenuAction> FileActions(FileListItem file, int index)
+    {
+        List<MenuAction> actions =
+        [
+            new("Preview", new Icons.Regular.Size20.Eye(), () => PreviewAsync(index)),
+            new("Download", new Icons.Regular.Size20.ArrowDownload(), () => DownloadAsync(file)),
+        ];
+
+        if (Location.View != FilesView.Folder)
+            actions.Add(new("Show in folder", new Icons.Regular.Size20.FolderOpen(), () => GoAsync(new FilesLocation(FilesView.Folder, file.FolderId))));
+
+        if (CanManage)
+        {
+            actions.Add(new("Rename", new Icons.Regular.Size20.Rename(), () => RenameFileAsync(file)));
+            actions.Add(new("Move to…", new Icons.Regular.Size20.ArrowMove(), () => MoveAsync([file.Id], [], file.FileName, file.FolderId)));
+            actions.Add(new("Delete", new Icons.Regular.Size20.Delete(), () => DeleteAsync([file.Id], [], [file.FileName]), Danger: true));
+        }
+
+        return actions;
+    }
+
+    private List<MenuAction> FolderActions(FolderNode folder)
+    {
+        List<MenuAction> actions =
+        [
+            new("Open", new Icons.Regular.Size20.FolderOpen(), () => GoAsync(new FilesLocation(FilesView.Folder, folder.Id))),
+        ];
+
+        if (CanManage)
+        {
+            actions.Add(new("Rename", new Icons.Regular.Size20.Rename(), () => RenameFolderAsync(folder)));
+            actions.Add(new(folder.IsSharedWithStaff ? "Stop sharing with staff" : "Share with staff", new Icons.Regular.Size20.People(), () => SetSharedAsync(folder, !folder.IsSharedWithStaff)));
+            actions.Add(new("Move to…", new Icons.Regular.Size20.ArrowMove(), () => MoveAsync([], [folder.Id], folder.Name, folder.ParentFolderId)));
+            actions.Add(new("Delete", new Icons.Regular.Size20.Delete(), () => DeleteAsync([], [folder.Id], [folder.Name]), Danger: true));
+        }
+
+        return actions;
+    }
+
+    private async Task OnItemKeyDownAsync(KeyboardEventArgs e, Selection selection)
+    {
+        switch (e.Key)
+        {
+            case "Delete" when CanManage:
+                if (selection is FileSelection f)
+                    await DeleteAsync([f.File.Id], [], [f.File.FileName]);
+                else if (selection is FolderSelection d)
+                    await DeleteAsync([], [d.Folder.Id], [d.Folder.Name]);
+                break;
+            case "F2" when CanManage:
+                if (selection is FileSelection rf)
+                    await RenameFileAsync(rf.File);
+                else if (selection is FolderSelection rd)
+                    await RenameFolderAsync(rd.Folder);
+                break;
+            case " ":
+                if (selection is FileSelection pf)
+                    await PreviewAsync(pf.Index);
+                break;
+        }
+    }
+
+    // ---------- Actions ----------
+
+    private async Task PreviewAsync(int index)
+    {
+        if (_result is null || _result.Files.Count == 0)
+            return;
+
+        await _dialogService.ShowDialogAsync<FilePreviewDialog>(options =>
+        {
+            options.Width = "min(1100px, 96vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(FilePreviewDialog.Files), _result.Files);
+            options.Parameters.Add(nameof(FilePreviewDialog.StartIndex), index);
+        });
+    }
+
+    // A full navigation to the download URL: the response is an attachment, so the browser saves
+    // it and stays on the page (a Blazor navigation would look for a page there instead).
+    private Task DownloadAsync(FileListItem file)
+    {
+        _navigation.NavigateTo(FileBrowserFormat.DownloadUrl(file.Id), forceLoad: true);
+        return Task.CompletedTask;
+    }
+
+    private Guid? CurrentFolderId => Location.View == FilesView.Folder ? Location.FolderId : null;
+
+    private string CurrentFolderName => _path.LastOrDefault()?.Name ?? "Files (top level)";
+
+    private async Task NewFolderAsync()
+    {
+        Guid? parent = CurrentFolderId;
+        Guid? created = null;
+
+        DialogResult result = await _dialogService.ShowDialogAsync<FileNameDialog>(options =>
+        {
+            options.Header.Title = "New folder";
+            options.Width = "min(440px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(FileNameDialog.Label), "Folder name");
+            options.Parameters.Add(nameof(FileNameDialog.ConfirmText), "Create");
+            options.Parameters.Add(nameof(FileNameDialog.Save), (Func<string, Task<string?>>)(async name =>
+            {
+                Result<Folder> saved = await _fileService.CreateFolderAsync(name, parent, CancellationToken.None);
+                created = saved.Data?.Id;
+                return saved.IsSuccess ? null : saved.Error;
+            }));
+        });
+
+        if (result.Cancelled)
+            return;
+
+        _toast.ShowSuccess($"Created \"{result.Value}\"");
+        await RefreshAsync();
+    }
+
+    private async Task UploadAsync()
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<UploadFilesDialog>(options =>
+        {
+            options.Header.Title = "Upload files";
+            options.Width = "min(560px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(UploadFilesDialog.FolderId), CurrentFolderId);
+            options.Parameters.Add(nameof(UploadFilesDialog.FolderName), CurrentFolderName);
+        });
+
+        // Refresh either way: files uploaded before Cancel are still there.
+        await RefreshAsync();
+
+        if (result.Value is int count && count > 0)
+            _toast.ShowSuccess($"Uploaded {FileBrowserFormat.Plural(count, "file")}");
+    }
+
+    private async Task RenameFileAsync(FileListItem file)
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<FileNameDialog>(options =>
+        {
+            options.Header.Title = "Rename file";
+            options.Width = "min(480px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(FileNameDialog.Label), "File name");
+            options.Parameters.Add(nameof(FileNameDialog.InitialValue), file.FileName);
+            options.Parameters.Add(nameof(FileNameDialog.KeepExtension), true);
+            options.Parameters.Add(nameof(FileNameDialog.ConfirmText), "Rename");
+            options.Parameters.Add(nameof(FileNameDialog.Save), (Func<string, Task<string?>>)(async name =>
+            {
+                if (name == file.FileName)
+                    return null;
+
+                Result<FileMetadata> saved = await _fileService.RenameFileAsync(file.Id, name, CancellationToken.None);
+                return saved.IsSuccess ? null : saved.Error;
+            }));
+        });
+
+        if (!result.Cancelled)
+            await RefreshAsync(tree: false);
+    }
+
+    private async Task RenameFolderAsync(FolderNode folder)
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<FileNameDialog>(options =>
+        {
+            options.Header.Title = "Rename folder";
+            options.Width = "min(440px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(FileNameDialog.Label), "Folder name");
+            options.Parameters.Add(nameof(FileNameDialog.InitialValue), folder.Name);
+            options.Parameters.Add(nameof(FileNameDialog.ConfirmText), "Rename");
+            options.Parameters.Add(nameof(FileNameDialog.Save), (Func<string, Task<string?>>)(async name =>
+            {
+                if (name == folder.Name)
+                    return null;
+
+                Result<Folder> saved = await _fileService.RenameFolderAsync(folder.Id, name, CancellationToken.None);
+                return saved.IsSuccess ? null : saved.Error;
+            }));
+        });
+
+        if (!result.Cancelled)
+            await RefreshAsync();
+    }
+
+    private async Task SetSharedAsync(FolderNode folder, bool shared)
+    {
+        Result<FolderNode> result = await _library.SetFolderSharedAsync(folder.Id, shared, CancellationToken.None);
+
+        if (!result.IsSuccess)
+        {
+            _toast.ShowWarning(result.Error ?? "Couldn't change who can see the folder.");
+            return;
+        }
+
+        _toast.ShowSuccess(shared
+            ? $"Every staff member can now see \"{folder.Name}\" and everything in it"
+            : $"\"{folder.Name}\" is for file managers only again");
+
+        await RefreshAsync();
+
+        if (_details is FolderSelection && result.Data is FolderNode updated)
+            _details = new FolderSelection(updated);
+    }
+
+    private async Task MoveAsync(IReadOnlyList<Guid> fileIds, IReadOnlyList<Guid> folderIds, string what, Guid? currentFolder)
+    {
+        if (_tree is null)
+            await LoadTreeAsync();
+
+        DialogResult result = await _dialogService.ShowDialogAsync<MoveItemsDialog>(options =>
+        {
+            options.Header.Title = "Move to";
+            options.Width = "min(480px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(MoveItemsDialog.Folders), _tree!);
+            options.Parameters.Add(nameof(MoveItemsDialog.MovingFolderIds), folderIds);
+            options.Parameters.Add(nameof(MoveItemsDialog.CurrentFolderId), currentFolder);
+            options.Parameters.Add(nameof(MoveItemsDialog.What), $"“{what}”");
+        });
+
+        if (result.Cancelled || result.Value is not MoveItemsDialog.MoveTarget target)
+            return;
+
+        Result<BulkOperationResult> moved = await _library.MoveAsync(fileIds, folderIds, target.FolderId, CancellationToken.None);
+        string destination = target.FolderId is Guid id ? _tree!.FirstOrDefault(x => x.Id == id)?.Name ?? "the folder" : "Files";
+
+        ReportBulk(moved, $"Moved to {destination}");
+        await RefreshAsync();
+    }
+
+    private async Task DeleteAsync(IReadOnlyList<Guid> fileIds, IReadOnlyList<Guid> folderIds, IReadOnlyList<string> names)
+    {
+        DialogResult confirm = await _dialogService.ShowDialogAsync<DeleteItemsDialog>(options =>
+        {
+            options.Header.Title = "Delete";
+            options.Width = "min(480px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(DeleteItemsDialog.Names), names);
+            options.Parameters.Add(nameof(DeleteItemsDialog.FileIds), fileIds);
+            options.Parameters.Add(nameof(DeleteItemsDialog.FolderCount), folderIds.Count);
+        });
+
+        if (confirm.Cancelled || confirm.Value is not true)
+            return;
+
+        Result<BulkOperationResult> deleted = await _library.MoveToBinAsync(fileIds, folderIds, CancellationToken.None);
+        ReportBulk(deleted, names.Count == 1 ? $"\"{names[0]}\" is in the Recycle bin" : $"{names.Count} items are in the Recycle bin");
+
+        // Deleting the folder that's open takes you to the one above it.
+        if (Location.FolderId is Guid open && folderIds.Contains(open))
+        {
+            await GoUpAsync();
+            await Task.WhenAll(LoadTreeAsync(), LoadStorageAsync());
+            return;
+        }
+
+        await RefreshAsync();
+    }
+
+    private async Task RestoreAsync(BinItem item)
+    {
+        Result<BulkOperationResult> restored = item.Kind == BinItemKind.Folder
+            ? await _library.RestoreAsync([], [item.Id], CancellationToken.None)
+            : await _library.RestoreAsync([item.Id], [], CancellationToken.None);
+
+        ReportBulk(restored, $"Restored \"{item.Name}\"");
+        await RefreshAsync();
+    }
+
+    private async Task DeleteForeverAsync(BinItem item)
+    {
+        DialogResult confirm = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Delete for good";
+            options.Width = "min(450px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message),
+                $"Delete \"{item.Name}\"{(item.Kind == BinItemKind.Folder ? " and everything in it" : "")} for good? This can't be undone.");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Delete for good");
+        });
+
+        if (confirm.Cancelled || confirm.Value is not true)
+            return;
+
+        Result<BulkOperationResult> deleted = item.Kind == BinItemKind.Folder
+            ? await _library.DeleteForeverAsync([], [item.Id], CancellationToken.None)
+            : await _library.DeleteForeverAsync([item.Id], [], CancellationToken.None);
+
+        ReportBulk(deleted, $"Deleted \"{item.Name}\" for good");
+        await RefreshAsync();
+    }
+
+    private async Task EmptyBinAsync()
+    {
+        DialogResult confirm = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Empty the Recycle bin";
+            options.Width = "min(450px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message),
+                $"Delete all {FileBrowserFormat.Plural(_bin?.Count ?? 0, "item")} in the Recycle bin for good? Anything still in use stays. This can't be undone.");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Empty bin");
+        });
+
+        if (confirm.Cancelled || confirm.Value is not true)
+            return;
+
+        ReportBulk(await _library.EmptyBinAsync(CancellationToken.None), "Emptied the Recycle bin");
+        await RefreshAsync();
+    }
+
+    private void ReportBulk(Result<BulkOperationResult> result, string success)
+    {
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toast.ShowWarning(result.Error ?? "That didn't work.");
+            return;
+        }
+
+        BulkOperationResult done = result.Data;
+
+        if (done.Failures.Count == 0)
+            _toast.ShowSuccess(success);
+        else if (done.Succeeded == 0 && done.Failures.Count == 1)
+            _toast.ShowWarning($"\"{done.Failures[0].Name}\": {done.Failures[0].Reason}");
+        else
+            _toast.ShowWarning($"{done.Succeeded} done. {done.Failures.Count} couldn't be: {string.Join(" ", done.Failures.Take(3).Select(x => $"\"{x.Name}\": {x.Reason}"))}");
+
+        foreach (string note in done.Notes)
+            _toast.ShowInfo(note);
+    }
+
+    // ---------- Rendering ----------
+
+    private RenderFragment QuickLink(FilesLocation to, string label, Icon icon, bool active) => __builder =>
+    {
+        <a class="files-quick-link @(active ? "is-active" : "")" href="@to.ToUrl()" aria-current="@(active ? "page" : null)"
+           @onclick="() => GoAsync(to)" @onclick:preventDefault>
+            <FluentIcon Value="@icon" Color="Color.Default" />
+            <span>@label</span>
+        </a>
+    };
+
+    private RenderFragment Chip(FilesLocation to, string label, bool active) => __builder =>
+    {
+        <a class="files-chip @(active ? "is-active" : "")" href="@to.ToUrl()" aria-current="@(active ? "page" : null)"
+           @onclick="() => GoAsync(to)" @onclick:preventDefault>@label</a>
+    };
+
+    private RenderFragment RenderFolder(FolderNode folder) => __builder =>
+    {
+        FolderSelection selection = new(folder);
+        bool selected = _details is FolderSelection s && s.Folder.Id == folder.Id;
+        FilesLocation open = new(FilesView.Folder, folder.Id);
+
+        <div class="files-item is-folder @(selected ? "is-selected" : "")" role="listitem" @key="folder.Id"
+             @oncontextmenu="e => OpenMenu(e, folder.Name, FolderActions(folder))" @oncontextmenu:preventDefault>
+            <a class="files-item-main" href="@open.ToUrl()" title="@folder.Name"
+               @onclick="() => GoAsync(open)" @onclick:preventDefault
+               @onkeydown="e => OnItemKeyDownAsync(e, selection)">
+                <span class="files-item-thumb is-folder">
+                    <FluentIcon Value="@(new Icons.Filled.Size24.Folder())" Color="Color.Default" />
+                    @if (folder.IsSharedEffective)
+                    {
+                        <span class="files-item-shared" title="Shared with staff"><FluentIcon Value="@(new Icons.Filled.Size12.People())" Color="Color.Default" /></span>
+                    }
+                </span>
+                <span class="files-item-text">
+                    <span class="files-item-name">@folder.Name</span>
+                    <span class="files-item-meta">
+                        @FileBrowserFormat.FolderSummary(folder)
+                        @if (Location.View == FilesView.Search && folder.ParentFolderId is not null)
+                        {
+                            <span class="files-item-path"> · in @(_tree?.FirstOrDefault(x => x.Id == folder.ParentFolderId)?.Name)</span>
+                        }
+                    </span>
+                </span>
+                <span class="files-item-col is-type">Folder</span>
+                <span class="files-item-col is-size">@(folder.Bytes > 0 ? FileTypeInfo.FormatSize(folder.Bytes) : "")</span>
+                <span class="files-item-col is-date">@FileBrowserFormat.Date(folder.CreatedAt)</span>
+            </a>
+            <button type="button" class="files-icon-button files-item-info" aria-label="@($"Details for {folder.Name}")" title="Details" @onclick="() => Select(selection)">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Info())" Color="Color.Default" />
+            </button>
+            <button type="button" class="files-icon-button files-item-more" aria-label="@($"More for {folder.Name}")" aria-haspopup="menu" title="More"
+                    @onclick="e => OpenMenu(e, folder.Name, FolderActions(folder))">
+                <FluentIcon Value="@(new Icons.Regular.Size20.MoreHorizontal())" Color="Color.Default" />
+            </button>
+        </div>
+    };
+
+    private RenderFragment RenderFile(FileListItem file, int index) => __builder =>
+    {
+        FileSelection selection = new(file, index);
+        bool selected = _details is FileSelection s && s.File.Id == file.Id;
+
+        <div class="files-item @(selected ? "is-selected" : "")" role="listitem" @key="file.Id"
+             @oncontextmenu="e => OpenMenu(e, file.FileName, FileActions(file, index))" @oncontextmenu:preventDefault>
+            <button type="button" class="files-item-main" title="@file.FileName"
+                    @onclick="() => Select(selection)" @ondblclick="() => PreviewAsync(index)"
+                    @onkeydown="e => OnItemKeyDownAsync(e, selection)">
+                <span class="files-item-thumb @FileBrowserFormat.TypeClass(file.TypeGroup)">
+                    @if (file.TypeGroup == FileTypeGroup.Image)
+                    {
+                        <img src="@FileBrowserFormat.DownloadUrl(file.Id)" alt="" loading="lazy" decoding="async" />
+                    }
+                    else
+                    {
+                        <FluentIcon Value="@FileBrowserFormat.IconFor(file.TypeGroup, file.FileName, large: _grid)" Color="Color.Default" />
+                    }
+                    @if (file.Duration is TimeSpan duration && duration > TimeSpan.Zero)
+                    {
+                        <span class="files-item-duration">@FileBrowserFormat.Duration(duration)</span>
+                    }
+                    @if (file.IsInUse)
+                    {
+                        <span class="files-item-inuse" title="Used elsewhere in Lanyard"><FluentIcon Value="@(new Icons.Filled.Size12.Link())" Color="Color.Default" /></span>
+                    }
+                </span>
+                <span class="files-item-text">
+                    <span class="files-item-name">@file.FileName</span>
+                    <span class="files-item-meta">
+                        @FileTypeInfo.FormatSize(file.FileSize) · @FileBrowserFormat.Ago(file.UploadedAt)
+                        @if (Location.View != FilesView.Folder && file.FolderPath.Length > 0)
+                        {
+                            <span class="files-item-path"> · @file.FolderPath</span>
+                        }
+                    </span>
+                </span>
+                <span class="files-item-col is-type">@file.TypeName</span>
+                <span class="files-item-col is-size">@FileTypeInfo.FormatSize(file.FileSize)</span>
+                <span class="files-item-col is-date">@FileBrowserFormat.Date(file.UploadedAt)</span>
+            </button>
+            <button type="button" class="files-icon-button files-item-info" aria-label="@($"Preview {file.FileName}")" title="Preview" @onclick="() => PreviewAsync(index)">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Eye())" Color="Color.Default" />
+            </button>
+            <button type="button" class="files-icon-button files-item-more" aria-label="@($"More for {file.FileName}")" aria-haspopup="menu" title="More"
+                    @onclick="e => OpenMenu(e, file.FileName, FileActions(file, index))">
+                <FluentIcon Value="@(new Icons.Regular.Size20.MoreHorizontal())" Color="Color.Default" />
+            </button>
+        </div>
+    };
+
+    private RenderFragment RenderEmpty() => __builder =>
+    {
+        <div class="files-empty">
+            @switch (Location.View)
+            {
+                case FilesView.Search:
+                    <FluentIcon Value="@(new Icons.Regular.Size24.SearchInfo())" Color="Color.Default" />
+                    <h2>Nothing matches “@Location.Search”</h2>
+                    <p>Search looks at file and folder names in every @(CanManage ? "" : "shared ")folder.</p>
+                    <FluentButton OnClick="ClearSearchAsync">Clear search</FluentButton>
+                    break;
+                case FilesView.Recent:
+                case FilesView.Type:
+                    <FluentIcon Value="@(new Icons.Regular.Size24.Search())" Color="Color.Default" />
+                    <h2>No @Heading.ToLowerInvariant() yet</h2>
+                    break;
+                default:
+                    @if (CanManage)
+                    {
+                        <FluentIcon Value="@(new Icons.Regular.Size24.FolderOpen())" Color="Color.Default" />
+                        <h2>@(Location.FolderId is null ? "No files yet" : "This folder is empty")</h2>
+                        <p>Upload posters, videos, music and documents here, or make folders to keep them tidy.</p>
+                        <FluentStack HorizontalGap="8" HorizontalAlignment="HorizontalAlignment.Center">
+                            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ArrowUpload())" OnClick="UploadAsync">Upload</FluentButton>
+                            <FluentButton IconStart="@(new Icons.Regular.Size20.FolderAdd())" OnClick="NewFolderAsync">New folder</FluentButton>
+                        </FluentStack>
+                    }
+                    else
+                    {
+                        <FluentIcon Value="@(new Icons.Regular.Size24.FolderPeople())" Color="Color.Default" />
+                        <h2>@(Location.FolderId is null ? "Nothing shared yet" : "This folder is empty")</h2>
+                        <p>Your managers can share folders of menus, posters and guides with everyone. They'll show up here.</p>
+                    }
+                    break;
+            }
+        </div>
+    };
+
+    private RenderFragment RenderBin() => __builder =>
+    {
+        if (_bin is null)
+        {
+            <div class="files-skeleton is-list"></div>
+            return;
+        }
+
+        <p class="files-bin-intro">
+            <FluentIcon Value="@(new Icons.Regular.Size16.Info())" Color="Color.Default" />
+            Deleted files and folders stay here for 30 days, then they're removed for good. Anything still in use is kept until nothing uses it.
+        </p>
+
+        if (_bin.Count == 0)
+        {
+            <div class="files-empty">
+                <FluentIcon Value="@(new Icons.Regular.Size24.Delete())" Color="Color.Default" />
+                <h2>The Recycle bin is empty</h2>
+            </div>
+            return;
+        }
+
+        <div class="files-bin" role="list">
+            @foreach (BinItem item in _bin)
+            {
+                <div class="files-bin-item" role="listitem" @key="item.Id">
+                    <span class="files-item-thumb @(item.Kind == BinItemKind.Folder ? "is-folder" : FileBrowserFormat.TypeClass(item.TypeGroup))">
+                        <FluentIcon Value="@(item.Kind == BinItemKind.Folder ? (Icon)new Icons.Filled.Size24.Folder() : FileBrowserFormat.IconFor(item.TypeGroup, item.Name))" Color="Color.Default" />
+                    </span>
+                    <span class="files-item-text">
+                        <span class="files-item-name">@item.Name</span>
+                        <span class="files-item-meta">
+                            @(item.Kind == BinItemKind.Folder ? $"{FileBrowserFormat.Plural(item.ItemCount, "item")} · " : "")@FileTypeInfo.FormatSize(item.Bytes)
+                            · from @(item.OriginalPath.Length > 0 ? item.OriginalPath : "Files")
+                        </span>
+                        <span class="files-item-meta">
+                            Deleted @FileBrowserFormat.Ago(item.DeletedAt)@(item.DeletedByName is string by ? $" by {by}" : "")
+                            · <span class="files-bin-purge">@FileBrowserFormat.PurgeIn(item.PurgeAfter)</span>
+                        </span>
+                    </span>
+                    <span class="files-bin-actions">
+                        <FluentButton IconStart="@(new Icons.Regular.Size20.ArrowUndo())" OnClick="() => RestoreAsync(item)">Restore</FluentButton>
+                        <button type="button" class="files-icon-button" aria-label="@($"Delete {item.Name} for good")" title="Delete for good" @onclick="() => DeleteForeverAsync(item)">
+                            <FluentIcon Value="@(new Icons.Regular.Size20.DeleteDismiss())" Color="Color.Default" />
+                        </button>
+                    </span>
+                </div>
+            }
+        </div>
+    };
+
+    private RenderFragment RenderDetails() => __builder =>
+    {
+        <div class="files-details-header">
+            <h2 class="files-details-title">Details</h2>
+            <button type="button" class="files-icon-button" aria-label="Close details" @onclick="CloseDetails">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Dismiss())" Color="Color.Default" />
+            </button>
+        </div>
+
+        switch (_details)
+        {
+            case FileSelection { File: var file, Index: var index }:
+                <FileDetailsPanel @key="file.Id" File="file" CanManage="CanManage"
+                                  OnPreview="() => PreviewAsync(index)"
+                                  OnShowFolder="() => GoAsync(new FilesLocation(FilesView.Folder, file.FolderId))"
+                                  ShowFolderLink="Location.View != FilesView.Folder"
+                                  OnRename="() => RenameFileAsync(file)"
+                                  OnMove="() => MoveAsync([file.Id], [], file.FileName, file.FolderId)"
+                                  OnDelete="() => DeleteAsync([file.Id], [], [file.FileName])" />
+                break;
+            case FolderSelection { Folder: var folder }:
+                <div class="files-details-body">
+                    <div class="files-details-preview is-folder">
+                        <FluentIcon Value="@(new Icons.Filled.Size24.Folder())" Color="Color.Default" />
+                    </div>
+                    <h3 class="files-details-name">@folder.Name</h3>
+                    <dl class="files-details-facts">
+                        <dt>Contains</dt><dd>@FileBrowserFormat.FolderSummary(folder)</dd>
+                        <dt>Size</dt><dd>@FileTypeInfo.FormatSize(folder.Bytes) <span class="files-details-note">(not counting subfolders)</span></dd>
+                        <dt>Created</dt><dd>@FileBrowserFormat.When(folder.CreatedAt)</dd>
+                    </dl>
+
+                    @if (CanManage)
+                    {
+                        <div class="files-details-share">
+                            <FluentSwitch Value="folder.IsSharedWithStaff" ValueChanged="(bool on) => SetSharedAsync(folder, on)" Label="Share with staff" />
+                            <p class="files-details-note">
+                                @if (folder.IsSharedWithStaff)
+                                {
+                                    <text>Every staff member can see and download what's in this folder and its subfolders. They can't change anything.</text>
+                                }
+                                else if (folder.IsSharedEffective)
+                                {
+                                    <text>Shared already, because a folder above it is shared.</text>
+                                }
+                                else
+                                {
+                                    <text>Only Admins and people with CanManageFiles can see this folder.</text>
+                                }
+                            </p>
+                        </div>
+                    }
+
+                    <div class="files-details-actions">
+                        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.FolderOpen())" OnClick="() => GoAsync(new FilesLocation(FilesView.Folder, folder.Id))">Open</FluentButton>
+                        @if (CanManage)
+                        {
+                            <FluentButton IconStart="@(new Icons.Regular.Size20.Rename())" OnClick="() => RenameFolderAsync(folder)">Rename</FluentButton>
+                            <FluentButton IconStart="@(new Icons.Regular.Size20.ArrowMove())" OnClick="() => MoveAsync([], [folder.Id], folder.Name, folder.ParentFolderId)">Move</FluentButton>
+                            <FluentButton IconStart="@(new Icons.Regular.Size20.Delete())" OnClick="() => DeleteAsync([], [folder.Id], [folder.Name])">Delete</FluentButton>
+                        }
+                    </div>
+                </div>
+                break;
+        }
+    };
+}
