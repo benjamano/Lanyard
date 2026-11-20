@@ -2,6 +2,8 @@
     display: inline-flex;
     align-items: center;
     flex-shrink: 0;
+    margin-left: 6px;
+    vertical-align: middle;
     padding: 0 5px;
     border-radius: 4px;
     font-size: var(--fontSizeBase100);
