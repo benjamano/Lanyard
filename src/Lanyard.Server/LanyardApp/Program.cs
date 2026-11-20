@@ -113,6 +113,8 @@ builder.Services.AddScoped<IKioskSecurityService, KioskSecurityService>();
 builder.Services.AddSingleton<KioskConnectionRegistry>();
 builder.Services.AddScoped<ICurrentUserAccessor, CurrentUserAccessor>();
 builder.Services.AddScoped<IFileService, FileService>();
+builder.Services.AddScoped<IFileUsageService, FileUsageService>();
+builder.Services.AddScoped<IFileLibraryService, FileLibraryService>();
 
 // One bucket client for the whole process. FileService is scoped and used to build its own
 // AmazonS3Client per instance - a new SDK client and HTTP pipeline for every request/circuit.
@@ -232,6 +234,8 @@ builder.Services.AddScoped<ITimeOffService, TimeOffService>();
 builder.Services.AddHostedService<CourseRecurrenceHostedService>();
 builder.Services.AddHostedService<TrainingDueSoonHostedService>();
 builder.Services.AddHostedService<StaffDocumentExpiryReminderHostedService>();
+builder.Services.AddHostedService<FileBinPurgeHostedService>();
+builder.Services.AddHostedService<FileThumbnailBackfillHostedService>();
 builder.Services.AddSingleton<NotificationDispatcher>();
 builder.Services.AddSingleton<INotificationDispatcher>(sp => sp.GetRequiredService<NotificationDispatcher>());
 builder.Services.AddScoped<INotificationDeliverer, NotificationDeliverer>();

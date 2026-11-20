@@ -1,0 +1,125 @@
+@using Lanyard.Infrastructure.DTO.Files
+@inject IFileUsageService _usageService
+
+@* One file's details: a preview, the facts, what in Lanyard uses it, and its actions. *@
+<div class="files-details-body">
+    <button type="button" class="files-details-preview @FileBrowserFormat.TypeClass(File.TypeGroup)" title="Preview" @onclick="OnPreview">
+        @switch (File.TypeGroup)
+        {
+            case FileTypeGroup.Image:
+                <img src="@FileBrowserFormat.DownloadUrl(File.Id)" alt="@File.FileName" />
+                break;
+            case FileTypeGroup.Video:
+                @* #t=1 asks for the frame one second in, rather than a black first frame. *@
+                <video src="@($"{FileBrowserFormat.DownloadUrl(File.Id)}#t=1")" preload="metadata" muted playsinline></video>
+                <span class="files-details-play"><FluentIcon Value="@(new Icons.Filled.Size24.Play())" Color="Color.Default" /></span>
+                break;
+            default:
+                <FluentIcon Value="@FileBrowserFormat.IconFor(File.TypeGroup, File.FileName, large: true)" Color="Color.Default" />
+                break;
+        }
+    </button>
+
+    <h3 class="files-details-name">@File.FileName</h3>
+
+    <dl class="files-details-facts">
+        <dt>Type</dt><dd>@File.TypeName</dd>
+        <dt>Size</dt><dd>@FileTypeInfo.FormatSize(File.FileSize)</dd>
+        @if (File.Duration is TimeSpan duration && duration > TimeSpan.Zero)
+        {
+            <dt>Length</dt><dd>@FileBrowserFormat.Duration(duration)</dd>
+        }
+        <dt>Uploaded</dt>
+        <dd>@FileBrowserFormat.When(File.UploadedAt)@(File.UploadedByName is string by ? $" by {by}" : "")</dd>
+        <dt>Folder</dt>
+        <dd>
+            @if (ShowFolderLink)
+            {
+                <button type="button" class="files-link" @onclick="OnShowFolder">@(File.FolderPath.Length > 0 ? File.FolderPath : "Files (top level)")</button>
+            }
+            else
+            {
+                @(File.FolderPath.Length > 0 ? File.FolderPath : "Files (top level)")
+            }
+            @if (File.IsSharedWithStaff)
+            {
+                <span class="files-badge is-shared"><FluentIcon Value="@(new Icons.Regular.Size12.People())" Color="Color.Default" /> Shared</span>
+            }
+        </dd>
+    </dl>
+
+    @if (CanManage)
+    {
+        <section class="files-details-usage" aria-label="Used by">
+            <h4>Used by</h4>
+            @if (_usages is null)
+            {
+                <FluentProgressBar />
+            }
+            else if (_usages.Count == 0)
+            {
+                <p class="files-details-note">Nothing in Lanyard uses this file.</p>
+            }
+            else
+            {
+                <ul>
+                    @foreach (FileUsage usage in _usages)
+                    {
+                        <li>
+                            @if (usage.Link is string link)
+                            {
+                                <a href="@link">@usage.Description</a>
+                            }
+                            else
+                            {
+                                @usage.Description
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+    }
+
+    <div class="files-details-actions">
+        <a class="files-link-button is-primary" href="@FileBrowserFormat.DownloadUrl(File.Id)" download="@File.FileName">
+            <FluentIcon Value="@(new Icons.Regular.Size20.ArrowDownload())" Color="Color.Default" /> Download
+        </a>
+        <FluentButton IconStart="@(new Icons.Regular.Size20.Eye())" OnClick="OnPreview">Preview</FluentButton>
+        @if (CanManage)
+        {
+            <FluentButton IconStart="@(new Icons.Regular.Size20.Rename())" OnClick="OnRename">Rename</FluentButton>
+            <FluentButton IconStart="@(new Icons.Regular.Size20.ArrowMove())" OnClick="OnMove">Move</FluentButton>
+            <FluentButton IconStart="@(new Icons.Regular.Size20.Delete())" OnClick="OnDelete">Delete</FluentButton>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public FileListItem File { get; set; } = default!;
+
+    [Parameter] public bool CanManage { get; set; }
+
+    [Parameter] public bool ShowFolderLink { get; set; }
+
+    [Parameter] public EventCallback OnPreview { get; set; }
+
+    [Parameter] public EventCallback OnShowFolder { get; set; }
+
+    [Parameter] public EventCallback OnRename { get; set; }
+
+    [Parameter] public EventCallback OnMove { get; set; }
+
+    [Parameter] public EventCallback OnDelete { get; set; }
+
+    private List<FileUsage>? _usages;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!CanManage)
+            return;
+
+        Result<IReadOnlyDictionary<Guid, IReadOnlyList<FileUsage>>> found = await _usageService.GetUsagesAsync([File.Id], CancellationToken.None);
+        _usages = found.Data?.GetValueOrDefault(File.Id)?.ToList() ?? [];
+    }
+}

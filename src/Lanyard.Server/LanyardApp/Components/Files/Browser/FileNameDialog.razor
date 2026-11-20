@@ -1,0 +1,98 @@
+@using Lanyard.Infrastructure.DTO.Files
+
+@* New folder and Rename. Save runs the change and returns the reason it couldn't be done, which
+   stays on screen; the dialog only closes once it worked. A file's extension is kept: it's shown
+   after the box and can't be edited, so a rename can't turn a .png into something else. *@
+<FluentDialogBody>
+    <ChildContent>
+        <div class="file-name-dialog" @onkeydown="OnKeyDownAsync">
+            <div class="file-name-dialog-row">
+                <FluentTextInput @bind-Value="_name" @bind-Value:after="ClearError" Label="@Label" Immediate="true"
+                                 AutoFocus="true" Class="file-name-dialog-input" aria-describedby="file-name-dialog-error" />
+                @if (_extension.Length > 0)
+                {
+                    <span class="file-name-dialog-extension" title="The file type stays the same">@_extension</span>
+                }
+            </div>
+            @if (_error is not null)
+            {
+                <p class="file-name-dialog-error" id="file-name-dialog-error" role="alert">@_error</p>
+            }
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentStack HorizontalGap="4" HorizontalAlignment="HorizontalAlignment.End">
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="SaveAsync" Loading="_saving" Disabled="_saving">@ConfirmText</FluentButton>
+            <FluentButton OnClick="() => Dialog.CancelAsync()">Cancel</FluentButton>
+        </FluentStack>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter] public string Label { get; set; } = "Name";
+
+    [Parameter] public string InitialValue { get; set; } = "";
+
+    [Parameter] public string ConfirmText { get; set; } = "Save";
+
+    /// <summary>For a file: keep the extension out of the box and put it back on save.</summary>
+    [Parameter] public bool KeepExtension { get; set; }
+
+    [Parameter, EditorRequired] public Func<string, Task<string?>> Save { get; set; } = default!;
+
+    [CascadingParameter] public required IDialogInstance Dialog { get; set; }
+
+    private string _name = "";
+    private string _extension = "";
+    private string? _error;
+    private bool _saving;
+
+    protected override void OnInitialized()
+    {
+        if (KeepExtension)
+        {
+            _extension = Path.GetExtension(InitialValue);
+            _name = Path.GetFileNameWithoutExtension(InitialValue);
+        }
+        else
+        {
+            _name = InitialValue;
+        }
+    }
+
+    private void ClearError() => _error = null;
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await SaveAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_saving)
+            return;
+
+        string full = (_name ?? "").Trim() + _extension;
+
+        if (FileNameRules.Validate(_name, KeepExtension ? "file name" : "name") is string invalid)
+        {
+            _error = invalid;
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            _error = await Save(full);
+
+            if (_error is null)
+                await Dialog.CloseAsync(full);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}
