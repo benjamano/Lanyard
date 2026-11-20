@@ -107,6 +107,14 @@
             {
                 <FluentNavSectionHeader Title="Management" />
 
+                @if (Has(CompanyFeature.Parties))
+                {
+                    <FluentNavItem Href="/manage/whats-on" IconRest="@(new Icons.Regular.Size20.CalendarAgenda())"
+                                   IconActive="@(new Icons.Filled.Size20.CalendarAgenda())">
+                        What's On
+                    </FluentNavItem>
+                }
+
                 @if (Has(CompanyFeature.OperationsAlerts))
                 {
                     <FluentNavItem Href="/manage/alerts" Match="NavLinkMatch.All" IconRest="@(new Icons.Regular.Size20.Alert())"

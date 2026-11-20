@@ -310,7 +310,8 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasValue<WhoIsOnTodayWidget>(WidgetType.WhoIsOnToday)
                 .HasValue<PendingTimeOffWidget>(WidgetType.PendingTimeOff)
                 .HasValue<ComplianceSummaryWidget>(WidgetType.ComplianceSummary)
-                .HasValue<DemandStaffingWidget>(WidgetType.DemandStaffing);
+                .HasValue<DemandStaffingWidget>(WidgetType.DemandStaffing)
+                .HasValue<WhatsOnTodayWidget>(WidgetType.WhatsOnToday);
 
             // Sibling widget types share a ClientId property in the TPH table; pin the
             // column names so EF's automatic uniquification cannot rename existing columns.
@@ -384,6 +385,14 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<DemandStaffingWidget>()
                 .Property(x => x.RangeDays)
                 .HasColumnName("DemandStaffingWidget_RangeDays");
+
+            modelBuilder.Entity<WhatsOnTodayWidget>()
+                .Property(x => x.LocationId)
+                .HasColumnName("WhatsOnTodayWidget_LocationId");
+
+            modelBuilder.Entity<WhatsOnTodayWidget>()
+                .Property(x => x.MaxItems)
+                .HasColumnName("WhatsOnTodayWidget_MaxItems");
 
             // A song may be backed by an uploaded file. When that file row is hard-deleted,
             // null the link rather than cascade-deleting the song (it is soft-deleted instead).

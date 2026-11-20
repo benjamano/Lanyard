@@ -1,0 +1,35 @@
+@* Who's on the published rota that day, earliest start first. *@
+
+<section class="wo-staff" aria-label="Staff on shift">
+    <h3 class="wo-staff-heading">
+        Staff on shift
+        <span class="wo-staff-count">@Staff.Select(x => x.UserId).Distinct().Count()</span>
+    </h3>
+
+    @if (Staff.Count == 0)
+    {
+        <FluentText Class="wo-staff-empty">No published shifts.</FluentText>
+    }
+    else
+    {
+        <ul class="wo-staff-list">
+            @foreach (WhatsOnStaff person in Staff)
+            {
+                <li class="wo-staff-row">
+                    <span class="wo-staff-dot theme-colour-swatch" style="@PositionColours.CssVariables(person.PositionColorIndex)" aria-hidden="true"></span>
+                    <span class="wo-staff-name">@person.Name</span>
+                    <span class="wo-staff-time">@RotaFormat.TimeRange(person.StartUtc, person.EndUtc)</span>
+                    @if (person.Position is not null)
+                    {
+                        <span class="wo-staff-position">@person.Position</span>
+                    }
+                </li>
+            }
+        </ul>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public List<WhatsOnStaff> Staff { get; set; } = [];
+}
