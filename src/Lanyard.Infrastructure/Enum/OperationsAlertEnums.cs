@@ -1,7 +1,7 @@
 namespace Lanyard.Infrastructure.Enum;
 
 // What an operations alert is about. Stored as its int value, so never renumber a member.
-// 8 and above are kept for producers still to come (policies, rota holidays, DMX output faults).
+// 9 and above are kept for producers still to come (policies, rota holidays, DMX output faults).
 public enum OperationsAlertType
 {
     KioskOffline = 1,
@@ -10,7 +10,11 @@ public enum OperationsAlertType
     MissedClockIn = 4,
     TrainingOverdue = 5,
     StaffDocumentExpiring = 6,
-    StaffDocumentExpired = 7
+    StaffDocumentExpired = 7,
+
+    // The Just Step Online booking import couldn't run (bad credentials, site down, parse failure),
+    // raised by JustStepImportHostedService / BookingImportService.
+    PartyBookingImportFailed = 8
 }
 
 // Higher is more urgent, so "at least Warning" is a plain comparison. Always shown with its text

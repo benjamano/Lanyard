@@ -79,6 +79,21 @@ namespace Lanyard.Infrastructure.Models
         public DateTime? UpdateDate { get; set; }
         public string? UpdateByUserId { get; set; }
 
+        // Set when this booking was brought in from an external system (e.g. "JustStepOnline")
+        // rather than entered by hand. ExternalRef is that system's own booking reference and, with
+        // the source and location, is what a re-import matches on so it updates instead of duplicating.
+        // Null source = a normal hand-entered Lanyard party.
+        public string? ExternalSource { get; set; }
+        public string? ExternalRef { get; set; }
+
+        // The external booking is still provisional (a hold not yet confirmed). Shown with a badge so
+        // staff can tell held bookings apart from confirmed ones.
+        public bool ExternalIsProvisional { get; set; }
+
+        public DateTime? ExternalLastImportedUtc { get; set; }
+
+        public bool IsImported => ExternalSource is not null;
+
         public PartyPaymentStatus PaymentStatus =>
             BalancePaidUtc is not null ? PartyPaymentStatus.PaidInFull
             : DepositPaidUtc is not null ? PartyPaymentStatus.DepositPaid

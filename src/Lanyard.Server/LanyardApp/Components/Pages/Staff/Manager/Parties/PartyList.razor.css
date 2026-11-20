@@ -78,6 +78,14 @@
     gap: 12px;
 }
 
+.party-card-badges {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
 .party-child {
     font-weight: 600;
     font-size: 1.05rem;

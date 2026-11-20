@@ -29,5 +29,6 @@ public enum NotificationTopic
     AutomationRuleFailed = 19,
     MissedClockIn = 20,
     TrainingOverdue = 21,
-    StaffDocumentExpiring = 22
+    StaffDocumentExpiring = 22,
+    PartyBookingImportFailed = 23
 }
