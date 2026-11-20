@@ -162,6 +162,77 @@ public class RotaAutoBuildRulesTests
         StringAssert.Contains(picks.Single().Line.WhyOpen, "maximum");
     }
 
+    private static readonly YoungWorkerProfile Under18 = new(Week.AddYears(1), null, YoungWorkerNightWindow.TenToSix);
+
+    [TestMethod]
+    public void Assign_YoungWorker_LateShiftLeftOpenWhenOnlyTheyAreFree()
+    {
+        List<DemandSlot> slots = RotaAutoBuildRules.ExpandTemplates([Template(DayOfWeek.Saturday, 17, 23, (Host, "Host", 1))], Saturday, Saturday);
+        AutoBuildWorker amy = Worker("Amy", Host) with { YoungWorker = Under18 };
+
+        AutoBuildPick pick = RotaAutoBuildRules.Assign(1, slots, [amy], (_, _) => null, "m", Now).Single();
+
+        Assert.IsTrue(pick.Line.IsOpen);
+        Assert.IsTrue(pick.OpenForYoungWorkers);
+        Assert.AreEqual("Only staff under 18 are free, and this shift would break their limits (can't work between 22:00 and 06:00).", pick.Line.WhyOpen);
+    }
+
+    [TestMethod]
+    public void Assign_YoungWorker_AdultGetsTheLateShiftInstead()
+    {
+        List<DemandSlot> slots = RotaAutoBuildRules.ExpandTemplates([Template(DayOfWeek.Saturday, 17, 23, (Host, "Host", 1))], Saturday, Saturday);
+        AutoBuildWorker amy = Worker("Amy", Host) with { YoungWorker = Under18 };
+
+        AutoBuildPick pick = RotaAutoBuildRules.Assign(1, slots, [amy, Worker("Tom", Host)], (_, _) => null, "m", Now).Single();
+
+        Assert.AreEqual("tom", pick.Shift.UserId);
+        Assert.IsFalse(pick.OpenForYoungWorkers);
+    }
+
+    [TestMethod]
+    public void Assign_YoungWorker_LongShiftGetsAThirtyMinuteBreakInsteadOfBeingSkipped()
+    {
+        List<DemandSlot> slots = RotaAutoBuildRules.ExpandTemplates([Template(DayOfWeek.Saturday, 9, 15, (Host, "Host", 1))], Saturday, Saturday);
+        AutoBuildWorker amy = Worker("Amy", Host) with { YoungWorker = Under18 };
+
+        AutoBuildPick pick = RotaAutoBuildRules.Assign(1, slots, [amy], (_, _) => null, "m", Now).Single();
+
+        Assert.AreEqual("amy", pick.Shift.UserId);
+        Assert.AreEqual(30, pick.Shift.BreakMinutes);
+        Assert.IsTrue(pick.BreakRaised);
+        StringAssert.Contains(pick.Line.Reason, "break set to 30 min (under 18)", StringComparison.OrdinalIgnoreCase);
+        Assert.AreEqual(1, amy.Shifts.Count, "the pick is added to their shifts");
+    }
+
+    [TestMethod]
+    public void Assign_AdultsKeepTheTemplateBreak()
+    {
+        List<DemandSlot> slots = RotaAutoBuildRules.ExpandTemplates([Template(DayOfWeek.Saturday, 9, 15, (Host, "Host", 1))], Saturday, Saturday);
+
+        AutoBuildPick pick = RotaAutoBuildRules.Assign(1, slots, [Worker("Tom", Host)], (_, _) => null, "m", Now).Single();
+
+        Assert.AreEqual(0, pick.Shift.BreakMinutes);
+        Assert.IsFalse(pick.BreakRaised);
+    }
+
+    [TestMethod]
+    public void Assign_YoungWorker_PicksInTheSameRunCountTowardsTheLimits()
+    {
+        // A full day every day Monday to Saturday: 6 x 7.5 h worked would be 45 h, and no weekend.
+        ShiftTemplate[] everyDay = Enumerable.Range(0, 6)
+            .Select(d => Template(Week.AddDays(d).DayOfWeek, 9, 17, (Host, "Host", 1)))
+            .ToArray();
+        List<DemandSlot> slots = RotaAutoBuildRules.ExpandTemplates(everyDay, Week, Week.AddDays(6));
+        AutoBuildWorker amy = Worker("Amy", Host) with { YoungWorker = Under18 };
+
+        List<AutoBuildPick> picks = RotaAutoBuildRules.Assign(1, slots, [amy], (_, _) => null, "m", Now);
+
+        List<Shift> given = picks.Where(x => !x.Line.IsOpen).Select(x => x.Shift).ToList();
+        Assert.IsTrue(given.Sum(x => x.PaidHours) <= YoungWorkerRules.MaxWeeklyHours, "never over 40 h");
+        Assert.AreEqual(0, YoungWorkerRules.EvaluateWeek(Under18, Week, given.Select(WorkBlock.From)).Count, "the week Auto-build made breaks no limit");
+        Assert.IsTrue(picks.Any(x => x.OpenForYoungWorkers));
+    }
+
     [TestMethod]
     public void Assign_PendingTimeOffThatDay_NotPicked()
     {
