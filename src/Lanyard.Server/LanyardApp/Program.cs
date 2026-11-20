@@ -23,6 +23,7 @@ using Lanyard.Application.Services.Insights;
 using Lanyard.Application.Services.Onboarding;
 using Lanyard.Application.Services.Notifications;
 using Lanyard.Application.Services.Parties;
+using Lanyard.Application.Services.WhatsOn;
 using Lanyard.Application.Services.BookingImport;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Application.SignalR;
@@ -179,6 +180,8 @@ builder.Services.AddScoped<IPartySettingsService, PartySettingsService>();
 builder.Services.AddScoped<IPartyStaffingService, PartyStaffingService>();
 builder.Services.AddScoped<IPartyTemplateService, PartyTemplateService>();
 builder.Services.AddScoped<IPartyDocumentService, PartyDocumentService>();
+builder.Services.AddScoped<IWhatsOnSource, PartyWhatsOnSource>();
+builder.Services.AddScoped<IWhatsOnService, WhatsOnService>();
 
 // Just Step Online booking import. The client drives the login + report by hand, so its HTTP
 // handler keeps cookies and redirects off; the service and the two background jobs do the rest.

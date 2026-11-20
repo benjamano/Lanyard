@@ -1,0 +1,227 @@
+@using Lanyard.App.Components.WhatsOn
+@using Lanyard.Application.Services.WhatsOn
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.DTO.WhatsOn
+@implements IDisposable
+
+@inject IWhatsOnService _whatsOnService
+
+@* Today at one location: the day's totals and what's still to come. For the viewing Admin or
+   Manager only - parties carry children's names, so a signed-out kiosk screen gets a short note
+   and the data is never requested for it. *@
+
+<FluentCard Height="100%">
+    <div class="sw-body">
+        <div class="sw-header">
+            <span class="sw-title">@(Widget.Title ?? "What's on today")</span>
+            @if (_state == State.Ready && _locationName is not null)
+            {
+                <span class="sw-count">@_locationName</span>
+            }
+        </div>
+
+        @switch (_state)
+        {
+            case State.Loading:
+                <div class="sw-empty"><FluentSpinner /></div>
+                break;
+            case State.Failed:
+                <div class="sw-empty" title="@_error">
+                    <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Danger">Couldn't load what's on</FluentBadge>
+                </div>
+                break;
+            case State.NotManager:
+                <div class="sw-empty">
+                    <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">Shown to managers</FluentBadge>
+                </div>
+                break;
+            case State.NoLocation:
+                <div class="sw-empty">
+                    <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">Pick a location in the widget settings</FluentBadge>
+                </div>
+                break;
+            default:
+                WhatsOnDay day = _day!;
+
+                <div class="wot-kpis">
+                    <div class="wot-kpi">
+                        <span class="wot-kpi-value">@day.Totals.Items</span>
+                        <span class="wot-kpi-label">@(day.Totals.Items == 1 ? "party" : "parties")</span>
+                    </div>
+                    <div class="wot-kpi">
+                        <span class="wot-kpi-value">@day.Totals.Children</span>
+                        <span class="wot-kpi-label">children</span>
+                    </div>
+                    <div class="wot-kpi">
+                        <span class="wot-kpi-value">@day.Staff.Select(x => x.UserId).Distinct().Count()</span>
+                        <span class="wot-kpi-label">staff on</span>
+                    </div>
+                </div>
+
+                <div class="sw-list">
+                    @if (Upcoming.Count == 0)
+                    {
+                        <div class="sw-empty">
+                            <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">
+                                @(day.Totals.Items == 0 ? "Nothing booked today" : "Nothing else on today")
+                            </FluentBadge>
+                        </div>
+                    }
+                    else
+                    {
+                        @foreach (WhatsOnItem item in Upcoming.Take(MaxItems))
+                        {
+                            <button type="button" class="sw-row" disabled="@(!AllowTrigger)" @onclick="@(() => Open(item.Href))"
+                                    title="@($"{item.TimeRange()} · {item.Title} · {item.Headcount()}")">
+                                <span class="wot-time">@RotaFormat.LocalTime(item.StartUtc)</span>
+                                <span class="sw-text">
+                                    <span class="sw-primary">@item.Title</span>
+                                    <span class="sw-secondary">@item.Headcount()@(item.Room is not null ? $" · {item.Room}" : string.Empty)</span>
+                                </span>
+                                @if (item.IsProvisional)
+                                {
+                                    <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Warning">Provisional</FluentBadge>
+                                }
+                            </button>
+                        }
+                        @if (Upcoming.Count > MaxItems)
+                        {
+                            <span class="wot-more">and @(Upcoming.Count - MaxItems) more</span>
+                        }
+                    }
+                </div>
+
+                @if (AllowTrigger)
+                {
+                    <FluentButton Appearance="ButtonAppearance.Transparent" IconEnd="@(new Icons.Regular.Size16.ArrowRight())" OnClick="@(() => Open(DayHref))">
+                        View the day
+                    </FluentButton>
+                }
+                break;
+        }
+    </div>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required WhatsOnTodayWidget Widget { get; set; }
+
+    [Parameter]
+    public bool AllowTrigger { get; set; } = true;
+
+    // Keeps "still to come" honest on a screen left open all day.
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(5);
+
+    private enum State { Loading, Failed, NotManager, NoLocation, Ready }
+
+    private State _state = State.Loading;
+    private string? _error;
+    private WhatsOnDay? _day;
+    private int? _locationId;
+    private string? _locationName;
+    private int? _loadedFor;
+    private PeriodicTimer? _refreshTimer;
+    private CancellationTokenSource? _refreshCancellation;
+
+    private int MaxItems => Math.Clamp(Widget.MaxItems, 1, WhatsOnTodayWidget.MaxSupportedItems);
+
+    // Entries not finished yet and not cancelled, earliest first.
+    private List<WhatsOnItem> Upcoming => _day is null
+        ? []
+        : _day.Items.Where(x => !x.IsCancelled && x.EndUtc > DateTime.UtcNow).ToList();
+
+    private string DayHref => _locationId is int id ? $"/manage/whats-on?location={id}" : "/manage/whats-on";
+
+    protected override void OnInitialized() => StartRefreshTimer();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_state != State.Loading && _loadedFor == Widget.LocationId)
+        {
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loadedFor = Widget.LocationId;
+
+        // Gate first: a signed-out screen (a kiosk) or a non-manager never reaches the service,
+        // which refuses them itself as well.
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (!scope.IsSuccess || scope.Data is null || !(scope.Data.IsAdmin || scope.Data.IsManager))
+        {
+            _state = State.NotManager;
+            return;
+        }
+
+        // Only an Admin can point the widget somewhere else; a Manager always sees their own location.
+        _locationId = scope.Data.IsAdmin ? Widget.LocationId ?? scope.Data.LocationId : scope.Data.LocationId;
+
+        if (_locationId is not int locationId)
+        {
+            _state = State.NoLocation;
+            return;
+        }
+
+        DateOnly today = RotaTime.Today(DateTime.UtcNow);
+        Result<WhatsOnRange> result = await _whatsOnService.GetRangeAsync(scope.Data, locationId, today, today);
+
+        if (!result.IsSuccess || result.Data?.Day(today) is not WhatsOnDay day)
+        {
+            _error = result.Error;
+            _state = State.Failed;
+            return;
+        }
+
+        _day = day;
+
+        Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync();
+        _locationName = locations.Data?.FirstOrDefault(x => x.Id == locationId)?.Name;
+
+        _state = State.Ready;
+    }
+
+    private void Open(string? href)
+    {
+        if (AllowTrigger && href is not null)
+        {
+            _navigationManager.NavigateTo(href);
+        }
+    }
+
+    private void StartRefreshTimer()
+    {
+        _refreshCancellation = new CancellationTokenSource();
+        _refreshTimer = new PeriodicTimer(RefreshInterval);
+        CancellationToken token = _refreshCancellation.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _refreshTimer.WaitForNextTickAsync(token))
+                {
+                    await InvokeAsync(async () =>
+                    {
+                        await LoadAsync();
+                        StateHasChanged();
+                    });
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        });
+    }
+
+    public void Dispose()
+    {
+        _refreshCancellation?.Cancel();
+        _refreshTimer?.Dispose();
+        _refreshCancellation?.Dispose();
+    }
+}

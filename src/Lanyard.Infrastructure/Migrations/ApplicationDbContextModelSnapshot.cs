@@ -5372,6 +5372,21 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasDiscriminator().HasValue(2);
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.WhatsOnTodayWidget", b =>
+                {
+                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
+
+                    b.Property<int?>("LocationId")
+                        .HasColumnType("integer")
+                        .HasColumnName("WhatsOnTodayWidget_LocationId");
+
+                    b.Property<int>("MaxItems")
+                        .HasColumnType("integer")
+                        .HasColumnName("WhatsOnTodayWidget_MaxItems");
+
+                    b.HasDiscriminator().HasValue(21);
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.WhoIsOnTodayWidget", b =>
                 {
                     b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");

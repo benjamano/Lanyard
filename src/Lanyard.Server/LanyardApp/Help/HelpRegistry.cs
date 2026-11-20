@@ -81,6 +81,7 @@ public static class HelpRegistry
     public const string Kiosks = "kiosks";
     public const string OperationsAlerts = "operations-alerts";
     public const string Insights = "insights";
+    public const string WhatsOn = "whats-on";
     public const string Parties = "parties";
     public const string BookingImport = "booking-import";
     public const string Feedback = "feedback";
@@ -283,6 +284,20 @@ public static class HelpRegistry
             ["/manage/insights"],
             Roles: "Admin,Manager",
             Feature: CompanyFeature.Insights),
+
+        new(WhatsOn,
+            "What's On",
+            "A day timeline and a week view of the parties booked at a location, with totals and who's on the rota.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.CalendarAgenda(),
+            [
+                new("day", "Day View"),
+                new("week", "Week View"),
+                new("staff", "Totals & Staff")
+            ],
+            ["/manage/whats-on"],
+            Roles: "Admin,Manager",
+            Feature: CompanyFeature.Parties),
 
         new(Parties,
             "Parties",
