@@ -974,9 +974,9 @@
     ]
   },
   {
-    "version": "1.4.29",
+    "version": "1.4.30",
     "releaseDate": "2026-11-19",
-    "summary": "Insights counts party bookings, What's On shows venue schedules, automation rules can be copied, and automation can run at party times.",
+    "summary": "Insights counts party bookings, What's On shows venue schedules, automation rules can be copied, automation can run at party times, and screens can welcome the birthday child.",
     "details": [
       "Insights counts booked parties at the location and the children expected at them, per hour and per day. Cancelled parties are left out; provisional Just Step bookings count.",
       "Games are split into walk-in games and party games. Each party is given its first two games: the first starting from 10 minutes before the party's laser tag time to half an hour after it, and the second within 20 minutes of the first. Parties with no laser tag time use the location's default from Party settings, and a laser tag private hire counts every game during the booking.",
@@ -1000,7 +1000,10 @@
       "A party time rule runs once for each party. Parties that reach the same moment together run it once, so two 2pm parties don't start the lights twice. Cancelled parties, provisional Just Step bookings and private hires don't run it.",
       "Moving or cancelling a party, by hand or through the Just Step import, changes when its rules run straight away.",
       "The Execution Log shows which party a party time run was for, with an Open party button, and never the child's name.",
-      "New \"A party is or isn't on\" condition for Automation rules: only run a rule while a booked party is on at a location (or in one room), or only while none is. For example, play the party version of the game lights during parties."
+      "New \"A party is or isn't on\" condition for Automation rules: only run a rule while a booked party is on at a location (or in one room), or only while none is. For example, play the party version of the game lights during parties.",
+      "Projection text steps can show the party that's on now: Party welcome (\"Happy 7th birthday, Ava!\"), the birthday child's first name, or what's next (\"Laser tag at 14:30\"). A party shows from 15 minutes before it starts until it ends.",
+      "New Party room setting on each kiosk (Settings, General tab): its screen shows the party in that room. Without one it shows a party at the kiosk's location.",
+      "Names only appear on screens once an Admin turns on \"Show the birthday child's first name on screens\" under Party settings > Venue screens. Only the first name is shown, and offline kiosks never keep it."
     ]
   }
 ]

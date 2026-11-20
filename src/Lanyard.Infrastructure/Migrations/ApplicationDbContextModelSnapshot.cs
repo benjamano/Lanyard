@@ -1152,6 +1152,10 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<bool>("OfflineFallbackEnabled")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("PartyRoom")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("PinnedClientVersion")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
@@ -1722,6 +1726,9 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Property<int>("SeasonalThemeSetting")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("ShowPartyNamesOnScreens")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("ThemeColorHex")
                         .HasColumnType("text");
