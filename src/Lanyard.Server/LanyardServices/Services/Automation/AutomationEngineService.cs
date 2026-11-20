@@ -97,7 +97,13 @@ public class AutomationEngineService(
     private readonly ConcurrentDictionary<Guid, byte> _testRunsInProgress = new();
 
     private volatile bool _isEnabled = false;
-    private volatile bool _ruleCacheDirty = true;
+    // Every save bumps _ruleCacheVersion; a reload records the version it started from. A save that
+    // lands while a reload is still reading the old rules leaves the two different, so the cache
+    // stays dirty and the next caller reloads again. A bool cleared at the end of the reload would
+    // swallow that save and hide the new rule until some other save came along.
+    private long _ruleCacheVersion = 1;
+    private long _loadedRuleCacheVersion;
+    private bool IsRuleCacheDirty => Interlocked.Read(ref _ruleCacheVersion) != Interlocked.Read(ref _loadedRuleCacheVersion);
     private List<AutomationRule> _ruleCache = [];
 
     // Kiosks named by ClientGameStatus conditions, loaded with the rule cache. Includes each one's
@@ -127,7 +133,7 @@ public class AutomationEngineService(
 
     public void InvalidateRuleCache()
     {
-        _ruleCacheDirty = true;
+        Interlocked.Increment(ref _ruleCacheVersion);
     }
 
     public void NotifyRuleEnabledChanged(Guid ruleId, bool isEnabled)
@@ -185,7 +191,7 @@ public class AutomationEngineService(
     {
         // A dirty cache hasn't been read yet (or just changed), so it can't say there are no
         // game-data rules; let the consumer reload it and decide.
-        if (!_hasGameDataRules && !_ruleCacheDirty)
+        if (!_hasGameDataRules && !IsRuleCacheDirty)
         {
             return;
         }
@@ -225,7 +231,10 @@ public class AutomationEngineService(
         await _ruleCacheLock.WaitAsync(ct);
         try
         {
-            if (!_ruleCacheDirty) return; // double-check inside lock
+            if (!IsRuleCacheDirty) return; // double-check inside lock
+
+            // Read before the query: anything saved from here on bumps the version past this.
+            long loadingVersion = Interlocked.Read(ref _ruleCacheVersion);
             await using ApplicationDbContext ctx = await _contextFactory.CreateDbContextAsync(ct);
             List<AutomationRule> rules = await ctx.AutomationRules
                 .Where(r => r.IsActive && r.IsEnabled)
@@ -243,7 +252,7 @@ public class AutomationEngineService(
             _conditionLocations = conditionLocations;
             _hasGameDataRules = rules.Any(r => IsGameDataTrigger(r.TriggerType));
             _ruleCache = rules;
-            _ruleCacheDirty = false;
+            Interlocked.Exchange(ref _loadedRuleCacheVersion, loadingVersion);
             _logger.LogInformation("AutomationEngine rule cache reloaded - {Count} rules", rules.Count);
         }
         finally
@@ -326,7 +335,7 @@ public class AutomationEngineService(
         }
 
         // Reload rule cache if dirty
-        if (_ruleCacheDirty)
+        if (IsRuleCacheDirty)
         {
             await ReloadRuleCacheAsync(ct);
         }
@@ -402,7 +411,7 @@ public class AutomationEngineService(
             return;
         }
 
-        if (_ruleCacheDirty)
+        if (IsRuleCacheDirty)
         {
             await ReloadRuleCacheAsync(ct);
         }
@@ -504,7 +513,7 @@ public class AutomationEngineService(
             return;
         }
 
-        if (_ruleCacheDirty)
+        if (IsRuleCacheDirty)
         {
             await ReloadRuleCacheAsync(ct);
         }
@@ -616,7 +625,7 @@ public class AutomationEngineService(
             return;
         }
 
-        if (_ruleCacheDirty)
+        if (IsRuleCacheDirty)
         {
             await ReloadRuleCacheAsync(ct);
         }

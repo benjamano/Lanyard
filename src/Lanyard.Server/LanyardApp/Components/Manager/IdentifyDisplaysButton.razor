@@ -1,0 +1,192 @@
+@using Lanyard.Shared.Kiosk
+
+@inject IDisplayIdentifyService _displayIdentifyService
+
+@*
+    "Identify displays": every screen on the kiosk shows its number, device name, resolution and
+    program for a few seconds. Icon-only by default (the Clients page's action buttons); ShowLabel
+    gives it text and ShowResults lists what came back underneath, for roomier places.
+*@
+<div class="identify-displays @(ShowResults ? "identify-displays--with-results" : null)">
+    @* Two branches, not one with an @if inside: any child content, even empty, makes Fluent size
+       the button for text, so the icon-only one would be three times as wide as its neighbours. *@
+    @if (ShowLabel)
+    {
+        <FluentButton Appearance="ButtonAppearance.Default"
+                      Title="@ButtonTitle"
+                      aria-label="@AriaLabel"
+                      IconStart="@(new Icons.Regular.Size20.NumberSymbolSquare())"
+                      Disabled="@(!CanIdentify)"
+                      Loading="@_busy"
+                      OnClick="IdentifyAsync">@(_busy ? "Identifying…" : "Identify displays")</FluentButton>
+    }
+    else
+    {
+        <FluentButton Appearance="ButtonAppearance.Transparent"
+                      Title="@ButtonTitle"
+                      aria-label="@AriaLabel"
+                      IconStart="@(new Icons.Regular.Size20.NumberSymbolSquare())"
+                      Disabled="@(!CanIdentify)"
+                      Loading="@_busy"
+                      OnClick="IdentifyAsync" />
+    }
+
+    <div class="visually-hidden" role="status" aria-live="polite" aria-atomic="true">@_announcement</div>
+
+    @if (ShowResults && _error != null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@_error</FluentMessageBar>
+    }
+
+    @if (ShowResults && _result != null)
+    {
+        <section class="identify-displays-result" aria-label="Screens on this kiosk">
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="8px">
+                <FluentText>@Summary(_result)</FluentText>
+
+                @if (_result.AnyChanged)
+                {
+                    <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                        Some screen numbers now point at a different screen than before. Anything set up for those numbers plays on the new screen; change it if that's wrong.
+                    </FluentMessageBar>
+                }
+
+                <ul class="identify-displays-list">
+                    @foreach (IdentifiedDisplayView display in _result.Displays)
+                    {
+                        <li class="identify-displays-item">
+                            <span class="identify-displays-number" aria-hidden="true">@display.Number</span>
+                            <div class="identify-displays-text">
+                                <FluentText Weight="TextWeight.Semibold">@DisplayIdentifyRules.ScreenTitle(display.Index)</FluentText>
+                                <span class="identify-displays-detail">@DisplayIdentifyRules.Describe(display.DeviceName, display.Width, display.Height, display.IsPrimary)</span>
+                                <span>@DisplayIdentifyRules.ProgramLine(display.ProgramName)</span>
+                                @if (display.Changed)
+                                {
+                                    <span class="identify-displays-warning">Changed: this number was @display.PreviousDeviceName before.</span>
+                                }
+                                @if (!display.Shown)
+                                {
+                                    <span class="identify-displays-warning">The overlay couldn't be shown here@(display.Error == null ? "." : $": {display.Error}")</span>
+                                }
+                            </div>
+                        </li>
+                    }
+                </ul>
+            </FluentStack>
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public Guid? ClientId { get; set; }
+
+    [Parameter]
+    public string? ClientName { get; set; }
+
+    /// <summary>False disables the button: an offline kiosk can't show anything.</summary>
+    [Parameter]
+    public bool IsConnected { get; set; } = true;
+
+    [Parameter]
+    public bool ShowLabel { get; set; }
+
+    [Parameter]
+    public bool ShowResults { get; set; }
+
+    private bool _busy;
+    private string? _announcement;
+    private string? _error;
+    private DisplayIdentifyView? _result;
+    private Guid? _resultFor;
+
+    private bool CanIdentify => ClientId != null && IsConnected && !_busy;
+
+    private string ButtonTitle => ClientId == null
+        ? "Identify displays (choose a kiosk first)"
+        : IsConnected ? "Identify displays" : "Identify displays (client is offline)";
+
+    private string AriaLabel => string.IsNullOrWhiteSpace(ClientName)
+        ? ButtonTitle
+        : $"{ButtonTitle} on {ClientName}";
+
+    protected override void OnParametersSet()
+    {
+        // A picker can switch kiosks under the button: don't leave the last kiosk's screens showing.
+        if (_resultFor != ClientId)
+        {
+            _result = null;
+            _error = null;
+            _resultFor = ClientId;
+        }
+    }
+
+    private async Task IdentifyAsync()
+    {
+        if (!CanIdentify)
+        {
+            return;
+        }
+
+        Guid clientId = ClientId!.Value;
+
+        _busy = true;
+        _error = null;
+        _announcement = "Identifying displays…";
+
+        try
+        {
+            Result<DisplayIdentifyView> result = await _displayIdentifyService.IdentifyAsync(clientId);
+
+            if (ClientId != clientId)
+            {
+                return;
+            }
+
+            if (!result.IsSuccess)
+            {
+                _result = null;
+                _error = result.Error;
+                _announcement = $"Couldn't identify the displays. {result.Error}";
+
+                if (!ShowResults)
+                {
+                    _toastService.ShowError(result.Error ?? "Couldn't identify the displays.");
+                }
+
+                return;
+            }
+
+            _result = result.Data!;
+            _announcement = Summary(_result);
+
+            if (!ShowResults)
+            {
+                if (_result.AnyChanged)
+                {
+                    _toastService.ShowWarning($"{Summary(_result)} Some screen numbers changed since this kiosk last reported its screens; open Settings to see which.");
+                }
+                else
+                {
+                    _toastService.ShowSuccess(Summary(_result));
+                }
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private string Summary(DisplayIdentifyView result)
+    {
+        int shown = result.Displays.Count(x => x.Shown);
+        string where = string.IsNullOrWhiteSpace(ClientName) ? "this kiosk" : ClientName;
+
+        return shown == 0
+            ? $"{where} found {result.Displays.Count} {Plural(result.Displays.Count)} but couldn't show the numbers on them."
+            : $"Showing numbers on {shown} {Plural(shown)} of {where} for {result.DurationSeconds} seconds.";
+    }
+
+    private static string Plural(int count) => count == 1 ? "screen" : "screens";
+}

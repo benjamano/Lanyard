@@ -66,6 +66,8 @@ public static class SelfTestRules
 
     public sealed record ProjectionWindow(int DisplayIndex, bool IsLoaded, bool IsOffline);
 
+    public sealed record DisplayFacts(int Index, string DeviceName, int Width, int Height, bool IsPrimary);
+
     public sealed record WebView2Facts(
         string? RuntimeVersion,
         string? RuntimeError,
@@ -380,6 +382,25 @@ public static class SelfTestRules
         }
 
         return checks;
+    }
+
+    /// <summary>
+    /// Lists the screens Windows reports, numbered the way the kiosk numbers them, so the result
+    /// shows which screen is which without anyone standing at the kiosk.
+    /// </summary>
+    public static List<KioskSelfTestCheckDTO> EvaluateDisplays(IReadOnlyList<DisplayFacts> displays)
+    {
+        if (displays.Count == 0)
+        {
+            return [Check(SelfTestCheckKeys.DisplaysList, SelfTestOutcome.Fail, SelfTestCodes.NoDisplays, "Windows doesn't report any screens.")];
+        }
+
+        string list = string.Join("; ", displays
+            .OrderBy(x => x.Index)
+            .Select(x => $"{DisplayIdentifyRules.ScreenTitle(x.Index)}: {DisplayIdentifyRules.Describe(x.DeviceName, x.Width, x.Height, x.IsPrimary)}"));
+
+        return [Check(SelfTestCheckKeys.DisplaysList, SelfTestOutcome.Pass, null,
+            $"{displays.Count} {(displays.Count == 1 ? "screen" : "screens")}. {list}.")];
     }
 
     /// <summary>A check for a whole group that threw or overran, so one bad device can't lose the others.</summary>

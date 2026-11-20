@@ -2831,6 +2831,13 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
                     b.Property<string>("FileName")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -2847,11 +2854,21 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<Guid?>("FolderId")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("Height")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsRestricted")
                         .HasColumnType("boolean");
+
+                    b.Property<bool>("IsSystemFile")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ThumbnailPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<DateTime>("UploadedAt")
                         .HasColumnType("timestamp with time zone");
@@ -2863,11 +2880,14 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<TimeSpan?>("VideoLength")
                         .HasColumnType("interval");
 
+                    b.Property<int?>("Width")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("CompanyId");
-
                     b.HasIndex("FolderId");
+
+                    b.HasIndex("CompanyId", "FolderId", "IsActive");
 
                     b.ToTable("FileMetadata");
                 });
@@ -2888,7 +2908,17 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("character varying(450)");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
                     b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsSharedWithStaff")
                         .HasColumnType("boolean");
 
                     b.Property<string>("Name")
@@ -2901,9 +2931,9 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CompanyId");
-
                     b.HasIndex("ParentFolderId");
+
+                    b.HasIndex("CompanyId", "ParentFolderId", "IsActive");
 
                     b.ToTable("Folders");
                 });
@@ -5376,6 +5406,21 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.HasDiscriminator().HasValue(2);
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.WhatsOnTodayWidget", b =>
+                {
+                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
+
+                    b.Property<int?>("LocationId")
+                        .HasColumnType("integer")
+                        .HasColumnName("WhatsOnTodayWidget_LocationId");
+
+                    b.Property<int>("MaxItems")
+                        .HasColumnType("integer")
+                        .HasColumnName("WhatsOnTodayWidget_MaxItems");
+
+                    b.HasDiscriminator().HasValue(21);
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.WhoIsOnTodayWidget", b =>

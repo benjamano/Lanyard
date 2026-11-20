@@ -22,6 +22,9 @@ public class ClientDiagnosticsStore(TimeProvider timeProvider) : IClientDiagnost
     // A self-test plays a beep and may flash the lights, so give whoever is near the kiosk a moment.
     public static readonly TimeSpan SelfTestCooldown = TimeSpan.FromSeconds(15);
 
+    // Short: pressing Identify again is meant to restart the overlay, this only absorbs double clicks.
+    public static readonly TimeSpan IdentifyCooldown = TimeSpan.FromSeconds(2);
+
     private readonly TimeProvider _timeProvider = timeProvider;
 
     private readonly ConcurrentDictionary<Guid, ClientLogTailCapture> _logTails = new();
@@ -40,6 +43,10 @@ public class ClientDiagnosticsStore(TimeProvider timeProvider) : IClientDiagnost
         "A self-test is already running on this kiosk.",
         "A self-test ran on this kiosk a moment ago. Try again in a few seconds.");
 
+    private readonly RequestGuard _identifyGuard = new(IdentifyCooldown,
+        "The displays are already being identified on this kiosk.",
+        "The displays were identified a moment ago. Try again in a few seconds.");
+
     public bool TryBeginSelfTest(Guid clientId, out string? reason)
     {
         return _selfTestGuard.TryBegin(clientId, Now(), out reason);
@@ -48,6 +55,16 @@ public class ClientDiagnosticsStore(TimeProvider timeProvider) : IClientDiagnost
     public void EndSelfTest(Guid clientId)
     {
         _selfTestGuard.End(clientId);
+    }
+
+    public bool TryBeginIdentify(Guid clientId, out string? reason)
+    {
+        return _identifyGuard.TryBegin(clientId, Now(), out reason);
+    }
+
+    public void EndIdentify(Guid clientId)
+    {
+        _identifyGuard.End(clientId);
     }
 
     public bool TryBeginLogTail(Guid clientId, out string? reason)

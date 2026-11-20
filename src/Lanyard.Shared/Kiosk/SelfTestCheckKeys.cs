@@ -24,10 +24,13 @@ public static class SelfTestCheckKeys
     public const string WebView2Runtime = "webview2.runtime";
     public const string WebView2Windows = "webview2.windows";
 
+    public const string DisplaysList = "displays.list";
+
     public const string GroupAudio = "audio";
     public const string GroupDmx = "dmx";
     public const string GroupCapture = "capture";
     public const string GroupWebView2 = "webview2";
+    public const string GroupDisplays = "displays";
 
     /// <summary>Every known key, in the order they're shown.</summary>
     public static readonly IReadOnlyList<string> All =
@@ -35,7 +38,8 @@ public static class SelfTestCheckKeys
         AudioDevice, AudioDefault, AudioTone,
         DmxDriver, DmxDevice, DmxPort, DmxOutput, DmxFlash,
         CaptureDriver, CaptureNic, CaptureRunning, CaptureTraffic,
-        WebView2Runtime, WebView2Windows
+        WebView2Runtime, WebView2Windows,
+        DisplaysList
     ];
 
     /// <summary>The hardware group a key belongs to: the part before the first dot.</summary>
@@ -90,4 +94,7 @@ public static class SelfTestCodes
     public const string Outdated = "Outdated";
     public const string WindowNotLoaded = "WindowNotLoaded";
     public const string ShowingOffline = "ShowingOffline";
+
+    // Screens
+    public const string NoDisplays = "NoDisplays";
 }

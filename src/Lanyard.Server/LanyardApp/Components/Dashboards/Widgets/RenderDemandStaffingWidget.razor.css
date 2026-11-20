@@ -119,6 +119,12 @@
     font-variant-numeric: tabular-nums;
 }
 
+.ds-parties {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground2);
+    padding-bottom: 4px;
+}
+
 .ds-kpi-label,
 .ds-note {
     font-size: var(--fontSizeBase200);
