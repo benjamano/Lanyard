@@ -7,7 +7,8 @@
         <li><strong>Health</strong>: version, uptime, memory, disk space, audio and DMX devices, projection windows and
             offline readiness.</li>
         <li><strong>Projection</strong>: which program plays on which display, full screen or borderless, and its size.
-            Use <strong>Add Projection</strong> to add one.</li>
+            Use <strong>Add Projection</strong> to add one. <strong>Identify displays</strong> at the top shows which
+            screen is which (see below).</li>
         <li><strong>Offline</strong>: turn on <strong>Keep screens playing when the server can't be reached</strong>. The kiosk
             keeps a copy of its projection programs and videos and plays them if it loses the server or internet.
             Set how long to wait before switching to offline, and the video cache limit.</li>
@@ -36,4 +37,28 @@
         <li><strong>Auto Restart</strong>: restart the PC on a schedule (every so many days or weeks, or monthly, at a set time).</li>
         <li><strong>Updates</strong>: which version the PC runs (see the next tab).</li>
     </ul>
+
+    <HelpSection Title="Identify displays">
+        <FluentText>
+            Lanyard numbers a kiosk's screens Screen 1, Screen 2 and so on, in the order Windows lists them. That isn't
+            always left to right, so use <strong>Identify displays</strong> to see which number is which physical screen.
+            It's the # button next to Self-test on the Clients page, and a button at the top of the
+            <strong>Projection</strong> tab here.
+        </FluentText>
+        <ul>
+            <li>For 8 seconds, every screen on the kiosk shows a large number with its name (such as \\.\DISPLAY2), its
+                resolution, whether it's the main screen, and the program set up for it or playing on it. Press the
+                button again to show the numbers again.</li>
+            <li>Whatever is playing carries on underneath, and the numbers can't be clicked or closed at the kiosk.
+                They show even during a game, so customers may see them.</li>
+            <li>On the Projection tab the same details are listed under the button, so you can match them up without
+                standing at the kiosk.</li>
+            <li>If a screen is marked <strong>Changed</strong>, Windows has renumbered the screens since the kiosk last
+                reported them, usually after a screen was unplugged or swapped. Anything set up for that number now plays
+                on the new screen, so check its projection is still right.</li>
+            <li>It only works while the kiosk is connected, and needs Lanyard Client 1.0.49 or later. An older kiosk says
+                so; use <strong>Restart</strong>, then <strong>Restart Lanyard Client</strong>, to update it.</li>
+            <li>The kiosk self-test also lists the screens it can see, under <strong>Screens</strong>.</li>
+        </ul>
+    </HelpSection>
 </HelpTab>
