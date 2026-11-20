@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.FluentUI.AspNetCore.Components;
@@ -196,15 +196,17 @@ public static class HelpRegistry
             Feature: CompanyFeature.Announcements),
 
         new(Files,
-            "File Manager",
-            "Folders, uploading, and moving, renaming and deleting your company's files.",
-            HelpAudience.Managers,
+            "Files",
+            "Finding, previewing and downloading files, uploading and organising them, sharing folders with staff, and the Recycle bin.",
+            HelpAudience.Everyone,
             () => new Icons.Regular.Size20.Folder(),
             [
-                new("overview", "File Manager")
+                new("overview", "Finding files"),
+                new("organising", "Uploading and organising"),
+                new("sharing", "Sharing with staff"),
+                new("bin", "Recycle bin")
             ],
-            ["/files"],
-            Roles: "Admin,CanManageFiles"),
+            ["/files"]),
 
         new(Music,
             "Music & Audio Clips",
@@ -273,12 +275,13 @@ public static class HelpRegistry
 
         new(Insights,
             "Insights",
-            "Comparing games played with staff hours, and the hours where staffing didn't match demand.",
+            "Comparing games and party bookings with staff hours, and the hours where staffing didn't match demand.",
             HelpAudience.Managers,
             () => new Icons.Regular.Size20.DataArea(),
             [
                 new("overview", "Figures"),
-                new("week", "Typical Week & Flags")
+                new("week", "Typical Week & Flags"),
+                new("parties", "Parties")
             ],
             ["/manage/insights"],
             Roles: "Admin,Manager",

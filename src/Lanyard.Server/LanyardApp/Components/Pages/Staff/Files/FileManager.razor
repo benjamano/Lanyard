@@ -1,66 +1,32 @@
 @page "/files"
-@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin, CanManageFiles")]
-@using Lanyard.Infrastructure.Models
-@using Lanyard.Infrastructure.DTO
-@using Lanyard.App.Components.Files
-@inject NavigationManager Navigation
-@inject AuthenticationStateProvider AuthStateProvider
+@* Everyone signed in: people who manage files (Admin, CanManageFiles) get the whole library; other
+   staff get the folders shared with staff, read-only. FileBrowser and IFileLibraryService enforce it. *@
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Lanyard.App.Components.Files.Browser
 
-<PageTitle>File Manager</PageTitle>
+<PageTitle>@(_canManage ? "Files" : "Shared files")</PageTitle>
 
-<div class="file-manager-page">
-    <div class="d-flex justify-content-end mb-2">
-        <HelpButton AreaKey="@HelpRegistry.Files" />
-    </div>
-
-    <FluentCard class="file-manager-card">
-        <FluentGrid class="h-100 w-100">
-            <FluentGridItem Xs="12" Sm="4" Md="3" class="file-manager-sidebar">
-                <FolderTree SelectedFolderId="selectedFolderId" SelectedFolderIdChanged="OnFolderChanged" />
-            </FluentGridItem>
-            <FluentGridItem Xs="12" Sm="8" Md="9" class="w-100 file-manager-content">
-                <AuthorizeView>
-                    <FileUploader SelectedFolderId="selectedFolderId" OnFileUploaded="OnFileUploaded" />
-                </AuthorizeView>
-                <FileList @ref="fileList" FolderId="selectedFolderId" OnFileDeleted="OnFileDeleted" OnFileRenamed="OnFileRenamed" OnFileMoved="OnFileMoved" />
-            </FluentGridItem>
-        </FluentGrid>
-    </FluentCard>
-</div>
+<FileBrowser CanManage="_canManage" Location="_location" />
 
 @code {
-    private Guid? selectedFolderId;
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
-    private FileList? fileList;
+    [SupplyParameterFromQuery(Name = "folder")] public Guid? Folder { get; set; }
+    [SupplyParameterFromQuery(Name = "view")] public string? View { get; set; }
+    [SupplyParameterFromQuery(Name = "type")] public string? Type { get; set; }
+    [SupplyParameterFromQuery(Name = "q")] public string? Search { get; set; }
 
-    private void OnFolderChanged(Guid? folderId)
+    private bool _canManage;
+    private FilesLocation _location = FilesLocation.Home;
+
+    protected override async Task OnInitializedAsync()
     {
-        // Changing the parameter re-triggers FileList.OnParametersSetAsync, which reloads.
-        selectedFolderId = folderId;
-        StateHasChanged();
+        if (AuthState is not null)
+        {
+            ClaimsPrincipal user = (await AuthState).User;
+            _canManage = user.IsInRole("Admin") || user.IsInRole("CanManageFiles");
+        }
     }
 
-    private async Task OnFileUploaded(FileMetadata file)
-    {
-        if (fileList is not null)
-            await fileList.RefreshAsync();
-    }
-
-    private async Task OnFileDeleted(Guid fileId)
-    {
-        if (fileList is not null)
-            await fileList.RefreshAsync();
-    }
-
-    private async Task OnFileRenamed(FileMetadata file)
-    {
-        if (fileList is not null)
-            await fileList.RefreshAsync();
-    }
-
-    private async Task OnFileMoved(FileMetadata file)
-    {
-        if (fileList is not null)
-            await fileList.RefreshAsync();
-    }
+    protected override void OnParametersSet() => _location = FilesLocation.FromQuery(Folder, View, Type, Search);
 }

@@ -14,6 +14,7 @@
 @inject Lanyard.App.Services.ChatUnreadTracker ChatUnread
 @inject Lanyard.Application.Services.Chat.IChatModerationService ChatModeration
 @inject ICompanyFeatureService CompanyFeatures
+@inject IFileLibraryService FileLibrary
 @inject Lanyard.Application.Services.OperationsAlerts.IOperationsAlertService OperationsAlerts
 @inject Lanyard.Application.Services.OperationsAlerts.IOperationsAlertEventBus OperationsAlertEvents
 
@@ -74,6 +75,15 @@
                 </FluentNavItem>
             }
 
+            @* File managers always; everyone else once a folder has been shared with staff. *@
+            @if (_canManageFiles || _hasSharedFiles)
+            {
+                <FluentNavItem Href="/files" IconRest="@(new Icons.Regular.Size20.Folder())"
+                               IconActive="@(new Icons.Filled.Size20.Folder())">
+                    @(_canManageFiles ? "Files" : "Shared files")
+                </FluentNavItem>
+            }
+
             @if (_canPostAnnouncements && Has(CompanyFeature.Announcements))
             {
                 <FluentNavItem Href="/manage/announcements" IconRest="@(new Icons.Regular.Size20.Megaphone())"
@@ -126,14 +136,6 @@
                                 <FluentCounterBadge Count="@_openAlerts" OverflowCount="99" aria-label="@($"{_openAlerts} open {(_openAlerts == 1 ? "alert" : "alerts")}")" />
                             }
                         </span>
-                    </FluentNavItem>
-                }
-
-                @if (_canManageFiles)
-                {
-                    <FluentNavItem Href="/files" IconRest="@(new Icons.Regular.Size20.Folder())"
-                                   IconActive="@(new Icons.Filled.Size20.Folder())">
-                        File Manager
                     </FluentNavItem>
                 }
 
@@ -330,6 +332,7 @@
     private bool _canControlMusic;
     private bool _canManageDmx;
     private bool _canManageFiles;
+    private bool _hasSharedFiles;
     private bool _canPostAnnouncements;
     private bool _canPlayAudioClips;
     private string? _displayName;
@@ -402,6 +405,12 @@
             {
                 ChatUnread.Changed += OnChatUnreadChanged;
                 await ChatUnread.StartAsync();
+            }
+
+            if (!_canManageFiles)
+            {
+                Result<IReadOnlyList<Lanyard.Infrastructure.DTO.Files.FolderNode>> shared = await FileLibrary.GetTreeAsync(sharedOnly: true, CancellationToken.None);
+                _hasSharedFiles = shared.Data?.Count > 0;
             }
 
             string? name = await SecurityService.GetCurrentUserName();
