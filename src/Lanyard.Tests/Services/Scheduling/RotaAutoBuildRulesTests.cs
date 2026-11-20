@@ -162,7 +162,7 @@ public class RotaAutoBuildRulesTests
         StringAssert.Contains(picks.Single().Line.WhyOpen, "maximum");
     }
 
-    private static readonly YoungWorkerProfile Under18 = new(Week.AddYears(1), null, YoungWorkerNightWindow.TenToSix);
+    private static readonly YoungWorkerProfile Under18 = new(Week.AddYears(-17), YoungWorkerNightWindow.TenToSix);
 
     [TestMethod]
     public void Assign_YoungWorker_LateShiftLeftOpenWhenOnlyTheyAreFree()

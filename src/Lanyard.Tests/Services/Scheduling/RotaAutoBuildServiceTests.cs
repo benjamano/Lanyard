@@ -106,7 +106,7 @@ public class RotaAutoBuildServiceTests
 
         await using (ApplicationDbContext ctx = new(w.Options))
         {
-            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = w.Ipswich.CompanyId, UserId = w.Amy.Id, UnderEighteenUntil = Week.AddYears(1) });
+            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = w.Ipswich.CompanyId, UserId = w.Amy.Id, DateOfBirth = Week.AddYears(-17) });
             await ctx.SaveChangesAsync();
         }
 
