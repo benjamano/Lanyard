@@ -11,7 +11,7 @@ public class YoungWorkerRulesTests
     // Monday 23 Nov 2026 (GMT, so local time = UTC that week).
     private static readonly DateOnly Monday = new(2026, 11, 23);
 
-    private static readonly YoungWorkerProfile Under18 = new(new DateOnly(2028, 1, 1), null, YoungWorkerNightWindow.TenToSix);
+    private static readonly YoungWorkerProfile Under18 = new(new DateOnly(2010, 1, 1), YoungWorkerNightWindow.TenToSix);
 
     private static WorkBlock Block(DateOnly day, int startHour, int startMinute, int endHour, int endMinute, int breakMinutes = 0)
     {
@@ -33,7 +33,7 @@ public class YoungWorkerRulesTests
     [TestMethod]
     public void Evaluate_OnTheir18thBirthday_NothingApplies()
     {
-        YoungWorkerProfile turns18Monday = new(Monday, null, YoungWorkerNightWindow.TenToSix);
+        YoungWorkerProfile turns18Monday = new(Monday.AddYears(-18), YoungWorkerNightWindow.TenToSix);
 
         Assert.AreEqual(0, Rules(turns18Monday, Block(Monday, 18, 0, 23, 30, 30)).Count);
     }
@@ -41,7 +41,7 @@ public class YoungWorkerRulesTests
     [TestMethod]
     public void Evaluate_DayBeforeTheir18thBirthday_LimitsApply()
     {
-        YoungWorkerProfile turns18Tuesday = new(Monday.AddDays(1), null, YoungWorkerNightWindow.TenToSix);
+        YoungWorkerProfile turns18Tuesday = new(Monday.AddDays(1).AddYears(-18), YoungWorkerNightWindow.TenToSix);
 
         CollectionAssert.Contains(Rules(turns18Tuesday, Block(Monday, 18, 0, 23, 0, 30)), YoungWorkerRule.NightWork);
     }
@@ -49,7 +49,7 @@ public class YoungWorkerRulesTests
     [TestMethod]
     public void Evaluate_UnderSchoolLeavingAge_AlwaysBreaches_EvenForAShortDayShift()
     {
-        YoungWorkerProfile atSchool = new(new DateOnly(2028, 9, 1), new DateOnly(2027, 6, 25), YoungWorkerNightWindow.TenToSix);
+        YoungWorkerProfile atSchool = new(new DateOnly(2011, 1, 15), YoungWorkerNightWindow.TenToSix);
 
         List<YoungWorkerBreach> breaches = YoungWorkerRules.Evaluate(atSchool, Block(Monday, 10, 0, 12, 0), []);
 
@@ -106,7 +106,7 @@ public class YoungWorkerRulesTests
         Assert.AreEqual(0, YoungWorkerRules.RequiredBreakMinutes(Under18, Block(Monday, 9, 0, 13, 0)));
         Assert.AreEqual(45, YoungWorkerRules.RequiredBreakMinutes(Under18, Block(Monday, 9, 0, 17, 0, 45)));
 
-        YoungWorkerProfile adult = new(Monday, null, YoungWorkerNightWindow.TenToSix);
+        YoungWorkerProfile adult = new(Monday.AddYears(-18), YoungWorkerNightWindow.TenToSix);
         Assert.AreEqual(0, YoungWorkerRules.RequiredBreakMinutes(adult, Block(Monday, 9, 0, 17, 0)));
     }
 

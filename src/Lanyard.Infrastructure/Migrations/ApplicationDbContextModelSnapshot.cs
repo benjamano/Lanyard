@@ -4959,10 +4959,7 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<int>("CompanyId")
                         .HasColumnType("integer");
 
-                    b.Property<DateOnly?>("SchoolLeavingAgeUntil")
-                        .HasColumnType("date");
-
-                    b.Property<DateOnly?>("UnderEighteenUntil")
+                    b.Property<DateOnly>("DateOfBirth")
                         .HasColumnType("date");
 
                     b.Property<DateTime>("UpdateDate")

@@ -260,7 +260,7 @@ public class ShiftSuggestionServiceTests
 
         await using (ApplicationDbContext ctx = new(w.Options))
         {
-            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = w.Company.Id, UserId = w.Amy.Id, UnderEighteenUntil = Monday.AddYears(1) });
+            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = w.Company.Id, UserId = w.Amy.Id, DateOfBirth = Monday.AddYears(-17) });
             await ctx.SaveChangesAsync();
         }
 

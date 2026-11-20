@@ -14,36 +14,35 @@ public class YoungWorkerService(
     TimeProvider timeProvider,
     ILogger<YoungWorkerService> logger) : IYoungWorkerService
 {
+    // The youngest anyone can legally work in the UK (13, where the local council allows it).
+    public const int YoungestWorkingAge = 13;
+
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger<YoungWorkerService> _logger = logger;
 
-    // Rows for some people at one company that still apply on `today` - what the rota reads.
-    internal static IQueryable<YoungWorkerStatus> ForUsers(ApplicationDbContext ctx, IReadOnlyCollection<string> userIds, int companyId, DateOnly today) =>
-        ctx.YoungWorkerStatuses
+    // Rows for some people at one company who are still under 18 on `today` - what the rota reads.
+    internal static IQueryable<YoungWorkerStatus> ForUsers(ApplicationDbContext ctx, IReadOnlyCollection<string> userIds, int companyId, DateOnly today)
+    {
+        DateOnly cutoff = YoungWorkerAge.Born18YearsBefore(today);
+
+        return ctx.YoungWorkerStatuses
             .AsNoTracking()
             .TagWithCallSite()
-            .Where(x => x.CompanyId == companyId && userIds.Contains(x.UserId)
-                && ((x.UnderEighteenUntil != null && x.UnderEighteenUntil > today) || (x.SchoolLeavingAgeUntil != null && x.SchoolLeavingAgeUntil > today)));
+            .Where(x => x.CompanyId == companyId && userIds.Contains(x.UserId) && x.DateOfBirth > cutoff);
+    }
 
-    // Someone can't be 18 any later than 18 years from now.
-    public static string? Validate(DateOnly? underEighteenUntil, DateOnly? schoolLeavingAgeUntil, DateOnly today)
+    // A date of birth is only kept for someone under 18, and nobody younger than 13 can work.
+    public static string? Validate(DateOnly dateOfBirth, DateOnly today)
     {
-        DateOnly latest = today.AddYears(18);
-
-        if (underEighteenUntil is DateOnly adult && adult > latest)
+        if (!YoungWorkerAge.IsUnder18On(dateOfBirth, today))
         {
-            return "Their 18th birthday can't be more than 18 years from today.";
+            return "They're 18 or over, so the young worker limits don't apply and there's no need to keep their date of birth.";
         }
 
-        if (schoolLeavingAgeUntil is DateOnly school && school > latest)
+        if (dateOfBirth > today.AddYears(-YoungestWorkingAge))
         {
-            return "The school leaving date can't be more than 18 years from today.";
-        }
-
-        if (underEighteenUntil is DateOnly a && schoolLeavingAgeUntil is DateOnly s && s > a)
-        {
-            return "The school leaving date must be before their 18th birthday.";
+            return $"They'd be under {YoungestWorkingAge}, which is too young to work. Check the date of birth.";
         }
 
         return null;
@@ -71,18 +70,18 @@ public class YoungWorkerService(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load young worker dates for {UserId}", userId);
-            return Result<YoungWorkerStatusView?>.Fail($"Failed to load young worker details: {ex.Message}");
+            _logger.LogError(ex, "Failed to load the date of birth for {UserId}", userId);
+            return Result<YoungWorkerStatusView?>.Fail($"Failed to load the date of birth: {ex.Message}");
         }
     }
 
-    public async Task<Result<YoungWorkerStatusView?>> SaveAsync(LocationScope scope, string userId, DateOnly? underEighteenUntil, DateOnly? schoolLeavingAgeUntil, string actingUserId)
+    public async Task<Result<YoungWorkerStatusView?>> SaveAsync(LocationScope scope, string userId, DateOnly? dateOfBirth, string actingUserId)
     {
         try
         {
             DateTime nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
 
-            if (Validate(underEighteenUntil, schoolLeavingAgeUntil, RotaTime.Today(nowUtc)) is string invalid)
+            if (dateOfBirth is DateOnly born && Validate(born, RotaTime.Today(nowUtc)) is string invalid)
             {
                 return Result<YoungWorkerStatusView?>.Fail(invalid);
             }
@@ -98,7 +97,7 @@ public class YoungWorkerService(
 
             YoungWorkerStatus? row = await ctx.YoungWorkerStatuses.FirstOrDefaultAsync(x => x.CompanyId == company && x.UserId == userId);
 
-            if (underEighteenUntil is null && schoolLeavingAgeUntil is null)
+            if (dateOfBirth is not DateOnly newDateOfBirth)
             {
                 if (row is not null)
                 {
@@ -106,8 +105,8 @@ public class YoungWorkerService(
                     await ctx.SaveChangesAsync();
                 }
 
-                // The dates themselves are never logged.
-                _logger.LogInformation("Young worker dates cleared for {UserId} by {ActingUserId}", userId, actingUserId);
+                // The date of birth itself is never logged.
+                _logger.LogInformation("Date of birth cleared for {UserId} by {ActingUserId}", userId, actingUserId);
                 return Result<YoungWorkerStatusView?>.Ok(null);
             }
 
@@ -117,21 +116,20 @@ public class YoungWorkerService(
                 ctx.YoungWorkerStatuses.Add(row);
             }
 
-            row.UnderEighteenUntil = underEighteenUntil;
-            row.SchoolLeavingAgeUntil = schoolLeavingAgeUntil;
+            row.DateOfBirth = newDateOfBirth;
             row.UpdateDate = nowUtc;
             row.UpdatedByUserId = actingUserId;
 
             await ctx.SaveChangesAsync();
 
-            _logger.LogInformation("Young worker dates set for {UserId} by {ActingUserId}", userId, actingUserId);
+            _logger.LogInformation("Date of birth set for {UserId} by {ActingUserId}", userId, actingUserId);
 
             return Result<YoungWorkerStatusView?>.Ok(await ToViewAsync(ctx, row));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to save young worker dates for {UserId}", userId);
-            return Result<YoungWorkerStatusView?>.Fail($"Failed to save young worker details: {ex.Message}");
+            _logger.LogError(ex, "Failed to save the date of birth for {UserId}", userId);
+            return Result<YoungWorkerStatusView?>.Fail($"Failed to save the date of birth: {ex.Message}");
         }
     }
 
@@ -141,16 +139,17 @@ public class YoungWorkerService(
         {
             if (scope.CompanyId is not int companyId || !SchedulingAccess.CanManageCompany(scope, companyId))
             {
-                return Result<Dictionary<string, YoungWorkerStatus>>.Fail("Only Managers and Admins can see who is a young worker.");
+                return Result<Dictionary<string, YoungWorkerStatus>>.Fail("Only Managers and Admins can see who is under 18.");
             }
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
+            DateOnly cutoff = YoungWorkerAge.Born18YearsBefore(today);
+
             Dictionary<string, YoungWorkerStatus> rows = await ctx.YoungWorkerStatuses
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(x => x.CompanyId == companyId
-                    && ((x.UnderEighteenUntil != null && x.UnderEighteenUntil > today) || (x.SchoolLeavingAgeUntil != null && x.SchoolLeavingAgeUntil > today)))
+                .Where(x => x.CompanyId == companyId && x.DateOfBirth > cutoff)
                 .ToDictionaryAsync(x => x.UserId);
 
             return Result<Dictionary<string, YoungWorkerStatus>>.Ok(rows);
@@ -202,16 +201,17 @@ public class YoungWorkerService(
         }
     }
 
-    // Deletes rows whose dates have all passed: once someone is 18 and past school leaving age the
-    // row only says when their birthday is, which there's no reason to keep. Run by
-    // YoungWorkerCleanupHostedService across every company (system context, no tenant filter).
+    // Deletes the date of birth of anyone who has turned 18: the limits no longer apply, so there's
+    // no reason to keep it. Run by YoungWorkerCleanupHostedService across every company (system
+    // context, no tenant filter).
     public static async Task<int> RemoveExpiredAsync(ApplicationDbContext ctx, DateOnly today, CancellationToken cancellationToken = default)
     {
+        DateOnly cutoff = YoungWorkerAge.Born18YearsBefore(today);
+
         List<YoungWorkerStatus> expired = await ctx.YoungWorkerStatuses
             .IgnoreQueryFilters()
             .TagWithCallSite()
-            .Where(x => (x.UnderEighteenUntil == null || x.UnderEighteenUntil <= today)
-                && (x.SchoolLeavingAgeUntil == null || x.SchoolLeavingAgeUntil <= today))
+            .Where(x => x.DateOfBirth <= cutoff)
             .ToListAsync(cancellationToken);
 
         if (expired.Count == 0)
@@ -239,33 +239,32 @@ public class YoungWorkerService(
             updatedBy = editor is null ? null : RotaNames.For(editor);
         }
 
-        return new YoungWorkerStatusView(row.UnderEighteenUntil, row.SchoolLeavingAgeUntil, row.UpdateDate, updatedBy);
+        return new YoungWorkerStatusView(row.DateOfBirth, row.EighteenthBirthday, row.SchoolLeavingDate, row.UpdateDate, updatedBy);
     }
 
-    // Which company the person's dates belong to, or why the caller can't see or change them.
-    // Managers and Admins only, and only for someone they manage; nobody changes their own (a
-    // young manager mustn't be able to switch their own limits off); only an Admin may change an
-    // Admin's.
+    // Which company the person's date of birth belongs to, or why the caller can't see or change it.
+    // Managers and Admins only, and only for someone they manage; nobody changes their own (a young
+    // manager mustn't be able to switch their own limits off); only an Admin may change an Admin's.
     private static async Task<(int? CompanyId, string? Error)> ResolveCompanyAsync(ApplicationDbContext ctx, LocationScope scope, string userId, string actingUserId, bool forChange)
     {
         if (!scope.IsAdmin && !scope.IsManager)
         {
-            return (null, "Only Managers and Admins can see young worker details.");
+            return (null, "Only Managers and Admins can see dates of birth.");
         }
 
         if (forChange && userId == actingUserId)
         {
-            return (null, "You can't change your own young worker details. Ask another manager or an Admin.");
+            return (null, "You can't change your own date of birth. Ask another manager or an Admin.");
         }
 
         if (!await SchedulingAccess.CanManageUserAsync(ctx, scope, userId))
         {
-            return (null, "You can only see young worker details for people you manage.");
+            return (null, "You can only see dates of birth for people you manage.");
         }
 
         if (forChange && !scope.IsAdmin && await IsAdminAsync(ctx, userId))
         {
-            return (null, "Only an Admin can change young worker details for an Admin.");
+            return (null, "Only an Admin can change an Admin's date of birth.");
         }
 
         List<int> userCompanies = await ctx.UserLocationMemberships
@@ -283,7 +282,7 @@ public class YoungWorkerService(
 
         return scope.IsAdmin && userCompanies.Count == 1
             ? (userCompanies[0], null)
-            : (null, "This person isn't a member of exactly one company, so their young worker details can't be edited here.");
+            : (null, "This person isn't a member of exactly one company, so their date of birth can't be edited here.");
     }
 
     private static Task<bool> IsAdminAsync(ApplicationDbContext ctx, string userId) =>

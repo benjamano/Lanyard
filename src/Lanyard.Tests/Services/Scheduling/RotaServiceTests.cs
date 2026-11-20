@@ -125,7 +125,7 @@ public class RotaServiceTests
     private static async Task MarkUnder18Async(DbContextOptions<ApplicationDbContext> options, Company company, UserProfile user)
     {
         await using ApplicationDbContext ctx = new(options);
-        ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = company.Id, UserId = user.Id, UnderEighteenUntil = Monday.AddYears(1) });
+        ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = company.Id, UserId = user.Id, DateOfBirth = Monday.AddYears(-17) });
         await ctx.SaveChangesAsync();
     }
 

@@ -657,7 +657,7 @@ public class GdprServiceTests
     }
 
     [TestMethod]
-    public async Task EraseUserDataAsync_RemovesTheirYoungWorkerDatesAndClearsTheirNameFromOthers()
+    public async Task EraseUserDataAsync_RemovesTheirDateOfBirthAndClearsTheirNameFromOthers()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         UserManager<UserProfile> userManager = BuildUserManager(options);
@@ -670,9 +670,9 @@ public class GdprServiceTests
         await using (ApplicationDbContext ctx = new(options))
         {
             ctx.Users.Add(new UserProfile { Id = ApplicationDbContext.SystemDeletedUserPlaceholderId, UserName = "deleted-user" });
-            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = 1, UserId = target.Id, UnderEighteenUntil = new DateOnly(2028, 3, 1), UpdatedByUserId = admin.Id });
-            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = 2, UserId = target.Id, UnderEighteenUntil = new DateOnly(2028, 3, 1) });
-            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = setByTarget, CompanyId = 1, UserId = admin.Id, UnderEighteenUntil = new DateOnly(2028, 3, 1), UpdatedByUserId = target.Id });
+            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = 1, UserId = target.Id, DateOfBirth = new DateOnly(2010, 3, 1), UpdatedByUserId = admin.Id });
+            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = 2, UserId = target.Id, DateOfBirth = new DateOnly(2010, 3, 1) });
+            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = setByTarget, CompanyId = 1, UserId = admin.Id, DateOfBirth = new DateOnly(2010, 3, 1), UpdatedByUserId = target.Id });
 
             await ctx.SaveChangesAsync();
         }
@@ -689,7 +689,7 @@ public class GdprServiceTests
         Assert.IsFalse(await verifyCtx.YoungWorkerStatuses.IgnoreQueryFilters().AnyAsync(x => x.UserId == target.Id));
         YoungWorkerStatus kept = await verifyCtx.YoungWorkerStatuses.IgnoreQueryFilters().SingleAsync(x => x.Id == setByTarget);
         Assert.IsNull(kept.UpdatedByUserId);
-        Assert.AreEqual(new DateOnly(2028, 3, 1), kept.UnderEighteenUntil);
+        Assert.AreEqual(new DateOnly(2010, 3, 1), kept.DateOfBirth);
     }
 
     [TestMethod]

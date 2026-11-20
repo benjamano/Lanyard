@@ -119,9 +119,8 @@ internal static class ShiftClaimRules
             young.ContainsKey(id) ? youngShifts[id].ToList() : null));
     }
 
-    // The young worker dates of whichever of these people are still under 18 (or under school
-    // leaving age) on or after `fromDay`, with their company's night window. Someone in two
-    // companies with dates in both uses the later 18th birthday.
+    // The dates of birth of whichever of these people are still under 18 on or after `fromDay`, with
+    // their company's night window. Someone in two companies with a date in both uses the later one.
     public static async Task<Dictionary<string, YoungWorkerProfile>> LoadYoungWorkerProfilesAsync(ApplicationDbContext ctx, IReadOnlyCollection<string> userIds, DateOnly fromDay)
     {
         List<string> ids = userIds.Distinct().ToList();
@@ -131,16 +130,16 @@ internal static class ShiftClaimRules
             return [];
         }
 
+        DateOnly cutoff = YoungWorkerAge.Born18YearsBefore(fromDay);
+
         var rows = await ctx.YoungWorkerStatuses
             .AsNoTracking()
             .TagWithCallSite()
-            .Where(x => ids.Contains(x.UserId)
-                && ((x.UnderEighteenUntil != null && x.UnderEighteenUntil > fromDay) || (x.SchoolLeavingAgeUntil != null && x.SchoolLeavingAgeUntil > fromDay)))
+            .Where(x => ids.Contains(x.UserId) && x.DateOfBirth > cutoff)
             .Select(x => new
             {
                 x.UserId,
-                x.UnderEighteenUntil,
-                x.SchoolLeavingAgeUntil,
+                x.DateOfBirth,
                 Window = ctx.CompanySchedulingSettings.Where(s => s.CompanyId == x.CompanyId).Select(s => (YoungWorkerNightWindow?)s.YoungWorkerNightWindow).FirstOrDefault()
             })
             .ToListAsync();
@@ -149,8 +148,8 @@ internal static class ShiftClaimRules
             .GroupBy(x => x.UserId)
             .ToDictionary(g => g.Key, g =>
             {
-                var latest = g.OrderByDescending(x => x.UnderEighteenUntil ?? x.SchoolLeavingAgeUntil).First();
-                return new YoungWorkerProfile(g.Max(x => x.UnderEighteenUntil), g.Max(x => x.SchoolLeavingAgeUntil), latest.Window ?? YoungWorkerNightWindow.TenToSix);
+                var youngest = g.OrderByDescending(x => x.DateOfBirth).First();
+                return new YoungWorkerProfile(youngest.DateOfBirth, youngest.Window ?? YoungWorkerNightWindow.TenToSix);
             });
     }
 

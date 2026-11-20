@@ -52,16 +52,19 @@ public class YoungWorkerServiceTests
         await ctx.SaveChangesAsync();
     }
 
+    private static readonly DateOnly Sixteen = new(2010, 3, 3);
+
     [TestMethod]
-    public async Task SaveAsync_ManagerSetsDates_SavedWithWhoSetThem()
+    public async Task SaveAsync_ManagerSetsDateOfBirth_DatesWorkedOutAndWhoSetIt()
     {
         World w = await SeedAsync();
 
-        Result<YoungWorkerStatusView?> saved = await GetService(w.Options)
-            .SaveAsync(w.ManagerScope, w.Amy.Id, new DateOnly(2028, 3, 1), null, w.Sam.Id);
+        Result<YoungWorkerStatusView?> saved = await GetService(w.Options).SaveAsync(w.ManagerScope, w.Amy.Id, Sixteen, w.Sam.Id);
 
         Assert.IsTrue(saved.IsSuccess, saved.Error);
-        Assert.AreEqual(new DateOnly(2028, 3, 1), saved.Data!.UnderEighteenUntil);
+        Assert.AreEqual(Sixteen, saved.Data!.DateOfBirth);
+        Assert.AreEqual(new DateOnly(2028, 3, 3), saved.Data.EighteenthBirthday);
+        Assert.AreEqual(new DateOnly(2026, 6, 26), saved.Data.SchoolLeavingDate);
         Assert.AreEqual("Sam Tester", saved.Data.UpdatedByName);
 
         await using ApplicationDbContext ctx = new(w.Options);
@@ -72,13 +75,13 @@ public class YoungWorkerServiceTests
     }
 
     [TestMethod]
-    public async Task SaveAsync_BothDatesNull_DeletesTheRow()
+    public async Task SaveAsync_Null_DeletesTheRow()
     {
         World w = await SeedAsync();
         YoungWorkerService service = GetService(w.Options);
-        await service.SaveAsync(w.ManagerScope, w.Amy.Id, new DateOnly(2028, 3, 1), null, w.Sam.Id);
+        await service.SaveAsync(w.ManagerScope, w.Amy.Id, Sixteen, w.Sam.Id);
 
-        Result<YoungWorkerStatusView?> cleared = await service.SaveAsync(w.ManagerScope, w.Amy.Id, null, null, w.Sam.Id);
+        Result<YoungWorkerStatusView?> cleared = await service.SaveAsync(w.ManagerScope, w.Amy.Id, null, w.Sam.Id);
 
         Assert.IsTrue(cleared.IsSuccess, cleared.Error);
         Assert.IsNull(cleared.Data);
@@ -92,8 +95,7 @@ public class YoungWorkerServiceTests
     {
         World w = await SeedAsync();
 
-        Result<YoungWorkerStatusView?> saved = await GetService(w.Options)
-            .SaveAsync(w.StaffScope, w.Amy.Id, new DateOnly(2028, 3, 1), null, w.Sam.Id);
+        Result<YoungWorkerStatusView?> saved = await GetService(w.Options).SaveAsync(w.StaffScope, w.Amy.Id, Sixteen, w.Sam.Id);
 
         Assert.IsFalse(saved.IsSuccess);
         StringAssert.Contains(saved.Error, "Managers and Admins");
@@ -114,8 +116,7 @@ public class YoungWorkerServiceTests
     {
         World w = await SeedAsync();
 
-        Result<YoungWorkerStatusView?> saved = await GetService(w.Options)
-            .SaveAsync(w.ManagerScope, w.Sam.Id, null, null, w.Sam.Id);
+        Result<YoungWorkerStatusView?> saved = await GetService(w.Options).SaveAsync(w.ManagerScope, w.Sam.Id, null, w.Sam.Id);
 
         Assert.IsFalse(saved.IsSuccess);
         StringAssert.Contains(saved.Error, "your own");
@@ -129,7 +130,7 @@ public class YoungWorkerServiceTests
         UserProfile otherManager = await SchedulingTestHelpers.SeedUserAsync(w.Options, elsewhere, "Olly");
 
         Result<YoungWorkerStatusView?> saved = await GetService(w.Options)
-            .SaveAsync(SchedulingTestHelpers.ManagerScopeFor(elsewhere), w.Amy.Id, new DateOnly(2028, 3, 1), null, otherManager.Id);
+            .SaveAsync(SchedulingTestHelpers.ManagerScopeFor(elsewhere), w.Amy.Id, Sixteen, otherManager.Id);
 
         Assert.IsFalse(saved.IsSuccess);
         StringAssert.Contains(saved.Error, "people you manage");
@@ -141,39 +142,47 @@ public class YoungWorkerServiceTests
         World w = await SeedAsync();
         await MakeAdminAsync(w.Options, w.Amy);
 
-        Result<YoungWorkerStatusView?> byManager = await GetService(w.Options)
-            .SaveAsync(w.ManagerScope, w.Amy.Id, null, null, w.Sam.Id);
+        Result<YoungWorkerStatusView?> byManager = await GetService(w.Options).SaveAsync(w.ManagerScope, w.Amy.Id, null, w.Sam.Id);
 
         Assert.IsFalse(byManager.IsSuccess);
         StringAssert.Contains(byManager.Error, "Only an Admin");
 
         LocationScope adminScope = new(true, w.Ipswich.Id, w.Company.Id, w.Ipswich.Name);
-        Result<YoungWorkerStatusView?> byAdmin = await GetService(w.Options)
-            .SaveAsync(adminScope, w.Amy.Id, new DateOnly(2028, 3, 1), null, w.Sam.Id);
+        Result<YoungWorkerStatusView?> byAdmin = await GetService(w.Options).SaveAsync(adminScope, w.Amy.Id, Sixteen, w.Sam.Id);
 
         Assert.IsTrue(byAdmin.IsSuccess, byAdmin.Error);
     }
 
     [TestMethod]
-    public void Validate_RejectsImpossibleDates()
+    public void Validate_OnlyUnder18sOldEnoughToWork()
     {
-        Assert.IsNull(YoungWorkerService.Validate(new DateOnly(2028, 3, 1), new DateOnly(2027, 6, 25), Today));
-        Assert.IsNull(YoungWorkerService.Validate(Today.AddYears(18), null, Today));
+        Assert.IsNull(YoungWorkerService.Validate(new DateOnly(2008, 11, 20), Today), "turns 18 tomorrow");
+        Assert.IsNull(YoungWorkerService.Validate(new DateOnly(2013, 11, 19), Today), "13 today");
 
-        StringAssert.Contains(YoungWorkerService.Validate(Today.AddYears(18).AddDays(1), null, Today), "18 years");
-        StringAssert.Contains(YoungWorkerService.Validate(null, Today.AddYears(19), Today), "18 years");
-        StringAssert.Contains(YoungWorkerService.Validate(new DateOnly(2027, 3, 1), new DateOnly(2027, 6, 25), Today), "before their 18th birthday");
+        StringAssert.Contains(YoungWorkerService.Validate(new DateOnly(2008, 11, 19), Today), "18 or over");
+        StringAssert.Contains(YoungWorkerService.Validate(new DateOnly(2013, 11, 20), Today), "too young");
     }
 
     [TestMethod]
-    public async Task GetForCompanyAsync_OnlyPeopleStillYoungOnTheDay()
+    public async Task SaveAsync_SomeoneAlready18_Refused()
+    {
+        World w = await SeedAsync();
+
+        Result<YoungWorkerStatusView?> saved = await GetService(w.Options).SaveAsync(w.ManagerScope, w.Amy.Id, new DateOnly(2000, 1, 1), w.Sam.Id);
+
+        Assert.IsFalse(saved.IsSuccess);
+        StringAssert.Contains(saved.Error, "18 or over");
+    }
+
+    [TestMethod]
+    public async Task GetForCompanyAsync_OnlyPeopleStillUnder18()
     {
         World w = await SeedAsync();
 
         await using (ApplicationDbContext ctx = new(w.Options))
         {
-            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = w.Company.Id, UserId = w.Amy.Id, UnderEighteenUntil = Today.AddDays(1) });
-            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = w.Company.Id, UserId = w.Sam.Id, UnderEighteenUntil = Today });
+            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = w.Company.Id, UserId = w.Amy.Id, DateOfBirth = new DateOnly(2008, 11, 20) });
+            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = w.Company.Id, UserId = w.Sam.Id, DateOfBirth = new DateOnly(2008, 11, 19) });
             await ctx.SaveChangesAsync();
         }
 
@@ -187,33 +196,34 @@ public class YoungWorkerServiceTests
     }
 
     [TestMethod]
-    public async Task IsYoungWorkerAsync_SchoolLeavingDateAloneCounts()
+    public async Task IsYoungWorkerAsync_TrueOnlyWhileUnder18()
     {
         World w = await SeedAsync();
 
         await using (ApplicationDbContext ctx = new(w.Options))
         {
-            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = w.Company.Id, UserId = w.Amy.Id, SchoolLeavingAgeUntil = Today.AddMonths(6) });
+            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = w.Company.Id, UserId = w.Amy.Id, DateOfBirth = new DateOnly(2011, 12, 25) });
             await ctx.SaveChangesAsync();
         }
 
         Assert.IsTrue((await GetService(w.Options).IsYoungWorkerAsync(w.Amy.Id, w.Company.Id, Today)).Data);
+        Assert.IsFalse((await GetService(w.Options).IsYoungWorkerAsync(w.Amy.Id, w.Company.Id, new DateOnly(2029, 12, 25))).Data);
         Assert.IsFalse((await GetService(w.Options).IsYoungWorkerAsync(w.Sam.Id, w.Company.Id, Today)).Data);
     }
 
     [TestMethod]
-    public async Task RemoveExpiredAsync_DeletesOnlyRowsWhoseDatesHaveAllPassed()
+    public async Task RemoveExpiredAsync_DeletesOnlyPeopleWhoHaveTurned18()
     {
         World w = await SeedAsync();
-        Guid stillUnder18 = Guid.NewGuid();
-        Guid stillAtSchool = Guid.NewGuid();
+        Guid turns18Tomorrow = Guid.NewGuid();
+        Guid atSchool = Guid.NewGuid();
 
         await using (ApplicationDbContext ctx = new(w.Options))
         {
-            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = w.Company.Id, UserId = w.Amy.Id, UnderEighteenUntil = Today });
-            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = w.Company.Id, UserId = w.Sam.Id, UnderEighteenUntil = Today.AddDays(-30), SchoolLeavingAgeUntil = Today.AddDays(-400) });
-            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = stillUnder18, CompanyId = 99, UserId = w.Amy.Id, UnderEighteenUntil = Today.AddDays(1) });
-            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = stillAtSchool, CompanyId = 98, UserId = w.Sam.Id, SchoolLeavingAgeUntil = Today.AddDays(1) });
+            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = w.Company.Id, UserId = w.Amy.Id, DateOfBirth = new DateOnly(2008, 11, 19) });
+            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = w.Company.Id, UserId = w.Sam.Id, DateOfBirth = new DateOnly(2005, 1, 1) });
+            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = turns18Tomorrow, CompanyId = 99, UserId = w.Amy.Id, DateOfBirth = new DateOnly(2008, 11, 20) });
+            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = atSchool, CompanyId = 98, UserId = w.Sam.Id, DateOfBirth = new DateOnly(2011, 12, 25) });
             await ctx.SaveChangesAsync();
         }
 
@@ -223,19 +233,38 @@ public class YoungWorkerServiceTests
         }
 
         await using ApplicationDbContext verify = new(w.Options);
-        CollectionAssert.AreEquivalent(new[] { stillUnder18, stillAtSchool },
+        CollectionAssert.AreEquivalent(new[] { turns18Tomorrow, atSchool },
             await verify.YoungWorkerStatuses.IgnoreQueryFilters().Select(x => x.Id).ToListAsync());
     }
 
+    // --- Dates worked out from a date of birth ---
+
     [TestMethod]
-    public void AppliesOn_EitherDateStillAhead()
+    public void IsUnder18On_UntilTheDayBeforeTheir18thBirthday()
     {
-        YoungWorkerStatus status = new() { CompanyId = 1, UserId = "u", UnderEighteenUntil = new DateOnly(2027, 5, 10) };
+        DateOnly born = new(2008, 11, 20);
 
-        Assert.IsTrue(status.AppliesOn(new DateOnly(2027, 5, 9)));
-        Assert.IsFalse(status.AppliesOn(new DateOnly(2027, 5, 10)));
+        Assert.IsTrue(YoungWorkerAge.IsUnder18On(born, new DateOnly(2026, 11, 19)));
+        Assert.IsFalse(YoungWorkerAge.IsUnder18On(born, new DateOnly(2026, 11, 20)));
+    }
 
-        status.SchoolLeavingAgeUntil = new DateOnly(2027, 6, 25);
-        Assert.IsTrue(status.AppliesOn(new DateOnly(2027, 6, 1)));
+    [TestMethod]
+    public void EighteenthBirthday_LeapDayBirthday_IsFirstOfMarch()
+    {
+        DateOnly leap = new(2008, 2, 29);
+
+        Assert.AreEqual(new DateOnly(2026, 3, 1), YoungWorkerAge.EighteenthBirthday(leap));
+        Assert.IsTrue(YoungWorkerAge.IsUnder18On(leap, new DateOnly(2026, 2, 28)));
+        Assert.IsFalse(YoungWorkerAge.IsUnder18On(leap, new DateOnly(2026, 3, 1)));
+    }
+
+    [TestMethod]
+    public void SchoolLeavingDate_LastFridayInJuneOfTheSchoolYearTheyTurn16()
+    {
+        // The youngest and oldest in one school year leave on the same day.
+        Assert.AreEqual(new DateOnly(2026, 6, 26), YoungWorkerAge.SchoolLeavingDate(new DateOnly(2010, 8, 31)));
+        Assert.AreEqual(new DateOnly(2027, 6, 25), YoungWorkerAge.SchoolLeavingDate(new DateOnly(2010, 9, 1)));
+        Assert.AreEqual(new DateOnly(2027, 6, 25), YoungWorkerAge.SchoolLeavingDate(new DateOnly(2011, 1, 15)));
+        Assert.AreEqual(new DateOnly(2028, 6, 30), YoungWorkerAge.SchoolLeavingDate(new DateOnly(2011, 12, 25)), "30 June itself when it's a Friday");
     }
 }
