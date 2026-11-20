@@ -107,14 +107,43 @@
         <FluentText>
             Only people who hold a position appear on the rota. Give one person positions on the
             <strong>Rota</strong> tab of their profile under <a href="/manage/users">Users</a>. There you can also
-            set their primary position, their own contract and allowances, their availability and their
-            clock-in PIN.
+            set their primary position, their own contract and allowances, whether they're under 18, their
+            availability and their clock-in PIN.
         </FluentText>
         <FluentText>
             To change several people at once, use <a href="/manage/rota/staff">Staff</a>. Filter by location,
             position or name, tick people, then use <strong>Positions</strong>, <strong>Contract</strong> or
             <strong>Allowances</strong>.
         </FluentText>
+    </HelpSection>
+
+    <HelpSection Title="Staff under 18">
+        <FluentText>
+            UK law limits how much staff under 18 can work. Mark them in the <strong>Under 18</strong> section of
+            their <strong>Rota</strong> tab: enter their <strong>18th birthday</strong> and press <strong>Save</strong>.
+            Only Managers and Admins can see or change these dates, and nobody can change their own. The person only
+            sees that young worker hours apply to them, never the dates.
+        </FluentText>
+        <FluentText>
+            The limits are 8 hours a day and 40 hours a week, a 30 minute break on any shift over 4.5 hours, 12 hours
+            off between working days, 48 hours off in a row each week, and no night work. Choose the night hours in
+            <strong>Rota Settings</strong>.
+        </FluentText>
+        <FluentText>
+            If someone is still under school leaving age, also fill in <strong>Over school leaving age from</strong>.
+            In England this is the last Friday in June of the school year they turn 16. Lanyard doesn't check the
+            child employment rules that apply until then (shorter hours in term time, no work after 19:00, a council
+            permit), so it won't add them to a rota automatically or let them pick up shifts. You can still give
+            them a shift yourself.
+        </FluentText>
+        <FluentText>
+            Once both dates have passed the record is deleted. <a href="/manage/rota/staff">Staff</a> shows who is
+            currently marked as under 18.
+        </FluentText>
+        <HelpNote Intent="MessageBarIntent.Info">
+            Lanyard only knows about shifts here. If someone under 18 also works somewhere else, those hours count
+            towards their limits too.
+        </HelpNote>
     </HelpSection>
 
     <HelpSection Title="Contract requirements">
@@ -134,6 +163,8 @@
                 clocked in, before it shows on <a href="/manage/alerts">Operations Alerts</a> and managers are told. 15 to
                 start with; 0 turns these alerts off.</li>
             <li><strong>Email staff a reminder before each shift</strong>, and how many hours before.</li>
+            <li><strong>Night hours they can't work</strong> (staff under 18): <strong>22:00 to 06:00</strong>, or
+                <strong>23:00 to 07:00</strong> if their contract says so. Midnight to 04:00 is never allowed.</li>
             <li><strong>Payroll export</strong>: your pay period, and whether to take a break off long days in the export.</li>
         </ul>
     </HelpSection>

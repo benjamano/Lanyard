@@ -182,3 +182,14 @@
         display: none;
     }
 }
+
+.staff-bulk-young {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: var(--fontSizeBase200);
+    background: var(--colorPaletteMarigoldBackground2);
+    color: var(--colorPaletteMarigoldForeground2);
+    border: 1px solid var(--colorPaletteMarigoldBorder2);
+}

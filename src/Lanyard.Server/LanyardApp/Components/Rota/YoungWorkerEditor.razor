@@ -1,0 +1,170 @@
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@inject IYoungWorkerService _youngWorkerService
+
+@* Managers and Admins only (the user editor's Rota tab). Staff never see these dates. *@
+<div class="young-worker-editor">
+    <FluentText Style="color: var(--colorNeutralForeground3);">
+        For staff under 18. Lanyard keeps their rota within the UK young worker limits: 8 hours a day, 40 a week,
+        a 30 minute break on shifts over 4.5 hours, 12 hours off between days, 48 hours off a week, and no night work.
+        Only managers see these dates, and they're deleted once both have passed.
+    </FluentText>
+
+    @if (!isLoaded)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else
+    {
+        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8" Wrap="true">
+            @if (status is null)
+            {
+                <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative">Not marked as under 18</FluentBadge>
+            }
+            else
+            {
+                <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Warning">@StatusLabel</FluentBadge>
+                <FluentText Style="color: var(--colorNeutralForeground3);">
+                    Set@(status.UpdatedByName is string name ? $" by {name}" : "") on @RotaTime.LocalDate(status.UpdateDate).ToString("d MMM yyyy", RotaFormat.Uk)
+                </FluentText>
+            }
+        </FluentStack>
+
+        <div class="young-worker-fields">
+            <div>
+                <FluentDatePicker TValue="DateTime?" @bind-Value="underEighteenUntil" Label="18th birthday" Culture="@RotaFormat.Uk" Width="100%" />
+                <div class="young-worker-hint">The young worker limits apply to shifts before this day.</div>
+            </div>
+            <div>
+                <FluentDatePicker TValue="DateTime?" @bind-Value="schoolLeavingAgeUntil" Label="Over school leaving age from (if under 16)" Culture="@RotaFormat.Uk" Width="100%" />
+                <div class="young-worker-hint">In England, the last Friday in June of the school year they turn 16. Until then, Lanyard won't roster them automatically or let them pick up shifts.</div>
+            </div>
+        </div>
+
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6" Wrap="true">
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
+                          Disabled="@isBusy" OnClick="@SaveAsync">
+                @(isBusy ? "Saving..." : "Save")
+            </FluentButton>
+            @if (status is not null)
+            {
+                <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@isBusy" OnClick="@ClearAsync">
+                    Clear
+                </FluentButton>
+            }
+        </FluentStack>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required string UserId { get; set; }
+
+    private bool isLoaded;
+    private string? loadError;
+    private YoungWorkerStatusView? status;
+    private DateTime? underEighteenUntil;
+    private DateTime? schoolLeavingAgeUntil;
+    private bool isBusy;
+
+    private string StatusLabel
+    {
+        get
+        {
+            DateOnly today = RotaTime.Today(DateTime.UtcNow);
+
+            if (status?.SchoolLeavingAgeUntil is DateOnly school && school > today)
+            {
+                return "Under school leaving age";
+            }
+
+            return status?.UnderEighteenUntil is DateOnly adult && adult > today ? "Under 18" : "No longer applies";
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task<(LocationScope? Scope, string? ActingUserId)> ResolveCallerAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+        Result<string> currentUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null || !currentUser.IsSuccess || string.IsNullOrEmpty(currentUser.Data))
+        {
+            _toastService.ShowError($"Failed to resolve your location: {scopeResult.Error ?? currentUser.Error}");
+            return (null, null);
+        }
+
+        return (scopeResult.Data, currentUser.Data);
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoaded = false;
+
+        (LocationScope? scope, string? actingUserId) = await ResolveCallerAsync();
+
+        if (scope is null || actingUserId is null)
+        {
+            loadError = "Couldn't work out who you are.";
+            isLoaded = true;
+            return;
+        }
+
+        Result<YoungWorkerStatusView?> result = await _youngWorkerService.GetAsync(scope, UserId, actingUserId);
+
+        loadError = result.IsSuccess ? null : result.Error;
+        Show(result.IsSuccess ? result.Data : null);
+        isLoaded = true;
+    }
+
+    private void Show(YoungWorkerStatusView? view)
+    {
+        status = view;
+        underEighteenUntil = view?.UnderEighteenUntil?.ToDateTime(TimeOnly.MinValue);
+        schoolLeavingAgeUntil = view?.SchoolLeavingAgeUntil?.ToDateTime(TimeOnly.MinValue);
+    }
+
+    private Task SaveAsync() => SaveDatesAsync(
+        underEighteenUntil is DateTime adult ? DateOnly.FromDateTime(adult) : null,
+        schoolLeavingAgeUntil is DateTime school ? DateOnly.FromDateTime(school) : null);
+
+    private Task ClearAsync() => SaveDatesAsync(null, null);
+
+    private async Task SaveDatesAsync(DateOnly? adult, DateOnly? school)
+    {
+        isBusy = true;
+
+        (LocationScope? scope, string? actingUserId) = await ResolveCallerAsync();
+
+        if (scope is null || actingUserId is null)
+        {
+            isBusy = false;
+            return;
+        }
+
+        Result<YoungWorkerStatusView?> result = await _youngWorkerService.SaveAsync(scope, UserId, adult, school, actingUserId);
+
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to save: {result.Error}");
+            return;
+        }
+
+        Show(result.Data);
+        _toastService.ShowSuccess(result.Data is null ? "No longer marked as under 18." : "Young worker details saved.");
+    }
+}
