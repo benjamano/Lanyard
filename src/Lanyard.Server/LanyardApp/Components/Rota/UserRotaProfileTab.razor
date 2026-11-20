@@ -85,6 +85,13 @@
         <FluentDivider Style="width: 100%;" />
 
         <section class="rota-profile-section">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Under 18</FluentText>
+            <YoungWorkerEditor UserId="@UserId" />
+        </section>
+
+        <FluentDivider Style="width: 100%;" />
+
+        <section class="rota-profile-section">
             <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Availability</FluentText>
             <AvailabilityEditor UserId="@UserId" ForManager="true" />
         </section>

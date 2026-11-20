@@ -178,6 +178,44 @@ namespace Lanyard.Infrastructure.Models
         public bool HasAnyValue => MaxShiftsPerWeek is not null || MaxHoursPerWeek is not null;
     }
 
+    // Marks someone as a young worker: under 18, so the UK young worker limits apply to their rota
+    // (8 hours a day, 40 a week, a 30 minute break over 4.5 hours, 12 hours rest between days, 48
+    // hours off a week, no night work). Only the dates the rules need are kept - the day they turn
+    // 18, and for anyone still under school leaving age the day that ends - never a full date of
+    // birth. Managers and Admins set it; staff never see the dates. Its own table, not a
+    // UserProfile column, so a profile save can't touch it and GDPR erasure is a row delete. The
+    // row is deleted once both dates have passed (YoungWorkerCleanupHostedService), since by then
+    // it only says when their birthday is.
+    public class YoungWorkerStatus : ICompanyOwned
+    {
+        public Guid Id { get; set; }
+
+        public required int CompanyId { get; set; }
+        public Company? Company { get; set; }
+
+        public required string UserId { get; set; }
+        public UserProfile? User { get; set; }
+
+        // Their 18th birthday: the young worker rules apply to shifts on days before it.
+        public DateOnly? UnderEighteenUntil { get; set; }
+
+        // When they're over school leaving age (in England, the last Friday in June of the school
+        // year they turn 16). Before it, child employment rules apply, which Lanyard doesn't check,
+        // so they're never rostered automatically and can't pick up shifts.
+        public DateOnly? SchoolLeavingAgeUntil { get; set; }
+
+        public DateTime UpdateDate { get; set; }
+
+        // The manager who last changed it; null once they've been erased.
+        public string? UpdatedByUserId { get; set; }
+
+        public bool HasAnyValue => UnderEighteenUntil is not null || SchoolLeavingAgeUntil is not null;
+
+        // Whether any of it still applies on a venue-local day.
+        public bool AppliesOn(DateOnly day) =>
+            (UnderEighteenUntil is DateOnly adult && day < adult) || (SchoolLeavingAgeUntil is DateOnly school && day < school);
+    }
+
     // The PIN a staff member types on the clock-in terminal. The terminal identifies the person
     // by name first (they tap themselves on today's roster), so the PIN only has to verify that
     // one user - it never has to be unique or looked up, which is why a salted Identity
@@ -247,6 +285,10 @@ namespace Lanyard.Infrastructure.Models
         public BreakDeductionRule BreakDeduction { get; set; } = BreakDeductionRule.None;
         public int BreakDeductionMinutes { get; set; } = 20;
         public decimal BreakDeductionAfterHours { get; set; } = 6;
+
+        // The night hours staff under 18 can't be rostered for: 22:00-06:00 unless their contract
+        // says 23:00-07:00. Midnight to 04:00 is ruled out either way.
+        public YoungWorkerNightWindow YoungWorkerNightWindow { get; set; } = YoungWorkerNightWindow.TenToSix;
 
         public DateTime UpdateDate { get; set; }
     }

@@ -657,6 +657,42 @@ public class GdprServiceTests
     }
 
     [TestMethod]
+    public async Task EraseUserDataAsync_RemovesTheirYoungWorkerDatesAndClearsTheirNameFromOthers()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        UserManager<UserProfile> userManager = BuildUserManager(options);
+
+        UserProfile admin = await SeedUserAsync(userManager, "Ada", "Min", "admin@example.com");
+        UserProfile target = await SeedUserAsync(userManager);
+
+        Guid setByTarget = Guid.NewGuid();
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Users.Add(new UserProfile { Id = ApplicationDbContext.SystemDeletedUserPlaceholderId, UserName = "deleted-user" });
+            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = 1, UserId = target.Id, UnderEighteenUntil = new DateOnly(2028, 3, 1), UpdatedByUserId = admin.Id });
+            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = 2, UserId = target.Id, UnderEighteenUntil = new DateOnly(2028, 3, 1) });
+            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = setByTarget, CompanyId = 1, UserId = admin.Id, UnderEighteenUntil = new DateOnly(2028, 3, 1), UpdatedByUserId = target.Id });
+
+            await ctx.SaveChangesAsync();
+        }
+
+        Mock<ISecurityService> securityServiceMock = BuildSecurityServiceMock(isAdmin: true, admin);
+        GdprService service = BuildService(options, userManager, securityServiceMock);
+
+        Result<bool> result = await service.EraseUserDataAsync(target.Id);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using ApplicationDbContext verifyCtx = new(options);
+
+        Assert.IsFalse(await verifyCtx.YoungWorkerStatuses.IgnoreQueryFilters().AnyAsync(x => x.UserId == target.Id));
+        YoungWorkerStatus kept = await verifyCtx.YoungWorkerStatuses.IgnoreQueryFilters().SingleAsync(x => x.Id == setByTarget);
+        Assert.IsNull(kept.UpdatedByUserId);
+        Assert.AreEqual(new DateOnly(2028, 3, 1), kept.UnderEighteenUntil);
+    }
+
+    [TestMethod]
     public async Task EraseUserDataAsync_RemovesTheirStaffDocuments_RowsFilesAndBytes()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
