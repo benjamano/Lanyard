@@ -1,0 +1,255 @@
+@page "/manage/whats-on"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.Parties)]
+
+@using Lanyard.App.Components.WhatsOn
+@using Lanyard.Application.Services.WhatsOn
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.DTO.WhatsOn
+
+@inject IWhatsOnService _whatsOnService
+
+<PageTitle>What's on</PageTitle>
+
+<div class="wo-page">
+    <div class="wo-toolbar">
+        @if (locationOptions.Count > 1)
+        {
+            <FluentSelect TOption="LocationOption" TValue="string" Items="@locationOptions" OptionText="@(x => x.Name)"
+                          OptionValue="@(x => x.Id.ToString())" Value="@locationId?.ToString()" ValueChanged="@OnLocationChanged"
+                          Label="Location" Width="240px" />
+        }
+
+        <div class="wo-view-toggle" role="group" aria-label="Day or week">
+            <FluentButton Appearance="@(week ? ButtonAppearance.Outline : ButtonAppearance.Primary)" OnClick="@(() => Go(date, false))">Day</FluentButton>
+            <FluentButton Appearance="@(week ? ButtonAppearance.Primary : ButtonAppearance.Outline)" OnClick="@(() => Go(date, true))">Week</FluentButton>
+        </div>
+
+        <div class="wo-nav">
+            <FluentButton IconStart="@(new Icons.Regular.Size20.ChevronLeft())" Title="@(week ? "Previous week" : "Previous day")"
+                          OnClick="@(() => Go(date.AddDays(week ? -7 : -1), week))" />
+            <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => Go(today, week))">Today</FluentButton>
+            <FluentButton IconStart="@(new Icons.Regular.Size20.ChevronRight())" Title="@(week ? "Next week" : "Next day")"
+                          OnClick="@(() => Go(date.AddDays(week ? 7 : 1), week))" />
+        </div>
+
+        <FluentDatePicker TValue="DateTime?" Value="@date.ToDateTime(TimeOnly.MinValue)" ValueChanged="@OnDatePicked"
+                          Label="Go to date" Culture="@RotaFormat.Uk" Width="160px" />
+
+        <FluentCheckbox Label="Show cancelled" Value="@includeCancelled" ValueChanged="@OnIncludeCancelledChanged" />
+
+    </div>
+
+    <div class="wo-heading">
+        <h1 class="wo-range-label">
+            @RangeLabel
+            @if (!week && date == today)
+            {
+                <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Brand">Today</FluentBadge>
+            }
+        </h1>
+
+        <div class="wo-actions">
+            <HelpButton AreaKey="@HelpRegistry.WhatsOn" Topic="@(week ? "week" : "day")" />
+            <FluentAnchorButton Href="@NewPartyHref" Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Add())">
+                Book a party
+            </FluentAnchorButton>
+        </div>
+    </div>
+
+    @if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else if (range is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" HorizontalGap="8px">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else
+    {
+        @foreach (string warning in range.Warnings)
+        {
+            <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">@warning</FluentMessageBar>
+        }
+
+        @if (week)
+        {
+            <WhatsOnTotalsStrip Totals="@range.Totals" AriaLabel="Totals for the week" />
+            <WhatsOnWeek Days="@range.Days" Today="@today" DayHref="@(d => Href(d, false))" />
+        }
+        else if (range.Day(date) is WhatsOnDay day)
+        {
+            <WhatsOnTotalsStrip Totals="@day.Totals" StaffCount="@day.Staff.Select(x => x.UserId).Distinct().Count()" AriaLabel="Totals for the day" />
+
+            <div class="wo-day">
+                <div class="wo-day-main">
+                    @if (day.Items.Count == 0)
+                    {
+                        <FluentCard Height="auto" Class="wo-empty">
+                            <FluentText>Nothing booked on @date.ToString("dddd d MMMM", RotaFormat.Uk).</FluentText>
+                        </FluentCard>
+                    }
+                    else
+                    {
+                        <div class="wo-day-timeline">
+                            <WhatsOnTimeline Day="@date" Items="@day.Items" />
+                        </div>
+                        <div class="wo-day-list">
+                            @foreach (WhatsOnItem item in day.Items)
+                            {
+                                <WhatsOnItemCard Item="@item" />
+                            }
+                        </div>
+                    }
+                </div>
+
+                <aside class="wo-day-side">
+                    <WhatsOnStaffList Staff="@day.Staff" />
+                </aside>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "location")]
+    public int? LocationQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "date")]
+    public string? DateQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "view")]
+    public string? ViewQuery { get; set; }
+
+    private record LocationOption(int Id, string Name);
+
+    private LocationScope? scope;
+    private List<LocationOption> locationOptions = [];
+    private int? locationId;
+    private DateOnly today;
+    private DateOnly date;
+    private bool week;
+    private bool includeCancelled;
+
+    private WhatsOnRange? range;
+    private string? loadError;
+
+    private DateOnly WeekStart => RotaTime.GetWeekStart(date);
+
+    private string RangeLabel => week
+        ? $"{WeekStart.ToString("d MMM", RotaFormat.Uk)} – {WeekStart.AddDays(6).ToString("d MMM yyyy", RotaFormat.Uk)}"
+        : date.ToString("dddd d MMMM yyyy", RotaFormat.Uk);
+
+    private string NewPartyHref => locationId is int id ? $"/manage/parties/new?location={id}" : "/manage/parties/new";
+
+    protected override async Task OnInitializedAsync()
+    {
+        today = RotaTime.Today(DateTime.UtcNow);
+
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            loadError = $"Couldn't work out which location you're signed in to: {scopeResult.Error}";
+            return;
+        }
+
+        scope = scopeResult.Data;
+
+        // A Manager sees their own location (the service enforces the same rule); an Admin may
+        // pick any active location.
+        if (scope.IsAdmin)
+        {
+            Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsAsync();
+
+            locationOptions = locationsResult.IsSuccess && locationsResult.Data is not null
+                ? locationsResult.Data.OrderBy(l => l.GetDisplayName()).Select(l => new LocationOption(l.Id, l.GetDisplayName())).ToList()
+                : [];
+        }
+        else if (scope.LocationId is int scopeLocationId)
+        {
+            locationOptions = [new LocationOption(scopeLocationId, scope.LocationDisplayName ?? "Your location")];
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        week = string.Equals(ViewQuery, "week", StringComparison.OrdinalIgnoreCase);
+        date = DateOnly.TryParseExact(DateQuery, "yyyy-MM-dd", out DateOnly parsed) ? parsed : today;
+
+        locationId = LocationQuery is int requested && locationOptions.Any(l => l.Id == requested)
+            ? requested
+            : scope.LocationId is int own && locationOptions.Any(l => l.Id == own)
+                ? own
+                : locationOptions.FirstOrDefault()?.Id;
+
+        if (locationId is null)
+        {
+            loadError = "There are no active locations yet.";
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (scope is null || locationId is not int location)
+        {
+            return;
+        }
+
+        (DateOnly from, DateOnly to) = week ? (WeekStart, WeekStart.AddDays(6)) : (date, date);
+
+        Result<WhatsOnRange> result = await _whatsOnService.GetRangeAsync(scope, location, from, to, includeCancelled);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            loadError = result.Error;
+            range = null;
+            return;
+        }
+
+        loadError = null;
+        range = result.Data;
+    }
+
+    private string Href(DateOnly day, bool asWeek) => _navigationManager.GetUriWithQueryParameters(new Dictionary<string, object?>
+    {
+        ["date"] = day == today ? null : day.ToString("yyyy-MM-dd"),
+        ["view"] = asWeek ? "week" : null,
+        ["location"] = locationId
+    });
+
+    private void Go(DateOnly day, bool asWeek) => _navigationManager.NavigateTo(Href(day, asWeek));
+
+    private void OnDatePicked(DateTime? picked)
+    {
+        if (picked is DateTime value)
+        {
+            Go(DateOnly.FromDateTime(value), week);
+        }
+    }
+
+    private async Task OnIncludeCancelledChanged(bool value)
+    {
+        includeCancelled = value;
+        await LoadAsync();
+    }
+
+    private void OnLocationChanged(string? value)
+    {
+        if (int.TryParse(value, out int id) && id != locationId)
+        {
+            _navigationManager.NavigateTo(_navigationManager.GetUriWithQueryParameter("location", id));
+        }
+    }
+}

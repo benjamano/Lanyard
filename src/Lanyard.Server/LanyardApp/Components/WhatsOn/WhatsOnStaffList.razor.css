@@ -1,0 +1,68 @@
+.wo-staff {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+}
+
+.wo-staff-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.wo-staff-count {
+    min-width: 22px;
+    padding: 0 6px;
+    border-radius: 11px;
+    background: var(--colorNeutralBackground3);
+    color: var(--colorNeutralForeground2);
+    font-size: 0.8rem;
+    text-align: center;
+}
+
+.wo-staff-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.wo-staff-row {
+    display: grid;
+    grid-template-columns: 10px minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 8px;
+    font-size: 0.9rem;
+}
+
+.wo-staff-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+.wo-staff-name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.wo-staff-time {
+    color: var(--colorNeutralForeground2);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.wo-staff-position {
+    grid-column: 2 / -1;
+    color: var(--colorNeutralForeground3);
+    font-size: 0.8rem;
+}

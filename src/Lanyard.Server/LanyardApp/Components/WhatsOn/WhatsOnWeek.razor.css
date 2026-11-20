@@ -1,0 +1,122 @@
+/* Phone first: one day under another. Seven columns once there's room for them. */
+.wo-week {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+}
+
+@media (min-width: 1100px) {
+    .wo-week {
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .wo-week-day {
+        min-height: 260px;
+    }
+}
+
+.wo-week-day {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+    min-width: 0;
+}
+
+.wo-week-day.is-today {
+    border-color: var(--colorBrandStroke1);
+    box-shadow: inset 0 3px 0 var(--colorBrandStroke1);
+}
+
+.wo-week-head {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px;
+    color: inherit;
+    text-decoration: none;
+}
+
+.wo-week-head:hover .wo-week-date,
+.wo-week-head:focus-visible .wo-week-date {
+    text-decoration: underline;
+}
+
+.wo-week-dow {
+    font-weight: 600;
+    font-size: 1.05rem;
+}
+
+.wo-week-date {
+    color: var(--colorNeutralForeground2);
+}
+
+.wo-week-summary {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 2px 8px;
+    color: var(--colorNeutralForeground3);
+    font-size: 0.8rem;
+}
+
+.is-empty .wo-week-summary span:first-child {
+    font-style: italic;
+}
+
+.wo-chip {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border-left: 3px solid var(--colorBrandStroke1);
+    background: color-mix(in srgb, var(--colorBrandBackground2) 80%, var(--colorNeutralBackground1));
+    color: var(--colorNeutralForeground1);
+    text-decoration: none;
+    font-size: 0.85rem;
+}
+
+.wo-chip:hover,
+.wo-chip:focus-visible {
+    box-shadow: var(--shadow4);
+}
+
+.wo-chip-time {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: color-mix(in srgb, var(--colorBrandForeground1) 70%, var(--colorNeutralForeground1));
+}
+
+.wo-chip-title {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.wo-chip-facts,
+.wo-chip-badges {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    color: var(--colorNeutralForeground2);
+}
+
+.wo-provisional {
+    border-left-style: dashed;
+    border-left-color: var(--colorStatusWarningBorder2, var(--colorPaletteYellowBorder2));
+}
+
+.wo-cancelled {
+    opacity: 0.55;
+    border-left-color: var(--colorNeutralStroke1);
+    background: var(--colorNeutralBackground3);
+}
+
+.wo-cancelled .wo-chip-title {
+    text-decoration: line-through;
+}
