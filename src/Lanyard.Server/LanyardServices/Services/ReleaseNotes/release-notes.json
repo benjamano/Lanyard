@@ -963,9 +963,9 @@
     ]
   },
   {
-    "version": "1.4.26",
-    "releaseDate": "2026-11-19",
-    "summary": "Insights counts party bookings, What's On shows venue schedules, and automation rules can be copied.",
+    "version": "1.4.27",
+    "releaseDate": "2026-11-20",
+    "summary": "Insights counts party bookings, What's On shows venue schedules, automation rules can be copied, and Identify displays shows which kiosk screen is which.",
     "details": [
       "Insights counts booked parties at the location and the children expected at them, per hour and per day. Cancelled parties are left out; provisional Just Step bookings count.",
       "Games are split into walk-in games and party games. Each party is given its first two games: the first starting from 10 minutes before the party's laser tag time to half an hour after it, and the second within 20 minutes of the first. Parties with no laser tag time use the location's default from Party settings, and a laser tag private hire counts every game during the booking.",
@@ -982,7 +982,10 @@
       "New What's On Today dashboard widget (Admins and Managers): today's parties, children and staff on, and the parties still to come, with a link to the day's timeline. Right-click it to choose how many to list and, for Admins, which location.",
       "New Duplicate rule button on Automation: it copies a rule with its trigger, conditions and actions as \"Copy of\" the rule's name, switched off, and opens it so you can change what's different before turning it on.",
       "The Automation rule list now fits on a phone: each rule's name shows in full with its kiosk and trigger underneath, instead of being cut short with the switch and buttons off the side of the screen.",
-      "The Edit and Delete buttons on Automation, and the rule names in the Execution Log, now work with the keyboard and screen readers and show what they do when you hover over them."
+      "The Edit and Delete buttons on Automation, and the rule names in the Execution Log, now work with the keyboard and screen readers and show what they do when you hover over them.",
+      "New Identify displays button (the # button) for each kiosk on the Clients page, and at the top of a kiosk's Settings > Projection tab (Admins). For 8 seconds every screen on that kiosk shows a large number with its name, resolution and the program set up for it, so you can tell which Screen 1, 2 or 3 in Lanyard is which physical screen. Whatever is playing carries on underneath.",
+      "The Projection tab also lists each screen's details under the button, and marks a screen as Changed when Windows has renumbered the screens since the kiosk last reported them, for example after a screen was unplugged, so you can check its projection is still on the right screen.",
+      "Kiosks now tell Lanyard straight away when a screen is plugged in, unplugged or changes resolution, instead of only when they reconnect, and the kiosk self-test lists the screens it can see. Both need Lanyard Client 1.0.49."
     ]
   }
 ]

@@ -140,6 +140,7 @@ builder.Services.AddScoped<IClientUpdatePolicyService, ClientUpdatePolicyService
 builder.Services.AddScoped<IClientReleaseAdminService, ClientReleaseAdminService>();
 builder.Services.AddScoped<IClientDiagnosticsService, ClientDiagnosticsService>();
 builder.Services.AddScoped<IKioskSelfTestService, KioskSelfTestService>();
+builder.Services.AddScoped<IDisplayIdentifyService, DisplayIdentifyService>();
 builder.Services.AddScoped<IKioskHealthService, KioskHealthService>();
 builder.Services.AddScoped<IKioskClientListService, KioskClientListService>();
 builder.Services.AddScoped<IKioskOfflineManifestService, KioskOfflineManifestService>();

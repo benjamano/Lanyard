@@ -3,6 +3,13 @@
 
 @if (ClientId != null)
 {
+    <section class="client-projection-identify" aria-label="Identify this kiosk's screens">
+        <FluentText>
+            Not sure which screen is which? Identify displays shows each screen's number, name, resolution and program on the screen itself for a few seconds.
+        </FluentText>
+        <IdentifyDisplaysButton ClientId="@ClientId" ClientName="@ClientName" IsConnected="@IsConnected" ShowLabel="true" ShowResults="true" />
+    </section>
+
     <FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.Right" VerticalAlignment="@VerticalAlignment.Center" Margin="@Margin.Bottom2">
         <FluentButton IconStart="new Icons.Regular.Size20.Add()" OnClick="OpenAddProjectionDialog">Add Projection</FluentButton>
     </FluentStack>
@@ -39,6 +46,12 @@
 
     [Parameter]
     public EventCallback UpdateClientCapabilities { get; set; }
+
+    [Parameter]
+    public string? ClientName { get; set; }
+
+    [Parameter]
+    public bool IsConnected { get; set; } = true;
 
     private IEnumerable<ClientProjectionSettings> projectionSettings = Array.Empty<ClientProjectionSettings>();
 
