@@ -963,7 +963,7 @@
     ]
   },
   {
-    "version": "1.4.26",
+    "version": "1.4.27",
     "releaseDate": "2026-11-19",
     "summary": "See what's on at your venue each day and week, and duplicate automation rules.",
     "details": [
@@ -975,7 +975,8 @@
       "New What's On Today dashboard widget (Admins and Managers): today's parties, children and staff on, and the parties still to come, with a link to the day's timeline. Right-click it to choose how many to list and, for Admins, which location.",
       "New Duplicate rule button on Automation: it copies a rule with its trigger, conditions and actions as \"Copy of\" the rule's name, switched off, and opens it so you can change what's different before turning it on.",
       "The Automation rule list now fits on a phone: each rule's name shows in full with its kiosk and trigger underneath, instead of being cut short with the switch and buttons off the side of the screen.",
-      "The Edit and Delete buttons on Automation, and the rule names in the Execution Log, now work with the keyboard and screen readers and show what they do when you hover over them."
+      "The Edit and Delete buttons on Automation, and the rule names in the Execution Log, now work with the keyboard and screen readers and show what they do when you hover over them.",
+      "An automation rule saved while Lanyard was reloading its rules no longer goes unnoticed until the next save: it now starts working straight away."
     ]
   }
 ]
