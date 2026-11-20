@@ -963,9 +963,9 @@
     ]
   },
   {
-    "version": "1.4.27",
+    "version": "1.4.28",
     "releaseDate": "2026-11-19",
-    "summary": "See what's on at your venue each day and week, and duplicate automation rules.",
+    "summary": "See what's on at your venue each day and week, duplicate automation rules, and run automation at party times.",
     "details": [
       "New What's On page under Management (Admins and Managers): everything booked at a location for one day or one week. For now it shows parties, including ones imported from Just Step Online.",
       "The Day view is a timeline: each party is a block from arrival to finish, with its eating and laser tag times marked, and parties that overlap sit side by side. Today's timeline has a line at the time now. On a phone the day is a list of party cards instead.",
@@ -976,7 +976,11 @@
       "New Duplicate rule button on Automation: it copies a rule with its trigger, conditions and actions as \"Copy of\" the rule's name, switched off, and opens it so you can change what's different before turning it on.",
       "The Automation rule list now fits on a phone: each rule's name shows in full with its kiosk and trigger underneath, instead of being cut short with the switch and buttons off the side of the screen.",
       "The Edit and Delete buttons on Automation, and the rule names in the Execution Log, now work with the keyboard and screen readers and show what they do when you hover over them.",
-      "An automation rule saved while Lanyard was reloading its rules no longer goes unnoticed until the next save: it now starts working straight away."
+      "An automation rule saved while Lanyard was reloading its rules no longer goes unnoticed until the next save: it now starts working straight away.",
+      "New Party time trigger for Automation rules: run lights, music or projection actions when a booked party starts, eats, plays laser tag or ends, at the time or up to 120 minutes before. Choose the location, and optionally one room.",
+      "A party time rule runs once for each party. Parties that reach the same moment together run it once, so two 2pm parties don't start the lights twice. Cancelled parties, provisional Just Step bookings and private hires don't run it.",
+      "Moving or cancelling a party, by hand or through the Just Step import, changes when its rules run straight away.",
+      "The Execution Log shows which party a party time run was for, with an Open party button, and never the child's name."
     ]
   }
 ]
