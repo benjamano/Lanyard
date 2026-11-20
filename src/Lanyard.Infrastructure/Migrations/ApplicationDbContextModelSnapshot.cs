@@ -2825,6 +2825,13 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
                     b.Property<string>("FileName")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -2847,6 +2854,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<bool>("IsRestricted")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsSystemFile")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime>("UploadedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2859,9 +2869,9 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CompanyId");
-
                     b.HasIndex("FolderId");
+
+                    b.HasIndex("CompanyId", "FolderId", "IsActive");
 
                     b.ToTable("FileMetadata");
                 });
@@ -2882,7 +2892,17 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("character varying(450)");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
                     b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsSharedWithStaff")
                         .HasColumnType("boolean");
 
                     b.Property<string>("Name")
@@ -2895,9 +2915,9 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CompanyId");
-
                     b.HasIndex("ParentFolderId");
+
+                    b.HasIndex("CompanyId", "ParentFolderId", "IsActive");
 
                     b.ToTable("Folders");
                 });
