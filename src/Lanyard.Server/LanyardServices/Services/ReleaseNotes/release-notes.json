@@ -965,8 +965,16 @@
   {
     "version": "1.4.27",
     "releaseDate": "2026-11-19",
-    "summary": "See what's on at your venue each day and week, and duplicate automation rules.",
+    "summary": "Insights counts party bookings, What's On shows venue schedules, and automation rules can be copied.",
     "details": [
+      "Insights counts booked parties at the location and the children expected at them, per hour and per day. Cancelled parties are left out; provisional Just Step bookings count.",
+      "Games are split into walk-in games and party games. Each party is given its first two games: the first starting from 10 minutes before the party's laser tag time to half an hour after it, and the second within 20 minutes of the first. Parties with no laser tag time use the location's default from Party settings, and a laser tag private hire counts every game during the booking.",
+      "Busy and quiet flags, and the typical games per staff hour they are measured against, now leave out hours with a party on, so a party no longer makes a normal hour look understaffed. An hour that has a party most weeks shows as Mostly parties instead of being flagged.",
+      "On the Insights page: new Parties and Party children tiles, the Games tile shows how many games were at parties, Games per day draws walk-in and party games as separate lines, and Shade by in Typical week offers Party games and Party children. A note says how many parties had no laser tag time, with a link to Party settings to set a default.",
+      "The Demand and Staffing dashboard widget shows the parties, children and party games in its range, and never lists a party hour as busy or quiet.",
+      "The Insights help has a new Parties tab explaining how games are matched to parties and why party hours aren't flagged.",
+      "Export CSV has four new columns at the end: Walk-in games, Party games, Parties on and Expected children. Like the rest of the file they are counts only, with no names, contact details, allergies or prices.",
+      "Only for companies using Parties. Without it, Insights works as before.",
       "New What's On page under Management (Admins and Managers): everything booked at a location for one day or one week. For now it shows parties, including ones imported from Just Step Online.",
       "The Day view is a timeline: each party is a block from arrival to finish, with its eating and laser tag times marked, and parties that overlap sit side by side. Today's timeline has a line at the time now. On a phone the day is a list of party cards instead.",
       "The Week view shows Monday to Sunday, side by side on a computer and one under another on a phone, with each day's parties and headcount. Click a day to open its timeline, or a party to open it.",
