@@ -382,6 +382,10 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                     existingDemand.RangeDays = incomingDemand.RangeDays;
                     existingDemand.LocationId = incomingDemand.LocationId;
                     break;
+                case WhatsOnTodayWidget existingWhatsOn when widget is WhatsOnTodayWidget incomingWhatsOn:
+                    existingWhatsOn.MaxItems = incomingWhatsOn.MaxItems;
+                    existingWhatsOn.LocationId = incomingWhatsOn.LocationId;
+                    break;
             }
 
             Dashboard? parentDashboard = await ctx.Dashboards
@@ -779,6 +783,11 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 RangeDays = demandWidget.RangeDays,
                 LocationId = demandWidget.LocationId
             },
+            WhatsOnTodayWidget whatsOnWidget => new WhatsOnTodayWidget
+            {
+                MaxItems = whatsOnWidget.MaxItems,
+                LocationId = whatsOnWidget.LocationId
+            },
             _ => throw new InvalidOperationException("Unsupported widget type.")
         };
 
@@ -919,6 +928,12 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         {
             targetDemand.RangeDays = sourceDemand.RangeDays;
             targetDemand.LocationId = sourceDemand.LocationId;
+        }
+
+        if (target is WhatsOnTodayWidget targetWhatsOn && source is WhatsOnTodayWidget sourceWhatsOn)
+        {
+            targetWhatsOn.MaxItems = sourceWhatsOn.MaxItems;
+            targetWhatsOn.LocationId = sourceWhatsOn.LocationId;
         }
 
         if (target is ProjectionStatusWidget targetProjectionStatus && source is ProjectionStatusWidget sourceProjectionStatus)

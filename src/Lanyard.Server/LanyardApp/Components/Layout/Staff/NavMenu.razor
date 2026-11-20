@@ -117,6 +117,14 @@
             {
                 <FluentNavSectionHeader Title="Management" />
 
+                @if (Has(CompanyFeature.Parties))
+                {
+                    <FluentNavItem Href="/manage/whats-on" IconRest="@(new Icons.Regular.Size20.CalendarAgenda())"
+                                   IconActive="@(new Icons.Filled.Size20.CalendarAgenda())">
+                        What's On
+                    </FluentNavItem>
+                }
+
                 @if (Has(CompanyFeature.OperationsAlerts))
                 {
                     <FluentNavItem Href="/manage/alerts" Match="NavLinkMatch.All" IconRest="@(new Icons.Regular.Size20.Alert())"
@@ -239,6 +247,10 @@
                         <FluentNavItem Href="/manage/parties/new">Book a Party</FluentNavItem>
                         <FluentNavItem Href="/manage/parties/settings">Party Settings</FluentNavItem>
                         <FluentNavItem Href="/manage/parties/printouts">Printouts</FluentNavItem>
+                        @if (_isAdmin)
+                        {
+                            <FluentNavItem Href="/manage/booking-import">Booking Import</FluentNavItem>
+                        }
                     </FluentNavCategory>
                 }
             }

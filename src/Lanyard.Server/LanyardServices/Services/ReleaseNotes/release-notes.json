@@ -969,5 +969,41 @@
       "Only the music changes. Audio clips and announcements play as they are.",
       "Each kiosk keeps its own equaliser, also when it's offline or restarts. Kiosks need version 1.0.48 or later; older ones apply it once they update."
     ]
+  },
+  {
+    "version": "1.4.24",
+    "releaseDate": "2026-11-18",
+    "summary": "Import party bookings automatically from Just Step Online.",
+    "details": [
+      "New Parties > Booking Import page (Admins): sign in to Just Step Online per location and Lanyard brings that venue's party bookings into Parties by itself. By default it imports once an hour between 07:00 and 23:00 and rests overnight; the frequency and hours are set per location on the page.",
+      "Enter each location's Just Step Online email and password, switch import on, then use Test connection or Run now. The password is stored encrypted and never shown again.",
+      "Bookings are matched on their Just Step reference, so later runs update them in place instead of duplicating, and a booking cancelled or removed in Just Step is cancelled in Lanyard too. Confirmed and provisional bookings both come in, with provisional ones marked.",
+      "Each import is listed on the page with its result and how many bookings came in. If an import can't run - a wrong password or the site being down - Admins and the location's Managers get one alert on Operations Alerts, which clears itself once an import succeeds again."
+    ]
+  },
+  {
+    "version": "1.4.27",
+    "releaseDate": "2026-11-19",
+    "summary": "Insights counts party bookings, What's On shows venue schedules, and automation rules can be copied.",
+    "details": [
+      "Insights counts booked parties at the location and the children expected at them, per hour and per day. Cancelled parties are left out; provisional Just Step bookings count.",
+      "Games are split into walk-in games and party games. Each party is given its first two games: the first starting from 10 minutes before the party's laser tag time to half an hour after it, and the second within 20 minutes of the first. Parties with no laser tag time use the location's default from Party settings, and a laser tag private hire counts every game during the booking.",
+      "Busy and quiet flags, and the typical games per staff hour they are measured against, now leave out hours with a party on, so a party no longer makes a normal hour look understaffed. An hour that has a party most weeks shows as Mostly parties instead of being flagged.",
+      "On the Insights page: new Parties and Party children tiles, the Games tile shows how many games were at parties, Games per day draws walk-in and party games as separate lines, and Shade by in Typical week offers Party games and Party children. A note says how many parties had no laser tag time, with a link to Party settings to set a default.",
+      "The Demand and Staffing dashboard widget shows the parties, children and party games in its range, and never lists a party hour as busy or quiet.",
+      "The Insights help has a new Parties tab explaining how games are matched to parties and why party hours aren't flagged.",
+      "Export CSV has four new columns at the end: Walk-in games, Party games, Parties on and Expected children. Like the rest of the file they are counts only, with no names, contact details, allergies or prices.",
+      "Only for companies using Parties. Without it, Insights works as before.",
+      "New What's On page under Management (Admins and Managers): everything booked at a location for one day or one week. For now it shows parties, including ones imported from Just Step Online.",
+      "The Day view is a timeline: each party is a block from arrival to finish, with its eating and laser tag times marked, and parties that overlap sit side by side. Today's timeline has a line at the time now. On a phone the day is a list of party cards instead.",
+      "The Week view shows Monday to Sunday, side by side on a computer and one under another on a phone, with each day's parties and headcount. Click a day to open its timeline, or a party to open it.",
+      "Totals at the top add up the parties, children and adults expected, hot and cold food, parties not paid in full with the balance due, and provisional holds.",
+      "The Day view also lists everyone on the published rota that day, with their times and position.",
+      "New What's On Today dashboard widget (Admins and Managers): today's parties, children and staff on, and the parties still to come, with a link to the day's timeline. Right-click it to choose how many to list and, for Admins, which location.",
+      "New Duplicate rule button on Automation: it copies a rule with its trigger, conditions and actions as \"Copy of\" the rule's name, switched off, and opens it so you can change what's different before turning it on.",
+      "The Automation rule list now fits on a phone: each rule's name shows in full with its kiosk and trigger underneath, instead of being cut short with the switch and buttons off the side of the screen.",
+      "The Edit and Delete buttons on Automation, and the rule names in the Execution Log, now work with the keyboard and screen readers and show what they do when you hover over them.",
+      "An automation rule saved while Lanyard was reloading its rules no longer goes unnoticed until the next save: it now starts working straight away."
+    ]
   }
 ]

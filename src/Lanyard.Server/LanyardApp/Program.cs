@@ -23,6 +23,8 @@ using Lanyard.Application.Services.Insights;
 using Lanyard.Application.Services.Onboarding;
 using Lanyard.Application.Services.Notifications;
 using Lanyard.Application.Services.Parties;
+using Lanyard.Application.Services.WhatsOn;
+using Lanyard.Application.Services.BookingImport;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
@@ -181,6 +183,23 @@ builder.Services.AddScoped<IPartySettingsService, PartySettingsService>();
 builder.Services.AddScoped<IPartyStaffingService, PartyStaffingService>();
 builder.Services.AddScoped<IPartyTemplateService, PartyTemplateService>();
 builder.Services.AddScoped<IPartyDocumentService, PartyDocumentService>();
+builder.Services.AddScoped<IWhatsOnSource, PartyWhatsOnSource>();
+builder.Services.AddScoped<IWhatsOnService, WhatsOnService>();
+
+// Just Step Online booking import. The client drives the login + report by hand, so its HTTP
+// handler keeps cookies and redirects off; the service and the two background jobs do the rest.
+builder.Services.AddHttpClient(JustStepClient.HttpClientName, client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(45);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("LanyardBookingImport/1.0");
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { UseCookies = false, AllowAutoRedirect = false });
+builder.Services.AddSingleton<IJustStepClient, JustStepClient>();
+builder.Services.AddScoped<IBookingImportService, BookingImportService>();
+builder.Services.Configure<BookingImportRetentionOptions>(builder.Configuration.GetSection(BookingImportRetentionOptions.SectionName));
+builder.Services.AddHostedService<JustStepImportHostedService>();
+builder.Services.AddHostedService<BookingImportRetentionHostedService>();
+
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ITerminalEphemeralTokenService, TerminalEphemeralTokenService>();
 builder.Services.AddSingleton<ITerminalEventBus, TerminalEventBus>();
