@@ -58,7 +58,10 @@
                                         continue;
                                     }
 
-                                    bool isVideoParameter = string.Equals(parameter.Name, "VideoFile", StringComparison.OrdinalIgnoreCase)
+                                    // The seeded template calls it "Video File"; this checked "VideoFile", so the
+                                    // video-only filter never applied and any file could be chosen.
+                                    bool isVideoParameter = string.Equals(parameter.Name, Lanyard.Shared.Projection.ProjectionParameterNames.Video, StringComparison.OrdinalIgnoreCase)
+                                        || string.Equals(parameter.Name, "VideoFile", StringComparison.OrdinalIgnoreCase)
                                         || string.Equals(parameter.DataType, "VideoFile", StringComparison.OrdinalIgnoreCase);
 
                                     <FluentGridItem Xs="12">

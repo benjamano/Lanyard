@@ -115,6 +115,7 @@ builder.Services.AddScoped<ICurrentUserAccessor, CurrentUserAccessor>();
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<IFileUsageService, FileUsageService>();
 builder.Services.AddScoped<IFileLibraryService, FileLibraryService>();
+builder.Services.AddSingleton<IFileLibraryEvents, FileLibraryEvents>();
 
 // One bucket client for the whole process. FileService is scoped and used to build its own
 // AmazonS3Client per instance - a new SDK client and HTTP pipeline for every request/circuit.
