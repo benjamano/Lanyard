@@ -169,6 +169,48 @@ public class ShiftClaimServiceTests
         StringAssert.Contains(wrongPosition.Error, "don't work as CSA");
     }
 
+    private static async Task MarkUnder18Async(World w, UserProfile user)
+    {
+        await using ApplicationDbContext ctx = new(w.Options);
+        ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = w.Company.Id, UserId = user.Id, DateOfBirth = DateOnly.FromDateTime(Day).AddYears(-17) });
+        await ctx.SaveChangesAsync();
+    }
+
+    [TestMethod]
+    public async Task PickUp_YoungWorker_RefusedForANightShift_AdultAllowed()
+    {
+        World w = await SeedAsync();
+        await MarkUnder18Async(w, w.Amy);
+        Shift late = await ShiftAsync(w, null, startHour: 18, hours: 5);
+
+        Result<ShiftClaim> amy = await w.Service.PickUpAsync(w.Amy.Id, late.Id, null);
+        Result<ShiftClaim> tom = await w.Service.PickUpAsync(w.Tom.Id, late.Id, null);
+
+        Assert.IsFalse(amy.IsSuccess);
+        StringAssert.Contains(amy.Error, "Under 18");
+        Assert.IsTrue(tom.IsSuccess, tom.Error);
+    }
+
+    [TestMethod]
+    public async Task Decide_YoungWorker_ApprovalRefusedOnceTheDayWouldBeTooLong()
+    {
+        World w = await SeedAsync();
+        Shift open = await ShiftAsync(w, null, startHour: 9, hours: 4);
+
+        Result<ShiftClaim> claim = await w.Service.PickUpAsync(w.Amy.Id, open.Id, null);
+        Assert.IsTrue(claim.IsSuccess, claim.Error);
+
+        // Since asking, Amy has been marked under 18 and given another 5 hours that day.
+        await MarkUnder18Async(w, w.Amy);
+        await ShiftAsync(w, w.Amy.Id, startHour: 13, hours: 5);
+
+        Result<bool> decided = await w.Service.DecideAsync(w.ManagerScope, claim.Data!.Id, true, null, w.Manager.Id);
+
+        Assert.IsFalse(decided.IsSuccess);
+        StringAssert.Contains(decided.Error, "limit is 8 h a day");
+        Assert.IsNull((await ReloadAsync(w, open.Id)).UserId);
+    }
+
     [TestMethod]
     public async Task PickUp_RefusedOnApprovedTimeOff()
     {

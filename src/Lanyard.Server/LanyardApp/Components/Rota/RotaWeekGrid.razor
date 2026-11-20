@@ -42,7 +42,7 @@
             List<ContractWarning> weekWarnings = row.Warnings.Where(w => w.WeekStart == WeekStart).ToList();
 
             <div class="rota-name-cell @(weekWarnings.Count > 0 ? "has-warning" : string.Empty)" role="rowheader">
-                <div class="rota-name">@row.DisplayName</div>
+                <div class="rota-name">@row.DisplayName @if (row.IsYoungWorker) { <YoungWorkerChip /> }</div>
                 <div class="rota-name-meta">
                     @if (row.PrimaryPosition?.StaffPosition is StaffPosition position)
                     {
