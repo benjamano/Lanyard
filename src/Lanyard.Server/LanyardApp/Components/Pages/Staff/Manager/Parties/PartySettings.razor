@@ -92,6 +92,34 @@
                                   Hint="Only shown in the allergy panel." AddLabel="Add an item" NamePlaceholder="e.g. Crisps"
                                   Items="@ItemsOf(PartyMenuItemKind.ColdExtra)" OnChanged="@LoadMenuAsync" />
             </section>
+
+            <section class="settings-card">
+                <h2>Venue screens</h2>
+                <p class="settings-intro">
+                    Projection programs can show live party details, such as "Happy 7th birthday, Ava!", on the screen in the
+                    party's room. This applies to every location in your company.
+                </p>
+
+                @if (showNamesOnScreens is bool show)
+                {
+                    <FluentSwitch Value="@show" ValueChanged="@SetShowNamesAsync" Disabled="@(!scope.IsAdmin || isSavingScreens)"
+                                  Label="Show the birthday child's first name on screens" />
+                    <p class="settings-intro">
+                        @if (show)
+                        {
+                            <span>Screens show the first name only, never a surname, from 15 minutes before the party until it ends.</span>
+                        }
+                        else
+                        {
+                            <span>Off: screens show your fallback text instead of a name. Party times such as "Laser tag at 14:30" still show.</span>
+                        }
+                        @if (!scope.IsAdmin)
+                        {
+                            <span> Only an Admin can change this.</span>
+                        }
+                    </p>
+                }
+            </section>
         </div>
     }
 </div>
@@ -112,6 +140,53 @@
     private string? loadError;
 
     private List<PartyMenuItem> ItemsOf(PartyMenuItemKind kind) => menu.Where(x => x.Kind == kind).ToList();
+
+    // Company-wide, so it's read for the selected location's company.
+    private bool? showNamesOnScreens;
+    private bool isSavingScreens;
+
+    private int? SelectedCompanyId => locationOptions.FirstOrDefault(l => l.Id == locationId)?.CompanyId;
+
+    private async Task LoadScreenSettingAsync()
+    {
+        if (scope is null || SelectedCompanyId is not int companyId)
+        {
+            return;
+        }
+
+        Result<bool> result = await _partySettingsService.GetShowNamesOnScreensAsync(scope, companyId);
+        showNamesOnScreens = result.IsSuccess ? result.Data : null;
+    }
+
+    private async Task SetShowNamesAsync(bool show)
+    {
+        if (scope is null || SelectedCompanyId is not int companyId)
+        {
+            return;
+        }
+
+        isSavingScreens = true;
+
+        try
+        {
+            Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+            Result<bool> result = await _partySettingsService.SetShowNamesOnScreensAsync(scope, companyId, show, actingUser.Data ?? string.Empty);
+
+            if (result.IsSuccess)
+            {
+                showNamesOnScreens = show;
+                _toastService.ShowSuccess(show ? "Screens can now show the birthday child's first name." : "Screens no longer show names.");
+            }
+            else
+            {
+                _toastService.ShowError(result.Error ?? "Couldn't save the setting.");
+            }
+        }
+        finally
+        {
+            isSavingScreens = false;
+        }
+    }
 
     // "A party arriving at 11:00 finishes at 13:00, eats at 12:00 and starts laser tag at 11:30."
     private string Example
@@ -199,6 +274,7 @@
         loadError = null;
         settings = result.Data;
         await LoadMenuAsync();
+        await LoadScreenSettingAsync();
     }
 
     private async Task LoadMenuAsync()

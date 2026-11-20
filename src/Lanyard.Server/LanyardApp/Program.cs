@@ -288,6 +288,9 @@ builder.Services.AddHostedService<DmxOutputStatePersister>();
 builder.Services.AddSingleton<IProjectionBindingSource, LastGameWinnerBindingSource>();
 builder.Services.AddSingleton<IProjectionBindingSource, TopScoreTodayBindingSource>();
 builder.Services.AddSingleton<IProjectionBindingSource, OpeningHoursTodayBindingSource>();
+builder.Services.AddSingleton<IProjectionBindingSource, PartyWelcomeBindingSource>();
+builder.Services.AddSingleton<IProjectionBindingSource, PartyChildNameBindingSource>();
+builder.Services.AddSingleton<IProjectionBindingSource, PartyNextUpBindingSource>();
 builder.Services.AddSingleton<IProjectionBindingResolver, ProjectionBindingResolver>();
 
 builder.Services.AddSingleton<IProjectionProgramRunnerService, ProjectionProgramRunnerService>();
