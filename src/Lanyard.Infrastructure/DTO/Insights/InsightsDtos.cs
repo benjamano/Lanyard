@@ -12,7 +12,11 @@ public enum StaffingFlag
     Understaffed = 2,
 
     // Quieter per person on shift than usual, with more than one person on to spare.
-    Overstaffed = 3
+    Overstaffed = 3,
+
+    // At least half of this hour's occurrences had a party on. Party hours are left out of the
+    // typical rate and aren't judged busy or quiet: the party brings its own staff and games.
+    PartyHours = 4
 }
 
 // Admin may name any location of their company; a Manager is always pinned to their own.
@@ -25,6 +29,9 @@ public record InsightsQuery(int? LocationId, DateOnly From, DateOnly To)
 }
 
 // One venue-local hour (Hour 14 is 14:00-15:00 UK time). Hours are not money: no pay is reported.
+// Games counts every game; PartyGames is the part of it put down to a party (see
+// InsightsRules.ClaimPartyGames). Parties is how many booked parties were on at some point in the hour
+// and ExpectedChildren the children booked for them - counts only, never who.
 public record InsightsSlot(
     DateOnly Date,
     int Hour,
@@ -33,9 +40,14 @@ public record InsightsSlot(
     int Games,
     int Players,
     decimal ClockedHours,
-    decimal RotaHours)
+    decimal RotaHours,
+    int PartyGames = 0,
+    int Parties = 0,
+    int ExpectedChildren = 0)
 {
-    public bool HasActivity => Games > 0 || ClockedHours > 0 || RotaHours > 0;
+    public bool HasParty => Parties > 0;
+    public int WalkInGames => Games - PartyGames;
+    public bool HasActivity => Games > 0 || ClockedHours > 0 || RotaHours > 0 || Parties > 0;
 }
 
 // One weekday-hour across the whole range, e.g. "Saturdays 14:00". Samples is how many open
@@ -47,6 +59,10 @@ public static class InsightsLimits
     public const decimal MinAverageStaffForRate = 0.5m;
 }
 
+// Samples to RotaHours cover every open occurrence and are what the page shows. The Rate* figures
+// cover only the occurrences with no party on, and are what the games-per-staff-hour rate, the
+// typical rate and the busy/quiet flags use: a party's games and its party staff would otherwise
+// decide what a normal Saturday afternoon looks like. With no parties they equal the totals.
 public record InsightsCell(
     DayOfWeek Day,
     int Hour,
@@ -55,27 +71,65 @@ public record InsightsCell(
     int Players,
     decimal ClockedHours,
     decimal RotaHours,
-    StaffingFlag Flag)
+    StaffingFlag Flag,
+    int PartyGames,
+    int PartySamples,
+    int ExpectedChildren,
+    int RateSamples,
+    int RateGames,
+    decimal RateClockedHours)
 {
     public decimal AverageGames => Samples == 0 ? 0 : (decimal)Games / Samples;
     public decimal AveragePlayers => Samples == 0 ? 0 : (decimal)Players / Samples;
+    public decimal AveragePartyGames => Samples == 0 ? 0 : (decimal)PartyGames / Samples;
+    public decimal AverageExpectedChildren => Samples == 0 ? 0 : (decimal)ExpectedChildren / Samples;
 
     // Clocked hours in a one-hour slot are the number of people on, on average.
     public decimal AverageStaff => Samples == 0 ? 0 : ClockedHours / Samples;
     public decimal AverageRotaStaff => Samples == 0 ? 0 : RotaHours / Samples;
 
-    public decimal? GamesPerStaffHour => AverageStaff >= InsightsLimits.MinAverageStaffForRate ? Games / ClockedHours : null;
+    // The same, over the party-free occurrences only.
+    public decimal RateAverageStaff => RateSamples == 0 ? 0 : RateClockedHours / RateSamples;
+
+    public decimal? GamesPerStaffHour => RateAverageStaff >= InsightsLimits.MinAverageStaffForRate ? RateGames / RateClockedHours : null;
 }
 
-public record InsightsDay(DateOnly Date, int Games, int Players, decimal ClockedHours, decimal RotaHours, int OpenHours);
+// Parties and ExpectedChildren count the parties that start on this (UK) day.
+public record InsightsDay(
+    DateOnly Date,
+    int Games,
+    int Players,
+    decimal ClockedHours,
+    decimal RotaHours,
+    int OpenHours,
+    int PartyGames = 0,
+    int Parties = 0,
+    int ExpectedChildren = 0)
+{
+    public int WalkInGames => Games - PartyGames;
+}
 
 public record InsightsDaypartRow(string Name, int Games, int Players, decimal ClockedHours, decimal RotaHours)
 {
     public decimal? GamesPerStaffHour => ClockedHours > 0 ? Games / ClockedHours : null;
 }
 
-public record InsightsTotals(int Games, int Players, decimal ClockedHours, decimal RotaHours, decimal ClockedHoursWhileOpen)
+// Parties counts the booked parties starting in the range. PartiesWithoutLaserTime is how many of
+// those kids' parties had no laser tag time and no location default to fall back on, so none of
+// their games could be told apart from walk-ins.
+public record InsightsTotals(
+    int Games,
+    int Players,
+    decimal ClockedHours,
+    decimal RotaHours,
+    decimal ClockedHoursWhileOpen,
+    int PartyGames = 0,
+    int Parties = 0,
+    int ExpectedChildren = 0,
+    int PartiesWithoutLaserTime = 0)
 {
+    public int WalkInGames => Games - PartyGames;
+
     // All clocked time, including setting up and closing down, per game played.
     public decimal? LabourHoursPerGame => Games > 0 ? ClockedHours / Games : null;
     public decimal? GamesPerStaffHour => ClockedHours > 0 ? Games / ClockedHours : null;
@@ -113,4 +167,7 @@ public record InsightsSummary(
     int UnassignedKioskCount,
     bool HasOpeningHours,
     bool HasDayparts,
-    InsightsFigures Figures);
+    InsightsFigures Figures,
+    // False when the company doesn't use Parties: every party figure is then zero and the page and
+    // export leave the party parts out.
+    bool HasPartyData = false);

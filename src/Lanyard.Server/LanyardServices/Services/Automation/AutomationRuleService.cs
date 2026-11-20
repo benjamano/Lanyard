@@ -25,7 +25,11 @@ public class AutomationRuleService(
                 .Where(r => r.IsActive)
                 .Include(r => r.Actions.Where(a => a.IsActive))
                 .Include(r => r.Conditions.Where(c => c.IsActive))
+                // Oldest first, so the list doesn't reshuffle between loads and a copy lands at the end.
+                .OrderBy(r => r.CreateDate)
+                .ThenBy(r => r.Name)
                 .AsNoTracking()
+                .TagWithCallSite()
                 .ToListAsync();
             return Result<IEnumerable<AutomationRule>>.Ok(rules);
         }
@@ -276,6 +280,128 @@ public class AutomationRuleService(
         {
             return Result<AutomationRule>.Fail(ex.Message);
         }
+    }
+
+    public async Task<Result<AutomationRule>> DuplicateRuleAsync(Guid id)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            // Tenant-filtered, so another company's rule is simply not found.
+            AutomationRule? source = await ctx.AutomationRules
+                .Where(r => r.Id == id && r.IsActive)
+                .Include(r => r.Actions.Where(a => a.IsActive))
+                .Include(r => r.Conditions.Where(c => c.IsActive))
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync();
+
+            if (source == null)
+            {
+                return Result<AutomationRule>.Fail("Rule not found.");
+            }
+
+            string name = await NextCopyNameAsync(ctx, source.Name);
+
+            // A brand-new graph rather than the loaded entities with their keys changed, so EF
+            // never confuses the copy's rows with the source's.
+            Guid copyId = Guid.NewGuid();
+
+            AutomationRule copy = new()
+            {
+                Id = copyId,
+                CompanyId = source.CompanyId,
+                Name = name,
+                TriggerClientId = source.TriggerClientId,
+                TriggerType = source.TriggerType,
+                TriggerEvent = source.TriggerEvent,
+                IdleThresholdMinutes = source.IdleThresholdMinutes,
+                ScheduledTimeOfDay = source.ScheduledTimeOfDay,
+                ScheduledDaysOfWeek = source.ScheduledDaysOfWeek,
+                TriggerThreshold = source.TriggerThreshold,
+                TriggerScoreScope = source.TriggerScoreScope,
+                TriggerTeam = source.TriggerTeam,
+                // Off until someone checks it, so a copy can't fire alongside its original.
+                IsEnabled = false,
+                IsActive = true,
+                CreateDate = DateTime.UtcNow,
+                Actions = source.Actions
+                    .OrderBy(a => a.SortOrder)
+                    .Select(a => new AutomationRuleAction
+                    {
+                        Id = Guid.NewGuid(),
+                        AutomationRuleId = copyId,
+                        ActionType = a.ActionType,
+                        ParametersJson = a.ParametersJson,
+                        SortOrder = a.SortOrder,
+                        IsActive = true
+                    })
+                    .ToList(),
+                Conditions = source.Conditions
+                    .OrderBy(c => c.SortOrder)
+                    .Select(c => new AutomationRuleCondition
+                    {
+                        Id = Guid.NewGuid(),
+                        AutomationRuleId = copyId,
+                        ConditionType = c.ConditionType,
+                        ParametersJson = c.ParametersJson,
+                        SortOrder = c.SortOrder,
+                        IsActive = true
+                    })
+                    .ToList()
+            };
+
+            // The source may have gone stale since it was saved (a kiosk or scene removed), and a
+            // copy that couldn't be saved by hand shouldn't be created this way either.
+            string? validationError = await ValidateRuleAsync(ctx, copy, source.CompanyId);
+
+            if (validationError != null)
+            {
+                return Result<AutomationRule>.Fail(validationError);
+            }
+
+            ctx.AutomationRules.Add(copy);
+            await ctx.SaveChangesAsync();
+
+            // Disabled, so the engine wouldn't pick it up anyway, but the cache is only ever
+            // trusted when nothing has changed under it.
+            _engineService.InvalidateRuleCache();
+
+            return Result<AutomationRule>.Ok(copy);
+        }
+        catch (Exception ex)
+        {
+            return Result<AutomationRule>.Fail($"Couldn't copy the rule: {ex.Message}");
+        }
+    }
+
+    // "Copy of X", then "Copy of X (2)", "(3)"... among the company's live rules.
+    private static async Task<string> NextCopyNameAsync(ApplicationDbContext ctx, string sourceName)
+    {
+        string baseName = $"Copy of {sourceName}";
+
+        HashSet<string> taken = (await ctx.AutomationRules
+            .Where(r => r.IsActive && r.Name.StartsWith(baseName))
+            .Select(r => r.Name)
+            .AsNoTracking()
+            .TagWithCallSite()
+            .ToListAsync())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (!taken.Contains(baseName))
+        {
+            return baseName;
+        }
+
+        int n = 2;
+
+        while (taken.Contains($"{baseName} ({n})"))
+        {
+            n++;
+        }
+
+        return $"{baseName} ({n})";
     }
 
     // A rule with a misconfigured trigger or condition can never fire, and nothing downstream
