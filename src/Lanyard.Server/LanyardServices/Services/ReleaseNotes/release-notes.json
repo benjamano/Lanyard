@@ -963,7 +963,7 @@
     ]
   },
   {
-    "version": "1.4.27",
+    "version": "1.4.28",
     "releaseDate": "2026-11-20",
     "summary": "Insights counts party bookings, What's On shows venue schedules, automation rules can be copied, and Identify displays shows which kiosk screen is which.",
     "details": [
@@ -985,7 +985,8 @@
       "The Edit and Delete buttons on Automation, and the rule names in the Execution Log, now work with the keyboard and screen readers and show what they do when you hover over them.",
       "New Identify displays button (the # button) for each kiosk on the Clients page, and at the top of a kiosk's Settings > Projection tab (Admins). For 8 seconds every screen on that kiosk shows a large number with its name, resolution and the program set up for it, so you can tell which Screen 1, 2 or 3 in Lanyard is which physical screen. Whatever is playing carries on underneath.",
       "The Projection tab also lists each screen's details under the button, and marks a screen as Changed when Windows has renumbered the screens since the kiosk last reported them, for example after a screen was unplugged, so you can check its projection is still on the right screen.",
-      "Kiosks now tell Lanyard straight away when a screen is plugged in, unplugged or changes resolution, instead of only when they reconnect, and the kiosk self-test lists the screens it can see. Both need Lanyard Client 1.0.49."
+      "Kiosks now tell Lanyard straight away when a screen is plugged in, unplugged or changes resolution, instead of only when they reconnect, and the kiosk self-test lists the screens it can see. Both need Lanyard Client 1.0.49.",
+      "Screens are now numbered Screen 1, Screen 2 and so on everywhere you pick or see one: the Screen pickers in Automation rules and the Projection Status and Button dashboard widgets, Add Projection, the Projection tab and the Screens window. Each Screen picker has the # Identify displays button beside it, as do Add Projection and the Screens window, so you can check which screen is which before choosing."
     ]
   }
 ]
