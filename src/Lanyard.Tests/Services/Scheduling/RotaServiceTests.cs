@@ -122,6 +122,61 @@ public class RotaServiceTests
         Assert.AreEqual("CSA", row.PrimaryPosition!.StaffPosition!.Name);
     }
 
+    private static async Task MarkUnder18Async(DbContextOptions<ApplicationDbContext> options, Company company, UserProfile user)
+    {
+        await using ApplicationDbContext ctx = new(options);
+        ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = company.Id, UserId = user.Id, UnderEighteenUntil = Monday.AddYears(1) });
+        await ctx.SaveChangesAsync();
+    }
+
+    [TestMethod]
+    public async Task GetRangeViewAsync_YoungWorker_FlaggedAndWarnedAboutANightShift()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        UserProfile amy = await SchedulingTestHelpers.SeedUserAsync(options, location, "Amy");
+        UserProfile tom = await SchedulingTestHelpers.SeedUserAsync(options, location, "Tom");
+        StaffPosition csa = await SchedulingTestHelpers.SeedPositionAsync(options, company, "CSA");
+        await GivePositionAsync(options, amy, csa);
+        await GivePositionAsync(options, tom, csa);
+        await MarkUnder18Async(options, company, amy);
+        await SeedShiftAsync(options, ShiftFor(location, amy, Monday.AddDays(1), 18, 23, breakMinutes: 30));
+        await SeedShiftAsync(options, ShiftFor(location, tom, Monday.AddDays(1), 18, 23, breakMinutes: 30));
+
+        Result<RotaRangeView> result = await GetService(options).GetRangeViewAsync(SchedulingTestHelpers.ManagerScopeFor(location), location.Id, Monday, Sunday);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        RotaStaffRow amyRow = result.Data!.Rows.Single(x => x.User.Id == amy.Id);
+        RotaStaffRow tomRow = result.Data.Rows.Single(x => x.User.Id == tom.Id);
+
+        Assert.IsTrue(amyRow.IsYoungWorker);
+        ContractWarning warning = amyRow.Warnings.Single();
+        Assert.AreEqual(ContractWarningKind.YoungWorkerLimit, warning.Kind);
+        StringAssert.Contains(warning.Message, "22:00");
+
+        Assert.IsFalse(tomRow.IsYoungWorker);
+        Assert.AreEqual(0, tomRow.Warnings.Count);
+    }
+
+    [TestMethod]
+    public async Task SaveShiftAsync_YoungWorker_ManagerCanStillSaveButIsWarned()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        UserProfile amy = await SchedulingTestHelpers.SeedUserAsync(options, location, "Amy");
+        await MarkUnder18Async(options, company, amy);
+
+        Result<ShiftSaveResult> result = await GetService(options).SaveShiftAsync(SchedulingTestHelpers.ManagerScopeFor(location),
+            ShiftFor(location, amy, Monday.AddDays(2), 9, 18), Manager);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        CollectionAssert.AreEquivalent(new[]
+        {
+            "Under 18: a shift over 4.5 h needs at least a 30 minute break.",
+            "Under 18: 9 h on Wed 7 Oct (the limit is 8 h a day)."
+        }, result.Data!.Warnings);
+    }
+
     [TestMethod]
     public async Task GetRangeViewAsync_ExcludesMembersWithoutPositionUnlessRequested()
     {
