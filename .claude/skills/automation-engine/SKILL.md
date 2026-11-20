@@ -55,6 +55,16 @@ GameEnded rules run on the **status-transition channel**, not the game-data one.
 - Rules match on the winner (`TriggerTeam` null means any team). The log label is `GameEnded (Red won)`.
 - A caller that passes only the status gets no snapshot, and GameEnded rules simply don't run for it.
 
+## PartyMilestone (party time)
+
+`ProcessPartyRulesAsync(nowUtc)` is ticked every 60s by `PartyTriggerHostedService` (UTC, since party times are stored in UTC). It reads parties live from `IPartyScheduleProvider` (singleton, system context, 60s cache, `Invalidate(locationId)` from `PartyBookingService` and `BookingImportService` on every write), so nothing is scheduled ahead and moves/cancellations need no extra handling. Pure timing and wording live in `PartyTriggerRules`.
+
+- Due when `0 <= now - (milestone - lead) <= ScheduleCatchUpWindow`.
+- Once per (rule, party) via `_partyFired`. Due parties in one tick are **merged into one run**, logged against the earliest with `PartyBookingId` and a "+N other" label.
+- `_partyLastRunUtc` + `EnsurePartyRuleSeededAsync` reseed from the log after a restart. The log keeps only the first party's id, so "anything due at or before the last run" covers the merged ones too.
+- **Never put the child's name in the log**: `TriggerEvent` is name-free and `AutomationRuleExecution.PartyBookingId` (FK SetNull) is the only link. A test asserts this.
+- Provisional Just Step holds, private hires and cancelled parties are excluded by the provider. A company with Parties off gets no slots, and `AutomationRuleService` refuses to save the rule.
+
 ## Saving rules: don't `ctx.Update` the detached graph
 
 `UpdateRuleAsync` loads the tracked rule and syncs `Actions` and `Conditions` (add new, update changed, soft-delete missing). `ctx.Update(rule)` on the dialog's detached graph used to mark a newly added child (client-generated Guid) as Modified, which failed the save, and overwrote `IsEnabled`. Keep `IsEnabled` changes in `SetRuleEnabledAsync` only.

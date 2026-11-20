@@ -296,6 +296,7 @@ builder.Services.AddSingleton<IProjectionBindingResolver, ProjectionBindingResol
 builder.Services.AddSingleton<IProjectionProgramRunnerService, ProjectionProgramRunnerService>();
 builder.Services.AddHostedService<ProjectionProgramCompletionListener>();
 
+builder.Services.AddSingleton<IPartyScheduleProvider, PartyScheduleProvider>();
 builder.Services.AddSingleton<AutomationEngineService>();
 // One instance under both types: the hosted services drain its channels through the concrete type,
 // everything else uses the interface.
@@ -316,6 +317,7 @@ builder.Services.Configure<KioskSelfTestOptions>(builder.Configuration.GetSectio
 builder.Services.AddHostedService<KioskSelfTestRetentionHostedService>();
 builder.Services.AddHostedService<IdleTriggerHostedService>();
 builder.Services.AddHostedService<ScheduledTriggerHostedService>();
+builder.Services.AddHostedService<PartyTriggerHostedService>();
 builder.Services.AddHostedService<KioskAlertMonitorHostedService>();
 
 builder.Services.AddScoped<IClientZoneScoreboardService, ClientZoneScoreboardService>();

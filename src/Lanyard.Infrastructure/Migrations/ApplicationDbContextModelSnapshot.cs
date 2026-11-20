@@ -454,6 +454,19 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("PartyLeadMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PartyLocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PartyMilestone")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PartyRoom")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("ScheduledDaysOfWeek")
                         .HasColumnType("text");
 
@@ -591,6 +604,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<bool>("OverallSuccess")
                         .HasColumnType("boolean");
 
+                    b.Property<Guid?>("PartyBookingId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("RuleName")
                         .IsRequired()
                         .HasColumnType("text");
@@ -612,7 +628,11 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.HasIndex("ExecutedAt");
 
+                    b.HasIndex("PartyBookingId");
+
                     b.HasIndex("AutomationRuleId", "ExecutedAt");
+
+                    b.HasIndex("AutomationRuleId", "PartyBookingId");
 
                     b.ToTable("AutomationRuleExecutions");
                 });
@@ -5673,6 +5693,11 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasForeignKey("AutomationRuleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.PartyBooking", null)
+                        .WithMany()
+                        .HasForeignKey("PartyBookingId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("AutomationRule");
                 });

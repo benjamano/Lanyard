@@ -996,7 +996,7 @@
   {
     "version": "1.4.29",
     "releaseDate": "2026-11-20",
-    "summary": "Insights counts party bookings, What's On shows venue schedules, automation rules can be copied, and Identify displays shows which kiosk screen is which.",
+    "summary": "Insights counts party bookings, What's On shows venue schedules, automation rules can be copied and run at party times, and Identify displays shows which kiosk screen is which.",
     "details": [
       "Insights counts booked parties at the location and the children expected at them, per hour and per day. Cancelled parties are left out; provisional Just Step bookings count.",
       "Games are split into walk-in games and party games. Each party is given its first two games: the first starting from 10 minutes before the party's laser tag time to half an hour after it, and the second within 20 minutes of the first. Parties with no laser tag time use the location's default from Party settings, and a laser tag private hire counts every game during the booking.",
@@ -1020,7 +1020,11 @@
       "New Identify displays button (the # button) for each kiosk on the Clients page, and at the top of a kiosk's Settings > Projection tab (Admins). For 8 seconds every screen on that kiosk shows a large number with its name, resolution and the program set up for it, so you can tell which Screen 1, 2 or 3 in Lanyard is which physical screen. Whatever is playing carries on underneath.",
       "The Projection tab also lists each screen's details under the button, and marks a screen as Changed when Windows has renumbered the screens since the kiosk last reported them, for example after a screen was unplugged, so you can check its projection is still on the right screen.",
       "Kiosks now tell Lanyard straight away when a screen is plugged in, unplugged or changes resolution, instead of only when they reconnect, and the kiosk self-test lists the screens it can see. Both need Lanyard Client 1.0.49.",
-      "Screens are now numbered Screen 1, Screen 2 and so on everywhere you pick or see one: the Screen pickers in Automation rules and the Projection Status and Button dashboard widgets, Add Projection, the Projection tab and the Screens window. Each Screen picker has the # Identify displays button beside it, as do Add Projection and the Screens window, so you can check which screen is which before choosing."
+      "Screens are now numbered Screen 1, Screen 2 and so on everywhere you pick or see one: the Screen pickers in Automation rules and the Projection Status and Button dashboard widgets, Add Projection, the Projection tab and the Screens window. Each Screen picker has the # Identify displays button beside it, as do Add Projection and the Screens window, so you can check which screen is which before choosing.",
+      "New Party time trigger for Automation rules: run lights, music or projection actions when a booked party starts, eats, plays laser tag or ends, at the time or up to 120 minutes before. Choose the location, and optionally one room.",
+      "A party time rule runs once for each party. Parties that reach the same moment together run it once, so two 2pm parties don't start the lights twice. Cancelled parties, provisional Just Step bookings and private hires don't run it.",
+      "Moving or cancelling a party, by hand or through the Just Step import, changes when its rules run straight away.",
+      "The Execution Log shows which party a party time run was for, with an Open party button, and never the child's name."
     ]
   }
 ]
