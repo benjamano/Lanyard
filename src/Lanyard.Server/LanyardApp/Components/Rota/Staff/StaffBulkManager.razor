@@ -319,11 +319,9 @@
     }
 
     private static string YoungWorkerLabel(YoungWorkerStatus status) =>
-        status.SchoolLeavingAgeUntil is DateOnly school && school > RotaTime.Today(DateTime.UtcNow)
-            ? $"Under school leaving age until {school.ToString("d MMM yyyy", RotaFormat.Uk)}"
-            : status.UnderEighteenUntil is DateOnly adult
-                ? $"Under 18 until {adult.ToString("d MMM yyyy", RotaFormat.Uk)}"
-                : "Under 18";
+        status.SchoolLeavingDate > RotaTime.Today(DateTime.UtcNow)
+            ? $"Under school leaving age until {status.SchoolLeavingDate.ToString("d MMM yyyy", RotaFormat.Uk)}"
+            : $"Under 18 until {status.EighteenthBirthday.ToString("d MMM yyyy", RotaFormat.Uk)}";
 
     private static string ContractSummary(ResolvedContract contract)
     {

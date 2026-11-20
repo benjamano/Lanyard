@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Lanyard.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class AddYoungWorkerStatus : Migration
+    public partial class AddYoungWorkerDateOfBirth : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -25,8 +25,7 @@ namespace Lanyard.Infrastructure.Migrations
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     CompanyId = table.Column<int>(type: "integer", nullable: false),
                     UserId = table.Column<string>(type: "text", nullable: false),
-                    UnderEighteenUntil = table.Column<DateOnly>(type: "date", nullable: true),
-                    SchoolLeavingAgeUntil = table.Column<DateOnly>(type: "date", nullable: true),
+                    DateOfBirth = table.Column<DateOnly>(type: "date", nullable: false),
                     UpdateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdatedByUserId = table.Column<string>(type: "text", nullable: true)
                 },

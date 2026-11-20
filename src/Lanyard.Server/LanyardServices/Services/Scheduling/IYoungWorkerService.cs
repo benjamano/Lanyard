@@ -5,23 +5,24 @@ using Lanyard.Infrastructure.Models;
 
 namespace Lanyard.Application.Services.Scheduling;
 
-// Who is a young worker (under 18, or under school leaving age), so the rota can keep them within
-// the UK young worker limits. Only Managers and Admins can read or change the dates: staff never
-// see them, and nobody can change their own.
+// The dates of birth of staff under 18, so the rota can keep them within the UK young worker
+// limits. Only Managers and Admins can read or change them: staff never see them, and nobody can
+// change their own. Only kept while the person is under 18.
 public interface IYoungWorkerService
 {
-    // Someone's dates, or null if they aren't marked as a young worker.
+    // Someone's date of birth and the dates worked out from it, or null if none is held.
     Task<Result<YoungWorkerStatusView?>> GetAsync(LocationScope scope, string userId, string actingUserId);
 
-    // Sets the dates, or with both null clears them (the row is deleted). Refused for your own
-    // record, for anyone you don't manage, and for an Admin unless you are one.
-    Task<Result<YoungWorkerStatusView?>> SaveAsync(LocationScope scope, string userId, DateOnly? underEighteenUntil, DateOnly? schoolLeavingAgeUntil, string actingUserId);
+    // Sets the date of birth, or with null clears it (the row is deleted). Only for someone under 18
+    // today. Refused for your own record, for anyone you don't manage, and for an Admin unless you
+    // are one.
+    Task<Result<YoungWorkerStatusView?>> SaveAsync(LocationScope scope, string userId, DateOnly? dateOfBirth, string actingUserId);
 
     // Everyone in the signed-in company who is still a young worker on `today`, by user id - for
     // the staff list and the rota.
     Task<Result<Dictionary<string, YoungWorkerStatus>>> GetForCompanyAsync(LocationScope scope, DateOnly today);
 
-    // True if the person is a young worker on `today` - all staff learn is that the limits apply
-    // to them, never the dates.
+    // True if the person is under 18 on `today` - all staff learn is that the limits apply to them,
+    // never their date of birth.
     Task<Result<bool>> IsYoungWorkerAsync(string userId, int companyId, DateOnly today);
 }

@@ -11,7 +11,7 @@
 |---|---|---|
 | Staff accounts (`UserProfile`) | Duration of employment + `12 months` | Access management; short tail for rehire/disputes |
 | Clock-in / shift / rota records | `6 years` | Employment/payroll record-keeping obligations |
-| Young worker dates (`YoungWorkerStatus`) | Until the day they turn 18 (or leave school leaving age, if later), then deleted automatically | Only needed while the young worker limits apply |
+| Dates of birth of staff under 18 (`YoungWorkerStatus`) | Until their 18th birthday, then deleted automatically | Only needed while the young worker limits apply |
 | Client device records (IP/MAC) | While the device is in service + `6 months` | Operations & troubleshooting |
 | Application/security logs | `90 days` | Security monitoring; data minimisation |
 | Kiosk hardware self-test results | `90 days` | Diagnosing venue hardware; links to the Admin who ran it |
@@ -154,10 +154,10 @@ say when, not why (no medical or family detail).
 
 ### Young workers
 
-For staff under 18, a Manager or Admin records the day they turn 18 and, if they are under school
-leaving age, the day that ends (`YoungWorkerStatus`). No date of birth is stored. Staff can't see or
-change it, and nobody can change their own. `YoungWorkerCleanupHostedService` deletes a row twice
-a day once both dates have passed. It is also **deleted with the account** (cascading foreign key;
+For staff under 18, a Manager or Admin records their date of birth (`YoungWorkerStatus`); the 18th
+birthday and school leaving date are worked out from it. It can't be saved for anyone 18 or over.
+Staff can't see or change it, and nobody can change their own. `YoungWorkerCleanupHostedService`
+deletes it on their 18th birthday (checked twice a day). It is also **deleted with the account** (cascading foreign key;
 removed explicitly by GDPR erasure, at every company), and a manager who set someone else's has
 their name cleared from it on erasure.
 
