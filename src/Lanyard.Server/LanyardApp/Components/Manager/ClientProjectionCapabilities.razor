@@ -1,4 +1,5 @@
-﻿@inject IClientService _clientService
+﻿@using Lanyard.Shared.Kiosk
+@inject IClientService _clientService
 @inject INotificationService _toastService
 
 @if (ClientId != null)
@@ -18,7 +19,9 @@
         <div class="client-projection-grid-wrapper">
             <FluentDataGrid ShowHover="true" Items="@projectionSettings.OrderBy(x => x.DisplayIndex).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr 1fr" Style="width: 100%;"">
                 <ChildContent>
-                    <PropertyColumn Property="x => x.DisplayIndex" Title="Display" />
+                    <TemplateColumn Title="Screen">
+                        @DisplayIdentifyRules.ScreenTitle(context.DisplayIndex)
+                    </TemplateColumn>
                     <PropertyColumn Property="x => x.ProjectionProgram!.Name" Title="Program Name" />
                     <PropertyColumn Property="x => x.IsFullScreen" Title="Is Full Screen" />
                     <PropertyColumn Property="x => x.IsBorderless" Title="Is Borderless" />
