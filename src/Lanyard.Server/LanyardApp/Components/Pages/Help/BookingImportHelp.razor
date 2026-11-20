@@ -1,0 +1,14 @@
+@page "/help/booking-import"
+@attribute [Authorize(Roles = "Admin")]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.BookingImport
+
+<HelpPage AreaKey="@HelpRegistry.BookingImport">
+    <FluentTab Id="help-setup" Header="Setting It Up" IconStart="@(new Icons.Regular.Size16.Key())">
+        <BookingImportSetupHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-runs" Header="Import Runs &amp; Alerts" IconStart="@(new Icons.Regular.Size16.History())" DeferredLoading="true">
+        <BookingImportRunsHelpTab />
+    </FluentTab>
+</HelpPage>

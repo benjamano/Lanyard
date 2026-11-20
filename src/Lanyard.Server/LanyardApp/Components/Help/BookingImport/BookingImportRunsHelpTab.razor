@@ -1,0 +1,23 @@
+<HelpTab>
+    <FluentText>
+        <strong>Import runs</strong> lists the recent imports for this location, newest first: when each ran, whether
+        it was the scheduled run or a <strong>Run now</strong>, how it ended, and how many bookings it brought in.
+    </FluentText>
+    <ul>
+        <li><strong>Success</strong> - the import ran and bookings were created or updated. <strong>No changes</strong>
+            means it ran fine but nothing had changed since last time.</li>
+        <li><strong>Partial</strong> - it ran but some bookings couldn't be read; the rest still came in.</li>
+        <li><strong>Login failed</strong> - the saved email or password was rejected. <strong>Failed</strong> - the
+            site couldn't be reached or returned something unexpected.</li>
+        <li><strong>Skipped</strong> - import is switched off for the location, or has no credentials.</li>
+    </ul>
+    <HelpNote>
+        When a run fails, Lanyard raises an alert on <a href="/manage/alerts">Operations Alerts</a> and notifies
+        Admins and the location's Managers - once, not every few minutes - and clears it automatically the next time
+        an import runs cleanly.
+    </HelpNote>
+    <FluentText>
+        Imported bookings carry a <strong>Provisional</strong> marker while they're still a hold in Just Step, so you
+        can tell them apart from confirmed ones in Parties.
+    </FluentText>
+</HelpTab>

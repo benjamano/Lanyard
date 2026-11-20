@@ -156,6 +156,8 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<PartyLocationSettings> PartyLocationSettings { get; set; }
         public DbSet<PartyMenuItem> PartyMenuItems { get; set; }
         public DbSet<PartyDocumentTemplate> PartyDocumentTemplates { get; set; }
+        public DbSet<BookingImportSettings> BookingImportSettings { get; set; }
+        public DbSet<BookingImportRun> BookingImportRuns { get; set; }
         public DbSet<ChatConversation> ChatConversations { get; set; }
         public DbSet<ChatMember> ChatMembers { get; set; }
         public DbSet<ChatMessage> ChatMessages { get; set; }
@@ -308,7 +310,8 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasValue<WhoIsOnTodayWidget>(WidgetType.WhoIsOnToday)
                 .HasValue<PendingTimeOffWidget>(WidgetType.PendingTimeOff)
                 .HasValue<ComplianceSummaryWidget>(WidgetType.ComplianceSummary)
-                .HasValue<DemandStaffingWidget>(WidgetType.DemandStaffing);
+                .HasValue<DemandStaffingWidget>(WidgetType.DemandStaffing)
+                .HasValue<WhatsOnTodayWidget>(WidgetType.WhatsOnToday);
 
             // Sibling widget types share a ClientId property in the TPH table; pin the
             // column names so EF's automatic uniquification cannot rename existing columns.
@@ -382,6 +385,14 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<DemandStaffingWidget>()
                 .Property(x => x.RangeDays)
                 .HasColumnName("DemandStaffingWidget_RangeDays");
+
+            modelBuilder.Entity<WhatsOnTodayWidget>()
+                .Property(x => x.LocationId)
+                .HasColumnName("WhatsOnTodayWidget_LocationId");
+
+            modelBuilder.Entity<WhatsOnTodayWidget>()
+                .Property(x => x.MaxItems)
+                .HasColumnName("WhatsOnTodayWidget_MaxItems");
 
             // A song may be backed by an uploaded file. When that file row is hard-deleted,
             // null the link rather than cascade-deleting the song (it is soft-deleted instead).
@@ -759,6 +770,37 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<PartyLocationSettings>()
                 .HasIndex(x => x.LocationId)
                 .IsUnique();
+
+            // A re-import matches an existing booking on (location, source, ref), so that pair is
+            // unique among imported rows. Hand-entered parties have a null ExternalRef and are
+            // exempt via the filtered index.
+            modelBuilder.Entity<PartyBooking>()
+                .HasIndex(x => new { x.LocationId, x.ExternalSource, x.ExternalRef })
+                .IsUnique()
+                .HasFilter(null);
+
+            modelBuilder.Entity<BookingImportSettings>()
+                .HasIndex(x => x.LocationId)
+                .IsUnique();
+
+            modelBuilder.Entity<BookingImportSettings>()
+                .HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<BookingImportRun>()
+                .HasIndex(x => new { x.LocationId, x.StartedAtUtc });
+
+            // The retention sweep deletes by age across every location.
+            modelBuilder.Entity<BookingImportRun>()
+                .HasIndex(x => x.StartedAtUtc);
+
+            modelBuilder.Entity<BookingImportRun>()
+                .HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<PartyMenuItem>()
                 .HasIndex(x => new { x.LocationId, x.Kind, x.SortOrder });

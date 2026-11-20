@@ -1,0 +1,90 @@
+@* The desktop Day view: hours down the side, each entry a block from start to finish. Entries
+   that overlap sit side by side. Eat and laser times are ticks inside the block. *@
+
+<div class="wo-timeline" style="height: @(window.TotalMinutes * HourPx / 60)px;" aria-label="Timeline for @Day.ToString("dddd d MMMM", RotaFormat.Uk)">
+    @foreach (int hour in window.Hours)
+    {
+        <div class="wo-hour" style="top: @Px(hour * 60)px;">
+            <span class="wo-hour-label">@($"{hour % 24:00}:00")</span>
+        </div>
+    }
+
+    <div class="wo-lanes">
+        @foreach (TimelineLayout.Block block in blocks)
+        {
+            WhatsOnItem item = block.Item;
+            int height = Px(block.EndMinute) - Px(block.StartMinute);
+
+            <a class="wo-block @(item.IsCancelled ? "wo-cancelled" : string.Empty) @(item.IsProvisional ? "wo-provisional" : string.Empty) @(height < 70 ? "wo-block-short" : string.Empty)"
+               href="@item.Href"
+               title="@($"{item.TimeRange()} · {item.Title}")"
+               style="top: @(Px(block.StartMinute))px; height: @(height - 3)px; left: calc(@Pct(block.Lane, block.Lanes)% + 2px); width: calc(@Pct(1, block.Lanes)% - 6px);">
+                <div class="wo-block-top">
+                    <span class="wo-block-time">@item.TimeRange()</span>
+                    <span class="wo-block-badges"><WhatsOnBadges Item="@item" /></span>
+                </div>
+                <div class="wo-block-title">
+                    @if (item.AllergyNotes is not null)
+                    {
+                        <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Color="Color.Warning" title="@($"Allergies: {item.AllergyNotes}")" />
+                    }
+                    @item.Title
+                </div>
+                <div class="wo-block-facts">
+                    @item.Headcount()@(item.Room is not null ? $" · {item.Room}" : string.Empty)@(item.Subtitle is not null ? $" · {item.Subtitle}" : string.Empty)
+                </div>
+                @if (item.Markers.Count > 0)
+                {
+                    <div class="wo-block-markers">
+                        @string.Join(" · ", item.Markers.OrderBy(x => x.AtUtc).Select(x => $"{x.Label} {RotaFormat.LocalTime(x.AtUtc)}"))
+                    </div>
+                }
+
+                @foreach (WhatsOnMarker marker in item.Markers)
+                {
+                    int at = TimelineLayout.MinutesOn(marker.AtUtc, Day);
+                    // Not in the first half hour, where the badges are: the time is in the text anyway.
+                    if (at >= block.StartMinute + 30 && at < block.EndMinute)
+                    {
+                        <span class="wo-marker" style="top: @(Px(at) - Px(block.StartMinute))px;" title="@($"{marker.Label} {RotaFormat.LocalTime(marker.AtUtc)}")"></span>
+                    }
+                }
+            </a>
+        }
+
+        @if (nowMinute is int now)
+        {
+            <div class="wo-now" style="top: @(Px(now))px;" aria-label="Now"></div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public DateOnly Day { get; set; }
+
+    [Parameter, EditorRequired]
+    public List<WhatsOnItem> Items { get; set; } = [];
+
+    // Pixels per hour: enough for a two-hour party to show its title, times and headcount.
+    private const int HourPx = 72;
+
+    private TimelineLayout.Window window = new(TimelineLayout.DefaultStartHour, TimelineLayout.DefaultEndHour);
+    private List<TimelineLayout.Block> blocks = [];
+    private int? nowMinute;
+
+    protected override void OnParametersSet()
+    {
+        window = TimelineLayout.WindowFor(Items, Day);
+        blocks = TimelineLayout.Layout(Items, Day);
+
+        DateTime utcNow = DateTime.UtcNow;
+        int minute = TimelineLayout.MinutesOn(utcNow, Day);
+
+        nowMinute = RotaTime.LocalDate(utcNow) == Day && minute >= window.StartMinute && minute <= window.EndMinute ? minute : null;
+    }
+
+    private int Px(int minute) => (minute - window.StartMinute) * HourPx / 60;
+
+    private static string Pct(int part, int whole) => (part * 100.0 / whole).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+}

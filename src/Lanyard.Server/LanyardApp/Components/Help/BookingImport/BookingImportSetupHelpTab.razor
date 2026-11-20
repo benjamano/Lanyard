@@ -1,0 +1,29 @@
+<HelpTab>
+    <FluentText>
+        <strong>Booking import</strong> signs in to Just Step Online with the details you save here and brings that
+        location's party bookings into Lanyard automatically, every few minutes. They appear in <a href="/manage/parties">Parties</a>
+        alongside anything booked by hand.
+    </FluentText>
+    <ul>
+        <li>Each Just Step login only sees one venue, so set up each location separately. Pick the location at the
+            top of the page if you run more than one.</li>
+        <li>Enter the Just Step Online <strong>email</strong> and <strong>password</strong> for that venue, then
+            switch <strong>Import bookings for this location</strong> on and press <strong>Save</strong>. You can't
+            switch it on until an email and password are in.</li>
+        <li>Use <strong>Test connection</strong> to check the details work before saving, and <strong>Run now</strong>
+            to import straight away instead of waiting for the next run.</li>
+        <li>Under <strong>Schedule</strong>, set how often it imports (once an hour by default) and the hours it runs
+            between, in the venue's local time - the default 07:00 to 23:00 keeps it from polling overnight.
+            <strong>Run now</strong> always works, whatever the schedule says.</li>
+    </ul>
+    <HelpNote>
+        The password is stored encrypted and is never shown again. To change it, type a new one; leave it blank to
+        keep the saved one.
+    </HelpNote>
+    <FluentText>
+        A booking that already came across is matched on its Just Step reference, so later runs update it rather than
+        adding a duplicate. Just Step is treated as the source of truth, so changes made there flow over on the next
+        run, and a booking cancelled or removed in Just Step is cancelled in Lanyard too. A booking you cancel in
+        Lanyard stays cancelled.
+    </FluentText>
+</HelpTab>
