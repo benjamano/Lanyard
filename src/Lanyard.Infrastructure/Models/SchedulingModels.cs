@@ -178,14 +178,13 @@ namespace Lanyard.Infrastructure.Models
         public bool HasAnyValue => MaxShiftsPerWeek is not null || MaxHoursPerWeek is not null;
     }
 
-    // Marks someone as a young worker: under 18, so the UK young worker limits apply to their rota
-    // (8 hours a day, 40 a week, a 30 minute break over 4.5 hours, 12 hours rest between days, 48
-    // hours off a week, no night work). Only the dates the rules need are kept - the day they turn
-    // 18, and for anyone still under school leaving age the day that ends - never a full date of
-    // birth. Managers and Admins set it; staff never see the dates. Its own table, not a
-    // UserProfile column, so a profile save can't touch it and GDPR erasure is a row delete. The
-    // row is deleted once both dates have passed (YoungWorkerCleanupHostedService), since by then
-    // it only says when their birthday is.
+    // The date of birth of a member of staff under 18, so the UK young worker limits apply to their
+    // rota (8 hours a day, 40 a week, a 30 minute break over 4.5 hours, 12 hours rest between days,
+    // 48 hours off a week, no night work) - and, until they're over school leaving age, so they're
+    // never rostered automatically. Only kept while they're under 18: the row is deleted on their
+    // 18th birthday (YoungWorkerCleanupHostedService). Managers and Admins set it; staff never see
+    // it. Its own table, not a UserProfile column, so a profile save can't touch it and GDPR erasure
+    // is a row delete.
     public class YoungWorkerStatus : ICompanyOwned
     {
         public Guid Id { get; set; }
@@ -196,24 +195,49 @@ namespace Lanyard.Infrastructure.Models
         public required string UserId { get; set; }
         public UserProfile? User { get; set; }
 
-        // Their 18th birthday: the young worker rules apply to shifts on days before it.
-        public DateOnly? UnderEighteenUntil { get; set; }
-
-        // When they're over school leaving age (in England, the last Friday in June of the school
-        // year they turn 16). Before it, child employment rules apply, which Lanyard doesn't check,
-        // so they're never rostered automatically and can't pick up shifts.
-        public DateOnly? SchoolLeavingAgeUntil { get; set; }
+        public DateOnly DateOfBirth { get; set; }
 
         public DateTime UpdateDate { get; set; }
 
         // The manager who last changed it; null once they've been erased.
         public string? UpdatedByUserId { get; set; }
 
-        public bool HasAnyValue => UnderEighteenUntil is not null || SchoolLeavingAgeUntil is not null;
+        public DateOnly EighteenthBirthday => YoungWorkerAge.EighteenthBirthday(DateOfBirth);
 
-        // Whether any of it still applies on a venue-local day.
-        public bool AppliesOn(DateOnly day) =>
-            (UnderEighteenUntil is DateOnly adult && day < adult) || (SchoolLeavingAgeUntil is DateOnly school && day < school);
+        public DateOnly SchoolLeavingDate => YoungWorkerAge.SchoolLeavingDate(DateOfBirth);
+
+        public bool IsUnder18On(DateOnly day) => YoungWorkerAge.IsUnder18On(DateOfBirth, day);
+    }
+
+    // The dates the young worker rules need, worked out from a date of birth.
+    public static class YoungWorkerAge
+    {
+        // Under 18 on `day`: born after the same date 18 years earlier. Someone born on 29 February
+        // turns 18 on 1 March in a non-leap year, which this gives too.
+        public static bool IsUnder18On(DateOnly dateOfBirth, DateOnly day) => dateOfBirth > day.AddYears(-18);
+
+        // The latest date of birth of anyone who is 18 or over on `day` - for database filters:
+        // "still under 18" is DateOfBirth > this.
+        public static DateOnly Born18YearsBefore(DateOnly day) => day.AddYears(-18);
+
+        public static DateOnly EighteenthBirthday(DateOnly dateOfBirth)
+        {
+            DateOnly birthday = dateOfBirth.AddYears(18);
+            return dateOfBirth is { Month: 2, Day: 29 } && birthday.Day == 28 ? birthday.AddDays(1) : birthday;
+        }
+
+        // The day they're over school leaving age in England: the last Friday in June of the school
+        // year (September to August) in which they turn 16. Someone born September to December turns
+        // 16 early in Year 11 and leaves the following June; January to August, the June of the year
+        // they turn 16.
+        public static DateOnly SchoolLeavingDate(DateOnly dateOfBirth)
+        {
+            int year = dateOfBirth.Year + (dateOfBirth.Month >= 9 ? 17 : 16);
+            DateOnly lastOfJune = new(year, 6, 30);
+            int back = ((int)lastOfJune.DayOfWeek - (int)DayOfWeek.Friday + 7) % 7;
+
+            return lastOfJune.AddDays(-back);
+        }
     }
 
     // The PIN a staff member types on the clock-in terminal. The terminal identifies the person

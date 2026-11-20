@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Lanyard.Application.Services.Scheduling;
 
-// Twice a day, deletes young worker rows whose dates have all passed (see
+// Twice a day, deletes the date of birth of anyone who has turned 18 (see
 // YoungWorkerService.RemoveExpiredAsync). Checking more than once a day means a restart never
 // leaves a row for long; deleting the same expired rows twice is harmless.
 public class YoungWorkerCleanupHostedService(
@@ -58,7 +58,7 @@ public class YoungWorkerCleanupHostedService(
 
             if (removed > 0)
             {
-                _logger.LogInformation("Removed {Count} young worker records whose dates have passed", removed);
+                _logger.LogInformation("Removed {Count} dates of birth of staff who have turned 18", removed);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

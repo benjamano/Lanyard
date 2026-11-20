@@ -3,12 +3,12 @@
 
 @inject IYoungWorkerService _youngWorkerService
 
-@* Managers and Admins only (the user editor's Rota tab). Staff never see these dates. *@
+@* Managers and Admins only (the user editor's Rota tab). Staff never see their date of birth here. *@
 <div class="young-worker-editor">
     <FluentText Style="color: var(--colorNeutralForeground3);">
         For staff under 18. Lanyard keeps their rota within the UK young worker limits: 8 hours a day, 40 a week,
         a 30 minute break on shifts over 4.5 hours, 12 hours off between days, 48 hours off a week, and no night work.
-        Only managers see these dates, and they're deleted once both have passed.
+        Only managers see the date of birth, and it's deleted on their 18th birthday.
     </FluentText>
 
     @if (!isLoaded)
@@ -31,21 +31,21 @@
             }
             else
             {
-                <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Warning">@StatusLabel</FluentBadge>
+                @if (status.SchoolLeavingDate > Today)
+                {
+                    <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Warning">Under school leaving age until @Format(status.SchoolLeavingDate)</FluentBadge>
+                }
+                <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Warning">Under 18 until @Format(status.EighteenthBirthday)</FluentBadge>
                 <FluentText Style="color: var(--colorNeutralForeground3);">
-                    Set@(status.UpdatedByName is string name ? $" by {name}" : "") on @RotaTime.LocalDate(status.UpdateDate).ToString("d MMM yyyy", RotaFormat.Uk)
+                    Set@(status.UpdatedByName is string name ? $" by {name}" : "") on @Format(RotaTime.LocalDate(status.UpdateDate))
                 </FluentText>
             }
         </FluentStack>
 
         <div class="young-worker-fields">
             <div>
-                <FluentDatePicker TValue="DateTime?" @bind-Value="underEighteenUntil" Label="18th birthday" Culture="@RotaFormat.Uk" Width="100%" />
-                <div class="young-worker-hint">The young worker limits apply to shifts before this day.</div>
-            </div>
-            <div>
-                <FluentDatePicker TValue="DateTime?" @bind-Value="schoolLeavingAgeUntil" Label="Over school leaving age from (if under 16)" Culture="@RotaFormat.Uk" Width="100%" />
-                <div class="young-worker-hint">In England, the last Friday in June of the school year they turn 16. Until then, Lanyard won't roster them automatically or let them pick up shifts.</div>
+                <FluentDatePicker TValue="DateTime?" @bind-Value="dateOfBirth" Label="Date of birth" Culture="@RotaFormat.Uk" Width="100%" />
+                <div class="young-worker-hint">@Hint</div>
             </div>
         </div>
 
@@ -71,22 +71,35 @@
     private bool isLoaded;
     private string? loadError;
     private YoungWorkerStatusView? status;
-    private DateTime? underEighteenUntil;
-    private DateTime? schoolLeavingAgeUntil;
+    private DateTime? dateOfBirth;
     private bool isBusy;
 
-    private string StatusLabel
+    private static DateOnly Today => RotaTime.Today(DateTime.UtcNow);
+
+    private static string Format(DateOnly day) => day.ToString("d MMM yyyy", RotaFormat.Uk);
+
+    // What the date entered means, worked out as it's typed.
+    private string Hint
     {
         get
         {
-            DateOnly today = RotaTime.Today(DateTime.UtcNow);
-
-            if (status?.SchoolLeavingAgeUntil is DateOnly school && school > today)
+            if (dateOfBirth is not DateTime entered)
             {
-                return "Under school leaving age";
+                return "Only for staff under 18. Leave it empty for everyone else.";
             }
 
-            return status?.UnderEighteenUntil is DateOnly adult && adult > today ? "Under 18" : "No longer applies";
+            DateOnly born = DateOnly.FromDateTime(entered);
+
+            if (!YoungWorkerAge.IsUnder18On(born, Today))
+            {
+                return "They're 18 or over, so nothing needs to be kept.";
+            }
+
+            DateOnly school = YoungWorkerAge.SchoolLeavingDate(born);
+
+            return school > Today
+                ? $"Under 18 until {Format(YoungWorkerAge.EighteenthBirthday(born))}. Under school leaving age until {Format(school)}: until then Lanyard won't roster them automatically or let them pick up shifts."
+                : $"Under 18 until {Format(YoungWorkerAge.EighteenthBirthday(born))}.";
         }
     }
 
@@ -132,17 +145,14 @@
     private void Show(YoungWorkerStatusView? view)
     {
         status = view;
-        underEighteenUntil = view?.UnderEighteenUntil?.ToDateTime(TimeOnly.MinValue);
-        schoolLeavingAgeUntil = view?.SchoolLeavingAgeUntil?.ToDateTime(TimeOnly.MinValue);
+        dateOfBirth = view?.DateOfBirth.ToDateTime(TimeOnly.MinValue);
     }
 
-    private Task SaveAsync() => SaveDatesAsync(
-        underEighteenUntil is DateTime adult ? DateOnly.FromDateTime(adult) : null,
-        schoolLeavingAgeUntil is DateTime school ? DateOnly.FromDateTime(school) : null);
+    private Task SaveAsync() => SaveDateAsync(dateOfBirth is DateTime entered ? DateOnly.FromDateTime(entered) : null);
 
-    private Task ClearAsync() => SaveDatesAsync(null, null);
+    private Task ClearAsync() => SaveDateAsync(null);
 
-    private async Task SaveDatesAsync(DateOnly? adult, DateOnly? school)
+    private async Task SaveDateAsync(DateOnly? born)
     {
         isBusy = true;
 
@@ -154,7 +164,7 @@
             return;
         }
 
-        Result<YoungWorkerStatusView?> result = await _youngWorkerService.SaveAsync(scope, UserId, adult, school, actingUserId);
+        Result<YoungWorkerStatusView?> result = await _youngWorkerService.SaveAsync(scope, UserId, born, actingUserId);
 
         isBusy = false;
 
@@ -165,6 +175,6 @@
         }
 
         Show(result.Data);
-        _toastService.ShowSuccess(result.Data is null ? "No longer marked as under 18." : "Young worker details saved.");
+        _toastService.ShowSuccess(result.Data is null ? "Date of birth removed." : "Date of birth saved.");
     }
 }

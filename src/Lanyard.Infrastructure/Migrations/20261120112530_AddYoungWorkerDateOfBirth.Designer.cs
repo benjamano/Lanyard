@@ -14,8 +14,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20261119202734_AddYoungWorkerStatus")]
-    partial class AddYoungWorkerStatus
+    [Migration("20261120112530_AddYoungWorkerDateOfBirth")]
+    partial class AddYoungWorkerDateOfBirth
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -4962,10 +4962,7 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<int>("CompanyId")
                         .HasColumnType("integer");
 
-                    b.Property<DateOnly?>("SchoolLeavingAgeUntil")
-                        .HasColumnType("date");
-
-                    b.Property<DateOnly?>("UnderEighteenUntil")
+                    b.Property<DateOnly>("DateOfBirth")
                         .HasColumnType("date");
 
                     b.Property<DateTime>("UpdateDate")

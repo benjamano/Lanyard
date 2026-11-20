@@ -172,7 +172,7 @@ public class ShiftClaimServiceTests
     private static async Task MarkUnder18Async(World w, UserProfile user)
     {
         await using ApplicationDbContext ctx = new(w.Options);
-        ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = w.Company.Id, UserId = user.Id, UnderEighteenUntil = DateOnly.FromDateTime(Day).AddYears(1) });
+        ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = w.Company.Id, UserId = user.Id, DateOfBirth = DateOnly.FromDateTime(Day).AddYears(-17) });
         await ctx.SaveChangesAsync();
     }
 

@@ -4,13 +4,13 @@ using Lanyard.Infrastructure.Models;
 
 namespace Lanyard.Application.Services.Scheduling;
 
-// Someone's young worker dates (YoungWorkerStatus) and their company's night window, as the rules
-// need them.
-public sealed record YoungWorkerProfile(DateOnly? UnderEighteenUntil, DateOnly? SchoolLeavingAgeUntil, YoungWorkerNightWindow NightWindow)
+// Someone under 18 (YoungWorkerStatus.DateOfBirth) and their company's night window, as the rules
+// need them. The 18th birthday and school leaving date are worked out from the date of birth.
+public sealed record YoungWorkerProfile(DateOnly DateOfBirth, YoungWorkerNightWindow NightWindow)
 {
-    public bool IsUnder18On(DateOnly day) => (UnderEighteenUntil is DateOnly adult && day < adult) || IsUnderSchoolAgeOn(day);
+    public bool IsUnder18On(DateOnly day) => YoungWorkerAge.IsUnder18On(DateOfBirth, day);
 
-    public bool IsUnderSchoolAgeOn(DateOnly day) => SchoolLeavingAgeUntil is DateOnly school && day < school;
+    public bool IsUnderSchoolAgeOn(DateOnly day) => day < YoungWorkerAge.SchoolLeavingDate(DateOfBirth);
 }
 
 // A stretch of work: a shift, reduced to what the young worker rules look at.

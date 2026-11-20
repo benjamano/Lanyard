@@ -17,7 +17,7 @@ protection matters is **Benjamin Mercer, benmercer76@btinternet.com**.
 | Category | Data | Where |
 |---|---|---|
 | Staff account | Username, email, first/last name, preferred language, hashed password | `UserProfile` |
-| Young workers | For staff under 18 only: the day they turn 18 and, if they are under school leaving age, the day that ends. Never a full date of birth | `YoungWorkerStatus` |
+| Young workers | Date of birth, for staff under 18 only | `YoungWorkerStatus` |
 | Staff attendance | Clock-in/out times, shifts, rota assignments | ClockIn / Shift / Rota records |
 | Device/network | Client device IP addresses, MAC/physical addresses of network interfaces | `Client`, network interface records |
 | Staff documents | Right-to-work checks, identity documents, DBS checks, certificates, with their expiry and reminder dates | `StaffDocument` rows and the uploaded files |
@@ -34,12 +34,11 @@ document or right-to-work check may show nationality, and a DBS check shows crim
 information. These files are kept private to Admins and the person's Managers, are never shown
 in the File Manager, and are deleted when the person's data is erased.
 
-Staff can be under 18. A date of birth is **not** collected. For staff under 18, a Manager records
-the day they turn 18 (and, if they are under school leaving age, the day that ends) so the rota
-keeps them within the legal limits on young workers' hours, breaks, rest and night work. Only
-Admins and Managers of their company can see these dates; the person only sees that young worker
-hours apply to them. The record is deleted automatically once both dates have passed, and on
-erasure.
+Staff can be under 18. A date of birth is collected **only for staff under 18**: a Manager records
+it so the rota keeps them within the legal limits on young workers' hours, breaks, rest and night
+work, and so anyone under school leaving age isn't rostered automatically. Only Admins and Managers
+of their company can see it; the person only sees that young worker hours apply to them. It is
+deleted automatically on their 18th birthday, and on erasure.
 
 ## 3. Why we process it and our legal basis
 
