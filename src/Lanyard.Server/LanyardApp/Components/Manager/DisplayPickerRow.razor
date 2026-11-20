@@ -1,0 +1,27 @@
+@*
+    A display picker with the Identify displays button beside it, so whoever picks "Screen 2" can
+    check which physical screen that is first. The button lines up with the select's box, not its
+    label, and the pair stays on one line.
+*@
+<div class="display-picker-row">
+    <div class="display-picker-row-select">
+        @ChildContent
+    </div>
+    <IdentifyDisplaysButton ClientId="@ClientId" ClientName="@ClientName" IsConnected="@IsConnected" />
+</div>
+
+@code {
+    /// <summary>The kiosk whose screens are listed. Null disables the button (no kiosk chosen yet).</summary>
+    [Parameter]
+    public Guid? ClientId { get; set; }
+
+    [Parameter]
+    public string? ClientName { get; set; }
+
+    [Parameter]
+    public bool IsConnected { get; set; } = true;
+
+    /// <summary>The display picker itself.</summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

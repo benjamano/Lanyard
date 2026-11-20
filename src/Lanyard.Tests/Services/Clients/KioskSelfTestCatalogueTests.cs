@@ -59,5 +59,7 @@ public class KioskSelfTestCatalogueTests
     {
         Assert.IsLessThan(KioskSelfTestCatalogue.GroupOrder(SelfTestCheckKeys.GroupWebView2), KioskSelfTestCatalogue.GroupOrder(SelfTestCheckKeys.GroupAudio));
         Assert.AreEqual(int.MaxValue, KioskSelfTestCatalogue.GroupOrder("printer"));
+        Assert.IsLessThan(KioskSelfTestCatalogue.GroupOrder(SelfTestCheckKeys.GroupDisplays), KioskSelfTestCatalogue.GroupOrder(SelfTestCheckKeys.GroupWebView2));
+        Assert.AreEqual("Screens", KioskSelfTestCatalogue.GroupTitle(SelfTestCheckKeys.GroupDisplays));
     }
 }

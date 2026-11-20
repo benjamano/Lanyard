@@ -115,6 +115,7 @@ builder.Services.AddScoped<ICurrentUserAccessor, CurrentUserAccessor>();
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<IFileUsageService, FileUsageService>();
 builder.Services.AddScoped<IFileLibraryService, FileLibraryService>();
+builder.Services.AddSingleton<IFileLibraryEvents, FileLibraryEvents>();
 
 // One bucket client for the whole process. FileService is scoped and used to build its own
 // AmazonS3Client per instance - a new SDK client and HTTP pipeline for every request/circuit.
@@ -142,6 +143,7 @@ builder.Services.AddScoped<IClientUpdatePolicyService, ClientUpdatePolicyService
 builder.Services.AddScoped<IClientReleaseAdminService, ClientReleaseAdminService>();
 builder.Services.AddScoped<IClientDiagnosticsService, ClientDiagnosticsService>();
 builder.Services.AddScoped<IKioskSelfTestService, KioskSelfTestService>();
+builder.Services.AddScoped<IDisplayIdentifyService, DisplayIdentifyService>();
 builder.Services.AddScoped<IKioskHealthService, KioskHealthService>();
 builder.Services.AddScoped<IKioskClientListService, KioskClientListService>();
 builder.Services.AddScoped<IKioskOfflineManifestService, KioskOfflineManifestService>();
@@ -234,6 +236,7 @@ builder.Services.AddHostedService<CourseRecurrenceHostedService>();
 builder.Services.AddHostedService<TrainingDueSoonHostedService>();
 builder.Services.AddHostedService<StaffDocumentExpiryReminderHostedService>();
 builder.Services.AddHostedService<FileBinPurgeHostedService>();
+builder.Services.AddHostedService<FileThumbnailBackfillHostedService>();
 builder.Services.AddSingleton<NotificationDispatcher>();
 builder.Services.AddSingleton<INotificationDispatcher>(sp => sp.GetRequiredService<NotificationDispatcher>());
 builder.Services.AddScoped<INotificationDeliverer, NotificationDeliverer>();
@@ -295,6 +298,9 @@ builder.Services.AddHostedService<ProjectionProgramCompletionListener>();
 
 builder.Services.AddSingleton<IPartyScheduleProvider, PartyScheduleProvider>();
 builder.Services.AddSingleton<AutomationEngineService>();
+// One instance under both types: the hosted services drain its channels through the concrete type,
+// everything else uses the interface.
+builder.Services.AddSingleton<IAutomationEngineService>(sp => sp.GetRequiredService<AutomationEngineService>());
 builder.Services.AddSingleton<IActionExecutor, MusicControlActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, StartProjectionProgramActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, StopProjectionProgramActionExecutor>();

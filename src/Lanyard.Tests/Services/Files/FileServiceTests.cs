@@ -1,4 +1,4 @@
-using Lanyard.Infrastructure.Models;
+﻿using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.DTO;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
@@ -623,9 +623,13 @@ public class FileServiceTests
     public async Task UploadFileAsync_RefusesAFileOverTheSizeLimit()
     {
         Result<FileMetadata> result = await _fileService.UploadFileAsync(
-            FormFile("huge.mp4", "video/mp4", FileUploadPolicy.MaxBytes + 1).Object, null, "user1", CancellationToken.None);
+            FormFile("huge.pdf", "application/pdf", FileUploadPolicy.MaxBytes + 1).Object, null, "user1", CancellationToken.None);
+        Result<FileMetadata> video = await _fileService.UploadFileAsync(
+            FormFile("huge.mp4", "video/mp4", FileUploadPolicy.MaxVideoBytes + 1).Object, null, "user1", CancellationToken.None);
 
         Assert.IsFalse(result.Success);
+        Assert.IsFalse(video.Success);
+        StringAssert.Contains(video.Error, "500 MB");
         Assert.IsFalse(await _dbContext.FileMetadata.AnyAsync());
     }
 

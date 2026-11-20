@@ -86,6 +86,7 @@
             <FluentIcon Value="@(new Icons.Regular.Size20.ArrowDownload())" Color="Color.Default" /> Download
         </a>
         <FluentButton IconStart="@(new Icons.Regular.Size20.Eye())" OnClick="OnPreview">Preview</FluentButton>
+        <FluentButton IconStart="@(new Icons.Regular.Size20.Link())" OnClick="OnCopyLink">Copy link</FluentButton>
         @if (CanManage)
         {
             <FluentButton IconStart="@(new Icons.Regular.Size20.Rename())" OnClick="OnRename">Rename</FluentButton>
@@ -107,6 +108,8 @@
     [Parameter] public EventCallback OnShowFolder { get; set; }
 
     [Parameter] public EventCallback OnRename { get; set; }
+
+    [Parameter] public EventCallback OnCopyLink { get; set; }
 
     [Parameter] public EventCallback OnMove { get; set; }
 

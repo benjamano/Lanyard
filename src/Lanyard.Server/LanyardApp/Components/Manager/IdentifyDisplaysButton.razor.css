@@ -1,0 +1,74 @@
+.identify-displays {
+    display: inline-flex;
+    align-items: center;
+}
+
+.identify-displays--with-results {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+}
+
+.identify-displays--with-results > ::deep fluent-button {
+    align-self: flex-start;
+}
+
+.identify-displays-result {
+    width: 100%;
+    min-width: 0;
+}
+
+.identify-displays-list {
+    width: 100%;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 8px;
+}
+
+.identify-displays-item {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground2);
+}
+
+.identify-displays-number {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    font-size: 22px;
+    font-weight: 700;
+    background: var(--colorBrandBackground);
+    color: var(--colorNeutralForegroundOnBrand);
+}
+
+.identify-displays-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.identify-displays-detail {
+    font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+    color: var(--colorNeutralForeground2);
+}
+
+.identify-displays-warning {
+    color: var(--colorPaletteDarkOrangeForeground1);
+}

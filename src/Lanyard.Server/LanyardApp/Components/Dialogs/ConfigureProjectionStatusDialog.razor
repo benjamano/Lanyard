@@ -1,3 +1,5 @@
+@using Lanyard.App.Components.Manager
+@using Lanyard.Shared.Kiosk
 @using Lanyard.Infrastructure.Models
 
 @inject IClientService ClientService
@@ -26,18 +28,20 @@
 
             @if (Widget.ClientId is not null)
             {
-                <FluentSelect TOption="string"
-                              TValue="string"
-                              Label="Screen"
-                              Value="@_screenValue"
-                              ValueChanged="OnScreenChanged"
-                              Style="width: 100%;">
-                    <FluentOption TValue="string" Value="default">Client default</FluentOption>
-                    @foreach (ClientAvailableScreen screen in _screens)
-                    {
-                        <FluentOption TValue="string" Value="@screen.Index.ToString()">@($"{screen.Name} ({screen.Width}x{screen.Height})")</FluentOption>
-                    }
-                </FluentSelect>
+                <DisplayPickerRow ClientId="@Widget.ClientId" ClientName="@SelectedClientName">
+                    <FluentSelect TOption="string"
+                                  TValue="string"
+                                  Label="Screen"
+                                  Value="@_screenValue"
+                                  ValueChanged="OnScreenChanged"
+                                  Style="width: 100%;">
+                        <FluentOption TValue="string" Value="default">Client default</FluentOption>
+                        @foreach (ClientAvailableScreen screen in _screens)
+                        {
+                            <FluentOption TValue="string" Value="@screen.Index.ToString()">@DisplayIdentifyRules.PickerLabel(screen.Index, screen.Name, screen.Width, screen.Height)</FluentOption>
+                        }
+                    </FluentSelect>
+                </DisplayPickerRow>
             }
 
             <FluentCheckbox @bind-Value="Widget.ShowControls" Label="Show pause/skip/stop controls" />
@@ -110,6 +114,8 @@
         Widget.DisplayIndex = int.TryParse(newValue, out int index) ? index : null;
         _screenValue = newValue ?? string.Empty;
     }
+
+    private string? SelectedClientName => Clients?.FirstOrDefault(c => c.Id == Widget.ClientId)?.Name;
 
     private async Task LoadScreensAsync(Guid clientId)
     {
