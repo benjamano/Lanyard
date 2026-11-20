@@ -191,6 +191,7 @@ public class TemplateLearningService(
         foreach (ShiftClaimRules.WorkerCalendar calendar in pool.Calendars.Values)
         {
             calendar.Shifts.RemoveAll(x => actualIds.Contains(x.Id));
+            calendar.YoungWorkerShifts?.RemoveAll(x => actualIds.Contains(x.Id));
         }
 
         List<AutoBuildWorker> workers = pool.Users.Select(user =>
@@ -198,7 +199,7 @@ public class TemplateLearningService(
             StaffPosition? primary = pool.PrimaryPositions.GetValueOrDefault(user.Id);
             return new AutoBuildWorker(user.Id, RotaNames.For(user), primary?.Id, primary?.Name, pool.ContractFor(user.Id),
                 pool.ShiftsByUser[user.Id].Where(x => !actualIds.Contains(x.Id)).ToList(), pool.Availability[user.Id].ToList(),
-                new Dictionary<DateOnly, string>(), pool.Wishes.GetValueOrDefault(user.Id));
+                new Dictionary<DateOnly, string>(), pool.Wishes.GetValueOrDefault(user.Id), pool.CalendarFor(user.Id).YoungWorker);
         }).ToList();
 
         List<AutoBuildPick> picks = RotaAutoBuildRules.Assign(location.Id, [.. templateDemand, .. partyDemand], workers,

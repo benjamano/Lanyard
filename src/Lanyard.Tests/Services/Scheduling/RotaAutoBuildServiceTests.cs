@@ -100,6 +100,28 @@ public class RotaAutoBuildServiceTests
     }
 
     [TestMethod]
+    public async Task ApplyAsync_YoungWorker_BreakRaisedAndReported()
+    {
+        World w = await SeedAsync();
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = w.Ipswich.CompanyId, UserId = w.Amy.Id, DateOfBirth = Week.AddYears(-17) });
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<AutoBuildResult> applied = await GetService(w.Options).ApplyAsync(w.ManagerScope, w.Ipswich.Id, Week, Week.AddDays(6), ManagerId);
+
+        Assert.IsTrue(applied.IsSuccess, applied.Error);
+        Assert.AreEqual(2, applied.Data!.Assigned, "Amy still works, with a break");
+        CollectionAssert.Contains(applied.Data.Warnings, "The break was set to 30 minutes on 1 shift given to someone under 18.");
+
+        await using ApplicationDbContext verify = new(w.Options);
+        Assert.AreEqual(30, (await verify.Shifts.SingleAsync(x => x.UserId == w.Amy.Id)).BreakMinutes);
+        Assert.AreEqual(0, (await verify.Shifts.SingleAsync(x => x.UserId == w.Tom.Id)).BreakMinutes);
+    }
+
+    [TestMethod]
     public async Task ApplyAsync_AddsDraftsOnlyForLocationMembers_AndRunningAgainAddsNothing()
     {
         World w = await SeedAsync();

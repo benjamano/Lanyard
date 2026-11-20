@@ -112,6 +112,11 @@ public static class YoungWorkerRules
             .ToList();
     }
 
+    // Whether a "can't work" reason is one of these rules' messages (they all start this way), so
+    // Auto-build can tell "only the young worker limits are in the way" from any other reason.
+    public static bool IsBreachMessage(string reason) =>
+        reason.StartsWith("Under 18:", StringComparison.Ordinal) || reason.StartsWith("Under school leaving age:", StringComparison.Ordinal);
+
     // The break a shift needs for this person: at least 30 minutes once it's over 4.5 hours of work.
     // Auto-build sets this on the draft rather than skip an under-18 over a short break.
     public static int RequiredBreakMinutes(YoungWorkerProfile profile, WorkBlock shift) =>
