@@ -116,13 +116,38 @@
             {
                 <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">@reason</FluentMessageBar>
             }
+
+            @if (_summary.HasPartyData && figures.Totals.PartiesWithoutLaserTime > 0)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                    @PartyText(figures.Totals.PartiesWithoutLaserTime) no laser tag time, so @(figures.Totals.PartiesWithoutLaserTime == 1 ? "its games count" : "their games count") as walk-ins.
+                    Set a laser tag time on each party, or a default in <a href="/manage/parties/settings">Party settings</a> (Laser tag, minutes after arrival).
+                </FluentMessageBar>
+            }
         </div>
 
         <div class="insights-kpis">
             <div class="insights-kpi">
                 <span class="insights-kpi-label">Games</span>
                 <span class="insights-kpi-value">@figures.Totals.Games.ToString("#,0", RotaFormat.Uk)</span>
+                @if (_summary.HasPartyData)
+                {
+                    <span class="insights-kpi-note">@figures.Totals.PartyGames.ToString("#,0", RotaFormat.Uk) at parties, @figures.Totals.WalkInGames.ToString("#,0", RotaFormat.Uk) walk-in</span>
+                }
             </div>
+            @if (_summary.HasPartyData)
+            {
+                <div class="insights-kpi">
+                    <span class="insights-kpi-label">Parties</span>
+                    <span class="insights-kpi-value">@figures.Totals.Parties.ToString("#,0", RotaFormat.Uk)</span>
+                    <span class="insights-kpi-note">Booked, not cancelled</span>
+                </div>
+                <div class="insights-kpi">
+                    <span class="insights-kpi-label">Party children</span>
+                    <span class="insights-kpi-value">@figures.Totals.ExpectedChildren.ToString("#,0", RotaFormat.Uk)</span>
+                    <span class="insights-kpi-note">Expected, as booked</span>
+                </div>
+            }
             <div class="insights-kpi">
                 <span class="insights-kpi-label">Players</span>
                 <span class="insights-kpi-value">@figures.Totals.Players.ToString("#,0", RotaFormat.Uk)</span>
@@ -155,7 +180,7 @@
         <section class="insights-card" aria-labelledby="insights-week">
             <div class="insights-card-header">
                 <h2 id="insights-week" class="insights-card-title">Typical week</h2>
-                <FluentSelect TOption="InsightsMetric" TValue="string" Items="@Metrics" OptionText="@InsightsDisplay.MetricLabel"
+                <FluentSelect TOption="InsightsMetric" TValue="string" Items="@InsightsDisplay.MetricsFor(_summary.HasPartyData)" OptionText="@InsightsDisplay.MetricLabel"
                               OptionValue="@(x => x.ToString())" Value="@_metric.ToString()" ValueChanged="@OnMetricChanged"
                               Label="Shade by" Width="210px" />
             </div>
@@ -192,6 +217,14 @@
                 else
                 {
                     <FluentText>Staffing matched demand in every hour with enough data.</FluentText>
+                }
+
+                @if (figures.Cells.Where(x => x.Flag == StaffingFlag.PartyHours).ToList() is { Count: > 0 } partyHours)
+                {
+                    <p class="insights-party-hours">
+                        ● Mostly parties, so not judged: @string.Join(", ", partyHours.Take(MaxPartyHours).Select(InsightsDisplay.CellName))@(partyHours.Count > MaxPartyHours ? $" and {partyHours.Count - MaxPartyHours} more" : "").
+                        Hours with a party on are left out of the typical rate.
+                    </p>
                 }
             </section>
 
@@ -235,7 +268,7 @@
                 else
                 {
                     <FluentAreaChart ChartData="@GamesSeries" Mode="AreaChartMode.Tozeroy" Width="100%" Height="240px"
-                                     TickFormat="%d %b" RotateXAxisLabels="true" HideTickOverlap="true" YAxisTitle="Games" HideLegends="true" />
+                                     TickFormat="%d %b" RotateXAxisLabels="true" HideTickOverlap="true" YAxisTitle="Games" HideLegends="@(!_summary.HasPartyData)" />
                 }
             </section>
 
@@ -257,8 +290,8 @@
 
 @code {
     private const int MaxFlags = 8;
+    private const int MaxPartyHours = 6;
     private static readonly int[] PresetWeeks = [4, 8, 13];
-    private static readonly List<InsightsMetric> Metrics = [.. Enum.GetValues<InsightsMetric>()];
 
     [SupplyParameterFromQuery(Name = "location")]
     public int? LocationQuery { get; set; }
@@ -362,6 +395,11 @@
 
         _error = null;
         _summary = result.Data;
+
+        if (!_summary.HasPartyData && _metric is InsightsMetric.PartyGames or InsightsMetric.ExpectedChildren)
+        {
+            _metric = InsightsMetric.Games;
+        }
     }
 
     private void Navigate(int? location, DateOnly from, DateOnly to) =>
@@ -404,6 +442,8 @@
 
     private static string KioskText(int count) => count == 1 ? "1 kiosk is" : $"{count} kiosks are";
 
+    private static string PartyText(int count) => count == 1 ? "1 party had" : $"{count} parties had";
+
     private async Task ExportAsync()
     {
         if (_scope is null || _summary is null)
@@ -439,7 +479,24 @@
     }
 
     // Dates are plotted at local midnight; the chart only shows the day.
-    private IReadOnlyList<AreaChartSeries> GamesSeries => _summary is null ? [] :
+    // With Parties, walk-in and party games are drawn apart; without, one line of every game.
+    private IReadOnlyList<AreaChartSeries> GamesSeries => _summary is null ? [] : _summary.HasPartyData ?
+    [
+        new AreaChartSeries
+        {
+            Legend = "Walk-in",
+            Color = DataVizPalette.Custom,
+            CustomColor = ChartPalette.Accent,
+            ChartData = [.. _summary.Figures.Days.Select(d => new AreaChartDataPoint { X = d.Date.ToDateTime(TimeOnly.MinValue), Y = d.WalkInGames })]
+        },
+        new AreaChartSeries
+        {
+            Legend = "Party",
+            Color = DataVizPalette.Custom,
+            CustomColor = ChartPalette.PartyGames,
+            ChartData = [.. _summary.Figures.Days.Select(d => new AreaChartDataPoint { X = d.Date.ToDateTime(TimeOnly.MinValue), Y = d.PartyGames })]
+        }
+    ] :
     [
         new AreaChartSeries
         {

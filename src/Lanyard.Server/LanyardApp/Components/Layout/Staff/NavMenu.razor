@@ -14,6 +14,7 @@
 @inject Lanyard.App.Services.ChatUnreadTracker ChatUnread
 @inject Lanyard.Application.Services.Chat.IChatModerationService ChatModeration
 @inject ICompanyFeatureService CompanyFeatures
+@inject IFileLibraryService FileLibrary
 @inject Lanyard.Application.Services.OperationsAlerts.IOperationsAlertService OperationsAlerts
 @inject Lanyard.Application.Services.OperationsAlerts.IOperationsAlertEventBus OperationsAlertEvents
 
@@ -55,6 +56,14 @@
                            IconActive="@(new Icons.Filled.Size20.Board())">
                 Dashboards
             </FluentNavItem>
+
+            @if (_hasSharedFiles || (_canManageFiles && !_isManager))
+            {
+                <FluentNavItem Href="/files" IconRest="@(new Icons.Regular.Size20.Folder())"
+                               IconActive="@(new Icons.Filled.Size20.Folder())">
+                    @(_canManageFiles ? "Files" : "Shared files")
+                </FluentNavItem>
+            }
 
             @* Me: the person's own work. *@
             @if (Has(CompanyFeature.StaffScheduling) || Has(CompanyFeature.Training) || MusicLinks.Any || ShowOwnAnnouncementsLink)
@@ -117,6 +126,14 @@
             {
                 <FluentNavSectionHeader Title="Management" />
 
+                @if (Has(CompanyFeature.Parties))
+                {
+                    <FluentNavItem Href="/manage/whats-on" IconRest="@(new Icons.Regular.Size20.CalendarAgenda())"
+                                   IconActive="@(new Icons.Filled.Size20.CalendarAgenda())">
+                        What's On
+                    </FluentNavItem>
+                }
+
                 @if (Has(CompanyFeature.OperationsAlerts))
                 {
                     <FluentNavItem Href="/manage/alerts" Match="NavLinkMatch.All" IconRest="@(new Icons.Regular.Size20.Alert())"
@@ -133,8 +150,8 @@
 
                 @if (Has(CompanyFeature.Insights))
                 {
-                    <FluentNavItem Href="/manage/insights" IconRest="@(new Icons.Regular.Size20.DataTrending())"
-                                   IconActive="@(new Icons.Filled.Size20.DataTrending())">
+                    <FluentNavItem Href="/manage/insights" IconRest="@(new Icons.Regular.Size20.DataArea())"
+                                   IconActive="@(new Icons.Filled.Size20.DataArea())">
                         Insights
                     </FluentNavItem>
                 }
@@ -346,6 +363,7 @@
     private bool _canControlMusic;
     private bool _canManageDmx;
     private bool _canManageFiles;
+    private bool _hasSharedFiles;
     private bool _canPostAnnouncements;
     private bool _canPlayAudioClips;
     private string? _displayName;
@@ -425,6 +443,12 @@
             {
                 ChatUnread.Changed += OnChatUnreadChanged;
                 await ChatUnread.StartAsync();
+            }
+
+            if (!_canManageFiles)
+            {
+                Result<IReadOnlyList<Lanyard.Infrastructure.DTO.Files.FolderNode>> shared = await FileLibrary.GetTreeAsync(sharedOnly: true, CancellationToken.None);
+                _hasSharedFiles = shared.Data?.Count > 0;
             }
 
             string? name = await SecurityService.GetCurrentUserName();

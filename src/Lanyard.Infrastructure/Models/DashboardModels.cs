@@ -458,3 +458,25 @@ public class DemandStaffingWidget : DashboardWidget
     public int RangeDays { get; set; }
     public int? LocationId { get; set; }
 }
+
+// Today at one location from What's On: the day's totals and the parties still to come, for the
+// viewing Admin/Manager only - never a signed-out kiosk (parties carry children's names).
+// LocationId only applies to an Admin (null = the location they signed in to); a Manager sees their own.
+public class WhatsOnTodayWidget : DashboardWidget
+{
+    public const int MaxSupportedItems = 20;
+
+    [SetsRequiredMembers]
+    public WhatsOnTodayWidget()
+    {
+        Type = WidgetType.WhatsOnToday;
+
+        GridW = 4;
+        GridH = 4;
+
+        MaxItems = 6;
+    }
+
+    public int MaxItems { get; set; }
+    public int? LocationId { get; set; }
+}

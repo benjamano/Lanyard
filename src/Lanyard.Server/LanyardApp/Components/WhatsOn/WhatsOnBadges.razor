@@ -1,0 +1,22 @@
+@* The status badges an entry carries everywhere it's shown: provisional hold, cancelled, payment. *@
+
+@if (Item.IsProvisional && !Item.IsCancelled)
+{
+    <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Warning" title="A provisional hold imported from Just Step Online">Provisional</FluentBadge>
+}
+@if (Item.IsCancelled)
+{
+    <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Danger">Cancelled</FluentBadge>
+}
+else if (ShowPayment && Item.PaymentStatus is PartyPaymentStatus payment)
+{
+    <FluentBadge Appearance="BadgeAppearance.Filled" Color="@payment.Color()">@payment.Label()</FluentBadge>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public WhatsOnItem Item { get; set; } = default!;
+
+    [Parameter]
+    public bool ShowPayment { get; set; } = true;
+}

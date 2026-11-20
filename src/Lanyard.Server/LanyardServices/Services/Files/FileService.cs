@@ -1,6 +1,7 @@
 using Lanyard.Application.Services.Demo;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO.Files;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Amazon;
@@ -26,6 +27,7 @@ public class FileService : IFileService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _dbFactory;
     private readonly IDemoGuard? _demoGuard;
+    private readonly IFileUsageService? _usage;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly ISongAnalysisQueue _analysisQueue;
     private readonly string _storageRoot;
@@ -47,11 +49,13 @@ public class FileService : IFileService
         IWebHostEnvironment environment,
         IAmazonS3? s3Client = null,
         IDemoGuard? demoGuard = null,
-        ILogger<FileService>? logger = null)
+        ILogger<FileService>? logger = null,
+        IFileUsageService? usage = null)
     {
         _dbFactory = dbFactory;
         _logger = logger ?? NullLogger<FileService>.Instance;
         _demoGuard = demoGuard;
+        _usage = usage;
         _storageRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Lanyard", "UploadedFiles");
         _currentUserAccessor = currentUserAccessor;
         _analysisQueue = analysisQueue;
@@ -72,11 +76,23 @@ public class FileService : IFileService
             throw new InvalidOperationException("R2 storage is not configured.");
     }
 
-    private static string BuildR2Key(Guid? folderId, Guid fileId, string fileName)
-    {
-        string prefix = folderId.HasValue ? folderId.Value.ToString() : "root";
-        return $"{prefix}/{fileId}{fileName}";
-    }
+    // Where a new upload's bytes live. Deliberately not tied to the folder: a file can move
+    // between folders (and in and out of the Recycle bin) without its bytes moving. Older uploads
+    // were stored under "{folderId}/..." and keep the key saved in their FilePath.
+    private static string BuildR2Key(Guid fileId, string fileName) => $"files/{fileId}{Path.GetExtension(fileName).ToLowerInvariant()}";
+
+    // The names already used by live, browsable files in a folder, which a new name must avoid.
+    private static Task<List<string>> TakenFileNamesAsync(ApplicationDbContext db, Guid? folderId, Guid? exceptFileId, CancellationToken cancellationToken) =>
+        db.FileMetadata.AsNoTracking().TagWithCallSite()
+            .Where(x => x.FolderId == folderId && x.IsActive && !x.IsRestricted && !x.IsSystemFile && x.Id != exceptFileId)
+            .Select(x => x.FileName)
+            .ToListAsync(cancellationToken);
+
+    private static Task<List<string>> TakenFolderNamesAsync(ApplicationDbContext db, Guid? parentFolderId, Guid? exceptFolderId, CancellationToken cancellationToken) =>
+        db.Folders.AsNoTracking().TagWithCallSite()
+            .Where(x => x.ParentFolderId == parentFolderId && x.IsActive && x.Id != exceptFolderId)
+            .Select(x => x.Name)
+            .ToListAsync(cancellationToken);
 
     private static (double durationSeconds, string albumName) TryReadAudioMetadata(IFormFile file, string fileName)
     {
@@ -148,6 +164,9 @@ public class FileService : IFileService
             if (FileUploadPolicy.Check(fileName, file.Length) is string refusal)
                 return Result<FileMetadata>.Fail(refusal);
 
+            if (FileNameRules.Validate(fileName, "file name") is string badName)
+                return Result<FileMetadata>.Fail(badName);
+
             string contentType = FileUploadPolicy.ContentTypeFor(fileName);
 
             // The tenant filter hides other companies' folders, so this also stops a folder id
@@ -156,8 +175,18 @@ public class FileService : IFileService
             {
                 await using ApplicationDbContext folderCheck = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
-                if (!await folderCheck.Folders.AnyAsync(x => x.Id == folderId.Value, cancellationToken))
+                // A folder in the Recycle bin can't take new files either.
+                if (!await folderCheck.Folders.AnyAsync(x => x.Id == folderId.Value && x.IsActive, cancellationToken))
                     return Result<FileMetadata>.Fail("Folder not found.");
+            }
+
+            bool browsable = !options.IsRestricted && !options.IsSystemFile;
+
+            // Uploads never fail over a name clash: "poster.png" becomes "poster (2).png".
+            if (browsable)
+            {
+                await using ApplicationDbContext nameCheck = await _dbFactory.CreateDbContextAsync(cancellationToken);
+                fileName = FileNameRules.MakeUnique(fileName, await TakenFileNamesAsync(nameCheck, folderId, null, cancellationToken));
             }
 
             Guid fileId = Guid.NewGuid();
@@ -170,9 +199,7 @@ public class FileService : IFileService
 
             if (_isDevelopment)
             {
-                string folderPath = folderId.HasValue
-                    ? Path.Combine(_storageRoot, folderId.Value.ToString())
-                    : _storageRoot;
+                string folderPath = Path.Combine(_storageRoot, "files");
 
                 Directory.CreateDirectory(folderPath);
 
@@ -187,7 +214,7 @@ public class FileService : IFileService
             {
                 EnsureS3Configured();
 
-                string key = BuildR2Key(folderId, fileId, fileName);
+                string key = BuildR2Key(fileId, fileName);
 
                 PutObjectRequest putRequest = new()
                 {
@@ -204,6 +231,11 @@ public class FileService : IFileService
 
             await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
+            // The grid's thumbnail: the picture itself, or the frame the browser took from a video.
+            (string? thumbnailPath, int? sourceWidth, int? sourceHeight) = await StoreThumbnailForUploadAsync(fileId, file, contentType, options.Poster, cancellationToken);
+
+            double? duration = options.Media?.DurationSeconds is > 0 ? options.Media.DurationSeconds : durationSeconds > 0 ? durationSeconds : null;
+
             FileMetadata metadata = new()
             {
                 Id = fileId,
@@ -215,7 +247,12 @@ public class FileService : IFileService
                 UploadedBy = uploadedBy,
                 FolderId = folderId,
                 IsActive = true,
-                IsRestricted = options.IsRestricted
+                IsRestricted = options.IsRestricted,
+                IsSystemFile = options.IsSystemFile,
+                Width = options.Media?.Width is > 0 ? options.Media.Width : sourceWidth,
+                Height = options.Media?.Height is > 0 ? options.Media.Height : sourceHeight,
+                VideoLength = duration is double seconds ? TimeSpan.FromSeconds(Math.Round(seconds, 1)) : null,
+                ThumbnailPath = thumbnailPath
             };
 
             db.FileMetadata.Add(metadata);
@@ -245,6 +282,23 @@ public class FileService : IFileService
 
             await db.SaveChangesAsync(cancellationToken);
 
+            // The name was made unique before the bytes went up; another upload of the same name
+            // into the same folder (a second tab) may have landed meanwhile. Check again now both
+            // rows exist, and the later one takes the next number.
+            if (browsable)
+            {
+                string lowered = metadata.FileName.ToLower();
+                bool clash = await db.FileMetadata.AsNoTracking()
+                    .AnyAsync(x => x.FolderId == folderId && x.IsActive && !x.IsRestricted && !x.IsSystemFile
+                        && x.Id != metadata.Id && x.FileName.ToLower() == lowered && x.UploadedAt <= metadata.UploadedAt, cancellationToken);
+
+                if (clash)
+                {
+                    metadata.FileName = FileNameRules.MakeUnique(metadata.FileName, await TakenFileNamesAsync(db, folderId, metadata.Id, cancellationToken));
+                    await db.SaveChangesAsync(cancellationToken);
+                }
+            }
+
             // Queue BPM analysis only after the row is committed - the background
             // worker loads the song by ID from a fresh context.
             if (song != null)
@@ -265,15 +319,20 @@ public class FileService : IFileService
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(newName))
-                return Result<FileMetadata>.Fail("New name is required.");
+            if (FileNameRules.Validate(newName, "file name") is string badName)
+                return Result<FileMetadata>.Fail(badName);
+
+            newName = FileNameRules.Clean(newName);
 
             await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
             FileMetadata? file = await db.FileMetadata.FirstOrDefaultAsync(x => x.Id == fileId, cancellationToken);
 
-            if (file == null || file.IsRestricted)
+            if (file == null || file.IsRestricted || !file.IsActive)
                 return Result<FileMetadata>.Fail("File not found.");
+
+            if (!file.IsSystemFile && (await TakenFileNamesAsync(db, file.FolderId, file.Id, cancellationToken)).Any(x => FileNameRules.SameName(x, newName)))
+                return Result<FileMetadata>.Fail($"There's already a file called \"{newName}\" here.");
 
             file.FileName = newName;
 
@@ -363,6 +422,9 @@ public class FileService : IFileService
 
             await DeleteStoredFileAsync(file.FilePath);
 
+            if (!string.IsNullOrEmpty(file.ThumbnailPath))
+                await DeleteStoredFileAsync(file.ThumbnailPath);
+
             return Result<bool>.Ok(true);
         }
         catch (Exception ex)
@@ -428,7 +490,8 @@ public class FileService : IFileService
             List<FileMetadata> files = await db.FileMetadata
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(f => f.FolderId == folderId && !f.IsRestricted)
+                .Where(f => f.FolderId == folderId && f.IsActive && !f.IsRestricted && !f.IsSystemFile)
+                .OrderBy(f => f.FileName)
                 .ToListAsync(cancellationToken);
 
             return Result<IReadOnlyList<FileMetadata>>.Ok(files);
@@ -456,13 +519,18 @@ public class FileService : IFileService
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(name))
-                return Result<Folder>.Fail("Folder name is required.");
+            if (FileNameRules.Validate(name, "folder name") is string badName)
+                return Result<Folder>.Fail(badName);
+
+            name = FileNameRules.Clean(name);
 
             await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
-            if (parentFolderId.HasValue && !await db.Folders.AnyAsync(x => x.Id == parentFolderId.Value, cancellationToken))
+            if (parentFolderId.HasValue && !await db.Folders.AnyAsync(x => x.Id == parentFolderId.Value && x.IsActive, cancellationToken))
                 return Result<Folder>.Fail("Parent folder not found.");
+
+            if ((await TakenFolderNamesAsync(db, parentFolderId, null, cancellationToken)).Any(x => FileNameRules.SameName(x, name)))
+                return Result<Folder>.Fail($"There's already a folder called \"{name}\" here.");
 
             Folder folder = new()
             {
@@ -478,11 +546,6 @@ public class FileService : IFileService
 
             await db.SaveChangesAsync(cancellationToken);
 
-            if (_isDevelopment)
-            {
-                Directory.CreateDirectory(Path.Combine(_storageRoot, folder.Id.ToString()));
-            }
-
             return Result<Folder>.Ok(folder);
         }
         catch (Exception ex)
@@ -496,15 +559,20 @@ public class FileService : IFileService
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(newName))
-                return Result<Folder>.Fail("New name is required.");
+            if (FileNameRules.Validate(newName, "folder name") is string badName)
+                return Result<Folder>.Fail(badName);
+
+            newName = FileNameRules.Clean(newName);
 
             await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
-            Folder? folder = await db.Folders.FirstOrDefaultAsync(x => x.Id == folderId, cancellationToken);
+            Folder? folder = await db.Folders.FirstOrDefaultAsync(x => x.Id == folderId && x.IsActive, cancellationToken);
 
             if (folder == null)
                 return Result<Folder>.Fail("Folder not found.");
+
+            if ((await TakenFolderNamesAsync(db, folder.ParentFolderId, folder.Id, cancellationToken)).Any(x => FileNameRules.SameName(x, newName)))
+                return Result<Folder>.Fail($"There's already a folder called \"{newName}\" here.");
 
             folder.Name = newName;
 
@@ -571,7 +639,8 @@ public class FileService : IFileService
             List<Folder> folders = await db.Folders
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(f => f.ParentFolderId == parentFolderId)
+                .Where(f => f.ParentFolderId == parentFolderId && f.IsActive)
+                .OrderBy(f => f.Name)
                 .ToListAsync(cancellationToken);
 
             return Result<IReadOnlyList<Folder>>.Ok(folders);
@@ -592,7 +661,7 @@ public class FileService : IFileService
             Folder? folder = await db.Folders
                 .AsNoTracking()
                 .TagWithCallSite()
-                .FirstOrDefaultAsync(f => f.Id == folderId, cancellationToken);
+                .FirstOrDefaultAsync(f => f.Id == folderId && f.IsActive, cancellationToken);
 
             if (folder == null)
                 return Result<Folder>.Fail("Folder not found.");
@@ -616,6 +685,9 @@ public class FileService : IFileService
                 .AsNoTracking()
                 .TagWithCallSite()
                 .FirstOrDefaultAsync(f => f.Id == fileId && !f.IsRestricted, cancellationToken);
+
+            if (file != null && await IsDeletedAndUnusedAsync(db, file, cancellationToken))
+                file = null;
 
             if (_isDevelopment)
             {
@@ -666,7 +738,7 @@ public class FileService : IFileService
                 .TagWithCallSite()
                 .FirstOrDefaultAsync(f => f.Id == fileId && f.IsRestricted == restricted, cancellationToken);
 
-            if (file == null)
+            if (file == null || await IsDeletedAndUnusedAsync(db, file, cancellationToken))
                 return Result<FileContent>.Fail("File not found.");
 
             if (_isDevelopment)
@@ -728,6 +800,187 @@ public class FileService : IFileService
         }
     }
 
+    // A file in the Recycle bin (or inside a folder that is) is still served while something uses
+    // it, so the logo or a projection video doesn't vanish mid-show. Otherwise deleting it means
+    // it can't be opened any more, even by someone who kept the link.
+    private async Task<bool> IsDeletedAndUnusedAsync(ApplicationDbContext db, FileMetadata file, CancellationToken cancellationToken)
+    {
+        if (_usage is null)
+            return false;
+
+        bool binned = !file.IsActive;
+        Guid? folderId = file.FolderId;
+
+        for (int depth = 0; !binned && folderId is Guid current && depth < 64; depth++)
+        {
+            var folder = await db.Folders.AsNoTracking().TagWithCallSite()
+                .Where(x => x.Id == current)
+                .Select(x => new { x.IsActive, x.ParentFolderId })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (folder is null)
+                break;
+
+            binned = !folder.IsActive;
+            folderId = folder.ParentFolderId;
+        }
+
+        if (!binned)
+            return false;
+
+        Result<IReadOnlyDictionary<Guid, IReadOnlyList<FileUsage>>> usages = await _usage.GetUsagesAsync([file.Id], cancellationToken);
+
+        // If the check itself fails, keep serving rather than break something that uses it.
+        return usages.IsSuccess && usages.Data is not null && !usages.Data.ContainsKey(file.Id);
+    }
+
+    // ---------- Thumbnails ----------
+
+    private static string ThumbnailKey(Guid fileId) => $"thumbs/{fileId}.webp";
+
+    private async Task<(string? Path, int? Width, int? Height)> StoreThumbnailForUploadAsync(Guid fileId, IFormFile file, string contentType, IFormFile? poster, CancellationToken cancellationToken)
+    {
+        try
+        {
+            RenderedThumbnail? rendered = null;
+
+            if (contentType.StartsWith("image/", StringComparison.Ordinal) && contentType != "image/svg+xml")
+            {
+                await using Stream source = file.OpenReadStream();
+                rendered = ThumbnailRenderer.Render(source);
+            }
+            else if (contentType.StartsWith("video/", StringComparison.Ordinal) && poster is { Length: > 0 and < 5 * 1024 * 1024 })
+            {
+                await using Stream source = poster.OpenReadStream();
+                rendered = ThumbnailRenderer.Render(source);
+            }
+
+            if (rendered is null)
+                return (contentType.StartsWith("image/", StringComparison.Ordinal) ? string.Empty : null, null, null);
+
+            string path = await WriteObjectAsync(ThumbnailKey(fileId), new MemoryStream(rendered.WebP), "image/webp", cancellationToken);
+
+            // A poster frame's size is the video's size.
+            return (path, rendered.SourceWidth, rendered.SourceHeight);
+        }
+        catch (Exception ex)
+        {
+            // A missing thumbnail only means Files shows an icon; never fail the upload over it.
+            _logger.LogWarning(ex, "Couldn't make a thumbnail for {FileId}", fileId);
+            return (null, null, null);
+        }
+    }
+
+    // Writes bytes that aren't a library file in their own right (a thumbnail) and returns where they went.
+    private async Task<string> WriteObjectAsync(string key, Stream content, string contentType, CancellationToken cancellationToken)
+    {
+        if (_isDevelopment)
+        {
+            string path = Path.Combine(_storageRoot, key.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+            await using FileStream stream = new(path, FileMode.Create);
+            await content.CopyToAsync(stream, cancellationToken);
+            return path;
+        }
+
+        EnsureS3Configured();
+
+        await _s3Client!.PutObjectAsync(new PutObjectRequest
+        {
+            BucketName = _bucketName,
+            Key = key,
+            InputStream = content,
+            ContentType = contentType,
+            AutoCloseStream = true
+        }, cancellationToken);
+
+        return key;
+    }
+
+    public async Task<Result<Stream>> OpenThumbnailAsync(Guid fileId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+
+            FileMetadata? file = await db.FileMetadata.AsNoTracking().TagWithCallSite()
+                .FirstOrDefaultAsync(f => f.Id == fileId && !f.IsRestricted, cancellationToken);
+
+            string? path = file?.ThumbnailPath;
+
+            if (file is null || string.IsNullOrEmpty(path) || await IsDeletedAndUnusedAsync(db, file, cancellationToken))
+                return Result<Stream>.Fail("No thumbnail.");
+
+            if (_isDevelopment)
+            {
+                return File.Exists(path)
+                    ? Result<Stream>.Ok(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+                    : Result<Stream>.Fail("No thumbnail.");
+            }
+
+            EnsureS3Configured();
+
+            GetObjectResponse response = await _s3Client!.GetObjectAsync(new GetObjectRequest { BucketName = _bucketName, Key = path }, cancellationToken);
+            return Result<Stream>.Ok(response.ResponseStream);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Couldn't open the thumbnail for {FileId}", fileId);
+            return Result<Stream>.Fail("No thumbnail.");
+        }
+    }
+
+    public async Task<Result<bool>> CreateMissingThumbnailAsync(Guid fileId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+
+            FileMetadata? file = await db.FileMetadata.FirstOrDefaultAsync(f => f.Id == fileId, cancellationToken);
+
+            if (file is null || file.ThumbnailPath is not null)
+                return Result<bool>.Ok(false);
+
+            RenderedThumbnail? rendered = null;
+
+            if (file.ContentType?.StartsWith("image/", StringComparison.Ordinal) == true && file.ContentType != "image/svg+xml")
+            {
+                Result<FileContent> content = await OpenFileContentAsync(fileId, null, cancellationToken);
+
+                if (content.IsSuccess && content.Data is not null)
+                {
+                    await using FileContent opened = content.Data;
+
+                    // SKCodec wants to seek; the bucket stream can't.
+                    await using MemoryStream buffer = new();
+                    await opened.Stream.CopyToAsync(buffer, cancellationToken);
+                    buffer.Position = 0;
+                    rendered = ThumbnailRenderer.Render(buffer);
+                }
+            }
+
+            if (rendered is null)
+            {
+                file.ThumbnailPath = string.Empty;
+            }
+            else
+            {
+                file.ThumbnailPath = await WriteObjectAsync(ThumbnailKey(fileId), new MemoryStream(rendered.WebP), "image/webp", cancellationToken);
+                file.Width ??= rendered.SourceWidth;
+                file.Height ??= rendered.SourceHeight;
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+            return Result<bool>.Ok(rendered is not null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Couldn't make a thumbnail for {FileId}", fileId);
+            return Result<bool>.Fail("Couldn't make a thumbnail.");
+        }
+    }
+
     /// <summary>
     /// Reads an S3 Content-Range header ("bytes 0-99/1000"). A full-object response has no
     /// Content-Range, in which case the object's length comes from the response (or the
@@ -754,16 +1007,22 @@ public class FileService : IFileService
 
             FileMetadata? file = await db.FileMetadata.FirstOrDefaultAsync(x => x.Id == fileId, cancellationToken);
 
-            if (file == null || file.IsRestricted)
+            if (file == null || file.IsRestricted || !file.IsActive)
                 return Result<FileMetadata>.Fail("File not found.");
+
+            if (file.FolderId == destinationFolderId)
+                return Result<FileMetadata>.Ok(file);
 
             if (destinationFolderId.HasValue)
             {
-                Folder? destinationFolder = await db.Folders.FirstOrDefaultAsync(x => x.Id == destinationFolderId.Value, cancellationToken);
+                Folder? destinationFolder = await db.Folders.FirstOrDefaultAsync(x => x.Id == destinationFolderId.Value && x.IsActive, cancellationToken);
 
                 if (destinationFolder == null)
                     return Result<FileMetadata>.Fail("Destination folder not found.");
             }
+
+            if (!file.IsSystemFile && (await TakenFileNamesAsync(db, destinationFolderId, file.Id, cancellationToken)).Any(x => FileNameRules.SameName(x, file.FileName)))
+                return Result<FileMetadata>.Fail($"There's already a file called \"{file.FileName}\" there.");
 
             file.FolderId = destinationFolderId;
 
