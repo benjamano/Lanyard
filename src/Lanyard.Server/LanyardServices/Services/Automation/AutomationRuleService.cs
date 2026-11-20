@@ -507,6 +507,29 @@ public class AutomationRuleService(
             }
         }
 
+        List<int> partyConditionLocationIds = rule.Conditions
+            .Where(c => c.IsActive && c.ConditionType == AutomationConditionType.PartyInProgress)
+            .Select(c => AutomationConditionParameters.TryParse(c.ParametersJson, out PartyInProgressConditionParameters? p) ? p.LocationId : 0)
+            .Distinct()
+            .ToList();
+
+        if (partyConditionLocationIds.Count > 0)
+        {
+            // Same explicit company check as opening hours: locations aren't tenant-filtered.
+            int? companyId = ruleCompanyId ?? (ctx.TenantFilterDisabled ? null : ctx.TenantCompanyId);
+
+            int foundCount = await ctx.Locations
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(l => partyConditionLocationIds.Contains(l.Id) && l.IsActive && (companyId == null || l.CompanyId == companyId))
+                .CountAsync();
+
+            if (foundCount != partyConditionLocationIds.Count)
+            {
+                return "A party condition refers to a location that doesn't exist.";
+            }
+        }
+
         return await ValidateDmxActionsAsync(ctx, rule, ruleCompanyId);
     }
 

@@ -63,6 +63,7 @@ GameEnded rules run on the **status-transition channel**, not the game-data one.
 - Once per (rule, party) via `_partyFired`. Due parties in one tick are **merged into one run**, logged against the earliest with `PartyBookingId` and a "+N other" label.
 - `_partyLastRunUtc` + `EnsurePartyRuleSeededAsync` reseed from the log after a restart. The log keeps only the first party's id, so "anything due at or before the last run" covers the merged ones too.
 - **Never put the child's name in the log**: `TriggerEvent` is name-free and `AutomationRuleExecution.PartyBookingId` (FK SetNull) is the only link. A test asserts this.
+- The **PartyInProgress** condition (4) reads the same provider: `CheckConditionsAsync` fetches today's parties for the rule's party-condition locations before calling the pure evaluator (`partiesAt` lookup). A failed read gives NotMet ("couldn't be loaded"), not Misconfigured. Its location's name/company come from `_conditionLocations`, loaded alongside opening-hours locations.
 - Provisional Just Step holds, private hires and cancelled parties are excluded by the provider. A company with Parties off gets no slots, and `AutomationRuleService` refuses to save the rule.
 
 ## Saving rules: don't `ctx.Update` the detached graph

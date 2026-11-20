@@ -262,6 +262,10 @@
                                     <FluentOption Value="@AutomationConditionType.DaysOfWeek.ToString()">Day of week is</FluentOption>
                                     <FluentOption Value="@AutomationConditionType.ClientGameStatus.ToString()">A kiosk is or isn't in a game</FluentOption>
                                     <FluentOption Value="@AutomationConditionType.DuringOpeningHours.ToString()">A location is open or closed</FluentOption>
+                                    @if (_partiesEnabled || row.ConditionType == AutomationConditionType.PartyInProgress)
+                                    {
+                                        <FluentOption Value="@AutomationConditionType.PartyInProgress.ToString()">A party is or isn't on</FluentOption>
+                                    }
                                 </FluentSelect>
                             </div>
                             <div class="condition-remove">
@@ -317,6 +321,36 @@
                                 </FluentSelect>
                             </div>
                             <div class="condition-hint">Uses the location's opening hours, set under Manage &gt; Companies &amp; Locations. A location with no hours set counts as closed.</div>
+                        }
+                        else if (row.ConditionType == AutomationConditionType.PartyInProgress)
+                        {
+                            <div class="condition-fields">
+                                <FluentSelect TOption="Location"
+                                              TValue="string"
+                                              Label="Location"
+                                              Placeholder="Select location"
+                                              Width="100%"
+                                              Items="@_locations"
+                                              OptionText="@(l => l?.Name ?? string.Empty)"
+                                              OptionValue="@(l => l?.Id.ToString())"
+                                              @bind-Value="row.LocationIdString" />
+                                <FluentSelect TOption="string"
+                                              TValue="string"
+                                              Label="State"
+                                              Width="100%"
+                                              Value="@(row.PartyInProgress ? "on" : "off")"
+                                              ValueChanged="@((string? state) => row.PartyInProgress = state != "off")">
+                                    <FluentOption Value="@("on")">a party is on</FluentOption>
+                                    <FluentOption Value="@("off")">no party is on</FluentOption>
+                                </FluentSelect>
+                            </div>
+                            <FluentTextInput Label="Room (optional)"
+                                             Placeholder="Any room"
+                                             Maxlength="100"
+                                             Appearance="TextInputAppearance.Outline"
+                                             Style="width: 100%;"
+                                             @bind-Value="row.Room" />
+                            <div class="condition-hint">A party is on from its start time until its finish time. Cancelled parties, provisional bookings and private hires don't count.</div>
                         }
                         else
                         {
@@ -688,6 +722,8 @@
         public bool InGame { get; set; }
         public string LocationIdString { get; set; } = string.Empty;
         public bool Open { get; set; } = true;
+        public bool PartyInProgress { get; set; } = true;
+        public string? Room { get; set; }
     }
 
     private IEnumerable<Location> _locations = [];
@@ -727,6 +763,10 @@
             {
                 AutomationConditionType.TimeWindow => AutomationConditionParameters.Serialize(new TimeWindowConditionParameters(row.Start, row.End)),
                 AutomationConditionType.DaysOfWeek => AutomationConditionParameters.Serialize(new DaysOfWeekConditionParameters(AutomationScheduleDays.Serialize(row.Days))),
+                AutomationConditionType.PartyInProgress => AutomationConditionParameters.Serialize(new PartyInProgressConditionParameters(
+                    int.TryParse(row.LocationIdString, out int partyLocationId) ? partyLocationId : 0,
+                    string.IsNullOrWhiteSpace(row.Room) ? null : row.Room.Trim(),
+                    row.PartyInProgress)),
                 AutomationConditionType.DuringOpeningHours => AutomationConditionParameters.Serialize(new OpeningHoursConditionParameters(
                     int.TryParse(row.LocationIdString, out int locationId) ? locationId : 0,
                     row.Open)),
@@ -772,6 +812,12 @@
             case AutomationConditionType.ClientGameStatus when AutomationConditionParameters.TryParse(condition.ParametersJson, out ClientGameStatusConditionParameters? kiosk):
                 row.ClientIdString = kiosk.ClientId == Guid.Empty ? string.Empty : kiosk.ClientId.ToString();
                 row.InGame = kiosk.InGame;
+                break;
+
+            case AutomationConditionType.PartyInProgress when AutomationConditionParameters.TryParse(condition.ParametersJson, out PartyInProgressConditionParameters? party):
+                row.LocationIdString = party.LocationId > 0 ? party.LocationId.ToString() : string.Empty;
+                row.Room = party.Room;
+                row.PartyInProgress = party.InProgress;
                 break;
 
             case AutomationConditionType.DuringOpeningHours when AutomationConditionParameters.TryParse(condition.ParametersJson, out OpeningHoursConditionParameters? hours):

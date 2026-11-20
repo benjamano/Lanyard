@@ -974,7 +974,7 @@
     ]
   },
   {
-    "version": "1.4.28",
+    "version": "1.4.29",
     "releaseDate": "2026-11-19",
     "summary": "Insights counts party bookings, What's On shows venue schedules, automation rules can be copied, and automation can run at party times.",
     "details": [
@@ -999,7 +999,8 @@
       "New Party time trigger for Automation rules: run lights, music or projection actions when a booked party starts, eats, plays laser tag or ends, at the time or up to 120 minutes before. Choose the location, and optionally one room.",
       "A party time rule runs once for each party. Parties that reach the same moment together run it once, so two 2pm parties don't start the lights twice. Cancelled parties, provisional Just Step bookings and private hires don't run it.",
       "Moving or cancelling a party, by hand or through the Just Step import, changes when its rules run straight away.",
-      "The Execution Log shows which party a party time run was for, with an Open party button, and never the child's name."
+      "The Execution Log shows which party a party time run was for, with an Open party button, and never the child's name.",
+      "New \"A party is or isn't on\" condition for Automation rules: only run a rule while a booked party is on at a location (or in one room), or only while none is. For example, play the party version of the game lights during parties."
     ]
   }
 ]
