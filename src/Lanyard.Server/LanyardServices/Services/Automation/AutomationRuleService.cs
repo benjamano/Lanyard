@@ -11,10 +11,10 @@ namespace Lanyard.Application.Services;
 
 public class AutomationRuleService(
     IDbContextFactory<ApplicationDbContext> factory,
-    AutomationEngineService engineService) : IAutomationRuleService
+    IAutomationEngineService engineService) : IAutomationRuleService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
-    private readonly AutomationEngineService _engineService = engineService;
+    private readonly IAutomationEngineService _engineService = engineService;
 
     public async Task<Result<IEnumerable<AutomationRule>>> GetRulesAsync()
     {
@@ -482,22 +482,27 @@ public class AutomationRuleService(
             }
         }
 
-        return await ValidateDmxActionsAsync(ctx, rule, ruleCompanyId);
+        return await ValidateActionTargetsAsync(ctx, rule, ruleCompanyId);
     }
 
-    // A DMX action's kiosk and scene come from ParametersJson, which the scene runner trusts, so
-    // they must be the rule's own company's (and the scene must be on that kiosk).
-    private static async Task<string?> ValidateDmxActionsAsync(ApplicationDbContext ctx, AutomationRule rule, int? ruleCompanyId)
+    // An action's kiosk, and the playlist, program, scene or clip it plays, come from
+    // ParametersJson, which the executors trust (they look kiosks up through the unfiltered system
+    // context). So every one of them must be the rule's own company's, and a scene must be on the
+    // action's kiosk. The engine checks the same again before it runs anything.
+    private static async Task<string?> ValidateActionTargetsAsync(ApplicationDbContext ctx, AutomationRule rule, int? ruleCompanyId)
     {
-        foreach (AutomationRuleAction action in rule.Actions.Where(a => a.IsActive && a.ActionType == AutomationActionTypes.DmxSceneControl))
+        foreach (AutomationRuleAction action in rule.Actions.Where(a => a.IsActive && AutomationActionTargets.IsKnown(a.ActionType)))
         {
-            if (!DmxSceneControlActionExecutor.TryReadTargets(action.ParametersJson, out Guid clientId, out Guid? sceneId))
+            string described = AutomationActionTargets.Describe(action.ActionType);
+            string article = described.StartsWith("audio") ? "An" : "A";
+
+            if (!AutomationActionTargets.TryRead(action.ActionType, action.ParametersJson, out AutomationActionTarget target))
             {
-                return "A DMX action couldn't be read. Remove it and add it again.";
+                return $"{article} {described} action couldn't be read. Remove it and add it again.";
             }
 
             // Not configured yet: the executor reports that when it runs, as it always has.
-            if (clientId == Guid.Empty)
+            if (target.ClientId == Guid.Empty)
             {
                 continue;
             }
@@ -505,23 +510,41 @@ public class AutomationRuleService(
             bool clientFound = await ctx.Clients
                 .AsNoTracking()
                 .TagWithCallSite()
-                .AnyAsync(c => c.Id == clientId && (ruleCompanyId == null || c.CompanyId == ruleCompanyId));
+                .AnyAsync(c => c.Id == target.ClientId && (ruleCompanyId == null || c.CompanyId == ruleCompanyId));
 
             if (!clientFound)
             {
-                return "A DMX action refers to a kiosk that doesn't exist.";
+                return $"{article} {described} action refers to a kiosk that doesn't exist.";
             }
 
-            if (sceneId is Guid id && id != Guid.Empty)
+            foreach ((AutomationActionTargetKind kind, Guid id) in target.References)
             {
-                bool sceneFound = await ctx.DmxScenes
-                    .AsNoTracking()
-                    .TagWithCallSite()
-                    .AnyAsync(s => s.Id == id && s.ClientId == clientId && s.IsActive);
-
-                if (!sceneFound)
+                bool found = kind switch
                 {
-                    return "A DMX action refers to a scene that isn't on its kiosk.";
+                    AutomationActionTargetKind.DmxScene => await ctx.DmxScenes
+                        .AsNoTracking()
+                        .TagWithCallSite()
+                        .AnyAsync(x => x.Id == id && x.ClientId == target.ClientId && x.IsActive && (ruleCompanyId == null || x.CompanyId == ruleCompanyId)),
+                    AutomationActionTargetKind.Playlist => await ctx.Playlists
+                        .AsNoTracking()
+                        .TagWithCallSite()
+                        .AnyAsync(x => x.Id == id && (ruleCompanyId == null || x.CompanyId == ruleCompanyId)),
+                    AutomationActionTargetKind.ProjectionProgram => await ctx.ProjectionPrograms
+                        .AsNoTracking()
+                        .TagWithCallSite()
+                        .AnyAsync(x => x.Id == id && (ruleCompanyId == null || x.CompanyId == ruleCompanyId)),
+                    AutomationActionTargetKind.AudioClip => await ctx.AudioClips
+                        .AsNoTracking()
+                        .TagWithCallSite()
+                        .AnyAsync(x => x.Id == id && (ruleCompanyId == null || x.CompanyId == ruleCompanyId)),
+                    _ => false
+                };
+
+                if (!found)
+                {
+                    return kind == AutomationActionTargetKind.DmxScene
+                        ? $"{article} {described} action refers to a scene that isn't on its kiosk."
+                        : $"{article} {described} action refers to {(kind == AutomationActionTargetKind.AudioClip ? "an" : "a")} {AutomationActionTargets.Describe(kind)} that doesn't exist.";
                 }
             }
         }

@@ -3,6 +3,7 @@
 using Lanyard.Application.Services.OperationsAlerts;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
+using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
@@ -20,7 +21,7 @@ public class AutomationEngineService(
     ILaserGameStatusStore laserGameStatusStore,
     IOperationsAlertWriter alertWriter,
     TimeProvider timeProvider,
-    ILogger<AutomationEngineService> logger)
+    ILogger<AutomationEngineService> logger) : IAutomationEngineService
 {
     private readonly ISystemDbContextFactory _contextFactory = contextFactory;
     private readonly IEnumerable<IActionExecutor> _actionExecutors = actionExecutors;
@@ -91,6 +92,9 @@ public class AutomationEngineService(
     // the venue lights back on for a 09:00 rule). This window bounds both how late a tick can
     // still catch a fire and how many times a failed attempt retries (~5 tries at 60s cadence).
     private static readonly TimeSpan ScheduleCatchUpWindow = TimeSpan.FromMinutes(5);
+
+    // Rules being test-run right now, so a double click can't run the same actions twice at once.
+    private readonly ConcurrentDictionary<Guid, byte> _testRunsInProgress = new();
 
     private volatile bool _isEnabled = false;
     // Every save bumps _ruleCacheVersion; a reload records the version it started from. A save that
@@ -240,45 +244,8 @@ public class AutomationEngineService(
                 .TagWithCallSite()
                 .ToListAsync(ct);
 
-            List<Guid> conditionClientIds = rules
-                .SelectMany(r => r.Conditions)
-                .Where(c => c.ConditionType == AutomationConditionType.ClientGameStatus)
-                .Select(c => AutomationConditionParameters.TryParse(c.ParametersJson, out ClientGameStatusConditionParameters? p) ? p.ClientId : Guid.Empty)
-                .Where(id => id != Guid.Empty)
-                .Distinct()
-                .ToList();
-
-            Dictionary<Guid, AutomationClientInfo> conditionClients = conditionClientIds.Count == 0
-                ? []
-                : await ctx.Clients
-                    .Where(c => conditionClientIds.Contains(c.Id))
-                    .AsNoTracking()
-                    .TagWithCallSite()
-                    .ToDictionaryAsync(c => c.Id, c => new AutomationClientInfo(c.CompanyId, c.Name), ct);
-
-            List<int> conditionLocationIds = rules
-                .SelectMany(r => r.Conditions)
-                .Where(c => c.ConditionType == AutomationConditionType.DuringOpeningHours)
-                .Select(c => AutomationConditionParameters.TryParse(c.ParametersJson, out OpeningHoursConditionParameters? p) ? p.LocationId : 0)
-                .Where(id => id > 0)
-                .Distinct()
-                .ToList();
-
-            // A deactivated location is left out, so its conditions fail closed as "no longer exists".
-            Dictionary<int, AutomationLocationInfo> conditionLocations = conditionLocationIds.Count == 0
-                ? []
-                : await ctx.Locations
-                    .Where(l => conditionLocationIds.Contains(l.Id) && l.IsActive)
-                    .Select(l => new
-                    {
-                        l.Id,
-                        l.CompanyId,
-                        l.Name,
-                        Hours = l.OpeningHours.Where(h => h.IsActive).ToList()
-                    })
-                    .AsNoTracking()
-                    .TagWithCallSite()
-                    .ToDictionaryAsync(l => l.Id, l => new AutomationLocationInfo(l.CompanyId, l.Name, l.Hours), ct);
+            (Dictionary<Guid, AutomationClientInfo> conditionClients, Dictionary<int, AutomationLocationInfo> conditionLocations) =
+                await LoadConditionContextAsync(ctx, rules, ct);
 
             // Kiosks and locations first, so a rule is never visible without what its conditions name.
             _conditionClients = conditionClients;
@@ -292,6 +259,56 @@ public class AutomationEngineService(
         {
             _ruleCacheLock.Release();
         }
+    }
+
+    /// <summary>
+    /// The kiosks and locations the rules' conditions name. Shared by the rule cache and test runs,
+    /// which load one rule that may not be in the cache (it only holds enabled rules).
+    /// </summary>
+    private static async Task<(Dictionary<Guid, AutomationClientInfo> Clients, Dictionary<int, AutomationLocationInfo> Locations)> LoadConditionContextAsync(
+        ApplicationDbContext ctx, List<AutomationRule> rules, CancellationToken ct)
+    {
+        List<Guid> conditionClientIds = rules
+            .SelectMany(r => r.Conditions)
+            .Where(c => c.ConditionType == AutomationConditionType.ClientGameStatus)
+            .Select(c => AutomationConditionParameters.TryParse(c.ParametersJson, out ClientGameStatusConditionParameters? p) ? p.ClientId : Guid.Empty)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        Dictionary<Guid, AutomationClientInfo> conditionClients = conditionClientIds.Count == 0
+            ? []
+            : await ctx.Clients
+                .Where(c => conditionClientIds.Contains(c.Id))
+                .AsNoTracking()
+                .TagWithCallSite()
+                .ToDictionaryAsync(c => c.Id, c => new AutomationClientInfo(c.CompanyId, c.Name), ct);
+
+        List<int> conditionLocationIds = rules
+            .SelectMany(r => r.Conditions)
+            .Where(c => c.ConditionType == AutomationConditionType.DuringOpeningHours)
+            .Select(c => AutomationConditionParameters.TryParse(c.ParametersJson, out OpeningHoursConditionParameters? p) ? p.LocationId : 0)
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList();
+
+        // A deactivated location is left out, so its conditions fail closed as "no longer exists".
+        Dictionary<int, AutomationLocationInfo> conditionLocations = conditionLocationIds.Count == 0
+            ? []
+            : await ctx.Locations
+                .Where(l => conditionLocationIds.Contains(l.Id) && l.IsActive)
+                .Select(l => new
+                {
+                    l.Id,
+                    l.CompanyId,
+                    l.Name,
+                    Hours = l.OpeningHours.Where(h => h.IsActive).ToList()
+                })
+                .AsNoTracking()
+                .TagWithCallSite()
+                .ToDictionaryAsync(l => l.Id, l => new AutomationLocationInfo(l.CompanyId, l.Name, l.Hours), ct);
+
+        return (conditionClients, conditionLocations);
     }
 
     private async Task EnsureEnabledInitializedAsync(CancellationToken ct)
@@ -714,7 +731,7 @@ public class AutomationEngineService(
         {
             await using ApplicationDbContext ctx = await _contextFactory.CreateDbContextAsync(ct);
             AutomationRuleExecution? lastSuccess = await ctx.AutomationRuleExecutions
-                .Where(e => e.AutomationRuleId == ruleId && e.OverallSuccess)
+                .Where(e => e.AutomationRuleId == ruleId && e.OverallSuccess && !e.IsTestRun)
                 .OrderByDescending(e => e.ExecutedAt)
                 .AsNoTracking()
                 .TagWithCallSite()
@@ -739,14 +756,20 @@ public class AutomationEngineService(
 
     private AutomationConditionCheck CheckConditions(AutomationRule rule, DateTime nowUtc)
     {
+        return CheckConditions(rule, nowUtc, _conditionClients, _conditionLocations);
+    }
+
+    private AutomationConditionCheck CheckConditions(
+        AutomationRule rule,
+        DateTime nowUtc,
+        Dictionary<Guid, AutomationClientInfo> clients,
+        Dictionary<int, AutomationLocationInfo> locations)
+    {
         // Every rule saved before conditions existed takes this path, unchanged.
         if (!rule.Conditions.Any(c => c.IsActive))
         {
             return AutomationConditionCheck.Pass;
         }
-
-        Dictionary<Guid, AutomationClientInfo> clients = _conditionClients;
-        Dictionary<int, AutomationLocationInfo> locations = _conditionLocations;
 
         return AutomationConditionEvaluator.Evaluate(
             rule.Conditions,
@@ -769,7 +792,14 @@ public class AutomationEngineService(
     /// Records that the trigger fired but a condition stopped the rule, so "why didn't my rule run"
     /// can be answered from the execution log. Does not raise OnRuleExecuted - nothing ran.
     /// </summary>
-    private async Task WriteSkippedExecutionAsync(AutomationRule rule, Guid clientId, string triggerEventLabel, AutomationConditionCheck check, CancellationToken ct)
+    /// <returns>The log row's id.</returns>
+    private async Task<Guid> WriteSkippedExecutionAsync(
+        AutomationRule rule,
+        Guid clientId,
+        string triggerEventLabel,
+        AutomationConditionCheck check,
+        CancellationToken ct,
+        string? testRunByUserId = null)
     {
         string reason = check.Reason ?? "A condition wasn't met";
 
@@ -791,7 +821,9 @@ public class AutomationEngineService(
             TriggerEvent = triggerEventLabel,
             TriggerClientId = clientId,
             OverallSuccess = false,
-            SkipReason = reason
+            SkipReason = reason,
+            IsTestRun = testRunByUserId != null,
+            TestRunByUserId = testRunByUserId
         };
 
         try
@@ -804,15 +836,86 @@ public class AutomationEngineService(
         {
             _logger.LogError(ex, "Failed to write skipped execution log for rule {RuleId}", rule.Id);
         }
+
+        return execution.Id;
     }
 
     /// <summary>Returns whether every action in the rule succeeded.</summary>
     private async Task<bool> ExecuteRuleAsync(AutomationRule rule, Guid clientId, string triggerEventLabel, CancellationToken ct)
     {
-        List<AutomationRuleActionExecution> actionExecutions = [];
+        List<AutomationRuleActionExecution> actionExecutions = await RunActionsAsync(rule, clientId, ct);
 
-        foreach (AutomationRuleAction action in rule.Actions.OrderBy(a => a.SortOrder))
+        // LOG-01: Write execution log
+        AutomationRuleExecution execution = new()
         {
+            Id = Guid.NewGuid(),
+            AutomationRuleId = rule.Id,
+            RuleName = rule.Name,
+            ExecutedAt = DateTime.UtcNow,
+            TriggerEvent = triggerEventLabel, // string snapshot per STATE.md decision
+            TriggerClientId = clientId,
+            OverallSuccess = actionExecutions.All(a => a.Success),
+            ActionExecutions = actionExecutions
+        };
+
+        if (await WriteExecutionAsync(execution, ct))
+        {
+            OnRuleExecuted?.Invoke(rule.Id, execution.ExecutedAt, execution.OverallSuccess);
+        }
+
+        await UpdateAlertsPageAsync(rule, clientId, actionExecutions, ct);
+
+        return execution.OverallSuccess;
+    }
+
+    private async Task<bool> WriteExecutionAsync(AutomationRuleExecution execution, CancellationToken ct)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _contextFactory.CreateDbContextAsync(ct);
+            ctx.AutomationRuleExecutions.Add(execution);
+            await ctx.SaveChangesAsync(ct);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to write execution log for rule {RuleId}", execution.AutomationRuleId);
+
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Runs the rule's actions in order, each one isolated from the others' failures, and returns a
+    /// result row per action. Shared by real triggers and test runs.
+    /// </summary>
+    private async Task<List<AutomationRuleActionExecution>> RunActionsAsync(AutomationRule rule, Guid clientId, CancellationToken ct)
+    {
+        List<AutomationRuleActionExecution> actionExecutions = [];
+        List<AutomationRuleAction> actions = rule.Actions.Where(a => a.IsActive).OrderBy(a => a.SortOrder).ToList();
+        ActionTargetCompanies companies = await LoadActionTargetCompaniesAsync(actions, ct);
+
+        foreach (AutomationRuleAction action in actions)
+        {
+            // An action naming another company's kiosk, playlist, program, scene or clip never
+            // reaches its executor. The executors look these up through the unfiltered system
+            // context, so this is the check that keeps a rule inside its own company.
+            string? refused = CheckActionTargets(rule, action, companies);
+
+            if (refused != null)
+            {
+                actionExecutions.Add(new AutomationRuleActionExecution
+                {
+                    Id = Guid.NewGuid(),
+                    AutomationRuleActionId = action.Id,
+                    Success = false,
+                    ErrorMessage = refused
+                });
+                _logger.LogWarning("Refused action {ActionId} on rule {RuleId}: {Reason}", action.Id, rule.Id, refused);
+                continue;
+            }
+
             IActionExecutor? executor = _actionExecutors.FirstOrDefault(e => e.CanHandle(action.ActionType));
             if (executor == null)
             {
@@ -856,35 +959,216 @@ public class AutomationEngineService(
             }
         }
 
-        // LOG-01: Write execution log
-        AutomationRuleExecution execution = new()
+        return actionExecutions;
+    }
+
+    private sealed record ActionTargetCompanies(
+        Dictionary<Guid, int> Clients,
+        Dictionary<(AutomationActionTargetKind Kind, Guid Id), int> References);
+
+    // One query per kind of row, for the whole rule, rather than one per action.
+    private async Task<ActionTargetCompanies> LoadActionTargetCompaniesAsync(List<AutomationRuleAction> actions, CancellationToken ct)
+    {
+        List<AutomationActionTarget> targets = actions
+            .Select(a => AutomationActionTargets.TryRead(a.ActionType, a.ParametersJson, out AutomationActionTarget t) ? t : null)
+            .OfType<AutomationActionTarget>()
+            .ToList();
+
+        List<Guid> clientIds = targets.Select(t => t.ClientId).Where(id => id != Guid.Empty).Distinct().ToList();
+
+        List<Guid> IdsOf(AutomationActionTargetKind kind) => targets
+            .SelectMany(t => t.References)
+            .Where(r => r.Kind == kind)
+            .Select(r => r.Id)
+            .Distinct()
+            .ToList();
+
+        List<Guid> playlistIds = IdsOf(AutomationActionTargetKind.Playlist);
+        List<Guid> programIds = IdsOf(AutomationActionTargetKind.ProjectionProgram);
+        List<Guid> sceneIds = IdsOf(AutomationActionTargetKind.DmxScene);
+        List<Guid> clipIds = IdsOf(AutomationActionTargetKind.AudioClip);
+
+        Dictionary<Guid, int> clients = [];
+        Dictionary<(AutomationActionTargetKind, Guid), int> references = [];
+
+        if (clientIds.Count == 0)
         {
-            Id = Guid.NewGuid(),
-            AutomationRuleId = rule.Id,
-            RuleName = rule.Name,
-            ExecutedAt = DateTime.UtcNow,
-            TriggerEvent = triggerEventLabel, // string snapshot per STATE.md decision
-            TriggerClientId = clientId,
-            OverallSuccess = actionExecutions.All(a => a.Success),
-            ActionExecutions = actionExecutions
-        };
+            return new ActionTargetCompanies(clients, references);
+        }
+
+        await using ApplicationDbContext ctx = await _contextFactory.CreateDbContextAsync(ct);
+
+        clients = await ctx.Clients
+            .Where(c => clientIds.Contains(c.Id))
+            .AsNoTracking()
+            .TagWithCallSite()
+            .ToDictionaryAsync(c => c.Id, c => c.CompanyId, ct);
+
+        if (playlistIds.Count > 0)
+        {
+            foreach (var row in await ctx.Playlists.Where(x => playlistIds.Contains(x.Id)).Select(x => new { x.Id, x.CompanyId }).AsNoTracking().TagWithCallSite().ToListAsync(ct))
+            {
+                references[(AutomationActionTargetKind.Playlist, row.Id)] = row.CompanyId;
+            }
+        }
+
+        if (programIds.Count > 0)
+        {
+            foreach (var row in await ctx.ProjectionPrograms.Where(x => programIds.Contains(x.Id)).Select(x => new { x.Id, x.CompanyId }).AsNoTracking().TagWithCallSite().ToListAsync(ct))
+            {
+                references[(AutomationActionTargetKind.ProjectionProgram, row.Id)] = row.CompanyId;
+            }
+        }
+
+        if (sceneIds.Count > 0)
+        {
+            foreach (var row in await ctx.DmxScenes.Where(x => sceneIds.Contains(x.Id)).Select(x => new { x.Id, x.CompanyId }).AsNoTracking().TagWithCallSite().ToListAsync(ct))
+            {
+                references[(AutomationActionTargetKind.DmxScene, row.Id)] = row.CompanyId;
+            }
+        }
+
+        if (clipIds.Count > 0)
+        {
+            foreach (var row in await ctx.AudioClips.Where(x => clipIds.Contains(x.Id)).Select(x => new { x.Id, x.CompanyId }).AsNoTracking().TagWithCallSite().ToListAsync(ct))
+            {
+                references[(AutomationActionTargetKind.AudioClip, row.Id)] = row.CompanyId;
+            }
+        }
+
+        return new ActionTargetCompanies(clients, references);
+    }
+
+    /// <returns>Why the action mustn't run, or null when it may.</returns>
+    /// <remarks>
+    /// Only refuses what is definitely another company's. A missing kiosk or row is left to the
+    /// executor, which already reports it ("Client not connected", "no longer exists"...).
+    /// </remarks>
+    private static string? CheckActionTargets(AutomationRule rule, AutomationRuleAction action, ActionTargetCompanies companies)
+    {
+        if (!AutomationActionTargets.TryRead(action.ActionType, action.ParametersJson, out AutomationActionTarget target))
+        {
+            return "The action's settings couldn't be read. Remove it and add it again.";
+        }
+
+        if (target.ClientId != Guid.Empty
+            && companies.Clients.TryGetValue(target.ClientId, out int clientCompanyId)
+            && clientCompanyId != rule.CompanyId)
+        {
+            return "The action's kiosk belongs to a different company";
+        }
+
+        foreach ((AutomationActionTargetKind kind, Guid id) in target.References)
+        {
+            if (companies.References.TryGetValue((kind, id), out int companyId) && companyId != rule.CompanyId)
+            {
+                return $"The action's {AutomationActionTargets.Describe(kind)} belongs to a different company";
+            }
+        }
+
+        return null;
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<AutomationTestRunResult>> TestRunRuleAsync(AutomationTestRunRequest request, CancellationToken ct = default)
+    {
+        if (!_testRunsInProgress.TryAdd(request.RuleId, 0))
+        {
+            return Result<AutomationTestRunResult>.Fail("A test run of this rule is already in progress.");
+        }
 
         try
         {
             await using ApplicationDbContext ctx = await _contextFactory.CreateDbContextAsync(ct);
-            ctx.AutomationRuleExecutions.Add(execution);
-            await ctx.SaveChangesAsync(ct);
 
-            OnRuleExecuted?.Invoke(rule.Id, execution.ExecutedAt, execution.OverallSuccess);
+            // The system context isn't tenant-filtered, so the caller's company is checked here
+            // rather than trusting a rule id from a signed-in circuit.
+            AutomationRule? rule = await ctx.AutomationRules
+                .Where(r => r.Id == request.RuleId && r.IsActive)
+                .Include(r => r.Actions.Where(a => a.IsActive))
+                .Include(r => r.Conditions.Where(c => c.IsActive))
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(ct);
+
+            if (rule == null || rule.CompanyId != request.CallerCompanyId)
+            {
+                return Result<AutomationTestRunResult>.Fail("Rule not found.");
+            }
+
+            if (!rule.IsEnabled)
+            {
+                return Result<AutomationTestRunResult>.Fail("Switch the rule on before testing it.");
+            }
+
+            if (rule.Actions.Count == 0)
+            {
+                return Result<AutomationTestRunResult>.Fail("This rule has no actions to run.");
+            }
+
+            string label = $"Manual test by {request.UserDisplayName}";
+
+            if (request.CheckConditions)
+            {
+                (Dictionary<Guid, AutomationClientInfo> clients, Dictionary<int, AutomationLocationInfo> locations) =
+                    await LoadConditionContextAsync(ctx, [rule], ct);
+
+                AutomationConditionCheck check = CheckConditions(rule, _timeProvider.GetUtcNow().UtcDateTime, clients, locations);
+
+                if (!check.Passed)
+                {
+                    Guid skippedId = await WriteSkippedExecutionAsync(rule, rule.TriggerClientId, label, check, ct, request.UserId);
+
+                    return Result<AutomationTestRunResult>.Ok(new AutomationTestRunResult(
+                        skippedId, check.Reason ?? "A condition wasn't met", []));
+                }
+            }
+
+            // Deliberately none of the idle, schedule or game-data bookkeeping, and no alerts or
+            // OnRuleExecuted: a test mustn't stop the real trigger firing, or look like it fired.
+            List<AutomationRuleActionExecution> actionExecutions = await RunActionsAsync(rule, rule.TriggerClientId, ct);
+
+            AutomationRuleExecution execution = new()
+            {
+                Id = Guid.NewGuid(),
+                AutomationRuleId = rule.Id,
+                RuleName = rule.Name,
+                ExecutedAt = DateTime.UtcNow,
+                TriggerEvent = label,
+                TriggerClientId = rule.TriggerClientId,
+                OverallSuccess = actionExecutions.All(a => a.Success),
+                IsTestRun = true,
+                TestRunByUserId = request.UserId,
+                ActionExecutions = actionExecutions
+            };
+
+            await WriteExecutionAsync(execution, ct);
+
+            int passed = actionExecutions.Count(a => a.Success);
+            _logger.LogInformation("Rule {RuleId} test run by {UserId}: {Passed}/{Total} actions passed", rule.Id, request.UserId, passed, actionExecutions.Count);
+
+            Dictionary<Guid, AutomationRuleAction> actionsById = rule.Actions.ToDictionary(a => a.Id);
+
+            List<AutomationTestActionResult> results = actionExecutions
+                .Select(ae => new AutomationTestActionResult(
+                    ae.AutomationRuleActionId,
+                    actionsById[ae.AutomationRuleActionId].ActionType,
+                    actionsById[ae.AutomationRuleActionId].ParametersJson,
+                    ae.Success,
+                    ae.ErrorMessage))
+                .ToList();
+
+            return Result<AutomationTestRunResult>.Ok(new AutomationTestRunResult(execution.Id, null, results));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogError(ex, "Failed to write execution log for rule {RuleId}", rule.Id);
+            _logger.LogError(ex, "Test run of rule {RuleId} failed", request.RuleId);
+            return Result<AutomationTestRunResult>.Fail($"The test couldn't run: {ex.Message}");
         }
-
-        await UpdateAlertsPageAsync(rule, clientId, actionExecutions, ct);
-
-        return execution.OverallSuccess;
+        finally
+        {
+            _testRunsInProgress.TryRemove(request.RuleId, out _);
+        }
     }
 
     // A rule that ran with a failed action is raised on the Operations alerts page (one alert per

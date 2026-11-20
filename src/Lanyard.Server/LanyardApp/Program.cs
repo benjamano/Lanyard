@@ -297,6 +297,9 @@ builder.Services.AddSingleton<IProjectionProgramRunnerService, ProjectionProgram
 builder.Services.AddHostedService<ProjectionProgramCompletionListener>();
 
 builder.Services.AddSingleton<AutomationEngineService>();
+// One instance under both types: the hosted services drain its channels through the concrete type,
+// everything else uses the interface.
+builder.Services.AddSingleton<IAutomationEngineService>(sp => sp.GetRequiredService<AutomationEngineService>());
 builder.Services.AddSingleton<IActionExecutor, MusicControlActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, StartProjectionProgramActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, StopProjectionProgramActionExecutor>();

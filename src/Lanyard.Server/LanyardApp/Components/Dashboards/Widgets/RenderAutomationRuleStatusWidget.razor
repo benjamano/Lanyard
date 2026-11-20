@@ -2,7 +2,7 @@
 
 @inject IAutomationRuleService _ruleService
 @inject IAutomationLogService _logService
-@inject AutomationEngineService _engineService
+@inject IAutomationEngineService _engineService
 
 <FluentCard Height="100%">
     @if (Widget.AutomationRuleId == null || Widget.AutomationRuleId == Guid.Empty)
