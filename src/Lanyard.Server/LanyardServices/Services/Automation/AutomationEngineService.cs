@@ -305,6 +305,7 @@ public class AutomationEngineService(
             .SelectMany(r => r.Conditions)
             .Where(c => c.ConditionType == AutomationConditionType.DuringOpeningHours)
             .Select(c => AutomationConditionParameters.TryParse(c.ParametersJson, out OpeningHoursConditionParameters? p) ? p.LocationId : 0)
+            .Concat(PartyConditionLocationIds(rules.SelectMany(r => r.Conditions)))
             .Where(id => id > 0)
             .Distinct()
             .ToList();
@@ -388,7 +389,7 @@ public class AutomationEngineService(
         foreach ((AutomationRule rule, string label) in matchingRules)
         {
             // A status edge happens once, so a skip consumes it - the rule waits for the next edge.
-            AutomationConditionCheck check = CheckConditions(rule, _timeProvider.GetUtcNow().UtcDateTime);
+            AutomationConditionCheck check = await CheckConditionsAsync(rule, _timeProvider.GetUtcNow().UtcDateTime, ct);
 
             if (!check.Passed)
             {
@@ -467,7 +468,7 @@ public class AutomationEngineService(
             _gameDataFiredForGame[rule.Id] = snapshot.GameNumber;
 
             string label = rule.TriggerType.ToString();
-            AutomationConditionCheck check = CheckConditions(rule, _timeProvider.GetUtcNow().UtcDateTime);
+            AutomationConditionCheck check = await CheckConditionsAsync(rule, _timeProvider.GetUtcNow().UtcDateTime, ct);
 
             if (!check.Passed)
             {
@@ -581,7 +582,7 @@ public class AutomationEngineService(
                 continue;
             }
 
-            AutomationConditionCheck check = CheckConditions(rule, nowUtc);
+            AutomationConditionCheck check = await CheckConditionsAsync(rule, nowUtc, ct);
 
             if (!check.Passed)
             {
@@ -677,7 +678,7 @@ public class AutomationEngineService(
                 continue;
             }
 
-            AutomationConditionCheck check = CheckConditions(rule, _timeProvider.GetUtcNow().UtcDateTime);
+            AutomationConditionCheck check = await CheckConditionsAsync(rule, _timeProvider.GetUtcNow().UtcDateTime, ct);
 
             if (!check.Passed)
             {
@@ -857,7 +858,7 @@ public class AutomationEngineService(
 
             PartySlot first = due[0].Party;
             string label = PartyTriggerRules.ExecutionLabel(milestone, lead, due.Count - 1);
-            AutomationConditionCheck check = CheckConditions(rule, _timeProvider.GetUtcNow().UtcDateTime);
+            AutomationConditionCheck check = await CheckConditionsAsync(rule, _timeProvider.GetUtcNow().UtcDateTime, ct);
 
             if (!check.Passed)
             {
@@ -947,16 +948,52 @@ public class AutomationEngineService(
         }
     }
 
-    private AutomationConditionCheck CheckConditions(AutomationRule rule, DateTime nowUtc)
+    private async Task<AutomationConditionCheck> CheckConditionsAsync(AutomationRule rule, DateTime nowUtc, CancellationToken ct)
     {
-        return CheckConditions(rule, nowUtc, _conditionClients, _conditionLocations);
+        return await CheckConditionsAsync(rule, nowUtc, _conditionClients, _conditionLocations, ct);
+    }
+
+    private async Task<AutomationConditionCheck> CheckConditionsAsync(
+        AutomationRule rule,
+        DateTime nowUtc,
+        Dictionary<Guid, AutomationClientInfo> clients,
+        Dictionary<int, AutomationLocationInfo> locations,
+        CancellationToken ct)
+    {
+        // Every rule saved before conditions existed takes this path, unchanged.
+        if (!rule.Conditions.Any(c => c.IsActive))
+        {
+            return AutomationConditionCheck.Pass;
+        }
+
+        // The evaluator is pure and synchronous, so today's parties for any party conditions are
+        // read first (from the provider's one-minute cache, so this is rarely a query). A failed
+        // read leaves the location out, which the evaluator treats as "couldn't be loaded".
+        Dictionary<int, IReadOnlyList<PartySlot>> parties = [];
+
+        foreach (int locationId in PartyConditionLocationIds(rule.Conditions))
+        {
+            Infrastructure.DTO.Result<IReadOnlyList<PartySlot>> loaded = await _partySchedule.GetDayAsync(rule.CompanyId, locationId, nowUtc, ct);
+
+            if (loaded.IsSuccess && loaded.Data is not null)
+            {
+                parties[locationId] = loaded.Data;
+            }
+            else
+            {
+                _logger.LogWarning("Couldn't load parties at location {LocationId} for rule {RuleId}'s condition: {Error}", locationId, rule.Id, loaded.Error);
+            }
+        }
+
+        return CheckConditions(rule, nowUtc, clients, locations, parties);
     }
 
     private AutomationConditionCheck CheckConditions(
         AutomationRule rule,
         DateTime nowUtc,
         Dictionary<Guid, AutomationClientInfo> clients,
-        Dictionary<int, AutomationLocationInfo> locations)
+        Dictionary<int, AutomationLocationInfo> locations,
+        Dictionary<int, IReadOnlyList<PartySlot>> parties)
     {
         // Every rule saved before conditions existed takes this path, unchanged.
         if (!rule.Conditions.Any(c => c.IsActive))
@@ -970,8 +1007,15 @@ public class AutomationEngineService(
             nowUtc,
             clientId => clients.GetValueOrDefault(clientId),
             IsClientInGame,
-            locationId => locations.GetValueOrDefault(locationId));
+            locationId => locations.GetValueOrDefault(locationId),
+            locationId => parties.GetValueOrDefault(locationId));
     }
+
+    private static IEnumerable<int> PartyConditionLocationIds(IEnumerable<AutomationRuleCondition> conditions) => conditions
+        .Where(c => c.IsActive && c.ConditionType == AutomationConditionType.PartyInProgress)
+        .Select(c => AutomationConditionParameters.TryParse(c.ParametersJson, out PartyInProgressConditionParameters? p) ? p.LocationId : 0)
+        .Where(id => id > 0)
+        .Distinct();
 
     // The status store, not _lastKnownStatus: the hub clears the store when a kiosk disconnects,
     // so a kiosk that drops mid-game doesn't stay "in game" forever.
@@ -1309,7 +1353,7 @@ public class AutomationEngineService(
                 (Dictionary<Guid, AutomationClientInfo> clients, Dictionary<int, AutomationLocationInfo> locations) =
                     await LoadConditionContextAsync(ctx, [rule], ct);
 
-                AutomationConditionCheck check = CheckConditions(rule, _timeProvider.GetUtcNow().UtcDateTime, clients, locations);
+                AutomationConditionCheck check = await CheckConditionsAsync(rule, _timeProvider.GetUtcNow().UtcDateTime, clients, locations, ct);
 
                 if (!check.Passed)
                 {
