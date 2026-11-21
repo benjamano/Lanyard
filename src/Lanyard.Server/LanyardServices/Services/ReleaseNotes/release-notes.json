@@ -1025,7 +1025,8 @@
       "A party time rule runs once for each party. Parties that reach the same moment together run it once, so two 2pm parties don't start the lights twice. Cancelled parties, provisional Just Step bookings and private hires don't run it.",
       "Moving or cancelling a party, by hand or through the Just Step import, changes when its rules run straight away.",
       "The Execution Log shows which party a party time run was for, with an Open party button, and never the child's name.",
-      "New \"A party is or isn't on\" condition for Automation rules: only run a rule while a booked party is on at a location (or in one room), or only while none is. For example, play the party version of the game lights during parties."
+      "New \"A party is or isn't on\" condition for Automation rules: only run a rule while a booked party is on at a location (or in one room), or only while none is. For example, play the party version of the game lights during parties.",
+      "Training course sections can no longer contain scripts or other unsafe content. Only the formatting the course editor offers (headings, bold, italic, lists, links and images) is kept, including in sections saved before this change."
     ]
   }
 ]
