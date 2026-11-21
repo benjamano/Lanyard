@@ -652,6 +652,42 @@ public class FileLibraryServiceTests
         CollectionAssert.AreEquivalent(new[] { a, b }, ids.ToArray());
     }
 
+    [TestMethod]
+    public async Task Changes_TellOpenPagesInTheSameCompany()
+    {
+        FileLibraryEvents events = new();
+        List<int> heard = [];
+        events.Changed += heard.Add;
+
+        Mock<ICurrentUserAccessor> user = new();
+        user.Setup(x => x.GetCurrentUserIdAsync()).ReturnsAsync(Result<string>.Ok("manager-1"));
+        System.Security.Claims.ClaimsIdentity identity = new([new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, "CanManageFiles")], "test");
+        Mock<IHttpContextAccessor> http = new();
+        http.SetupGet(x => x.HttpContext).Returns(new DefaultHttpContext { User = new System.Security.Claims.ClaimsPrincipal(identity) });
+
+        FileLibraryService library = new(MockFactory(), _files, new FileUsageService(MockFactory(), NullLogger<FileUsageService>.Instance), user.Object,
+            NullLogger<FileLibraryService>.Instance, httpContextAccessor: http.Object, tenant: new Lanyard.Infrastructure.DataAccess.Tenancy.FixedTenantProvider(4), events: events);
+
+        Guid file = await SeedFileAsync("poster.png");
+        await library.MoveToBinAsync([file], [], CancellationToken.None);
+        await library.RestoreAsync([file], [], CancellationToken.None);
+
+        CollectionAssert.AreEqual(new[] { 4, 4 }, heard);
+    }
+
+    [TestMethod]
+    public void Events_KeepTellingOthersWhenOneListenerThrows()
+    {
+        FileLibraryEvents events = new();
+        int heard = 0;
+        events.Changed += _ => throw new InvalidOperationException();
+        events.Changed += _ => heard++;
+
+        events.Publish(1);
+
+        Assert.AreEqual(1, heard);
+    }
+
     private IDbContextFactory<ApplicationDbContext> MockFactory()
     {
         Mock<IDbContextFactory<ApplicationDbContext>> factory = new();

@@ -44,7 +44,7 @@ public class AutomationEngineServiceTests
         return new AutomationEngineService(
             GetFactory(options),
             executors,
-            new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+            new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance, new Lanyard.Tests.Services.Automation.NoPartiesSchedule());
     }
 
     // The engine reads its enabled flag from AppSettings on the first ProcessTransitionAsync and
@@ -438,7 +438,7 @@ public class AutomationEngineServiceTests
         AutomationEngineService engine = new(
             factoryMock.Object,
             [executor],
-            new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+            new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance, new Lanyard.Tests.Services.Automation.NoPartiesSchedule());
 
         GameStatusTransitionEvent ev = new(clientId, GameStatus.NotStarted, GameStatus.InGame);
 

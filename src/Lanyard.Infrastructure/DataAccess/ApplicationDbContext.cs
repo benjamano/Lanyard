@@ -1218,6 +1218,22 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<AutomationRuleExecution>()
                 .HasIndex(x => new { x.AutomationRuleId, x.ExecutedAt });
 
+            // A party-time rule's run keeps the party's id only (never the child's name). SetNull, so
+            // removing a booking never takes the automation history with it. The index serves the
+            // engine's "has this rule already fired for this party" reseed after a restart.
+            modelBuilder.Entity<AutomationRuleExecution>()
+                .HasOne<PartyBooking>()
+                .WithMany()
+                .HasForeignKey(x => x.PartyBookingId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<AutomationRuleExecution>()
+                .HasIndex(x => new { x.AutomationRuleId, x.PartyBookingId });
+
+            modelBuilder.Entity<AutomationRule>()
+                .Property(x => x.PartyRoom)
+                .HasMaxLength(100);
+
             // SongAnalysisHostedService sweeps for NotAnalyzed songs every five minutes.
             modelBuilder.Entity<Song>()
                 .HasIndex(x => x.BpmAnalysisStatus);

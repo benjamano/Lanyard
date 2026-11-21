@@ -30,7 +30,7 @@ public class SignalRControlHub(
     IClientService clientService,
     ILaserGameStatusStore laserGameStatusStore,
     SignalRProjectionControlHubEvents hubEvents,
-    AutomationEngineService automationEngineService,
+    IAutomationEngineService automationEngineService,
     IDmxClientService dmxClientService,
     IClientZoneScoreboardService clientZoneScoreboardService,
     IVideoStreamTokenService videoStreamTokenService,
@@ -49,7 +49,7 @@ public class SignalRControlHub(
     private readonly IClientService _clientService = clientService;
     private readonly SignalRProjectionControlHubEvents _hubEvents = hubEvents;
     private readonly ILaserGameStatusStore _laserGameStatusStore = laserGameStatusStore;
-    private readonly AutomationEngineService _automationEngineService = automationEngineService;
+    private readonly IAutomationEngineService _automationEngineService = automationEngineService;
     private readonly IDmxClientService _dmxClientService = dmxClientService;
     private readonly IClientZoneScoreboardService _clientZoneScoreboardService = clientZoneScoreboardService;
     private readonly IVideoStreamTokenService _videoStreamTokenService = videoStreamTokenService;

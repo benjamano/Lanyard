@@ -1,4 +1,4 @@
-using Lanyard.Application.Services.Demo;
+﻿using Lanyard.Application.Services.Demo;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Files;
@@ -28,6 +28,10 @@ public class FileService : IFileService
     private readonly IDbContextFactory<ApplicationDbContext> _dbFactory;
     private readonly IDemoGuard? _demoGuard;
     private readonly IFileUsageService? _usage;
+    private readonly IFileLibraryEvents? _events;
+
+    // Tells open Files pages in the company to refresh.
+    private void Changed(int companyId) => _events?.Publish(companyId);
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly ISongAnalysisQueue _analysisQueue;
     private readonly string _storageRoot;
@@ -50,12 +54,14 @@ public class FileService : IFileService
         IAmazonS3? s3Client = null,
         IDemoGuard? demoGuard = null,
         ILogger<FileService>? logger = null,
-        IFileUsageService? usage = null)
+        IFileUsageService? usage = null,
+        IFileLibraryEvents? events = null)
     {
         _dbFactory = dbFactory;
         _logger = logger ?? NullLogger<FileService>.Instance;
         _demoGuard = demoGuard;
         _usage = usage;
+        _events = events;
         _storageRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Lanyard", "UploadedFiles");
         _currentUserAccessor = currentUserAccessor;
         _analysisQueue = analysisQueue;
@@ -306,6 +312,9 @@ public class FileService : IFileService
                 _analysisQueue.Enqueue(song.Id);
             }
 
+            if (browsable)
+                Changed(metadata.CompanyId);
+
             return Result<FileMetadata>.Ok(metadata);
         }
         catch (Exception ex)
@@ -337,6 +346,7 @@ public class FileService : IFileService
             file.FileName = newName;
 
             await db.SaveChangesAsync(cancellationToken);
+            Changed(file.CompanyId);
 
             return Result<FileMetadata>.Ok(file);
         }
@@ -424,6 +434,9 @@ public class FileService : IFileService
 
             if (!string.IsNullOrEmpty(file.ThumbnailPath))
                 await DeleteStoredFileAsync(file.ThumbnailPath);
+
+            if (!file.IsRestricted && !file.IsSystemFile)
+                Changed(file.CompanyId);
 
             return Result<bool>.Ok(true);
         }
@@ -545,6 +558,7 @@ public class FileService : IFileService
             db.Folders.Add(folder);
 
             await db.SaveChangesAsync(cancellationToken);
+            Changed(folder.CompanyId);
 
             return Result<Folder>.Ok(folder);
         }
@@ -577,6 +591,7 @@ public class FileService : IFileService
             folder.Name = newName;
 
             await db.SaveChangesAsync(cancellationToken);
+            Changed(folder.CompanyId);
 
             return Result<Folder>.Ok(folder);
         }
@@ -1027,6 +1042,7 @@ public class FileService : IFileService
             file.FolderId = destinationFolderId;
 
             await db.SaveChangesAsync(cancellationToken);
+            Changed(file.CompanyId);
 
             return Result<FileMetadata>.Ok(file);
         }

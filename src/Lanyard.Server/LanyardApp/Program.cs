@@ -115,6 +115,7 @@ builder.Services.AddScoped<ICurrentUserAccessor, CurrentUserAccessor>();
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<IFileUsageService, FileUsageService>();
 builder.Services.AddScoped<IFileLibraryService, FileLibraryService>();
+builder.Services.AddSingleton<IFileLibraryEvents, FileLibraryEvents>();
 
 // One bucket client for the whole process. FileService is scoped and used to build its own
 // AmazonS3Client per instance - a new SDK client and HTTP pipeline for every request/circuit.
@@ -142,6 +143,7 @@ builder.Services.AddScoped<IClientUpdatePolicyService, ClientUpdatePolicyService
 builder.Services.AddScoped<IClientReleaseAdminService, ClientReleaseAdminService>();
 builder.Services.AddScoped<IClientDiagnosticsService, ClientDiagnosticsService>();
 builder.Services.AddScoped<IKioskSelfTestService, KioskSelfTestService>();
+builder.Services.AddScoped<IDisplayIdentifyService, DisplayIdentifyService>();
 builder.Services.AddScoped<IKioskHealthService, KioskHealthService>();
 builder.Services.AddScoped<IKioskClientListService, KioskClientListService>();
 builder.Services.AddScoped<IKioskOfflineManifestService, KioskOfflineManifestService>();
@@ -294,7 +296,11 @@ builder.Services.AddSingleton<IProjectionBindingResolver, ProjectionBindingResol
 builder.Services.AddSingleton<IProjectionProgramRunnerService, ProjectionProgramRunnerService>();
 builder.Services.AddHostedService<ProjectionProgramCompletionListener>();
 
+builder.Services.AddSingleton<IPartyScheduleProvider, PartyScheduleProvider>();
 builder.Services.AddSingleton<AutomationEngineService>();
+// One instance under both types: the hosted services drain its channels through the concrete type,
+// everything else uses the interface.
+builder.Services.AddSingleton<IAutomationEngineService>(sp => sp.GetRequiredService<AutomationEngineService>());
 builder.Services.AddSingleton<IActionExecutor, MusicControlActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, StartProjectionProgramActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, StopProjectionProgramActionExecutor>();
@@ -311,6 +317,7 @@ builder.Services.Configure<KioskSelfTestOptions>(builder.Configuration.GetSectio
 builder.Services.AddHostedService<KioskSelfTestRetentionHostedService>();
 builder.Services.AddHostedService<IdleTriggerHostedService>();
 builder.Services.AddHostedService<ScheduledTriggerHostedService>();
+builder.Services.AddHostedService<PartyTriggerHostedService>();
 builder.Services.AddHostedService<KioskAlertMonitorHostedService>();
 
 builder.Services.AddScoped<IClientZoneScoreboardService, ClientZoneScoreboardService>();

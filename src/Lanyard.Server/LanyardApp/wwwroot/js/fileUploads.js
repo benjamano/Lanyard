@@ -11,12 +11,20 @@
 //
 // The .NET side (FileBrowser) gets OnUploadsChanged(items) as things move, OnUploadFinished(item)
 // per file, and EnsureFolderPath(parentId, "A/B") when a dropped folder needs creating.
+//
+// It also carries Files' other browser-side bits: dragging files and folders onto a folder to move
+// them (OnItemDragStart / OnItemsDropped), Ctrl/⌘+A and Esc for the selection (SelectAll /
+// ClearSelection), the zip download and Copy link. Staff who can't upload get those without the
+// upload parts (options.canUpload false).
+
+const INTERNAL_DRAG = 'application/x-lanyard-files';
 
 const CONCURRENCY = 3;
 const MAX_FILES_PER_DROP = 500;
 const PROGRESS_EVERY_MS = 200;
 
 export function attach(root, dotnet, options) {
+    const canUpload = options.canUpload !== false;
     const state = {
         root,
         dotnet,
@@ -50,15 +58,69 @@ export function attach(root, dotnet, options) {
     root.appendChild(input);
     state.input = input;
 
-    const isFileDrag = e => Array.from(e.dataTransfer?.types || []).includes('Files');
+    const types = e => Array.from(e.dataTransfer?.types || []);
+    const isInternalDrag = e => types(e).includes(INTERNAL_DRAG);
+    const isFileDrag = e => canUpload && !isInternalDrag(e) && types(e).includes('Files');
+
+    // ---- Moving files and folders by dragging them onto a folder ----
+
+    state.onDragStart = e => {
+        const item = e.target?.closest?.('[data-drag-item]');
+        if (!item || !root.contains(item)) return;
+        // Firefox won't start a drag without data.
+        e.dataTransfer.setData(INTERNAL_DRAG, item.getAttribute('data-drag-item'));
+        e.dataTransfer.effectAllowed = 'move';
+        state.internalDrag = true;
+        dotnet.invokeMethodAsync('OnItemDragStart', item.getAttribute('data-drag-item')).catch(() => {});
+    };
+    state.onDragEnd = () => {
+        state.internalDrag = false;
+        root.querySelectorAll('.is-drop-target').forEach(x => x.classList.remove('is-drop-target'));
+    };
+    state.onInternalDragOver = e => {
+        if (!state.internalDrag && !isInternalDrag(e)) return false;
+        const target = e.target?.closest?.('[data-drop-folder]');
+        root.querySelectorAll('.is-drop-target').forEach(x => x !== target && x.classList.remove('is-drop-target'));
+        if (!target || !root.contains(target)) return true;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        target.classList.add('is-drop-target');
+        return true;
+    };
+    state.onInternalDrop = e => {
+        if (!state.internalDrag && !isInternalDrag(e)) return false;
+        const target = e.target?.closest?.('[data-drop-folder]');
+        state.onDragEnd();
+        if (!target || !root.contains(target)) return true;
+        e.preventDefault();
+        dotnet.invokeMethodAsync('OnItemsDropped', target.getAttribute('data-drop-folder') || null).catch(() => {});
+        return true;
+    };
+
+    // ---- Selecting everything / nothing from the keyboard ----
+
+    state.onKeyDown = e => {
+        const active = document.activeElement;
+        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT' || active.isContentEditable)) return;
+        if (document.querySelector('fluent-dialog')?.offsetParent) return;
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
+            if (!root.querySelector('.files-item')) return;
+            e.preventDefault();
+            dotnet.invokeMethodAsync('SelectAll').catch(() => {});
+        } else if (e.key === 'Escape') {
+            dotnet.invokeMethodAsync('ClearSelection').catch(() => {});
+        }
+    };
 
     state.onDragEnter = e => {
+        if (state.internalDrag) return;
         if (!isFileDrag(e)) return;
         e.preventDefault();
         state.dragDepth++;
         showOverlay(state, dropTarget(state, e.target));
     };
     state.onDragOver = e => {
+        if (state.onInternalDragOver(e)) return;
         if (!isFileDrag(e)) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'copy';
@@ -70,6 +132,7 @@ export function attach(root, dotnet, options) {
         if (state.dragDepth === 0) hideOverlay(state);
     };
     state.onDrop = async e => {
+        if (state.onInternalDrop(e)) return;
         if (!isFileDrag(e)) return;
         e.preventDefault();
         state.dragDepth = 0;
@@ -99,12 +162,17 @@ export function attach(root, dotnet, options) {
         }
     };
 
+    root.addEventListener('dragstart', state.onDragStart);
+    root.addEventListener('dragend', state.onDragEnd);
     root.addEventListener('dragenter', state.onDragEnter);
     root.addEventListener('dragover', state.onDragOver);
     root.addEventListener('dragleave', state.onDragLeave);
     root.addEventListener('drop', state.onDrop);
-    document.addEventListener('paste', state.onPaste);
-    window.addEventListener('beforeunload', state.onBeforeUnload);
+    document.addEventListener('keydown', state.onKeyDown);
+    if (canUpload) {
+        document.addEventListener('paste', state.onPaste);
+        window.addEventListener('beforeunload', state.onBeforeUnload);
+    }
 
     return {
         setFolder(folderId, folderName) {
@@ -140,6 +208,9 @@ export function attach(root, dotnet, options) {
         },
         dispose() {
             state.disposed = true;
+            root.removeEventListener('dragstart', state.onDragStart);
+            root.removeEventListener('dragend', state.onDragEnd);
+            document.removeEventListener('keydown', state.onKeyDown);
             root.removeEventListener('dragenter', state.onDragEnter);
             root.removeEventListener('dragover', state.onDragOver);
             root.removeEventListener('dragleave', state.onDragLeave);
@@ -437,5 +508,42 @@ function report(state, now) {
         send();
     } else if (!state.reportTimer) {
         state.reportTimer = setTimeout(send, PROGRESS_EVERY_MS);
+    }
+}
+
+
+// ---------- Zip download and Copy link ----------
+
+// Asks the server to prepare a zip of the selection, then lets the browser download it like any
+// file, so a big zip streams to disk. Returns null when it started, or the reason it couldn't.
+export async function downloadZip(fileIds, folderIds) {
+    try {
+        const response = await fetch('api/files/zip', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileIds, folderIds }),
+            credentials: 'same-origin',
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || !body.isSuccess) return body.error || 'Couldn\'t prepare the download.';
+        const link = document.createElement('a');
+        link.href = body.data;
+        link.download = '';
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        return null;
+    } catch {
+        return 'Couldn\'t prepare the download.';
+    }
+}
+
+export async function copyText(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        return true;
+    } catch {
+        return false;
     }
 }
