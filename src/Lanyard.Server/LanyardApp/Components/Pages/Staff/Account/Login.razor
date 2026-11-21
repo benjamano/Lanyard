@@ -33,9 +33,9 @@
                                       OnClick="@(() => SelectCompany(company.CompanyId))">
                             <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8"
                                          VerticalAlignment="VerticalAlignment.Center">
-                                @if (company.LogoFileId is not null)
+                                @if (company.LogoFileId is Guid companyLogoFileId)
                                 {
-                                    <img src="@($"/api/companies/{company.CompanyId}/logo")" alt="@($"{company.Name} logo")"
+                                    <img src="@($"/api/companies/{company.CompanyId}/logo?v={companyLogoFileId:N}")" alt="@($"{company.Name} logo")"
                                          class="company-picker-logo" onerror="this.style.display='none'" />
                                 }
                                 <FluentText>@company.Name</FluentText>
@@ -282,9 +282,12 @@ else
         }
 
         SelectedAccentColor = branding.Data!.ThemeColorHex;
-        SelectedLogoUrl = branding.Data!.LogoFileId is Guid ? $"/api/companies/{CompanyId}/logo" : null;
+        // ?v= is the file id, so the browser can keep these for good and still pick up a new upload.
+        SelectedLogoUrl = branding.Data!.LogoFileId is Guid logoFileId ? $"/api/companies/{CompanyId}/logo?v={logoFileId:N}" : null;
         SelectedBranding = branding.Data;
-        BackgroundImageUrl = branding.Data!.BackgroundImageFileId is Guid ? $"/api/companies/{CompanyId}/background" : null;
+        BackgroundImageUrl = branding.Data!.BackgroundImageFileId is Guid backgroundFileId
+            ? $"/api/companies/{CompanyId}/background?v={backgroundFileId:N}"
+            : null;
 
         // Reflects the chosen company's brand color in the page's overall Fluent theme (not
         // just the accent bar/submit button), using whatever light/dark mode is already active.
@@ -369,7 +372,7 @@ else
         LoginLocationOption? option = LocationOptions.FirstOrDefault(x => x.LocationId == locationId);
 
         SelectedAccentColor = option?.ThemeColorHex;
-        SelectedLogoUrl = option?.LogoFileId is Guid ? $"/api/companies/{option.CompanyId}/logo" : null;
+        SelectedLogoUrl = option?.LogoFileId is Guid logoFileId ? $"/api/companies/{option.CompanyId}/logo?v={logoFileId:N}" : null;
     }
 
     private async Task SignInWithPasskey()

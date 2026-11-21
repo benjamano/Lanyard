@@ -1,9 +1,12 @@
+using Lanyard.Application.Services.Features;
+using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -25,6 +28,7 @@ public sealed class DemoResetService(
     IOptions<DemoOptions> demoOptions,
     IDemoDirectory demoDirectory,
     TimeProvider timeProvider,
+    IMemoryCache cache,
     ILogger<DemoResetService> logger) : IDemoResetService
 {
     internal const string LastResetKey = "Demo.LastResetUtc";
@@ -68,6 +72,20 @@ public sealed class DemoResetService(
                     CreateDate = timeProvider.GetUtcNow().UtcDateTime,
                 });
                 await ctx.SaveChangesAsync(ct);
+
+                // The seeder writes the company's branding and deletes its feature settings
+                // directly, not through CompanyLocationService/CompanyFeatureService, so their
+                // caches are cleared here. Visitors' accounts are deleted rather than moved, so the
+                // short-lived user->company entries can't point anywhere wrong; they just expire.
+                List<int> locationIds = await ctx.Locations
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .Where(x => x.CompanyId == companyId)
+                    .Select(x => x.Id)
+                    .ToListAsync(ct);
+
+                BrandingCache.EvictCompany(cache, companyId, locationIds);
+                CompanyFeatureService.Evict(cache, companyId);
             }
 
             demoDirectory.Invalidate();

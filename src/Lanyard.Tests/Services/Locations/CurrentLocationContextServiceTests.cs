@@ -4,6 +4,7 @@ using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using System.Security.Claims;
@@ -53,7 +54,7 @@ public class CurrentLocationContextServiceTests
             .ReturnsAsync(() => new ApplicationDbContext(options));
 
         Mock<AuthenticationStateProvider> authProvider = BuildAuthStateProvider(BuildPrincipal(isAdmin: true, locationId: null));
-        CurrentLocationContextService service = new(authProvider.Object, factoryMock.Object);
+        CurrentLocationContextService service = new(authProvider.Object, factoryMock.Object, new MemoryCache(new MemoryCacheOptions()));
 
         Result<LocationScope> result = await service.GetScopeAsync();
 
@@ -85,7 +86,7 @@ public class CurrentLocationContextServiceTests
             .ReturnsAsync(() => new ApplicationDbContext(options));
 
         Mock<AuthenticationStateProvider> authProvider = BuildAuthStateProvider(BuildPrincipal(isAdmin: false, locationId: locationId));
-        CurrentLocationContextService service = new(authProvider.Object, factoryMock.Object);
+        CurrentLocationContextService service = new(authProvider.Object, factoryMock.Object, new MemoryCache(new MemoryCacheOptions()));
 
         Result<LocationScope> result = await service.GetScopeAsync();
 
@@ -118,7 +119,7 @@ public class CurrentLocationContextServiceTests
             .ReturnsAsync(() => new ApplicationDbContext(options));
 
         Mock<AuthenticationStateProvider> authProvider = BuildAuthStateProvider(BuildPrincipal(isAdmin: true, locationId: locationId));
-        CurrentLocationContextService service = new(authProvider.Object, factoryMock.Object);
+        CurrentLocationContextService service = new(authProvider.Object, factoryMock.Object, new MemoryCache(new MemoryCacheOptions()));
 
         Result<LocationScope> result = await service.GetScopeAsync();
 
@@ -151,7 +152,7 @@ public class CurrentLocationContextServiceTests
             .ReturnsAsync(() => new ApplicationDbContext(options));
 
         Mock<AuthenticationStateProvider> authProvider = BuildAuthStateProvider(BuildPrincipal(isAdmin: true, locationId: locationId));
-        CurrentLocationContextService service = new(authProvider.Object, factoryMock.Object);
+        CurrentLocationContextService service = new(authProvider.Object, factoryMock.Object, new MemoryCache(new MemoryCacheOptions()));
 
         Result<LocationScope> result = await service.GetScopeAsync();
 
@@ -169,7 +170,7 @@ public class CurrentLocationContextServiceTests
             .ReturnsAsync(() => new ApplicationDbContext(options));
 
         Mock<AuthenticationStateProvider> authProvider = BuildAuthStateProvider(BuildPrincipal(isAdmin: false, locationId: null));
-        CurrentLocationContextService service = new(authProvider.Object, factoryMock.Object);
+        CurrentLocationContextService service = new(authProvider.Object, factoryMock.Object, new MemoryCache(new MemoryCacheOptions()));
 
         Result<LocationScope> result = await service.GetScopeAsync();
 
@@ -199,7 +200,7 @@ public class CurrentLocationContextServiceTests
             .ReturnsAsync(() => new ApplicationDbContext(options));
 
         Mock<AuthenticationStateProvider> authProvider = BuildAuthStateProvider(BuildPrincipal(isAdmin: false, locationId: locationId));
-        CurrentLocationContextService service = new(authProvider.Object, factoryMock.Object);
+        CurrentLocationContextService service = new(authProvider.Object, factoryMock.Object, new MemoryCache(new MemoryCacheOptions()));
 
         Result<LocationScope> result = await service.GetScopeAsync();
 
