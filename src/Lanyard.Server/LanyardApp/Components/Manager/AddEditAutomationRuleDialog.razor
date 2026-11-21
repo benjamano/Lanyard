@@ -1,4 +1,5 @@
-﻿@using Lanyard.App.Components.ProjectionPrograms
+﻿@using Lanyard.Shared.Kiosk
+@using Lanyard.App.Components.ProjectionPrograms
 @using Lanyard.Application.Services
 @using Lanyard.Infrastructure.Models
 @using Lanyard.Infrastructure.Enum
@@ -320,7 +321,7 @@
                                     <FluentOption Value="@("closed")">is closed</FluentOption>
                                 </FluentSelect>
                             </div>
-                            <div class="condition-hint">Uses the location's opening hours, set under Manage &gt; Companies &amp; Locations. A location with no hours set counts as closed.</div>
+                            <div class="condition-hint">Uses the location's opening hours, set under Admin &gt; Companies &amp; Locations. A location with no hours set counts as closed.</div>
                         }
                         else if (row.ConditionType == AutomationConditionType.PartyInProgress)
                         {
@@ -398,7 +399,7 @@
                 @for (int i = 0; i < _actionRows.Count; i++)
                 {
                     int index = i;
-                    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
+                    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8" VerticalGap="8" Wrap="true">
                         <div>
                             <FluentSelect TOption="string"
                                 TValue="string"
@@ -431,7 +432,7 @@
                         @if (_actionRows[index].ActionType == AutomationActionTypes.StopProjectionProgram)
                         {
                             @* No program picker: stopping targets whatever is on the display. *@
-                            <div>
+                            <DisplayPickerRow ClientId="@RowClientId(index)" ClientName="@RowClient(index)?.Name" IsConnected="@(RowClient(index)?.IsCurrentlyConnected ?? false)">
                                 <FluentSelect TOption="string"
                                     TValue="string"
                                     Label="Screen"
@@ -441,10 +442,10 @@
                                     <FluentOption TValue="string" Value="default">Client default</FluentOption>
                                     @foreach (ClientAvailableScreen screen in _actionRows[index].Screens)
                                     {
-                                        <FluentOption TValue="string" Value="@screen.Index.ToString()">@($"{screen.Name} ({screen.Width}x{screen.Height})")</FluentOption>
+                                        <FluentOption TValue="string" Value="@screen.Index.ToString()">@DisplayIdentifyRules.PickerLabel(screen.Index, screen.Name, screen.Width, screen.Height)</FluentOption>
                                     }
                                 </FluentSelect>
-                            </div>
+                            </DisplayPickerRow>
                         }
                         else if (_actionRows[index].ActionType == AutomationActionTypes.StartProjectionProgram)
                         {
@@ -460,7 +461,7 @@
                                     ValueChanged="@((string? id) => _actionRows[index].ProjectionProgramIdString = id ?? string.Empty)"
                                     Style="flex: 1;" />
                             </div>
-                            <div>
+                            <DisplayPickerRow ClientId="@RowClientId(index)" ClientName="@RowClient(index)?.Name" IsConnected="@(RowClient(index)?.IsCurrentlyConnected ?? false)">
                                 <FluentSelect TOption="string"
                                     TValue="string"
                                     Label="Screen"
@@ -470,10 +471,10 @@
                                     <FluentOption TValue="string" Value="default">Client default</FluentOption>
                                     @foreach (ClientAvailableScreen screen in _actionRows[index].Screens)
                                     {
-                                        <FluentOption TValue="string" Value="@screen.Index.ToString()">@($"{screen.Name} ({screen.Width}x{screen.Height})")</FluentOption>
+                                        <FluentOption TValue="string" Value="@screen.Index.ToString()">@DisplayIdentifyRules.PickerLabel(screen.Index, screen.Name, screen.Width, screen.Height)</FluentOption>
                                     }
                                 </FluentSelect>
-                            </div>
+                            </DisplayPickerRow>
                         }
                         else if (_actionRows[index].ActionType == AutomationActionTypes.ProjectionProgramControl)
                         {
@@ -507,7 +508,7 @@
                                         Style="flex: 1;" />
                                 </div>
                             }
-                            <div>
+                            <DisplayPickerRow ClientId="@RowClientId(index)" ClientName="@RowClient(index)?.Name" IsConnected="@(RowClient(index)?.IsCurrentlyConnected ?? false)">
                                 <FluentSelect TOption="string"
                                     TValue="string"
                                     Label="Screen"
@@ -517,10 +518,10 @@
                                     <FluentOption TValue="string" Value="default">Client default</FluentOption>
                                     @foreach (ClientAvailableScreen screen in _actionRows[index].Screens)
                                     {
-                                        <FluentOption TValue="string" Value="@screen.Index.ToString()">@($"{screen.Name} ({screen.Width}x{screen.Height})")</FluentOption>
+                                        <FluentOption TValue="string" Value="@screen.Index.ToString()">@DisplayIdentifyRules.PickerLabel(screen.Index, screen.Name, screen.Width, screen.Height)</FluentOption>
                                     }
                                 </FluentSelect>
-                            </div>
+                            </DisplayPickerRow>
                         }
                         else if (_actionRows[index].ActionType == AutomationActionTypes.DmxSceneControl)
                         {
@@ -1200,6 +1201,14 @@
             await LoadScenesForRowAsync(index);
         }
     }
+
+    // The row's target kiosk, for its Identify displays button.
+    private ClientConnectedDTO? RowClient(int index)
+    {
+        return Guid.TryParse(_actionRows[index].TargetClientIdString, out Guid id) ? _clients.FirstOrDefault(c => c.Id == id) : null;
+    }
+
+    private Guid? RowClientId(int index) => RowClient(index)?.Id;
 
     private async Task LoadScreensForRowAsync(int index)
     {

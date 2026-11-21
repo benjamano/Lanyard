@@ -33,4 +33,9 @@ public interface IClientDiagnosticsStore
     bool TryBeginSelfTest(Guid clientId, out string? reason);
 
     void EndSelfTest(Guid clientId);
+
+    /// <summary>The same guard for "Identify displays", with a short cooldown so a double click doesn't send two.</summary>
+    bool TryBeginIdentify(Guid clientId, out string? reason);
+
+    void EndIdentify(Guid clientId);
 }

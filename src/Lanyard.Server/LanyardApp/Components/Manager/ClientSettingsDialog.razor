@@ -64,7 +64,7 @@
                 <ClientHealthDetails ClientId="@ClientId" />
             </FluentTab>
             <FluentTab Header="Projection" IconStart="@(new Icons.Regular.Size16.ProjectionScreenText())" DeferredLoading="true">
-                <ClientProjectionCapabilities ClientId="@ClientId" />
+                <ClientProjectionCapabilities ClientId="@ClientId" ClientName="@_clientName" />
             </FluentTab>
             <FluentTab Header="Offline" IconStart="@(new Icons.Regular.Size16.CloudOff())" DeferredLoading="true">
                 <ClientOfflineFallback ClientId="@ClientId" />

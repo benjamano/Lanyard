@@ -1,8 +1,16 @@
-﻿@inject IClientService _clientService
+﻿@using Lanyard.Shared.Kiosk
+@inject IClientService _clientService
 @inject INotificationService _toastService
 
 @if (ClientId != null)
 {
+    <section class="client-projection-identify" aria-label="Identify this kiosk's screens">
+        <FluentText>
+            Not sure which screen is which? Identify displays shows each screen's number, name, resolution and program on the screen itself for a few seconds.
+        </FluentText>
+        <IdentifyDisplaysButton ClientId="@ClientId" ClientName="@ClientName" IsConnected="@IsConnected" ShowLabel="true" ShowResults="true" />
+    </section>
+
     <FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.Right" VerticalAlignment="@VerticalAlignment.Center" Margin="@Margin.Bottom2">
         <FluentButton IconStart="new Icons.Regular.Size20.Add()" OnClick="OpenAddProjectionDialog">Add Projection</FluentButton>
     </FluentStack>
@@ -11,7 +19,9 @@
         <div class="client-projection-grid-wrapper">
             <FluentDataGrid ShowHover="true" Items="@projectionSettings.OrderBy(x => x.DisplayIndex).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr 1fr" Style="width: 100%;"">
                 <ChildContent>
-                    <PropertyColumn Property="x => x.DisplayIndex" Title="Display" />
+                    <TemplateColumn Title="Screen">
+                        @DisplayIdentifyRules.ScreenTitle(context.DisplayIndex)
+                    </TemplateColumn>
                     <PropertyColumn Property="x => x.ProjectionProgram!.Name" Title="Program Name" />
                     <PropertyColumn Property="x => x.IsFullScreen" Title="Is Full Screen" />
                     <PropertyColumn Property="x => x.IsBorderless" Title="Is Borderless" />
@@ -39,6 +49,12 @@
 
     [Parameter]
     public EventCallback UpdateClientCapabilities { get; set; }
+
+    [Parameter]
+    public string? ClientName { get; set; }
+
+    [Parameter]
+    public bool IsConnected { get; set; } = true;
 
     private IEnumerable<ClientProjectionSettings> projectionSettings = Array.Empty<ClientProjectionSettings>();
 
