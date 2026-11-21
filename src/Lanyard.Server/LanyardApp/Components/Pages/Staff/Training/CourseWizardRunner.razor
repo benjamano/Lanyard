@@ -10,7 +10,7 @@
             {
                 <FluentWizardStep Label="@courseSection.Title">
                     <div class="take-course-section-body ql-editor">
-                        @((MarkupString)courseSection.BodyHtml)
+                        @((MarkupString)SafeBody(courseSection))
                     </div>
                 </FluentWizardStep>
             }
@@ -137,6 +137,21 @@
                    PassMarkPercent="Course.PassMarkPercent" OnFinished="HandleWalkthroughFinishedAsync" />
 
 @code {
+    // Sections are cleaned when they're saved; this also covers ones saved before that, and is
+    // cached per section so stepping through the wizard doesn't re-sanitise on every render.
+    private readonly Dictionary<(Guid Id, string Html), string> safeBodies = [];
+
+    private string SafeBody(CourseSection section)
+    {
+        if (!safeBodies.TryGetValue((section.Id, section.BodyHtml), out string? safe))
+        {
+            safe = Lanyard.Application.Services.Training.CourseHtml.Clean(section.BodyHtml);
+            safeBodies[(section.Id, section.BodyHtml)] = safe;
+        }
+
+        return safe;
+    }
+
     [Parameter, EditorRequired]
     public Course Course { get; set; } = null!;
 
@@ -204,6 +219,7 @@
     private bool scrollGateAttached;
     private readonly HashSet<int> readSections = [];
     private DotNetObjectReference<CourseWizardRunner>? _scrollGateRef;
+    private IJSObjectReference? _scrollGateModule;
     private int lastTrackedStepIndexForTiming = -1;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -241,15 +257,16 @@
         {
             scrollGateAttached = true;
             _scrollGateRef = DotNetObjectReference.Create(this);
-            await JS.InvokeVoidAsync("trainingScrollGate.attach", wizardHostRef, _scrollGateRef, currentWizardStepIndex);
+            _scrollGateModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/trainingScrollGate.js");
+            await _scrollGateModule.InvokeVoidAsync("trainingScrollGate.attach", wizardHostRef, _scrollGateRef, currentWizardStepIndex);
             lastCheckedStepIndex = currentWizardStepIndex;
             return;
         }
 
-        if (scrollGateAttached && currentWizardStepIndex != lastCheckedStepIndex)
+        if (scrollGateAttached && _scrollGateModule is not null && currentWizardStepIndex != lastCheckedStepIndex)
         {
             lastCheckedStepIndex = currentWizardStepIndex;
-            await JS.InvokeVoidAsync("trainingScrollGate.resetForStep", currentWizardStepIndex);
+            await _scrollGateModule.InvokeVoidAsync("trainingScrollGate.resetForStep", currentWizardStepIndex);
         }
     }
 
@@ -290,11 +307,12 @@
         catch (Microsoft.JSInterop.JSDisconnectedException) { }
         catch (InvalidOperationException) { }
 
-        if (EnableScrollGate)
+        if (_scrollGateModule is not null)
         {
             try
             {
-                await JS.InvokeVoidAsync("trainingScrollGate.dispose");
+                await _scrollGateModule.InvokeVoidAsync("trainingScrollGate.dispose");
+                await _scrollGateModule.DisposeAsync();
             }
             catch (Microsoft.JSInterop.JSDisconnectedException) { }
             catch (InvalidOperationException) { }

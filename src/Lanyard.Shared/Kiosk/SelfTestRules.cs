@@ -61,9 +61,12 @@ public static class SelfTestRules
         string? ActiveDeviceName,
         DateTime? CaptureStartedUtc,
         DateTime? LastPacketUtc,
-        DateTime? LastGamePacketUtc);
+        DateTime? LastGamePacketUtc,
+        bool CaptureFiltered = false);
 
     public sealed record ProjectionWindow(int DisplayIndex, bool IsLoaded, bool IsOffline);
+
+    public sealed record DisplayFacts(int Index, string DeviceName, int Width, int Height, bool IsPrimary);
 
     public sealed record WebView2Facts(
         string? RuntimeVersion,
@@ -305,7 +308,16 @@ public static class SelfTestRules
         // Too soon after starting to judge, e.g. the kiosk has just reconnected.
         bool justStarted = facts.CaptureStartedUtc != null && nowUtc - facts.CaptureStartedUtc.Value < TrafficWindow;
 
-        if (facts.LastPacketUtc == null || nowUtc - facts.LastPacketUtc.Value >= TrafficWindow)
+        if (facts.CaptureFiltered && (facts.LastGamePacketUtc == null || nowUtc - facts.LastGamePacketUtc.Value >= TrafficWindow))
+        {
+            // The capture filter drops everything but game messages, so silence between games
+            // says nothing about the cable or the network.
+            checks.Add(justStarted
+                ? Check(SelfTestCheckKeys.CaptureTraffic, SelfTestOutcome.Skipped, null, "Capture only just started. Run the test again in a minute.")
+                : Check(SelfTestCheckKeys.CaptureTraffic, SelfTestOutcome.Warn, SelfTestCodes.NoGamePackets,
+                    $"The capture filter is on, so only game messages are read, and none arrived in the last minute.{LastSeen(facts.LastGamePacketUtc, nowUtc)}"));
+        }
+        else if (facts.LastPacketUtc == null || nowUtc - facts.LastPacketUtc.Value >= TrafficWindow)
         {
             checks.Add(justStarted
                 ? Check(SelfTestCheckKeys.CaptureTraffic, SelfTestOutcome.Skipped, null, "Capture only just started. Run the test again in a minute.")
@@ -370,6 +382,25 @@ public static class SelfTestRules
         }
 
         return checks;
+    }
+
+    /// <summary>
+    /// Lists the screens Windows reports, numbered the way the kiosk numbers them, so the result
+    /// shows which screen is which without anyone standing at the kiosk.
+    /// </summary>
+    public static List<KioskSelfTestCheckDTO> EvaluateDisplays(IReadOnlyList<DisplayFacts> displays)
+    {
+        if (displays.Count == 0)
+        {
+            return [Check(SelfTestCheckKeys.DisplaysList, SelfTestOutcome.Fail, SelfTestCodes.NoDisplays, "Windows doesn't report any screens.")];
+        }
+
+        string list = string.Join("; ", displays
+            .OrderBy(x => x.Index)
+            .Select(x => $"{DisplayIdentifyRules.ScreenTitle(x.Index)}: {DisplayIdentifyRules.Describe(x.DeviceName, x.Width, x.Height, x.IsPrimary)}"));
+
+        return [Check(SelfTestCheckKeys.DisplaysList, SelfTestOutcome.Pass, null,
+            $"{displays.Count} {(displays.Count == 1 ? "screen" : "screens")}. {list}.")];
     }
 
     /// <summary>A check for a whole group that threw or overran, so one bad device can't lose the others.</summary>

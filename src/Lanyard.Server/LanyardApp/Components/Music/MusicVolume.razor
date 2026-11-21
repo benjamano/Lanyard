@@ -1,0 +1,114 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject IMusicPlayerService _player
+
+<div class="music-volume" @ref="_root">
+    <button type="button" class="music-icon-button" @onclick="ToggleMuteAsync" disabled="@Disabled"
+            aria-label="@(Volume == 0 ? "Unmute" : "Mute")" title="@(Volume == 0 ? "Unmute" : "Mute")">
+        <FluentIcon Value="@VolumeIcon" Color="Color.Default" />
+    </button>
+    <input type="range" class="music-volume-range" min="0" max="100" step="1" value="@_initialVolume"
+           aria-label="Volume" disabled="@Disabled" />
+    <span class="music-volume-label" data-music-volume-label aria-hidden="true">@_initialVolume%</span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid ClientId { get; set; }
+    [Parameter] public int Volume { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+
+    private const int UnmuteVolume = 25;
+
+    private ElementReference _root;
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<MusicVolume>? _ref;
+    private int _initialVolume;
+    private int? _sentVolume;
+    private int _volumeBeforeMute = UnmuteVolume;
+
+    private Icon VolumeIcon => Volume switch
+    {
+        0 => new Icons.Regular.Size20.SpeakerMute(),
+        <= 20 => new Icons.Regular.Size20.Speaker0(),
+        <= 70 => new Icons.Regular.Size20.Speaker1(),
+        _ => new Icons.Regular.Size20.Speaker2()
+    };
+
+    protected override void OnInitialized()
+    {
+        _initialVolume = Volume;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Volume > 0)
+        {
+            _volumeBeforeMute = Volume;
+        }
+
+        if (_module is not null && _sentVolume != Volume)
+        {
+            _sentVolume = Volume;
+            try
+            {
+                await _module.InvokeVoidAsync("setVolume", _root, Volume);
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/musicPlayer.js");
+            _ref = DotNetObjectReference.Create(this);
+            await _module.InvokeVoidAsync("initVolume", _root, _ref);
+            _sentVolume = Volume;
+            await _module.InvokeVoidAsync("setVolume", _root, Volume);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    [JSInvokable]
+    public async Task CommitVolume(int volume)
+    {
+        _sentVolume = volume;
+        Result<bool> result = await _player.SetVolume(ClientId, volume);
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowWarning(result.Error ?? "Couldn't change the volume.");
+        }
+    }
+
+    private async Task ToggleMuteAsync()
+    {
+        int target = Volume == 0 ? Math.Max(_volumeBeforeMute, 5) : 0;
+        await CommitVolume(target);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+
+        _ref?.Dispose();
+    }
+}

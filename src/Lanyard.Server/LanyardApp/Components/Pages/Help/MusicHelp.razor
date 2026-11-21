@@ -1,8 +1,10 @@
 @page "/help/music"
-@attribute [Authorize(Roles = "Admin,Manager,CanControlMusic,CanPlayAudioClips")]
+@attribute [Authorize(Roles = "Admin,Manager,CanControlMusic,CanManagePlaylists,CanPlayAudioClips")]
 
 @using Microsoft.AspNetCore.Authorization
 @using Lanyard.App.Components.Help.Music
+
+@inject ICompanyFeatureService _companyFeatures
 
 <HelpPage AreaKey="@HelpRegistry.Music">
     <FluentTab Id="help-player" Header="Music" IconStart="@(new Icons.Regular.Size16.MusicNote2())">
@@ -11,7 +13,21 @@
     <FluentTab Id="help-schedule" Header="Music Schedule" IconStart="@(new Icons.Regular.Size16.CalendarClock())" DeferredLoading="true">
         <MusicScheduleHelpTab />
     </FluentTab>
-    <FluentTab Id="help-clips" Header="Audio Clips" IconStart="@(new Icons.Regular.Size16.Speaker2())" DeferredLoading="true">
-        <AudioClipsHelpTab />
-    </FluentTab>
+    @if (_audioClipsEnabled)
+    {
+        <FluentTab Id="help-clips" Header="Audio Clips" IconStart="@(new Icons.Regular.Size16.Speaker2())" DeferredLoading="true">
+            <AudioClipsHelpTab />
+        </FluentTab>
+    }
 </HelpPage>
+
+@code {
+    // Music help is for everyone with music access; only the clips tab depends on the company
+    // having audio clips switched on.
+    private bool _audioClipsEnabled;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _audioClipsEnabled = await _companyFeatures.IsEnabledForCurrentUserAsync(CompanyFeature.AudioClips);
+    }
+}

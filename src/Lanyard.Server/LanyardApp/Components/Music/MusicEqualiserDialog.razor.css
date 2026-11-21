@@ -1,0 +1,20 @@
+.eq-dialog-kiosk {
+    margin: 0 0 1rem;
+    color: var(--colorNeutralForeground3);
+    overflow-wrap: anywhere;
+}
+
+.eq-dialog-message {
+    margin-bottom: 1rem;
+}
+
+.eq-dialog-status {
+    min-height: 1.25rem;
+    margin-top: 0.75rem;
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}
+
+.eq-dialog-status .is-error {
+    color: var(--colorPaletteRedForeground1);
+}

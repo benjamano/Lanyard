@@ -55,6 +55,11 @@ public record RotaRangeView(
 
     public IReadOnlyList<TrainingGap> TrainingGapsFor(Shift shift) =>
         TrainingGapsByShift.TryGetValue(shift.Id, out List<TrainingGap>? gaps) ? gaps : [];
+
+    // The location's school holidays, bank holidays and closed days touching the range.
+    public List<RotaHoliday> Holidays { get; init; } = [];
+
+    public RotaHolidayDay HolidayOn(DateOnly day) => RotaHolidayRules.For(Holidays, day);
 }
 
 public record ShiftSaveResult(Shift Shift, List<string> Warnings);

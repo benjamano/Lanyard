@@ -76,6 +76,7 @@
     private bool needsPlacement;
     private ElementReference spotlightRef;
     private ElementReference calloutRef;
+    private IJSObjectReference? _module;
 
     public void Start()
     {
@@ -160,7 +161,10 @@
 
         try
         {
-            await JS.InvokeVoidAsync("courseWalkthrough.hide");
+            if (_module is not null)
+            {
+                await _module.InvokeVoidAsync("courseWalkthrough.hide");
+            }
         }
         catch (JSDisconnectedException) { }
 
@@ -175,14 +179,21 @@
         }
 
         needsPlacement = false;
-        await JS.InvokeVoidAsync("courseWalkthrough.show", spotlightRef, calloutRef, steps[currentIndex].Selector);
+        _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/courseWalkthrough.js");
+        await _module.InvokeVoidAsync("courseWalkthrough.show", spotlightRef, calloutRef, steps[currentIndex].Selector);
     }
 
     public async ValueTask DisposeAsync()
     {
+        if (_module is null)
+        {
+            return;
+        }
+
         try
         {
-            await JS.InvokeVoidAsync("courseWalkthrough.hide");
+            await _module.InvokeVoidAsync("courseWalkthrough.hide");
+            await _module.DisposeAsync();
         }
         catch (JSDisconnectedException) { }
         catch (InvalidOperationException) { }

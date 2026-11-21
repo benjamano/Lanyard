@@ -1,57 +1,61 @@
-@using System.ComponentModel.DataAnnotations
+@using Lanyard.Application.Services
 
 <FluentDialogBody>
     <TitleTemplate>
         <FluentStack VerticalAlignment="VerticalAlignment.Center">
             <FluentIcon Value="new Icons.Regular.Size24.WindowApps()" Margin="@Margin.End2"/>
-            <FluentText Size="@TextSize.Size500">Create new DMX scene</FluentText>
+            <FluentText Size="@TextSize.Size500">New DMX scene</FluentText>
         </FluentStack>
     </TitleTemplate>
     <ChildContent>
-        <EditForm EditContext="@_editContext">
-            <DataAnnotationsValidator />
+        @* A plain form so Enter saves. The name is checked as you type, but no error shows until
+           you've typed something or tried to save. *@
+        <form @onsubmit="SaveAsync" @onsubmit:preventDefault="true">
             <FluentTextInput Label="Scene name"
-                             Value="@Content.SceneName"
-                             ValueChanged="@(value => Content.SceneName = value)"
+                             Value="@sceneName"
+                             ValueChanged="@OnNameChanged"
+                             Immediate="true"
+                             Maxlength="@DmxSceneService.MaxSceneNameLength"
+                             Placeholder="e.g. Party chase"
                              Style="width: 100%;" />
-            <FluentValidationSummary />
-        </EditForm>
+            @if (showError && Error != null)
+            {
+                <FluentText Size="TextSize.Size200" Style="color: var(--colorStatusDangerForeground1);">@Error</FluentText>
+            }
+            <button type="submit" hidden></button>
+        </form>
     </ChildContent>
     <ActionTemplate>
-        <FluentButton Appearance="ButtonAppearance.Primary"
-                      Disabled="@(!_editContext.Validate())"
-                      OnClick="@SaveAsync">
-            Save
-        </FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@(Error != null)" OnClick="@SaveAsync">Create</FluentButton>
         <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
     </ActionTemplate>
 </FluentDialogBody>
 
 @code
 {
-    private EditContext _editContext = default!;
-
     [CascadingParameter]
     public required IDialogInstance Dialog { get; set; }
 
-    public CreateNewDmxSceneDialogModel Content { get; set; } = new();
+    private string sceneName = string.Empty;
+    private bool showError;
 
-    public class CreateNewDmxSceneDialogModel
-    {
-        [Required(ErrorMessage = "Scene name is required.")]
-        public string SceneName { get; set; } = string.Empty;
-    }
+    private string? Error => string.IsNullOrWhiteSpace(sceneName) ? "Give the scene a name."
+        : sceneName.Trim().Length > DmxSceneService.MaxSceneNameLength ? $"Keep it to {DmxSceneService.MaxSceneNameLength} characters."
+        : null;
 
-    protected override void OnInitialized()
+    private void OnNameChanged(string? value)
     {
-        _editContext = new EditContext(Content);
+        sceneName = value ?? string.Empty;
+        showError = true;
     }
 
     private async Task SaveAsync()
     {
-        if (_editContext.Validate())
+        showError = true;
+
+        if (Error == null)
         {
-            await Dialog.CloseAsync(Content.SceneName);
+            await Dialog.CloseAsync(sceneName.Trim());
         }
     }
 

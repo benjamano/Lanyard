@@ -1792,6 +1792,72 @@ public class DashboardServiceTests
     }
 
     [TestMethod]
+    public async Task DashboardService_SaveDashboard_PersistsAndUpdatesWhatsOnTodayWidget()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        // Id = Guid.Empty forces CreateWidgetCopy, whose default arm fails the whole save.
+        WhatsOnTodayWidget whatsOn = new() { Id = Guid.Empty, MaxItems = 4, LocationId = 2, IsActive = true };
+        dashboard.Widgets = [whatsOn];
+        Assert.IsTrue((await service.SaveDashboardAsync(dashboard)).Success);
+
+        await using (ApplicationDbContext read = new(options))
+        {
+            WhatsOnTodayWidget created = await read.DashboardWidgets.OfType<WhatsOnTodayWidget>().SingleAsync();
+            Assert.AreEqual(WidgetType.WhatsOnToday, created.Type);
+            Assert.AreEqual(4, created.MaxItems);
+            Assert.AreEqual(2, created.LocationId);
+            whatsOn.Id = created.Id;
+        }
+
+        whatsOn.MaxItems = 10;
+        whatsOn.LocationId = null;
+        Result<bool> result = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        WhatsOnTodayWidget saved = await ctx.DashboardWidgets.OfType<WhatsOnTodayWidget>().SingleAsync();
+        Assert.AreEqual(10, saved.MaxItems);
+        Assert.IsNull(saved.LocationId);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveWidget_UpdatesWhatsOnTodaySettings()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        WhatsOnTodayWidget whatsOn = new() { Id = Guid.NewGuid(), DashboardId = dashboard.Id, IsActive = true };
+
+        await using (ApplicationDbContext seed = new(options))
+        {
+            seed.DashboardWidgets.Add(whatsOn);
+            await seed.SaveChangesAsync();
+        }
+
+        Assert.IsTrue((await service.SaveWidgetAsync(new WhatsOnTodayWidget { Id = whatsOn.Id, DashboardId = dashboard.Id, MaxItems = 3, LocationId = 7, IsActive = true })).Success);
+
+        await using ApplicationDbContext ctx = new(options);
+        WhatsOnTodayWidget saved = await ctx.DashboardWidgets.OfType<WhatsOnTodayWidget>().SingleAsync();
+        Assert.AreEqual(3, saved.MaxItems);
+        Assert.AreEqual(7, saved.LocationId);
+    }
+
+    [TestMethod]
+    public void WhatsOnTodayWidget_DefaultsToSixEntriesAtTheSignedInLocation()
+    {
+        WhatsOnTodayWidget widget = new();
+
+        Assert.AreEqual(WidgetType.WhatsOnToday, widget.Type);
+        Assert.AreEqual(6, widget.MaxItems);
+        Assert.IsNull(widget.LocationId);
+    }
+
+    [TestMethod]
     public void DemandStaffingWidget_DefaultsToFourWeeksAtTheSignedInLocation()
     {
         DemandStaffingWidget widget = new();

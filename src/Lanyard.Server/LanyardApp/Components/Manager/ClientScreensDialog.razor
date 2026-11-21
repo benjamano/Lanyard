@@ -1,3 +1,4 @@
+@using Lanyard.Shared.Kiosk
 @using System.Globalization
 
 @inject IClientDiagnosticsService _clientDiagnosticsService
@@ -16,6 +17,7 @@
                               OnClick="CaptureAsync">
                     @(_capture == null ? "Capture screens" : "Capture again")
                 </FluentButton>
+                <IdentifyDisplaysButton ClientId="@ClientId" ClientName="@ClientName" ShowLabel="true" />
                 @if (_expanded != null)
                 {
                     <FluentButton Appearance="ButtonAppearance.Outline"
@@ -180,10 +182,11 @@
         await Dialog.CloseAsync();
     }
 
-    // Numbered from 1 to match how Windows names displays; the kiosk sends -1 when it can't tell.
+    // "Screen N", numbered as the Identify displays overlay and the display pickers number them;
+    // the kiosk sends -1 when it can't tell.
     private static string DisplayLabel(ClientScreenSnapshot screen)
     {
-        return screen.DisplayIndex >= 0 ? $"Display {screen.DisplayIndex + 1}" : "Display";
+        return screen.DisplayIndex >= 0 ? DisplayIdentifyRules.ScreenTitle(screen.DisplayIndex) : "Screen";
     }
 
     private static string ScreenCountLabel(int count)

@@ -1,0 +1,205 @@
+@using Lanyard.Infrastructure.Models.Dmx
+
+@* One light: what it looks like now, and the controls people actually want - brightness, colour,
+   position - turned into channel writes by DmxFixtureControls. Raw faders are one tap away. *@
+<article class="dmx-card @(isStrobing ? "dmx-card--strobe" : null)" aria-label="@Fixture.Name">
+    <header class="dmx-card-head">
+        <span class="dmx-card-swatch" style="background: @swatch;" aria-hidden="true"></span>
+        <span class="dmx-card-title">
+            <span class="dmx-card-name">@Fixture.Name</span>
+            <span class="dmx-card-meta">@Summary</span>
+        </span>
+        @if (isStrobing)
+        {
+            <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Warning">Strobe</FluentBadge>
+        }
+    </header>
+
+    @if (intensity is byte level)
+    {
+        <label class="dmx-card-row">
+            <span class="dmx-card-label">Brightness</span>
+            <input type="range" min="0" max="255" value="@level" disabled="@ReadOnly"
+                   aria-label="@($"{Fixture.Name} brightness")" @oninput="OnIntensity" />
+            <span class="dmx-card-number">@Percent(level)</span>
+        </label>
+    }
+
+    @if (hasColour)
+    {
+        <div class="dmx-card-row">
+            <span class="dmx-card-label">Colour</span>
+            <input type="color" class="dmx-card-colour" value="@colourHex" disabled="@ReadOnly"
+                   aria-label="@($"{Fixture.Name} colour")" @onchange="OnColour" />
+            <div class="dmx-card-presets">
+                @foreach ((string name, string hex) in Presets)
+                {
+                    <button type="button" class="dmx-card-preset" style="background: @hex;" title="@name" aria-label="@($"{Fixture.Name}: {name}")"
+                            disabled="@ReadOnly" @onclick="() => SetColour(hex)"></button>
+                }
+            </div>
+        </div>
+    }
+
+    @if (panAddress is int pan)
+    {
+        <label class="dmx-card-row">
+            <span class="dmx-card-label">Pan</span>
+            <input type="range" min="0" max="255" value="@Values[pan]" disabled="@ReadOnly"
+                   aria-label="@($"{Fixture.Name} pan")" @oninput="e => OnRaw(pan, e)" />
+            <span class="dmx-card-number">@Percent(Values[pan])</span>
+        </label>
+    }
+
+    @if (tiltAddress is int tilt)
+    {
+        <label class="dmx-card-row">
+            <span class="dmx-card-label">Tilt</span>
+            <input type="range" min="0" max="255" value="@Values[tilt]" disabled="@ReadOnly"
+                   aria-label="@($"{Fixture.Name} tilt")" @oninput="e => OnRaw(tilt, e)" />
+            <span class="dmx-card-number">@Percent(Values[tilt])</span>
+        </label>
+    }
+
+    <footer class="dmx-card-actions">
+        @if (intensity != null)
+        {
+            <FluentButton Appearance="ButtonAppearance.Outline" Size="ButtonSize.Small" Disabled="@ReadOnly" OnClick="() => SetIntensity(0)">Off</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline" Size="ButtonSize.Small" Disabled="@ReadOnly" OnClick="FullAsync">Full</FluentButton>
+        }
+        <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small"
+                      IconEnd="@(showChannels ? new Icons.Regular.Size16.ChevronUp() : new Icons.Regular.Size16.ChevronDown())"
+                      OnClick="() => showChannels = !showChannels"
+                      aria-expanded="@(showChannels ? "true" : "false")">
+            Channels
+        </FluentButton>
+    </footer>
+
+    @if (showChannels)
+    {
+        <div class="dmx-card-faders">
+            @foreach (int address in DmxFixtureControls.Addresses(Fixture))
+            {
+                <DmxFader @key="address" Address="@address" Value="@Values[address]" Disabled="@ReadOnly"
+                          Patches="@PatchesFor(address)" OnChange="OnFaderChanged" />
+            }
+        </div>
+    }
+</article>
+
+@code {
+    [Parameter, EditorRequired]
+    public required DmxFixture Fixture { get; set; }
+
+    // Index = address; the desk's buffer, or the scene preview's.
+    [Parameter, EditorRequired]
+    public required byte[] Values { get; set; }
+
+    [Parameter, EditorRequired]
+    public required DmxUniverseView ValuesView { get; set; }
+
+    [Parameter]
+    public bool ReadOnly { get; set; }
+
+    [Parameter]
+    public Func<int, IReadOnlyList<DmxChannelPatch>> PatchesFor { get; set; } = _ => [];
+
+    [Parameter]
+    public EventCallback<IReadOnlyList<DmxChannel>> OnWrite { get; set; }
+
+    [Parameter]
+    public int Version { get; set; }
+
+    private static readonly (string Name, string Hex)[] Presets =
+    [
+        ("Red", "#ff0000"), ("Amber", "#ff8000"), ("Yellow", "#ffff00"), ("Green", "#00ff00"),
+        ("Cyan", "#00ffff"), ("Blue", "#0000ff"), ("Magenta", "#ff00ff"), ("White", "#ffffff")
+    ];
+
+    private bool showChannels;
+
+    private string swatch = "rgb(0,0,0)";
+    private bool isStrobing;
+    private byte? intensity;
+    private bool hasColour;
+    private string colourHex = "#000000";
+    private int? panAddress;
+    private int? tiltAddress;
+
+    private string Summary
+    {
+        get
+        {
+            List<int> addresses = DmxFixtureControls.Addresses(Fixture).ToList();
+            string range = addresses.Count == 0 ? "-" : addresses.Count == 1 ? $"Ch {addresses[0]}" : $"Ch {addresses[0]}-{addresses[^1]}";
+            DmxFixtureDefinition? definition = Fixture.FixtureMode?.Definition;
+
+            return definition == null ? range
+                : definition.Source == DmxFixtureDefinitionSource.BuiltIn ? $"{range} · {definition.Model}"
+                : $"{range} · {definition.Manufacturer} {definition.Model}";
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        DmxFixtureColorMapper.FixtureColor color = DmxFixtureColorMapper.GetColor(Fixture, ValuesView);
+        double scale = color.Brightness / 255.0;
+        swatch = $"rgb({Math.Round(color.Red * scale)}, {Math.Round(color.Green * scale)}, {Math.Round(color.Blue * scale)})";
+        isStrobing = DmxFixtureColorMapper.IsStrobing(Fixture, ValuesView);
+
+        intensity = DmxFixtureControls.GetIntensity(Fixture, ValuesView);
+        hasColour = DmxFixtureControls.HasColour(Fixture);
+        colourHex = DmxFixtureControls.ToHex(DmxFixtureControls.GetColour(Fixture, ValuesView));
+        panAddress = DmxFixtureControls.AddressOf(Fixture, DmxChannelRole.Pan);
+        tiltAddress = DmxFixtureControls.AddressOf(Fixture, DmxChannelRole.Tilt);
+    }
+
+    private static string Percent(byte value) => $"{Math.Round(value / 2.55)}%";
+
+    private Task OnIntensity(ChangeEventArgs e) =>
+        byte.TryParse(e.Value?.ToString(), out byte level) ? SetIntensity(level) : Task.CompletedTask;
+
+    private Task SetIntensity(byte level) => OnWrite.InvokeAsync(DmxFixtureControls.SetIntensity(Fixture, ValuesView, level));
+
+    // Full on a light with no colour set would stay dark; bring it up white instead.
+    private Task FullAsync()
+    {
+        List<DmxChannel> writes = DmxFixtureControls.SetIntensity(Fixture, ValuesView, 255);
+
+        if (hasColour && DmxFixtureControls.GetColour(Fixture, ValuesView) == (0, 0, 0)
+            && DmxFixtureControls.Has(Fixture, DmxChannelRole.Intensity))
+        {
+            writes.AddRange(DmxFixtureControls.SetColour(Fixture, 255, 255, 255));
+        }
+
+        return OnWrite.InvokeAsync(writes);
+    }
+
+    private Task OnColour(ChangeEventArgs e) => SetColour(e.Value?.ToString());
+
+    private Task SetColour(string? hex)
+    {
+        if (!DmxFixtureControls.TryParseHex(hex, out (byte R, byte G, byte B) colour))
+        {
+            return Task.CompletedTask;
+        }
+
+        List<DmxChannel> writes = DmxFixtureControls.SetColour(Fixture, colour.R, colour.G, colour.B);
+
+        // Picking a colour on a dark light should show it: bring a zero dimmer up to full.
+        if (DmxFixtureControls.AddressOf(Fixture, DmxChannelRole.Intensity) is int dimmer && Values[dimmer] == 0)
+        {
+            writes.Add(new DmxChannel { Address = dimmer, Value = 255 });
+        }
+
+        return OnWrite.InvokeAsync(writes);
+    }
+
+    private Task OnRaw(int address, ChangeEventArgs e) =>
+        byte.TryParse(e.Value?.ToString(), out byte value)
+            ? OnWrite.InvokeAsync([new DmxChannel { Address = address, Value = value }])
+            : Task.CompletedTask;
+
+    private Task OnFaderChanged(DmxFaderChange change) =>
+        OnWrite.InvokeAsync([new DmxChannel { Address = change.Address, Value = change.Value }]);
+}

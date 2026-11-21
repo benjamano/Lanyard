@@ -1,0 +1,78 @@
+.holiday-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+}
+
+.holiday-dialog-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.holiday-dialog-pair ::deep fluent-datepicker,
+.holiday-dialog-pair ::deep .fluent-datepicker {
+    width: 100%;
+}
+
+.holiday-dialog-hint {
+    margin-top: -6px;
+    font-size: 0.8rem;
+    color: var(--colorNeutralForeground3);
+}
+
+.holiday-dialog-kinds {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+
+.holiday-dialog-kinds legend {
+    padding: 0;
+    margin-bottom: 6px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.holiday-kind {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.holiday-kind.is-selected {
+    border-color: var(--colorBrandStroke1);
+    background: var(--colorBrandBackground2);
+}
+
+.holiday-kind input {
+    margin-top: 3px;
+    accent-color: var(--colorBrandBackground);
+}
+
+.holiday-kind-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.holiday-kind-text span {
+    font-size: 0.85rem;
+    color: var(--colorNeutralForeground3);
+}
+
+@media (max-width: 480px) {
+    .holiday-dialog-pair {
+        grid-template-columns: 1fr;
+    }
+}

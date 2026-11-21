@@ -1,7 +1,7 @@
 # Data Retention & Erasure Policy
 
 > **Filled in from known operational details — still get a final legal/HR read before adopting.**
-> Last updated: 6 August 2026. Data controller / contact: Benjamin Mercer,
+> Last updated: 20 October 2026 (staff documents and erasure status: awaiting sign-off). Data controller / contact: Benjamin Mercer,
 > benmercer76@btinternet.com. Hosted on Railway (West Europe region); data does not leave the
 > UK/EU.
 
@@ -16,15 +16,28 @@
 | Kiosk hardware self-test results | `90 days` | Diagnosing venue hardware; links to the Admin who ran it |
 | Chat messages | `2 years` from sending (pinned posts: until unpinned) | Workplace messaging; data minimisation |
 | Chat reports | `2 years` after they were resolved | Evidence for disputes and repeat behaviour |
+| Operations alerts | `90 days` after they were resolved (unresolved alerts are kept until they resolve) | Showing managers what went wrong recently; some alerts name a staff member |
 
 ## Current implementation status
 
-The application currently uses **soft-delete only** (`DeleteDate` / `IsActive` flags); rows are
-never physically removed. This means:
+Most records are soft-deleted (`DeleteDate` / `IsActive` flags), and there is no general
+sweeper enforcing the retention periods above; the exceptions with their own purge job (chat,
+kiosk self-tests) are described below.
 
-- There is no automated enforcement of the retention periods above.
-- An erasure ("right to be forgotten") request cannot yet be fully satisfied in-app, because
-  soft-deleted rows and their personal data remain in the database.
+An erasure ("right to be forgotten") request **can** be satisfied in-app: an Admin erases a
+person from their user page, which runs `GdprService.EraseUserDataAsync`. It writes a
+`UserErasureRecord` audit row, scrubs the person's name from content they authored, deletes their
+own records, and deletes the account. Rota and timesheet records are kept and detached (see
+below).
+
+### Staff documents
+
+Staff documents are stored as restricted files: they never appear in the File Manager or reach a
+kiosk, and only Admins and the person's Managers can open them. Erasure deletes every one of the
+person's documents, including replaced (inactive) copies: the stored file is removed from the
+storage bucket, then its file and document rows. If a stored file can't be deleted, erasure stops
+with an error and can be retried; nothing is left half-erased. Documents the person uploaded for
+other people are kept, with the uploader shown as the deleted-user placeholder.
 
 ### Rota and timesheet records
 
@@ -161,20 +174,42 @@ ran the test, and **purged after 90 days** (`Kiosks:SelfTest:RetentionDays`). Th
 the kiosk, only visible to Admins of the kiosk's own company, and GDPR erasure clears the link to
 the Admin while keeping the result.
 
+### Operations alerts
+
+The Operations alerts page (`/manage/alerts`) keeps one `OperationsAlert` row per problem, raised by
+the system: a kiosk offline or needing attention, an automation rule failing, a missed clock-in,
+overdue training, or a staff document due for renewal or expired. The last three are about a named
+staff member.
+
+- Alerts never copy a staff member's name into their own text. An alert about a person points at
+  them (`SubjectUserId`) and the name is read through that link when the page shows it or a
+  notification is sent.
+- `OperationsAlertRetentionHostedService` deletes resolved alerts 90 days after they were resolved
+  (`OperationsAlerts:RetentionDays`, never less than the 90-day History tab). Alerts that are still
+  open or acknowledged are kept until they resolve.
+- A **GDPR erasure** deletes every alert about the person, and clears their name from the
+  "acknowledged by" and "resolved by" fields of alerts they handled. Those alerts stay as history.
+
+### Party bookings
+
+A party booking (`PartyBooking`) holds personal data about customers, not staff: the birthday
+child's name and age, and the booking parent's name, phone number and optional email address,
+plus free-text allergy and dietary notes. None of these people have a Lanyard account, so staff
+GDPR erasure doesn't touch them. Cancelling a party keeps the row (it can be reinstated); there is
+**no retention period or automatic deletion yet**. A period for customer party data still needs
+deciding, and a customer erasure request currently means deleting or blanking their bookings by
+hand. If a party's host leaves and their account is deleted, the party just loses its host.
+
 ## Required follow-up work (tracked separately)
 
-These are deliberately **not** implemented as part of the security-hardening change because they
-are destructive and need their own reviewed, tested change:
-
 1. **Retention sweeper** — a scheduled job that hard-deletes or anonymises records past their
-   retention period.
-2. **Erasure endpoint** — an admin action that hard-deletes or irreversibly anonymises a data
-   subject's personal data on a verified request (name, email, DOB → nulled/anonymised; logs
-   scrubbed of the subject's identifiers).
-3. **Subject Access Request (SAR) export** — an admin action that exports all personal data held
-   about a given staff member.
+   retention period (chat and kiosk self-tests already have one).
+2. **Subject Access Request (SAR) export** — there is no in-app export yet. Until there is, a SAR
+   is answered manually (below).
 
-## Handling a request today (manual process)
+## Handling a SAR today (manual process)
 
-Until the above is built, SAR / erasure requests must be handled manually by an administrator
-with database access.
+An administrator with database access gathers the person's records (account, attendance,
+staff documents and their files, training, time off, chat, feedback and notification settings)
+and sends them within one month of the request. Erasure no longer needs this: use the in-app
+erasure above.

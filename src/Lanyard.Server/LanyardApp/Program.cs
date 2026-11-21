@@ -5,6 +5,7 @@ using Lanyard.App;
 using Lanyard.App.Components;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.Feedback;
+using Lanyard.Application.Services.Themes;
 using Lanyard.Application.Services.Announcements;
 using Lanyard.Application.Services.AudioClips;
 using Lanyard.Application.Services.MusicScheduling;
@@ -21,6 +22,9 @@ using Lanyard.Application.Services.Compliance;
 using Lanyard.Application.Services.Insights;
 using Lanyard.Application.Services.Onboarding;
 using Lanyard.Application.Services.Notifications;
+using Lanyard.Application.Services.Parties;
+using Lanyard.Application.Services.WhatsOn;
+using Lanyard.Application.Services.BookingImport;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
@@ -54,6 +58,7 @@ using Microsoft.AspNetCore.Components.Server.Circuits;
 using Lanyard.Application.Services.Clients;
 using Lanyard.Application.Services.ClientReleases;
 using Lanyard.Application.Services.VideoStreaming;
+using Lanyard.Application.Services.OperationsAlerts;
 using Lanyard.App.Components.Layout;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
@@ -102,11 +107,15 @@ builder.Services.AddScoped<ISecurityService, SecurityService>();
 builder.Services.AddScoped<IGdprService, GdprService>();
 builder.Services.AddSingleton<IKioskCredentialService, KioskCredentialService>();
 builder.Services.AddSingleton<IKioskMediaTokenService, KioskMediaTokenService>();
+builder.Services.AddSingleton<ILoginAttemptThrottle, LoginAttemptThrottle>();
 builder.Services.AddScoped<IKioskEnrolmentService, KioskEnrolmentService>();
 builder.Services.AddScoped<IKioskSecurityService, KioskSecurityService>();
 builder.Services.AddSingleton<KioskConnectionRegistry>();
 builder.Services.AddScoped<ICurrentUserAccessor, CurrentUserAccessor>();
 builder.Services.AddScoped<IFileService, FileService>();
+builder.Services.AddScoped<IFileUsageService, FileUsageService>();
+builder.Services.AddScoped<IFileLibraryService, FileLibraryService>();
+builder.Services.AddSingleton<IFileLibraryEvents, FileLibraryEvents>();
 
 // One bucket client for the whole process. FileService is scoped and used to build its own
 // AmazonS3Client per instance - a new SDK client and HTTP pipeline for every request/circuit.
@@ -116,6 +125,7 @@ if (!builder.Environment.IsDevelopment())
 }
 builder.Services.AddScoped<ApplicationRolesService>();
 builder.Services.AddScoped<IPlaylistService, PlaylistService>();
+builder.Services.AddSingleton<IMusicLibraryEvents, MusicLibraryEvents>();
 builder.Services.AddScoped<IMusicScheduleService, MusicScheduleService>();
 // Singleton: it remembers what it last applied to each kiosk between ticks.
 builder.Services.AddSingleton<IMusicScheduleEngine, MusicScheduleEngine>();
@@ -133,7 +143,9 @@ builder.Services.AddScoped<IClientUpdatePolicyService, ClientUpdatePolicyService
 builder.Services.AddScoped<IClientReleaseAdminService, ClientReleaseAdminService>();
 builder.Services.AddScoped<IClientDiagnosticsService, ClientDiagnosticsService>();
 builder.Services.AddScoped<IKioskSelfTestService, KioskSelfTestService>();
+builder.Services.AddScoped<IDisplayIdentifyService, DisplayIdentifyService>();
 builder.Services.AddScoped<IKioskHealthService, KioskHealthService>();
+builder.Services.AddScoped<IKioskClientListService, KioskClientListService>();
 builder.Services.AddScoped<IKioskOfflineManifestService, KioskOfflineManifestService>();
 builder.Services.Configure<KioskHealthOptions>(builder.Configuration.GetSection(KioskHealthOptions.SectionName));
 builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>();
@@ -163,11 +175,46 @@ builder.Services.AddScoped<ISchedulingSettingsService, SchedulingSettingsService
 builder.Services.AddScoped<IRotaService, RotaService>();
 builder.Services.AddScoped<IShiftSuggestionService, ShiftSuggestionService>();
 builder.Services.AddScoped<IStaffAvailabilityService, StaffAvailabilityService>();
+builder.Services.AddScoped<IShiftTemplateService, ShiftTemplateService>();
+builder.Services.AddScoped<IRotaAutoBuildService, RotaAutoBuildService>();
+builder.Services.AddScoped<IRotaHolidayService, RotaHolidayService>();
+builder.Services.AddScoped<ITemplateLearningService, TemplateLearningService>();
+builder.Services.AddScoped<IPartyBookingService, PartyBookingService>();
+builder.Services.AddScoped<IPartySettingsService, PartySettingsService>();
+builder.Services.AddScoped<IPartyStaffingService, PartyStaffingService>();
+builder.Services.AddScoped<IPartyTemplateService, PartyTemplateService>();
+builder.Services.AddScoped<IPartyDocumentService, PartyDocumentService>();
+builder.Services.AddScoped<IWhatsOnSource, PartyWhatsOnSource>();
+builder.Services.AddScoped<IWhatsOnService, WhatsOnService>();
+
+// Just Step Online booking import. The client drives the login + report by hand, so its HTTP
+// handler keeps cookies and redirects off; the service and the two background jobs do the rest.
+builder.Services.AddHttpClient(JustStepClient.HttpClientName, client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(45);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("LanyardBookingImport/1.0");
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { UseCookies = false, AllowAutoRedirect = false });
+builder.Services.AddSingleton<IJustStepClient, JustStepClient>();
+builder.Services.AddScoped<IBookingImportService, BookingImportService>();
+builder.Services.Configure<BookingImportRetentionOptions>(builder.Configuration.GetSection(BookingImportRetentionOptions.SectionName));
+builder.Services.AddHostedService<JustStepImportHostedService>();
+builder.Services.AddHostedService<BookingImportRetentionHostedService>();
+
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ITerminalEphemeralTokenService, TerminalEphemeralTokenService>();
 builder.Services.AddSingleton<ITerminalEventBus, TerminalEventBus>();
 builder.Services.AddSingleton<ITimeOffEventBus, TimeOffEventBus>();
 builder.Services.AddSingleton<IShiftClaimEventBus, ShiftClaimEventBus>();
+builder.Services.AddSingleton<IKioskFleetEventBus, KioskFleetEventBus>();
+builder.Services.AddSingleton<IOperationsAlertEventBus, OperationsAlertEventBus>();
+builder.Services.AddSingleton<IOperationsAlertWriter, OperationsAlertWriter>();
+builder.Services.AddScoped<IOperationsAlertService, OperationsAlertService>();
+builder.Services.Configure<OperationsAlertOptions>(builder.Configuration.GetSection(OperationsAlertOptions.SectionName));
+builder.Services.AddHostedService<OperationsAlertRetentionHostedService>();
+builder.Services.AddHostedService<MissedClockInAlertHostedService>();
+builder.Services.AddHostedService<ComplianceAlertSweepHostedService>();
+builder.Services.AddSingleton<IKioskClientListCache, KioskClientListCache>();
 builder.Services.AddScoped<IShiftClaimService, ShiftClaimService>();
 builder.Services.AddSingleton<IChatEventBus, ChatEventBus>();
 builder.Services.AddSingleton<IChatPresence, ChatPresence>();
@@ -177,6 +224,7 @@ builder.Services.AddScoped<IChatModerationService, ChatModerationService>();
 builder.Services.AddScoped<IFeedbackService, FeedbackService>();
 builder.Services.AddHostedService<ChatDigestHostedService>();
 builder.Services.AddHostedService<ChatRetentionHostedService>();
+builder.Services.AddHostedService<TemplateSuggestionHostedService>();
 builder.Services.AddScoped<ChatUnreadTracker>();
 builder.Services.AddScoped<IClockInTerminalService, ClockInTerminalService>();
 builder.Services.AddScoped<ICalendarFeedService, CalendarFeedService>();
@@ -187,6 +235,8 @@ builder.Services.AddScoped<ITimeOffService, TimeOffService>();
 builder.Services.AddHostedService<CourseRecurrenceHostedService>();
 builder.Services.AddHostedService<TrainingDueSoonHostedService>();
 builder.Services.AddHostedService<StaffDocumentExpiryReminderHostedService>();
+builder.Services.AddHostedService<FileBinPurgeHostedService>();
+builder.Services.AddHostedService<FileThumbnailBackfillHostedService>();
 builder.Services.AddSingleton<NotificationDispatcher>();
 builder.Services.AddSingleton<INotificationDispatcher>(sp => sp.GetRequiredService<NotificationDispatcher>());
 builder.Services.AddScoped<INotificationDeliverer, NotificationDeliverer>();
@@ -200,6 +250,8 @@ builder.Services.AddHttpClient(WebPushSender.HttpClientName, client => client.Ti
 builder.Services.AddScoped<IPushSender, WebPushSender>();
 builder.Services.AddScoped<IPushSubscriptionService, PushSubscriptionService>();
 builder.Services.AddScoped<INotificationPreferenceService, NotificationPreferenceService>();
+builder.Services.AddScoped<ISeasonalThemeService, SeasonalThemeService>();
+builder.Services.AddScoped<SeasonalThemeState>();
 builder.Services.AddScoped<IAppInstallationService, AppInstallationService>();
 builder.Services.AddHostedService<PushDeviceCleanupHostedService>();
 builder.Services.AddHostedService<NotificationDeliveryHostedService>();
@@ -210,6 +262,7 @@ builder.Services.AddScoped<ITimeService, TimeService>();
 builder.Services.AddScoped<IDmxSceneService, DmxSceneService>();
 builder.Services.AddScoped<IDmxFixtureService, DmxFixtureService>();
 builder.Services.AddScoped<IDmxFixtureDefinitionService, DmxFixtureDefinitionService>();
+builder.Services.AddScoped<IDmxDeskService, DmxDeskService>();
 // The Open Fixture Library snapshot is read-only and the same for everyone: load and index it once.
 builder.Services.AddSingleton<IOflFixtureParser, OflFixtureParser>();
 builder.Services.AddSingleton<IOflCatalogueService, OflCatalogueService>();
@@ -221,9 +274,8 @@ builder.Services.AddSingleton<SignalRProjectionControlHubEvents>();
 builder.Services.AddSingleton<IVideoStreamTokenService, VideoStreamTokenService>();
 builder.Services.AddSingleton<IVideoStreamSignalingService, VideoStreamSignalingService>();
 builder.Services.Configure<VideoStreamingOptions>(builder.Configuration.GetSection("VideoStreaming"));
-builder.Services.AddSingleton<MusicPlayerService>();
-// Same instance either way - playback state lives in the singleton, so the interface must not get its own.
-builder.Services.AddSingleton<IMusicPlayerService>(sp => sp.GetRequiredService<MusicPlayerService>());
+// Playback state lives in this singleton; everything takes it through the interface.
+builder.Services.AddSingleton<IMusicPlayerService, MusicPlayerService>();
 builder.Services.AddScoped<ISongAnalysisService, SongAnalysisService>();
 builder.Services.AddSingleton<ISongAnalysisQueue, SongAnalysisQueue>();
 builder.Services.AddSingleton<IBeatClockService, BeatClockService>();
@@ -232,6 +284,7 @@ builder.Services.AddSingleton<DmxService>();
 builder.Services.AddSingleton<IDmxService>(sp => sp.GetRequiredService<DmxService>());
 builder.Services.AddSingleton<IDmxClientService>(sp => sp.GetRequiredService<DmxService>());
 builder.Services.AddSingleton<IDmxSceneRunnerService, DmxSceneRunnerService>();
+builder.Services.AddHostedService<DmxOutputStatePersister>();
 
 // Data sources a projection parameter can be bound to. Every key in ProjectionBindingCatalogue needs
 // one here, or that binding silently shows its fallback forever (a test checks the two match).
@@ -243,7 +296,11 @@ builder.Services.AddSingleton<IProjectionBindingResolver, ProjectionBindingResol
 builder.Services.AddSingleton<IProjectionProgramRunnerService, ProjectionProgramRunnerService>();
 builder.Services.AddHostedService<ProjectionProgramCompletionListener>();
 
+builder.Services.AddSingleton<IPartyScheduleProvider, PartyScheduleProvider>();
 builder.Services.AddSingleton<AutomationEngineService>();
+// One instance under both types: the hosted services drain its channels through the concrete type,
+// everything else uses the interface.
+builder.Services.AddSingleton<IAutomationEngineService>(sp => sp.GetRequiredService<AutomationEngineService>());
 builder.Services.AddSingleton<IActionExecutor, MusicControlActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, StartProjectionProgramActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, StopProjectionProgramActionExecutor>();
@@ -260,6 +317,7 @@ builder.Services.Configure<KioskSelfTestOptions>(builder.Configuration.GetSectio
 builder.Services.AddHostedService<KioskSelfTestRetentionHostedService>();
 builder.Services.AddHostedService<IdleTriggerHostedService>();
 builder.Services.AddHostedService<ScheduledTriggerHostedService>();
+builder.Services.AddHostedService<PartyTriggerHostedService>();
 builder.Services.AddHostedService<KioskAlertMonitorHostedService>();
 
 builder.Services.AddScoped<IClientZoneScoreboardService, ClientZoneScoreboardService>();
@@ -593,8 +651,10 @@ app.Use(async (context, next) =>
 
     context.Response.Headers["Content-Security-Policy"] =
         "default-src 'self'; " +
-        "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; " +
-        "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; " +
+        // Every script and stylesheet is served from Lanyard itself; third-party libraries are
+        // vendored under wwwroot/lib (see its README) rather than loaded from a CDN.
+        "script-src 'self' 'unsafe-inline'; " +
+        "style-src 'self' 'unsafe-inline'; " +
         "font-src 'self' data:; " +
         // blob: for the demo's "try your own branding" logo, which never leaves the visitor's browser.
         "img-src 'self' data: blob:; " +

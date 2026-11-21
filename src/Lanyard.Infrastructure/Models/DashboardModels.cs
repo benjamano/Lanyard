@@ -201,6 +201,25 @@ public class KioskHealthWidget : DashboardWidget
     public bool OnlyShowOffline { get; set; }
 }
 
+// The Operations alerts list for the locations the viewer manages. Shows nothing but a sign-in
+// prompt on a kiosk dashboard, which runs signed out (see OperationsAlertService).
+public class OperationsAlertsWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public OperationsAlertsWidget()
+    {
+        Type = WidgetType.OperationsAlerts;
+
+        GridW = 4;
+        GridH = 3;
+    }
+
+    // Null shows every severity.
+    public OperationsAlertSeverity? AlertMinimumSeverity { get; set; }
+
+    public bool AlertOnlyUnacknowledged { get; set; }
+}
+
 public class AutomationRuleStatusWidget : DashboardWidget
 {
     [SetsRequiredMembers]
@@ -437,5 +456,27 @@ public class DemandStaffingWidget : DashboardWidget
     }
 
     public int RangeDays { get; set; }
+    public int? LocationId { get; set; }
+}
+
+// Today at one location from What's On: the day's totals and the parties still to come, for the
+// viewing Admin/Manager only - never a signed-out kiosk (parties carry children's names).
+// LocationId only applies to an Admin (null = the location they signed in to); a Manager sees their own.
+public class WhatsOnTodayWidget : DashboardWidget
+{
+    public const int MaxSupportedItems = 20;
+
+    [SetsRequiredMembers]
+    public WhatsOnTodayWidget()
+    {
+        Type = WidgetType.WhatsOnToday;
+
+        GridW = 4;
+        GridH = 4;
+
+        MaxItems = 6;
+    }
+
+    public int MaxItems { get; set; }
     public int? LocationId { get; set; }
 }
