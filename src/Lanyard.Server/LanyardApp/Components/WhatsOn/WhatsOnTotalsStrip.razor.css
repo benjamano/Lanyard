@@ -1,0 +1,44 @@
+.wo-totals {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+    gap: 8px;
+}
+
+.wo-total {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 12px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+}
+
+.wo-total-value {
+    font-size: 1.35rem;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.wo-total-label {
+    color: var(--colorNeutralForeground3);
+    font-size: 0.85rem;
+}
+
+.wo-total-warn {
+    border-color: var(--colorStatusWarningBorder1, var(--colorNeutralStroke2));
+}
+
+@media (max-width: 600px) {
+    .wo-totals {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .wo-total {
+        padding: 8px 10px;
+    }
+
+    .wo-total-value {
+        font-size: 1.15rem;
+    }
+}

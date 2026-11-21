@@ -151,3 +151,24 @@
 .month-open-name {
     box-shadow: inset 3px 0 0 var(--colorBrandStroke1);
 }
+
+/* Holidays the manager marked under Rota > Holidays. */
+.month-day-holiday {
+    font-size: 0.62rem;
+    font-weight: 600;
+    line-height: 1.1;
+    color: var(--colorNeutralForeground2);
+}
+
+.month-day-header.is-closed .month-day-holiday {
+    color: var(--colorStatusDangerForeground1);
+}
+
+.month-day-header.is-school-holiday:not(.is-today),
+.month-day-header.is-bank-holiday:not(.is-today) {
+    background-color: color-mix(in srgb, var(--colorBrandBackground) 12%, var(--colorNeutralBackground3));
+}
+
+.month-day-header.is-closed:not(.is-today) {
+    background-color: color-mix(in srgb, var(--colorStatusDangerBackground3) 14%, var(--colorNeutralBackground3));
+}

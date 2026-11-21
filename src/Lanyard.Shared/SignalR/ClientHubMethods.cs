@@ -10,6 +10,15 @@ public static class ClientHubMethods
     /// <summary>Server to kiosk, client result: returns a <c>ClientLogTailDTO</c>.</summary>
     public const string RequestLogTail = "RequestLogTail";
 
+    /// <summary>Kiosk to server: sends a <c>LaserGameStatusDTO</c> with the live laser game state.</summary>
+    public const string UpdateLaserGameStatus = "UpdateLaserGameStatus";
+
+    /// <summary>
+    /// Server to kiosk: sends a <c>ZoneScoreboardSettingsDTO</c>, on every connect and whenever an
+    /// Admin saves the kiosk's zone scoreboard settings.
+    /// </summary>
+    public const string ReceiveZoneScoreboardSettings = "ReceiveZoneScoreboardSettings";
+
     /// <summary>Server to kiosk: play an <c>AudioClipPlayCommand</c> over the music, ducking it.</summary>
     public const string PlayAudioClip = "PlayAudioClip";
 
@@ -45,4 +54,18 @@ public static class ClientHubMethods
     /// audio, DMX, packet capture and WebView2, and returns a <c>KioskSelfTestResultDTO</c>.
     /// </summary>
     public const string RunSelfTest = "RunSelfTest";
+
+    /// <summary>
+    /// Server to kiosk: sends a <c>MusicEqualiserSettings</c> (bass, mid and treble in dB), on every
+    /// connect and whenever staff change the kiosk's equaliser. Kiosks before 1.0.48 ignore it.
+    /// </summary>
+    public const string ReceiveEqualiserSettings = "ReceiveEqualiserSettings";
+
+    /// <summary>
+    /// Server to kiosk, client result: takes a <c>DisplayIdentifyRequestDTO</c>, shows a numbered
+    /// overlay on every screen for a few seconds, and returns a <c>DisplayIdentifyResultDTO</c>
+    /// listing the screens. Kiosks before 1.0.49 have no handler, which reaches the server as a
+    /// HubException.
+    /// </summary>
+    public const string IdentifyDisplays = "IdentifyDisplays";
 }

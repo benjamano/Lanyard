@@ -162,6 +162,22 @@ public class CompanyFeatureService(
         return !hidden.Contains(feature);
     }
 
+    public async Task<bool> IsEnabledForCompanyAsync(int companyId, CompanyFeature feature)
+    {
+        try
+        {
+            IReadOnlySet<CompanyFeature> disabled = await GetDisabledForCompanyAsync(companyId);
+
+            return !disabled.Contains(feature);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Treating {Feature} as off for company {CompanyId} because the check failed", feature, companyId);
+
+            return false;
+        }
+    }
+
     private async Task<IReadOnlySet<CompanyFeature>> GetDisabledForCompanyAsync(int companyId)
     {
         if (_cache.TryGetValue(CacheKey(companyId), out IReadOnlySet<CompanyFeature>? cached) && cached is not null)

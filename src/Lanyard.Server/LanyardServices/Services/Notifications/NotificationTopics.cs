@@ -9,7 +9,8 @@ public enum NotificationTopicGroup
     TimeOff,
     Chat,
     Announcements,
-    Kiosks
+    Kiosks,
+    Operations
 }
 
 // How one topic is described in Notification settings, and what someone gets before they have
@@ -81,7 +82,26 @@ public static class NotificationTopics
         new(NotificationTopic.KioskOffline, NotificationTopicGroup.Kiosks,
             "Kiosk offline", "A kiosk at your location stops responding, and when it's back.", DefaultPush: true, DefaultEmail: true, ManagerOnly: true),
         new(NotificationTopic.KioskNeedsAttention, NotificationTopicGroup.Kiosks,
-            "Kiosk needs attention", "A kiosk has had a problem for 10 minutes, such as low disk space or its lighting not connected.", DefaultPush: true, DefaultEmail: false, ManagerOnly: true)
+            "Kiosk needs attention", "A kiosk has had a problem for 10 minutes, such as low disk space or its lighting not connected.", DefaultPush: true, DefaultEmail: false, ManagerOnly: true),
+
+        // Raised on the Operations alerts page by OperationsAlertWriter, once per failing rule until
+        // it runs cleanly again, so a rule that fails every minute doesn't send one every minute.
+        new(NotificationTopic.AutomationRuleFailed, NotificationTopicGroup.Operations,
+            "Automation rule failed", "An automation rule ran but one of its actions failed.", DefaultPush: true, DefaultEmail: false, ManagerOnly: true),
+
+        // Missed clock-ins matter within minutes, so push only. Training and documents come as one
+        // summary per sweep (ComplianceAlertSweepHostedService) and are worth an email.
+        new(NotificationTopic.MissedClockIn, NotificationTopicGroup.Operations,
+            "Missed clock-in", "Someone at your location hasn't clocked in for a shift that has started.", DefaultPush: true, DefaultEmail: false, ManagerOnly: true),
+        new(NotificationTopic.TrainingOverdue, NotificationTopicGroup.Operations,
+            "Training overdue", "Someone at your location has training past its due date.", DefaultPush: true, DefaultEmail: true, ManagerOnly: true),
+        new(NotificationTopic.StaffDocumentExpiring, NotificationTopicGroup.Operations,
+            "Staff documents expiring", "A staff document at your location is due for renewal or has expired.", DefaultPush: true, DefaultEmail: true, ManagerOnly: true),
+
+        // Raised once per failing location until an import runs cleanly again, so a login that keeps
+        // failing doesn't notify every five minutes. Worth an email: bookings stop syncing until fixed.
+        new(NotificationTopic.PartyBookingImportFailed, NotificationTopicGroup.Operations,
+            "Booking import failed", "The automatic party booking import for one of your locations couldn't run.", DefaultPush: true, DefaultEmail: true, ManagerOnly: true)
     ];
 
     public static NotificationTopicInfo Get(NotificationTopic topic) =>
@@ -103,6 +123,7 @@ public static class NotificationTopics
         NotificationTopicGroup.Chat => "Chat",
         NotificationTopicGroup.Announcements => "Announcements",
         NotificationTopicGroup.Kiosks => "Kiosks",
+        NotificationTopicGroup.Operations => "Operations alerts",
         _ => group.ToString()
     };
 }

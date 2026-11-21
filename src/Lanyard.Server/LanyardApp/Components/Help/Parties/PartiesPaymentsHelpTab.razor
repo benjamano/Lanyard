@@ -1,0 +1,35 @@
+<HelpTab>
+    <HelpSection Title="Payment status">
+        <FluentText>Every party shows one of these, worked out from what's been marked as paid:</FluentText>
+        <ul>
+            <li><FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Warning">Unpaid</FluentBadge> Nothing has been paid yet.</li>
+            <li><FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Brand">Deposit paid</FluentBadge> The deposit is in; the balance is still to pay.</li>
+            <li><FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Success">Paid in full</FluentBadge> Nothing left to pay.</li>
+        </ul>
+    </HelpSection>
+
+    <HelpSection Title="Recording payments">
+        <ol>
+            <li>Open the party. You can only record payments once it's been booked.</li>
+            <li>Under <strong>Payment</strong>, press <strong>Mark deposit paid</strong> when the deposit comes in, and
+                <strong>Mark paid in full</strong> when the rest is paid. Lanyard records when each was marked and shows the balance still due.</li>
+            <li>Marked one by mistake? Press <strong>Undo</strong> next to it.</li>
+        </ol>
+        <FluentText>
+            Use <strong>Payment notes</strong> for how it was paid, for example by card over the phone. The deposit can't be more
+            than the total price.
+        </FluentText>
+        <HelpNote>
+            <strong>Save changes</strong> never changes what's been paid, so someone editing a party that was open before the
+            deposit came in can't undo it by saving.
+        </HelpNote>
+    </HelpSection>
+
+    <HelpSection Title="Cancelling and reinstating">
+        <FluentText>
+            Open the party, press <strong>Cancel party</strong>, then <strong>Yes, cancel it</strong>. The party stays in Lanyard
+            with a <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Danger">Cancelled</FluentBadge> badge, and only
+            appears on the list when <strong>Show cancelled</strong> is ticked. Press <strong>Reinstate party</strong> to put it back.
+        </FluentText>
+    </HelpSection>
+</HelpTab>

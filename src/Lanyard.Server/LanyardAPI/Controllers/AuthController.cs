@@ -32,6 +32,13 @@ namespace Lanyard.API.Controllers
         private readonly IDemoDirectory _demoDirectory;
         private readonly IPushSubscriptionService _pushSubscriptionService;
         private readonly IPasskeyService _passkeyService;
+        private readonly ILoginAttemptThrottle _loginThrottle;
+
+        // One message for every failed password sign-in: unknown username, wrong password, a locked
+        // account, or too many tries from this address. Separate messages told anyone which usernames
+        // were real (only a real account can be locked). The second sentence is there so someone who
+        // really is locked out knows to wait rather than keep retrying.
+        internal const string SignInFailedMessage = "Invalid username or password. After several failed attempts, sign-in is paused for 15 minutes.";
 
         public AuthController(
             UserManager<UserProfile> userManager,
@@ -43,9 +50,11 @@ namespace Lanyard.API.Controllers
             IPushSubscriptionService pushSubscriptionService,
             IOptions<DemoOptions> demoOptions,
             IDemoDirectory demoDirectory,
-            IPasskeyService passkeyService)
+            IPasskeyService passkeyService,
+            ILoginAttemptThrottle loginThrottle)
         {
             _passkeyService = passkeyService;
+            _loginThrottle = loginThrottle;
             _demoOptions = demoOptions;
             _demoDirectory = demoDirectory;
             _userManager = userManager;
@@ -69,9 +78,6 @@ namespace Lanyard.API.Controllers
 
             switch (attempt.Kind)
             {
-                case SignInOutcomeKind.LockedOut:
-                    return Unauthorized(new { message = "Account temporarily locked due to repeated failed attempts. Try again later." });
-
                 case SignInOutcomeKind.RequiresTwoFactor:
                     return Unauthorized(new { message = "Two-factor authentication is required.", requiresTwoFactor = true });
 
@@ -84,7 +90,7 @@ namespace Lanyard.API.Controllers
                     return Ok(new { message = "Login successful", username = attempt.User!.UserName });
 
                 default:
-                    return Unauthorized(new { message = "Invalid username or password." });
+                    return Unauthorized(new { message = SignInFailedMessage });
             }
         }
 
@@ -96,9 +102,6 @@ namespace Lanyard.API.Controllers
 
             switch (attempt.Kind)
             {
-                case SignInOutcomeKind.LockedOut:
-                    return Redirect(BuildLoginErrorRedirect("Account temporarily locked due to repeated failed attempts. Try again later.", company));
-
                 case SignInOutcomeKind.RequiresTwoFactor:
                     return Redirect($"/login/verify-2fa{BuildTwoFactorRedirectQuery(rememberMe, returnUrl, locationId, company)}");
 
@@ -117,7 +120,7 @@ namespace Lanyard.API.Controllers
                     return Redirect("/");
 
                 default:
-                    return Redirect(BuildLoginErrorRedirect("Invalid username or password", company));
+                    return Redirect(BuildLoginErrorRedirect(SignInFailedMessage, company));
             }
         }
 
@@ -591,10 +594,10 @@ namespace Lanyard.API.Controllers
             return Redirect("/");
         }
 
+        // Locked-out accounts and throttled addresses come back as InvalidCredentials: see SignInFailedMessage.
         private enum SignInOutcomeKind
         {
             InvalidCredentials,
-            LockedOut,
             RequiresTwoFactor,
             LocationError,
             Success
@@ -604,33 +607,52 @@ namespace Lanyard.API.Controllers
 
         private async Task<SignInAttemptResult> AttemptPasswordSignInAsync(string username, string password, bool rememberMe, int? locationId)
         {
+            username ??= string.Empty;
+            System.Net.IPAddress? remoteIp = HttpContext.Connection.RemoteIpAddress;
+
+            // Before the password is checked, so attempts from an address that has already failed
+            // too often don't count towards the account's lockout (see LoginAttemptThrottle).
+            if (_loginThrottle.IsThrottled(remoteIp, username))
+            {
+                return new SignInAttemptResult(SignInOutcomeKind.InvalidCredentials);
+            }
+
             UserProfile? user = await FindUserByUsernameOrEmailAsync(username);
 
             if (user is null)
             {
+                // Hash the password anyway, so an unknown username takes as long to answer as a real one.
+                _userManager.PasswordHasher.VerifyHashedPassword(new UserProfile(), TimingHash.Value, password ?? string.Empty);
+                _loginThrottle.RecordFailure(remoteIp, username);
                 return new SignInAttemptResult(SignInOutcomeKind.InvalidCredentials);
             }
 
             Microsoft.AspNetCore.Identity.SignInResult result = await _signInManager.PasswordSignInAsync(
                 user,
-                password,
+                password ?? string.Empty,
                 rememberMe,
                 lockoutOnFailure: true);
 
             if (result.IsLockedOut)
             {
-                return new SignInAttemptResult(SignInOutcomeKind.LockedOut);
+                _logger.LogWarning("Sign-in refused for {UserId} from {RemoteIp}: the account is locked out", user.Id, remoteIp?.ToString() ?? "unknown");
+                _loginThrottle.RecordFailure(remoteIp, username);
+                return new SignInAttemptResult(SignInOutcomeKind.InvalidCredentials);
             }
 
             if (result.RequiresTwoFactor)
             {
+                _loginThrottle.RecordSuccess(remoteIp, username);
                 return new SignInAttemptResult(SignInOutcomeKind.RequiresTwoFactor, user);
             }
 
             if (!result.Succeeded)
             {
+                _loginThrottle.RecordFailure(remoteIp, username);
                 return new SignInAttemptResult(SignInOutcomeKind.InvalidCredentials);
             }
+
+            _loginThrottle.RecordSuccess(remoteIp, username);
 
             List<Claim> extraClaims = [];
             (bool locationOk, string? locationError) = await ValidateAndBuildLocationClaimsAsync(user, locationId, extraClaims);
@@ -726,6 +748,10 @@ namespace Lanyard.API.Controllers
 
             return (true, null);
         }
+
+        // A real hash of a throwaway password, made once, for the unknown-username path above.
+        private static readonly Lazy<string> TimingHash = new(() =>
+            new PasswordHasher<UserProfile>().HashPassword(new UserProfile(), Guid.NewGuid().ToString()));
 
         private async Task<UserProfile?> FindUserByUsernameOrEmailAsync(string identifier)
         {

@@ -41,6 +41,9 @@
     private int _startGeneration;
 
     private DotNetObjectReference<KioskLiveCaptureTemplate>? _selfRef;
+    // Imported on first use: this template is the only kiosk page that captures or streams video.
+    private IJSObjectReference? _captureModule;
+    private IJSObjectReference? _videoModule;
     private readonly CancellationTokenSource _disposeCts = new();
 
     private Guid _lastStepId = Guid.Empty;
@@ -104,7 +107,8 @@
         }
         else
         {
-            string error = await JS.InvokeAsync<string>("startLiveCapture", VideoElementId, _deviceName, _enableAudio);
+            _captureModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/liveCapture.js");
+            string error = await _captureModule.InvokeAsync<string>("startLiveCapture", VideoElementId, _deviceName, _enableAudio);
 
             SetErrorMessage(string.IsNullOrWhiteSpace(error) ? null : error);
         }
@@ -114,7 +118,8 @@
     {
         try
         {
-            int[] targetDimensions = await JS.InvokeAsync<int[]>("videoViewer.getTargetDimensions");
+            _videoModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./video-stream.js");
+            int[] targetDimensions = await _videoModule.InvokeAsync<int[]>("videoViewer.getTargetDimensions");
 
             Result<Guid> sessionResult = await _signalingService.CreateSessionAsync(
                 _sourceClientId, ClientId, ViewerToken, _deviceName, _enableAudio,
@@ -190,7 +195,7 @@
 
         await InvokeAsync(async () =>
         {
-            answerSdp = await JS.InvokeAsync<string>("videoViewer.receiveOffer", VideoElementId, sessionId, sdpOffer, _enableAudio, _selfRef, _videoStreamingOptions.Value.ToIceServersJson());
+            answerSdp = await _videoModule!.InvokeAsync<string>("videoViewer.receiveOffer", VideoElementId, sessionId, sdpOffer, _enableAudio, _selfRef, _videoStreamingOptions.Value.ToIceServersJson());
         });
 
         await _signalingService.ViewerSendAnswerAsync(sessionId, answerSdp);
@@ -200,7 +205,7 @@
     {
         await InvokeAsync(async () =>
         {
-            await JS.InvokeVoidAsync("videoViewer.addIceCandidate", sessionId, candidateJson);
+            await _videoModule!.InvokeVoidAsync("videoViewer.addIceCandidate", sessionId, candidateJson);
         });
     }
 
@@ -217,7 +222,10 @@
 
             try
             {
-                await JS.InvokeVoidAsync("videoViewer.stop", sessionId, VideoElementId);
+                if (_videoModule is not null)
+                {
+                    await _videoModule.InvokeVoidAsync("videoViewer.stop", sessionId, VideoElementId);
+                }
             }
             catch (JSDisconnectedException) { }
             catch (InvalidOperationException) { }
@@ -272,7 +280,10 @@
 
             try
             {
-                await JS.InvokeVoidAsync("videoViewer.stop", previousSessionId, VideoElementId);
+                if (_videoModule is not null)
+                {
+                    await _videoModule.InvokeVoidAsync("videoViewer.stop", previousSessionId, VideoElementId);
+                }
             }
             catch (JSDisconnectedException) { }
             catch (InvalidOperationException) { }
@@ -280,7 +291,10 @@
 
         try
         {
-            await JS.InvokeVoidAsync("stopLiveCapture", VideoElementId);
+            if (_captureModule is not null)
+            {
+                await _captureModule.InvokeVoidAsync("stopLiveCapture", VideoElementId);
+            }
         }
         catch (JSDisconnectedException) { }
         catch (InvalidOperationException) { }
@@ -292,6 +306,20 @@
         _startGeneration++;
 
         await StopCurrentAsync();
+
+        try
+        {
+            if (_captureModule is not null)
+            {
+                await _captureModule.DisposeAsync();
+            }
+
+            if (_videoModule is not null)
+            {
+                await _videoModule.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException) { }
 
         _selfRef?.Dispose();
         _disposeCts.Dispose();

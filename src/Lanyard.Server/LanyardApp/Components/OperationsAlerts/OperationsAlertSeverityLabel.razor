@@ -1,0 +1,26 @@
+@using Lanyard.Application.Services.Notifications
+
+@* Severity as an icon and its word, so it never relies on colour alone. The icon is decorative;
+   the text carries the meaning for a screen reader. *@
+<span class="ops-severity ops-severity--@Severity.ToString().ToLowerInvariant()">
+    <span class="ops-severity-icon" aria-hidden="true">
+        @switch (Severity)
+        {
+            case OperationsAlertSeverity.Critical:
+                <FluentIcon Value="@(new Icons.Filled.Size20.ErrorCircle())" Color="Color.Error" />
+                break;
+            case OperationsAlertSeverity.Warning:
+                <FluentIcon Value="@(new Icons.Filled.Size20.Warning())" Color="Color.Warning" />
+                break;
+            default:
+                <FluentIcon Value="@(new Icons.Filled.Size20.Info())" Color="Color.Info" />
+                break;
+        }
+    </span>
+    <span class="ops-severity-text">@OperationsAlertNotices.SeverityLabel(Severity)</span>
+</span>
+
+@code {
+    [Parameter, EditorRequired]
+    public OperationsAlertSeverity Severity { get; set; }
+}

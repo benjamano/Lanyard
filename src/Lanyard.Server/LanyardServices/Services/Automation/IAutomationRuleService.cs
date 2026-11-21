@@ -15,4 +15,11 @@ public interface IAutomationRuleService
     Task<Result<AutomationRule>> UpdateRuleAsync(AutomationRule rule);
     Task<Result<bool>> DeleteRuleAsync(Guid id);
     Task<Result<AutomationRule>> SetRuleEnabledAsync(Guid id, bool isEnabled);
+
+    /// <summary>
+    /// Copies a rule with its conditions and actions as a new, switched-off rule named
+    /// "Copy of ...". Fails when the rule doesn't exist (or is another company's), or when the copy
+    /// wouldn't pass the same checks as a save, for example because its kiosk has been removed.
+    /// </summary>
+    Task<Result<AutomationRule>> DuplicateRuleAsync(Guid id);
 }

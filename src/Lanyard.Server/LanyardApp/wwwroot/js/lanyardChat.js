@@ -1,4 +1,5 @@
-// lanyardChat.js - the chat composer (Quill, loaded globally in App.razor) and thread scrolling.
+// lanyardChat.js - the chat composer (Quill, which ChatComposer loads on demand through
+// QuillGate.EnsureQuillAsync before calling init) and thread scrolling.
 // The editor's DOM belongs to Quill: Blazor renders an empty host element and never touches its
 // contents, and .NET hears about a message only when it's sent.
 window.lanyardChat = (() => {

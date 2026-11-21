@@ -1,0 +1,97 @@
+.music-volume {
+    --music-volume: 0%;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-width: 0;
+    flex: 1 1 10rem;
+    max-width: 16rem;
+}
+
+.music-icon-button {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 0;
+    background: transparent;
+    color: var(--colorNeutralForeground2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.music-icon-button:hover:not(:disabled) {
+    background: var(--colorNeutralBackground1Hover);
+}
+
+.music-icon-button:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.music-icon-button:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+}
+
+.music-volume-range {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 1 1 auto;
+    min-width: 4rem;
+    height: 24px;
+    margin: 0;
+    background: transparent;
+    cursor: pointer;
+    touch-action: none;
+}
+
+.music-volume-range::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(to right, var(--colorNeutralForeground2) var(--music-volume), var(--colorNeutralStroke2) var(--music-volume));
+}
+
+.music-volume-range::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(to right, var(--colorNeutralForeground2) var(--music-volume), var(--colorNeutralStroke2) var(--music-volume));
+}
+
+.music-volume-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    margin-top: -5px;
+    border-radius: 50%;
+    background: var(--colorNeutralForeground1);
+    border: 2px solid var(--colorNeutralBackground1);
+}
+
+.music-volume-range::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--colorNeutralForeground1);
+    border: 2px solid var(--colorNeutralBackground1);
+}
+
+.music-volume-range:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.music-volume-range:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+.music-volume-label {
+    flex: 0 0 2.75rem;
+    font-size: var(--fontSizeBase200);
+    font-variant-numeric: tabular-nums;
+    color: var(--colorNeutralForeground3);
+    text-align: right;
+}

@@ -7,6 +7,7 @@ using FTD2XX_NET;
 using System.Text;
 using Lanyard.Infrastructure.Models.Dmx;
 using Lanyard.Infrastructure.DTO.Dmx;
+using Lanyard.Shared.Dmx;
 
 namespace Lanyard.Client.Controllers;
 
@@ -40,6 +41,15 @@ public class DmxSignalRController(ILogger<DmxSignalRController> logger, DmxContr
             _logger.LogDebug("Received {Count} DMX channel values", channels.Count);
 
             _dmxController.SetChannels(channels);
+        });
+
+        // Full-universe resync (sent when the kiosk connects): 512 bytes, channel 1 first. Only
+        // sent to kiosks that advertise dmxFrame=1; older ones get it as a 512-entry batch.
+        connection.On<byte[]>(DmxReceiveMethods.Frame, frame =>
+        {
+            _logger.LogInformation("Received a {Count}-channel DMX universe resync", frame.Length);
+
+            _dmxController.SetUniverse(frame);
         });
 
         // Single-channel form kept so a server that predates batching still drives the lights.

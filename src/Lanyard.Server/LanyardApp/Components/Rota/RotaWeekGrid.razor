@@ -5,9 +5,14 @@
         <div class="rota-corner" role="columnheader">Staff</div>
         @foreach (DateOnly day in Days)
         {
-            <div class="rota-day-header @(day == Today ? "is-today" : string.Empty)" role="columnheader">
+            RotaHolidayDay holiday = View.HolidayOn(day);
+            <div class="rota-day-header @(day == Today ? "is-today" : string.Empty) @HolidayClass(holiday)" role="columnheader" title="@RotaHolidayRules.Describe(holiday)">
                 <span class="rota-day-name">@day.ToString("ddd", RotaDisplayExtensions.Uk)</span>
                 <span class="rota-day-number">@day.ToString("d MMM", RotaDisplayExtensions.Uk)</span>
+                @if (!holiday.IsOrdinary)
+                {
+                    <span class="rota-day-holiday">@RotaHolidayRules.ShortLabel(holiday)</span>
+                }
             </div>
         }
 
@@ -85,6 +90,14 @@
 </div>
 
 @code {
+    private static string HolidayClass(RotaHolidayDay day) => day switch
+    {
+        { IsClosed: true } => "is-closed",
+        { BankHoliday: not null } => "is-bank-holiday",
+        { SchoolHoliday: not null } => "is-school-holiday",
+        _ => string.Empty
+    };
+
     [Parameter, EditorRequired]
     public required RotaRangeView View { get; set; }
 

@@ -1,7 +1,6 @@
 ﻿using Lanyard.Shared.DTO;
 using Lanyard.Shared.Enum;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json.Linq;
 
 namespace Lanyard.Client.PacketSniffing;
 
@@ -11,9 +10,9 @@ public class Actions(ILogger<Actions> logger, IGameStateService _gameStateServic
 
     private readonly IGameStateService _gameStateService = _gameStateService;
 
-    public async Task HandleTimingPacketAsync(string[] packetData)
+    public void HandleTimingPacket(string[] packetData)
     {
-        if (int.TryParse(packetData[3].ToString(), out int timeLeftSeconds))
+        if (int.TryParse(packetData[3], out int timeLeftSeconds))
         {
             if (timeLeftSeconds <= 0)
             {
@@ -39,39 +38,42 @@ public class Actions(ILogger<Actions> logger, IGameStateService _gameStateServic
 
                 _gameStateService.UpdateTimeRemaining(TimeSpan.FromSeconds(timeLeftSeconds));
 
-                _logger.LogInformation("Time left updated to {timeleft} seconds", timeLeftSeconds);
+                if (_logger.IsEnabled(LogLevel.Trace))
+                {
+                    _logger.LogTrace("Time left updated to {timeleft} seconds", timeLeftSeconds);
+                }
             }
         }
         else
         {
-            _logger.LogError("Invalid data parsed for the time left figure! Value: {timeleftValue}", packetData[3].ToString());
+            _logger.LogWarning("Invalid data parsed for the time left figure! Value: {timeleftValue}", packetData[3]);
         }
     }
 
-    public async Task HandlePlayerScorePacketAsync(string[] packetData)
+    public void HandlePlayerScorePacket(string[] packetData)
     {
-        if (int.TryParse(packetData[1].ToString(), out int GunId) == false)
+        if (int.TryParse(packetData[1], out int GunId) == false)
         {
-            _logger.LogError("Invalid data parsed for the Gun ID figure! Value: {gunIdValue}", packetData[1].ToString());
+            _logger.LogWarning("Invalid data parsed for the Gun ID figure! Value: {gunIdValue}", packetData[1]);
 
             return;
         }
         
-        if (int.TryParse(packetData[3].ToString(), out int Score) == false)
+        if (int.TryParse(packetData[3], out int Score) == false)
         {
-            _logger.LogError("Invalid data parsed for the Score figure! Value: {scoreValue}", packetData[3].ToString());
+            _logger.LogWarning("Invalid data parsed for the Score figure! Value: {scoreValue}", packetData[3]);
             return;
         }
         
-        if (int.TryParse(packetData[7].ToString(), out int Accuracy) == false)
+        if (int.TryParse(packetData[7], out int Accuracy) == false)
         {
-            _logger.LogError("Invalid data parsed for the Accuracy figure! Value: {accuracyValue}", packetData[7].ToString());
+            _logger.LogWarning("Invalid data parsed for the Accuracy figure! Value: {accuracyValue}", packetData[7]);
             return;
         }
 
-        if (int.TryParse(packetData[2].ToString(), out int TeamId) == false)
+        if (int.TryParse(packetData[2], out int TeamId) == false)
         {
-            _logger.LogError("Invalid data parsed for the Team ID figure! Value: {teamIdValue}", packetData[2].ToString());
+            _logger.LogWarning("Invalid data parsed for the Team ID figure! Value: {teamIdValue}", packetData[2]);
             return;
         }
 
@@ -90,10 +92,13 @@ public class Actions(ILogger<Actions> logger, IGameStateService _gameStateServic
 
         _gameStateService.UpdatePlayerScore(new PlayerScoreDTO { GunId = GunId, Score = Score, Accuracy = Accuracy, Team = team });
 
-        _logger.LogInformation("Player score updated: GunId={gunId}, Score={score}, Accuracy={accuracy}, Team={team}", GunId, Score, Accuracy, team);
+        if (_logger.IsEnabled(LogLevel.Trace))
+        {
+            _logger.LogTrace("Player score updated: GunId={gunId}, Score={score}, Accuracy={accuracy}, Team={team}", GunId, Score, Accuracy, team);
+        }
     }
 
-    public async Task HandleGameStatusPacketAsync(string[] packetData)
+    public void HandleGameStatusPacket(string[] packetData)
     {
         string[] parts = packetData[1].Split("@");
 
@@ -112,15 +117,18 @@ public class Actions(ILogger<Actions> logger, IGameStateService _gameStateServic
         if (looksLikeSettingsPacket)
         {
             // THIS MEANS THE GAME'S SETTINGS HAVE CHANGED, NOT THE STATUS
-            _logger.LogInformation("Game settings packet received. Raw: {RawValue}", packetData[1]);
+            _logger.LogDebug("Game settings packet received. Raw: {RawValue}", packetData[1]);
 
             foreach (string value in parts)
             {
                 if (value.StartsWith("016"))
                 {
-                    _gameStateService.UpdateGameLength(TimeSpan.FromMinutes(int.Parse(value[3..].Trim())));
+                    if (int.TryParse(value[3..].Trim(), out int minutes))
+                    {
+                        _gameStateService.UpdateGameLength(TimeSpan.FromMinutes(minutes));
 
-                    _logger.LogInformation("Game time limit updated to {timelimit} minutes", value[3..].Trim());
+                        _logger.LogDebug("Game time limit updated to {timelimit} minutes", minutes);
+                    }
                 }
                 else if (value.StartsWith("017"))
                 {
@@ -132,32 +140,32 @@ public class Actions(ILogger<Actions> logger, IGameStateService _gameStateServic
                 }
             }
         }
-        else if (int.TryParse(packetData[1].ToString().Replace("@", ""), out int gameStatusValue))
+        else if (int.TryParse(packetData[1].Replace("@", ""), out int gameStatusValue))
         {
             // THE GAMES STATUS HAS CHANGED
             GameStatus status = (GameStatus)gameStatusValue;
             switch (status)
             {
                 case GameStatus.NotStarted:
-                    _logger.LogInformation("Game status updated to Not Started");
                     if (_gameStateService.GetGameStatus() != GameStatus.NotStarted)
                     {
+                        _logger.LogInformation("Game status updated to Not Started");
                         _gameStateService.HandleGameEnded();
                     }
 
                     break;
                 case GameStatus.GetReady:
-                    _logger.LogInformation("Game status updated to Get Ready");
                     if (_gameStateService.GetGameStatus() != GameStatus.GetReady)
                     {
+                        _logger.LogInformation("Game status updated to Get Ready");
                         _gameStateService.HandleGameGetReady();
                     }
 
                     break;
                 case GameStatus.InGame:
-                    _logger.LogInformation("Game status updated to In Progress");
                     if (_gameStateService.GetGameStatus() != GameStatus.InGame)
                     {
+                        _logger.LogInformation("Game status updated to In Progress");
                         _gameStateService.HandleGameStarted();
                     }
 
@@ -169,27 +177,30 @@ public class Actions(ILogger<Actions> logger, IGameStateService _gameStateServic
         }
         else
         {
-            _logger.LogError("Invalid data parsed for the Game Status figure! Value: {rawValue}", packetData[1]);
+            _logger.LogWarning("Invalid data parsed for the Game Status figure! Value: {rawValue}", packetData[1]);
         }
 
     }
 
-    public async Task HandleShotConfirmedPacketAsync(string[] packetData)
+    public void HandleShotConfirmedPacket(string[] packetData)
     {
         if (int.TryParse(packetData[1], out int shotGunId) == false)
         {
-            _logger.LogError("Invalid data parsed for the Shot Gun ID figure! Value: {shooterGunIdValue}", packetData[1].ToString());
+            _logger.LogWarning("Invalid data parsed for the Shot Gun ID figure! Value: {shooterGunIdValue}", packetData[1]);
 
             return;
         }
 
         if (int.TryParse(packetData[2], out int shotByGunId) == false)
         {
-            _logger.LogError("Invalid data parsed for the Shot by Gun ID figure! Value: {shotGunId}", packetData[2].ToString());
+            _logger.LogWarning("Invalid data parsed for the Shot by Gun ID figure! Value: {shotGunId}", packetData[2]);
             return;
         }
 
-        _logger.LogInformation("Shot confirmed: ShooterGunId={shotByGunId}, TargetGunId={shotGunId}", shotByGunId, shotGunId);
+        if (_logger.IsEnabled(LogLevel.Trace))
+        {
+            _logger.LogTrace("Shot confirmed: ShooterGunId={shotByGunId}, TargetGunId={shotGunId}", shotByGunId, shotGunId);
+        }
 
         _gameStateService.HandlePlayerHit(shotGunId, shotByGunId);
     }

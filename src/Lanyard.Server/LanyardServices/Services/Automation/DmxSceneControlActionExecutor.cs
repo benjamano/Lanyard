@@ -34,6 +34,35 @@ public class DmxSceneControlActionExecutor(
 
     public bool CanHandle(string actionType) => actionType == AutomationActionTypes.DmxSceneControl;
 
+    /// <summary>
+    /// The kiosk and scene a DMX action points at, for AutomationRuleService to check they belong
+    /// to the rule's company when the rule is saved. False when the JSON can't be read.
+    /// </summary>
+    public static bool TryReadTargets(string parametersJson, out Guid targetClientId, out Guid? sceneId)
+    {
+        targetClientId = Guid.Empty;
+        sceneId = null;
+
+        try
+        {
+            DmxSceneControlParameters? parameters = JsonSerializer.Deserialize<DmxSceneControlParameters>(parametersJson);
+
+            if (parameters == null)
+            {
+                return false;
+            }
+
+            targetClientId = parameters.TargetClientId;
+            sceneId = parameters.Operation == StopAllScenes ? null : parameters.SceneId;
+
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
     public async Task<(bool Success, string? ErrorMessage)> ExecuteAsync(
         AutomationRuleAction action, Guid triggerClientId)
     {
@@ -67,6 +96,34 @@ public class DmxSceneControlActionExecutor(
             if (client == null)
             {
                 return (false, "Client not connected");
+            }
+
+            // The runner trusts its caller, and ParametersJson is just text: make sure the kiosk
+            // and scene are the rule's own company's before driving anything.
+            int? ruleCompanyId = await ctx.AutomationRules
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(r => r.Id == action.AutomationRuleId)
+                .Select(r => (int?)r.CompanyId)
+                .FirstOrDefaultAsync();
+
+            if (ruleCompanyId != client.CompanyId)
+            {
+                _logger.LogWarning("Refused DMX action {ActionId}: kiosk {ClientId} isn't in the rule's company", action.Id, parameters.TargetClientId);
+                return (false, "The action's kiosk belongs to a different company");
+            }
+
+            if (requiresScene)
+            {
+                bool sceneOnClient = await ctx.DmxScenes
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .AnyAsync(s => s.Id == parameters.SceneId && s.ClientId == parameters.TargetClientId && s.IsActive);
+
+                if (!sceneOnClient)
+                {
+                    return (false, "The action's DMX scene no longer exists on that kiosk");
+                }
             }
 
             if (string.IsNullOrEmpty(client.MostRecentConnectionId) ||

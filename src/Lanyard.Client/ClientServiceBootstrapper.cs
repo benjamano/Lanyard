@@ -1,3 +1,4 @@
+using Lanyard.Client.Identify;
 using Lanyard.Client.AudioDevices;
 using Lanyard.Client.Controllers;
 using Lanyard.Client.Diagnostics;
@@ -77,6 +78,7 @@ public static class ClientServiceBootstrapper
         services.AddSingleton<DmxSignalRController, DmxSignalRController>();
         services.AddSingleton<ISongCacheService, SongCacheService>();
         services.AddSingleton<MusicGain>();
+        services.AddSingleton<MusicEqualiser>();
         services.AddSingleton<IMusicDucker>(sp => sp.GetRequiredService<MusicGain>());
         services.AddSingleton<IMusicPlayer, MusicPlayer>();
         services.AddSingleton<IAudioClipCacheService, AudioClipCacheService>();
@@ -95,6 +97,7 @@ public static class ClientServiceBootstrapper
         services.AddSingleton<CredentialController>();
         services.AddSingleton<IAudioDeviceService, AudioDeviceService>();
         services.AddSingleton<AudioSettingsController>();
+        services.AddSingleton<EqualiserController>();
         services.AddSingleton(logLineBuffer);
         services.AddSingleton<ClientDiagnosticsController>();
         services.AddSingleton<KioskHealthReporter>();
@@ -104,6 +107,8 @@ public static class ClientServiceBootstrapper
         services.AddSingleton<IWebView2RuntimeProbe, WebView2RuntimeProbe>();
         services.AddSingleton<KioskSelfTestRunner>();
         services.AddSingleton<KioskSelfTestController>();
+        services.AddSingleton<IDisplayIdentifyService, DisplayIdentifyService>();
+        services.AddSingleton<DisplayIdentifyController>();
 
         return services.BuildServiceProvider();
     }
@@ -123,8 +128,10 @@ public static class ClientServiceBootstrapper
             provider.GetRequiredService<UpdateController>().Register,
             provider.GetRequiredService<CredentialController>().Register,
             provider.GetRequiredService<AudioSettingsController>().Register,
+            provider.GetRequiredService<EqualiserController>().Register,
             provider.GetRequiredService<ClientDiagnosticsController>().Register,
-            provider.GetRequiredService<KioskSelfTestController>().Register
+            provider.GetRequiredService<KioskSelfTestController>().Register,
+            provider.GetRequiredService<DisplayIdentifyController>().Register
         ];
     }
 }

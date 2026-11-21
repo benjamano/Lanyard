@@ -1,13 +1,16 @@
-﻿using Lanyard.Application.SignalR;
+﻿using Lanyard.Application.Services.Clients;
+using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Dmx;
 using Lanyard.Infrastructure.DTO.VideoDevices;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.Models.Dmx;
+using Lanyard.Shared.Audio;
 using Lanyard.Shared.Contracts;
 using Lanyard.Shared.DTO;
 using Lanyard.Shared.Enum;
+using Lanyard.Shared.SignalR;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -24,12 +27,14 @@ namespace Lanyard.Application.Services;
 public class ClientService(IDbContextFactory<ApplicationDbContext> factory, 
     IHubContext<SignalRControlHub> hubContext, 
     ILogger<ClientService> logger, 
-    IMemoryCache cache) : IClientService
+    IMemoryCache cache,
+    IKioskFleetEventBus fleetEvents) : IClientService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly IHubContext<SignalRControlHub> _hubContext = hubContext;
     private readonly ILogger<ClientService> _logger = logger;
     private readonly IMemoryCache _cache = cache;
+    private readonly IKioskFleetEventBus _fleetEvents = fleetEvents;
 
     public async Task<Result<Client?>> GetClientFromIdAsync(Guid clientId)
     {
@@ -128,6 +133,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
 
             await ctx.SaveChangesAsync();
 
+            _fleetEvents.Publish(newClient.CompanyId);
+
             return Result<Client?>.Ok(newClient);
         }
         catch (Exception ex)
@@ -161,6 +168,12 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
             entry.Property(x => x.LocationId).IsModified = false;
             entry.Property(x => x.MusicScheduleOverrideUntilUtc).IsModified = false;
 
+            // And the equaliser, owned by SetClientEqualiserAsync: the Music page changes it live
+            // while a settings dialog may be holding an older copy of the client.
+            entry.Property(x => x.EqBassDb).IsModified = false;
+            entry.Property(x => x.EqMidDb).IsModified = false;
+            entry.Property(x => x.EqTrebleDb).IsModified = false;
+
             await ctx.SaveChangesAsync();
 
             // Keep both cached connection-ID lookups in sync immediately, otherwise a
@@ -173,6 +186,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
             {
                 _cache.Set(updatedClient.MostRecentConnectionId, updatedClient.Id, TimeSpan.FromMinutes(10));
             }
+
+            _fleetEvents.Publish(updatedClient.CompanyId);
 
             return Result<Client?>.Ok(updatedClient);
         }
@@ -217,6 +232,23 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
         {
             _logger.LogError(ex, "Error recording the disconnect of client {ClientId}", clientId);
             return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    // For writes that only hold the client's id: the Clients page and the shared client list need
+    // the company to refresh.
+    private async Task PublishFleetChangeAsync(ApplicationDbContext ctx, Guid clientId)
+    {
+        int? companyId = await ctx.Clients
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => x.Id == clientId)
+            .Select(x => (int?)x.CompanyId)
+            .FirstOrDefaultAsync();
+
+        if (companyId is int id)
+        {
+            _fleetEvents.Publish(id);
         }
     }
 
@@ -310,6 +342,9 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
                     ReportedClientVersion = x.ReportedClientVersion,
                     ClientVersionReportedAt = x.ClientVersionReportedAt,
                     LastAuthMethod = x.LastAuthMethod,
+                    CompanyId = x.CompanyId,
+                    UpdateRing = x.UpdateRing,
+                    PinnedClientVersion = x.PinnedClientVersion,
                     IsCurrentlyConnected = ids.Contains(x.MostRecentConnectionId ?? ""),
                     ProjectionEnabled = ctx.ClientProjectionSettings
                         .AsNoTracking()
@@ -543,6 +578,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
 
             await ctx.SaveChangesAsync();
 
+            await PublishFleetChangeAsync(ctx, clientProjectionSettings.ClientId);
+
             await SendUpdatedProjectionProgramInfoToClientsAsync(clientProjectionSettings.ProjectionProgramId);
 
             return Result<Guid>.Ok(clientProjectionSettings.Id);
@@ -571,6 +608,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
             projectionSettings.IsActive = false;
 
             await ctx.SaveChangesAsync();
+
+            await PublishFleetChangeAsync(ctx, projectionSettings.ClientId);
 
             await SendUpdatedProjectionProgramInfoToClientsAsync(projectionSettings.ProjectionProgramId);
 
@@ -933,6 +972,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
 
             await ctx.SaveChangesAsync();
 
+            _fleetEvents.Publish(client.CompanyId);
+
             _logger.LogInformation("Updated available DMX devices for client {ClientId}: {Devices}", clientId, string.Join(", ", dmxDevices));
         }
         catch (Exception ex)
@@ -1173,6 +1214,96 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
             return Result<bool>.Fail(ex.Message);
         }
     }
+
+    public async Task<Result<ClientEqualiserStateDTO>> GetClientEqualiserAsync(Guid clientId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Client? client = await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.Id == clientId)
+                .FirstOrDefaultAsync();
+
+            if (client == null)
+            {
+                return Result<ClientEqualiserStateDTO>.Fail("Client not found for the given client ID.");
+            }
+
+            Result<bool> connectedResult = await IsClientConnectedAsync(clientId);
+
+            return Result<ClientEqualiserStateDTO>.Ok(ToEqualiserState(client, connectedResult.IsSuccess && connectedResult.Data));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading the equaliser for client {ClientId}", clientId);
+            return Result<ClientEqualiserStateDTO>.Fail(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Saves the kiosk's music equaliser (clamped to +/-12 dB) and sends it straight to the kiosk if
+    /// it's connected. The returned state says whether it's playing with it now, or will on reconnect
+    /// or after an update.
+    /// </summary>
+    public async Task<Result<ClientEqualiserStateDTO>> SetClientEqualiserAsync(Guid clientId, MusicEqualiserSettings settings)
+    {
+        try
+        {
+            MusicEqualiserSettings clamped = settings.Clamp();
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Client? client = await ctx.Clients
+                .TagWithCallSite()
+                .Where(x => x.Id == clientId)
+                .FirstOrDefaultAsync();
+
+            if (client == null)
+            {
+                return Result<ClientEqualiserStateDTO>.Fail("Client not found for the given client ID.");
+            }
+
+            client.EqBassDb = clamped.BassDb;
+            client.EqMidDb = clamped.MidDb;
+            client.EqTrebleDb = clamped.TrebleDb;
+
+            await ctx.SaveChangesAsync();
+
+            _logger.LogInformation("Set music equaliser for client {ClientId}: bass {BassDb} dB, mid {MidDb} dB, treble {TrebleDb} dB", clientId, clamped.BassDb, clamped.MidDb, clamped.TrebleDb);
+
+            Result<bool> connectedResult = await IsClientConnectedAsync(clientId);
+            bool connected = connectedResult.IsSuccess && connectedResult.Data && !string.IsNullOrEmpty(client.MostRecentConnectionId);
+
+            ClientEqualiserStateDTO state = ToEqualiserState(client, connected);
+
+            // An outdated kiosk has no handler for it, so don't bother sending; it gets the stored
+            // values on its first connect after updating.
+            if (state.Status == EqualiserApplyStatus.Applied)
+            {
+                await _hubContext.Clients.Client(client.MostRecentConnectionId!).SendAsync(ClientHubMethods.ReceiveEqualiserSettings, clamped);
+            }
+
+            return Result<ClientEqualiserStateDTO>.Ok(state);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting the music equaliser for client {ClientId}", clientId);
+            return Result<ClientEqualiserStateDTO>.Fail(ex.Message);
+        }
+    }
+
+    private static ClientEqualiserStateDTO ToEqualiserState(Client client, bool connected) => new()
+    {
+        ClientId = client.Id,
+        ClientName = client.Name,
+        Settings = new MusicEqualiserSettings(client.EqBassDb, client.EqMidDb, client.EqTrebleDb),
+        IsConnected = connected,
+        IsSupported = MusicEqualiserSettings.IsSupportedBy(client.ReportedClientVersion),
+        ReportedVersion = client.ReportedClientVersion
+    };
 
     public async Task<Result<IEnumerable<string>>> GetAllActiveVideoDeviceNamesAsync()
     {

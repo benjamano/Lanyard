@@ -13,11 +13,12 @@
 
 @inject IAutomationRuleService _ruleService
 @inject IAutomationLogService _logService
-@inject AutomationEngineService _engineService
+@inject IAutomationEngineService _engineService
 @inject IClientService _clientService
 @inject INotificationService _toastService
 @inject IDialogService _dialogService
 @inject IDbContextFactory<ApplicationDbContext> _dbContextFactory
+@inject Lanyard.Application.Services.Tenancy.ITenantContext _tenant
 
 <PageTitle>Automation</PageTitle>
 
@@ -38,32 +39,45 @@
         </div>
     </FluentStack>
 
-    <FluentDataGrid Items="@_rules.AsQueryable()" GridTemplateColumns="1fr 1fr 1fr auto auto" Style="width: 100%;">
-        <EmptyContent>
-            No automation rules configured.
-        </EmptyContent>
-        <ChildContent>
-            <PropertyColumn Title="Name" Property="@(r => r.Name)" />
-            <TemplateColumn Title="Trigger Client">
-                @GetClientName(context.TriggerClientId)
-            </TemplateColumn>
-            <TemplateColumn Title="Trigger">
-                @DescribeTrigger(context)
-            </TemplateColumn>
-            <TemplateColumn Title="Enabled">
-                <FluentSwitch Value="@context.IsEnabled"
-                              ValueChanged="@((bool isEnabled) => OnRuleEnabledToggleChangedAsync(context, isEnabled))" />
-            </TemplateColumn>
-            <TemplateColumn Title="Actions">
-                <div class="d-flex align-items-center">
-                    <FluentIcon Icon="Icons.Regular.Size20.Edit" Color="Color.Primary"
-                                OnClick="@(() => OpenEditRuleDialogAsync(context))" />
-                    <FluentIcon Icon="Icons.Regular.Size20.Delete" Color="Color.Error"
-                                OnClick="@(() => ConfirmDeleteRuleAsync(context))" />
+    @* A flex list, not a FluentDataGrid: fixed grid columns truncated every rule name on a phone and
+       pushed the switch and buttons off the side of the screen. *@
+    @if (!_rules.Any())
+    {
+        <div class="automation-rules-empty">No automation rules configured.</div>
+    }
+    else
+    {
+        <div class="automation-rules-list">
+            @foreach (AutomationRule rule in _rules)
+            {
+                <div class="automation-rules-item" @key="rule.Id">
+                    <div class="automation-rules-info">
+                        <div class="automation-rules-name">@rule.Name</div>
+                        <div class="automation-rules-meta">@GetClientName(rule.TriggerClientId) &middot; @DescribeTrigger(rule)</div>
+                    </div>
+                    <div class="automation-rules-controls">
+                        <FluentSwitch Value="@rule.IsEnabled"
+                                      Title="@(rule.IsEnabled ? "Switch this rule off" : "Switch this rule on")"
+                                      aria-label="@($"{rule.Name} enabled")"
+                                      ValueChanged="@((bool isEnabled) => OnRuleEnabledToggleChangedAsync(rule, isEnabled))" />
+                        <FluentButton Appearance="ButtonAppearance.Transparent"
+                                      Title="Edit rule" aria-label="@($"Edit {rule.Name}")"
+                                      IconStart="@(new Icons.Regular.Size20.Edit())"
+                                      OnClick="@(() => OpenEditRuleDialogAsync(rule))" />
+                        <FluentButton Appearance="ButtonAppearance.Transparent"
+                                      Title="Duplicate rule" aria-label="@($"Duplicate {rule.Name}")"
+                                      IconStart="@(new Icons.Regular.Size20.Copy())"
+                                      Disabled="@(_duplicatingRuleId != null)"
+                                      OnClick="@(() => DuplicateRuleAsync(rule))" />
+                        <FluentButton Appearance="ButtonAppearance.Transparent"
+                                      Title="Delete rule" aria-label="@($"Delete {rule.Name}")"
+                                      IconStart="@(new Icons.Regular.Size20.Delete())"
+                                      OnClick="@(() => ConfirmDeleteRuleAsync(rule))" />
+                    </div>
                 </div>
-            </TemplateColumn>
-        </ChildContent>
-    </FluentDataGrid>
+            }
+        </div>
+    }
 </FluentCard>
 
 <FluentDivider Class="my-2" />
@@ -84,10 +98,12 @@
         </EmptyContent>
         <ChildContent>
             <TemplateColumn Title="Rule Name">
-                <span style="cursor: pointer; text-decoration: underline;"
-                      @onclick="@(() => OpenExecutionDetailDialogAsync(context))">
+                <FluentButton Appearance="ButtonAppearance.Transparent"
+                              Title="Show what happened"
+                              aria-label="@($"Show what happened when {context.RuleName} ran")"
+                              OnClick="@(() => OpenExecutionDetailDialogAsync(context))">
                     @context.RuleName
-                </span>
+                </FluentButton>
             </TemplateColumn>
             <PropertyColumn Title="Trigger Event" Property="@(e => e.TriggerEvent)" />
             <TemplateColumn Title="Trigger Client">
@@ -120,6 +136,7 @@
     private IEnumerable<AutomationRuleExecution> _executions = [];
     private bool _engineEnabled;
     private bool _showFailuresOnly;
+    private Guid? _duplicatingRuleId;
 
     private IEnumerable<AutomationRuleExecution> FilteredExecutions =>
         _showFailuresOnly
@@ -137,7 +154,16 @@
 
         // Independent reads (each opens its own DbContext) - overlap them rather than paying
         // three round-trips back to back.
-        await Task.WhenAll(LoadClientsAsync(), LoadRulesAsync(), LoadExecutionsAsync());
+        await Task.WhenAll(LoadClientsAsync(), LoadRulesAsync(), LoadExecutionsAsync(), LoadLocationsAsync());
+    }
+
+    // Names for party time rules ("... (Ipswich)"); the rule only stores the location's id.
+    private Dictionary<int, string> _locationNames = [];
+
+    private async Task LoadLocationsAsync()
+    {
+        Result<List<Location>> result = await _companyLocationService.GetLocationsAsync(_tenant.CompanyId);
+        _locationNames = (result.Data ?? []).ToDictionary(l => l.Id, l => l.Name);
     }
 
     private async Task LoadRulesAsync()
@@ -180,7 +206,7 @@
         return _clients.FirstOrDefault(c => c.Id == clientId)?.Name ?? clientId.ToString();
     }
 
-    private static string DescribeTrigger(AutomationRule rule)
+    private string DescribeTrigger(AutomationRule rule)
     {
         int conditionCount = rule.Conditions.Count(c => c.IsActive);
 
@@ -192,7 +218,7 @@
         };
     }
 
-    private static string DescribeTriggerOnly(AutomationRule rule)
+    private string DescribeTriggerOnly(AutomationRule rule)
     {
         switch (rule.TriggerType)
         {
@@ -224,6 +250,11 @@
 
             case AutomationTriggerType.GameEnded:
                 return rule.TriggerTeam is Team winningTeam ? $"Game ends, {winningTeam} wins" : "Game ends with a winner";
+
+            case AutomationTriggerType.PartyMilestone when rule.PartyMilestone is PartyMilestone milestone:
+                string where = rule.PartyLocationId is int locationId && _locationNames.TryGetValue(locationId, out string? name) ? name : "a location";
+                string room = string.IsNullOrWhiteSpace(rule.PartyRoom) ? string.Empty : $", {rule.PartyRoom}";
+                return $"{PartyTriggerRules.Describe(milestone, rule.PartyLeadMinutes ?? 0)} ({where}{room})";
 
             default:
                 return $"Game status: {rule.TriggerEvent}";
@@ -297,6 +328,42 @@
         if (result.Value is true)
         {
             await LoadRulesAsync();
+        }
+    }
+
+    private async Task DuplicateRuleAsync(AutomationRule rule)
+    {
+        if (_duplicatingRuleId != null)
+        {
+            return;
+        }
+
+        _duplicatingRuleId = rule.Id;
+
+        try
+        {
+            Result<AutomationRule> result = await _ruleService.DuplicateRuleAsync(rule.Id);
+
+            if (!result.IsSuccess || result.Data is not AutomationRule copy)
+            {
+                _toastService.ShowError(result.Error ?? "Couldn't copy the rule.");
+                return;
+            }
+
+            await LoadRulesAsync();
+            _toastService.ShowSuccess($"Copied as \"{copy.Name}\". It's switched off until you turn it on.");
+
+            // Straight into the copy, so it can be renamed and changed before it's switched on.
+            AutomationRule? reloaded = _rules.FirstOrDefault(r => r.Id == copy.Id);
+
+            if (reloaded != null)
+            {
+                await OpenEditRuleDialogAsync(reloaded);
+            }
+        }
+        finally
+        {
+            _duplicatingRuleId = null;
         }
     }
 

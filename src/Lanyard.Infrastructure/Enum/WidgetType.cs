@@ -21,5 +21,7 @@ public enum WidgetType
     WhoIsOnToday = 16,
     PendingTimeOff = 17,
     ComplianceSummary = 18,
-    DemandStaffing = 19
+    DemandStaffing = 19,
+    OperationsAlerts = 20,
+    WhatsOnToday = 21
 }

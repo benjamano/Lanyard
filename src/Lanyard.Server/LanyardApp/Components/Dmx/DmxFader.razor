@@ -1,0 +1,115 @@
+@* One desk channel as a plain native range input. A FluentCard + FluentSlider + FluentButton per
+   channel made 512 web components that all re-rendered on every live update; this is plain HTML and
+   only re-renders when its own value, lock or label changes. *@
+<div class="dmx-fader @(Patches.Count > 1 ? "dmx-fader--clash" : null) @(IsUnset ? "dmx-fader--unset" : null)" title="@TagTitle">
+    <span class="dmx-fader-tag @(Patches.Count == 0 ? "dmx-fader-tag--empty" : null)">@TagText</span>
+    <span class="dmx-fader-value" aria-hidden="true">@(IsUnset ? "–" : Value.ToString())</span>
+    <input type="range"
+           class="dmx-fader-input"
+           min="0" max="255" step="1"
+           value="@Value"
+           disabled="@Disabled"
+           aria-label="@($"Channel {Address}")"
+           aria-valuetext="@($"Channel {Address}: {Value}")"
+           @oninput="OnInput" />
+    <span class="dmx-fader-address">@Address</span>
+    @if (StepMode)
+    {
+        @* In a scene step, "not set" (the step leaves the channel alone) differs from 0. *@
+        <button type="button" class="dmx-fader-zero" disabled="@(Disabled || IsUnset)"
+                title="@(IsUnset ? $"Channel {Address} isn't in this step" : $"Take channel {Address} out of this step")"
+                aria-label="@($"Take channel {Address} out of this step")" @onclick="Clear">×</button>
+    }
+    else
+    {
+        <button type="button" class="dmx-fader-zero" disabled="@Disabled" title="@($"Set channel {Address} to 0")" @onclick="Zero">0</button>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public int Address { get; set; }
+
+    [Parameter]
+    public byte Value { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    // Every fixture patched on this channel (usually one; more when double-patched).
+    [Parameter]
+    public IReadOnlyList<DmxChannelPatch> Patches { get; set; } = [];
+
+    [Parameter]
+    public EventCallback<DmxFaderChange> OnChange { get; set; }
+
+    // Editing a scene step: the button removes the channel from the step instead of zeroing it.
+    [Parameter]
+    public bool StepMode { get; set; }
+
+    // The step doesn't set this channel (shown dimmed; moving the fader adds it).
+    [Parameter]
+    public bool IsUnset { get; set; }
+
+    [Parameter]
+    public EventCallback<int> OnClear { get; set; }
+
+    private byte _renderedValue;
+    private bool _renderedDisabled;
+    private bool _renderedUnset;
+    private bool _renderedStepMode;
+    private IReadOnlyList<DmxChannelPatch>? _renderedPatches;
+    private bool _hasRendered;
+
+    // The parent re-renders a whole bank at once; only faders whose own inputs changed redraw.
+    protected override bool ShouldRender()
+    {
+        bool changed = !_hasRendered
+            || _renderedValue != Value
+            || _renderedDisabled != Disabled
+            || _renderedUnset != IsUnset
+            || _renderedStepMode != StepMode
+            || !ReferenceEquals(_renderedPatches, Patches);
+
+        _hasRendered = true;
+        _renderedValue = Value;
+        _renderedDisabled = Disabled;
+        _renderedUnset = IsUnset;
+        _renderedStepMode = StepMode;
+        _renderedPatches = Patches;
+
+        return changed;
+    }
+
+    private Task OnInput(ChangeEventArgs e)
+    {
+        if (Disabled || !int.TryParse(e.Value?.ToString(), out int parsed))
+        {
+            return Task.CompletedTask;
+        }
+
+        byte value = (byte)Math.Clamp(parsed, 0, 255);
+        Value = value;
+
+        return OnChange.InvokeAsync(new DmxFaderChange(Address, value));
+    }
+
+    private Task Clear() => OnClear.InvokeAsync(Address);
+
+    private Task Zero()
+    {
+        Value = 0;
+        return OnChange.InvokeAsync(new DmxFaderChange(Address, 0));
+    }
+
+    private string TagText => Patches.Count switch
+    {
+        0 => "·",
+        1 => DmxChannelRoleText.Tag(Patches[0].Role) + (Patches[0].IsFine ? "·f" : string.Empty),
+        _ => "2×",
+    };
+
+    private string TagTitle => Patches.Count == 0
+        ? $"Channel {Address}: no fixture"
+        : $"Channel {Address}: " + string.Join("; ", Patches.Select(p => $"{p.FixtureName} · {p.Label}"));
+}

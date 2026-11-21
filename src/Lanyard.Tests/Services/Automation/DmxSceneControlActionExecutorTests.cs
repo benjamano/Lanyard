@@ -50,22 +50,54 @@ public class DmxSceneControlActionExecutorTests
             isClientConnected);
     }
 
-    private static async Task<Client> SeedClientAsync(DbContextOptions<ApplicationDbContext> options, string? connectionId = "connection-1")
+    // Each test has its own in-memory database, so one fixed rule id is enough.
+    private static readonly Guid RuleId = Guid.Parse("4a6f0d55-1c55-4c44-9f31-0d3b8c1d2e01");
+
+    private const int CompanyId = 3;
+
+    private static async Task<Client> SeedClientAsync(DbContextOptions<ApplicationDbContext> options, string? connectionId = "connection-1", int clientCompanyId = CompanyId)
     {
         await using ApplicationDbContext ctx = new(options);
 
         Client client = new()
         {
             Id = Guid.NewGuid(),
+            CompanyId = clientCompanyId,
             Name = "Test Client",
             MostRecentConnectionId = connectionId,
             CreateDate = DateTime.UtcNow
         };
 
         ctx.Clients.Add(client);
+
+        if (!await ctx.AutomationRules.AnyAsync(r => r.Id == RuleId))
+        {
+            ctx.AutomationRules.Add(new AutomationRule { Id = RuleId, CompanyId = CompanyId, Name = "Rule", TriggerClientId = client.Id });
+        }
+
         await ctx.SaveChangesAsync();
 
         return client;
+    }
+
+    private static async Task<Guid> SeedSceneAsync(DbContextOptions<ApplicationDbContext> options, Guid clientId)
+    {
+        await using ApplicationDbContext ctx = new(options);
+
+        Lanyard.Infrastructure.Models.Dmx.DmxScene scene = new()
+        {
+            Id = Guid.NewGuid(),
+            CompanyId = CompanyId,
+            ClientId = clientId,
+            Name = "Scene",
+            IsActive = true,
+            CreateByUserId = "test"
+        };
+
+        ctx.DmxScenes.Add(scene);
+        await ctx.SaveChangesAsync();
+
+        return scene.Id;
     }
 
     private static AutomationRuleAction GetAction(string parametersJson)
@@ -73,6 +105,7 @@ public class DmxSceneControlActionExecutorTests
         return new AutomationRuleAction
         {
             Id = Guid.NewGuid(),
+            AutomationRuleId = RuleId,
             ActionType = AutomationActionTypes.DmxSceneControl,
             ParametersJson = parametersJson,
             SortOrder = 0,
@@ -96,7 +129,7 @@ public class DmxSceneControlActionExecutorTests
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         Client client = await SeedClientAsync(options);
-        Guid sceneId = Guid.NewGuid();
+        Guid sceneId = await SeedSceneAsync(options, client.Id);
 
         Mock<IDmxSceneRunnerService> runnerMock = new();
         runnerMock.Setup(r => r.StartSceneAsync(client.Id, sceneId, null))
@@ -121,7 +154,7 @@ public class DmxSceneControlActionExecutorTests
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         Client client = await SeedClientAsync(options);
-        Guid sceneId = Guid.NewGuid();
+        Guid sceneId = await SeedSceneAsync(options, client.Id);
 
         Mock<IDmxSceneRunnerService> runnerMock = new();
         runnerMock.Setup(r => r.StartSceneAsync(client.Id, sceneId, TimeSpan.FromMilliseconds(3000)))
@@ -145,7 +178,7 @@ public class DmxSceneControlActionExecutorTests
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         Client client = await SeedClientAsync(options);
-        Guid sceneId = Guid.NewGuid();
+        Guid sceneId = await SeedSceneAsync(options, client.Id);
 
         Mock<IDmxSceneRunnerService> runnerMock = new();
         runnerMock.Setup(r => r.StartSceneAsync(client.Id, sceneId, null))
@@ -169,7 +202,7 @@ public class DmxSceneControlActionExecutorTests
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         Client client = await SeedClientAsync(options);
-        Guid sceneId = Guid.NewGuid();
+        Guid sceneId = await SeedSceneAsync(options, client.Id);
 
         Mock<IDmxSceneRunnerService> runnerMock = new();
         runnerMock.Setup(r => r.StopScene(sceneId)).Returns(Result<bool>.Ok(true));
@@ -191,7 +224,7 @@ public class DmxSceneControlActionExecutorTests
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         Client client = await SeedClientAsync(options);
-        Guid sceneId = Guid.NewGuid();
+        Guid sceneId = await SeedSceneAsync(options, client.Id);
 
         Mock<IDmxSceneRunnerService> runnerMock = new();
         runnerMock.Setup(r => r.StopScene(sceneId)).Returns(Result<bool>.Ok(true));
@@ -264,7 +297,7 @@ public class DmxSceneControlActionExecutorTests
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         Client client = await SeedClientAsync(options, connectionId: "stale-connection");
-        Guid sceneId = Guid.NewGuid();
+        Guid sceneId = await SeedSceneAsync(options, client.Id);
 
         Mock<IDmxSceneRunnerService> runnerMock = new();
 
@@ -301,7 +334,7 @@ public class DmxSceneControlActionExecutorTests
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         Client client = await SeedClientAsync(options);
-        Guid sceneId = Guid.NewGuid();
+        Guid sceneId = await SeedSceneAsync(options, client.Id);
 
         Mock<IDmxSceneRunnerService> runnerMock = new();
         runnerMock.Setup(r => r.StartSceneAsync(client.Id, sceneId, It.IsAny<TimeSpan?>()))
@@ -322,7 +355,7 @@ public class DmxSceneControlActionExecutorTests
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         Client client = await SeedClientAsync(options);
-        Guid sceneId = Guid.NewGuid();
+        Guid sceneId = await SeedSceneAsync(options, client.Id);
 
         Mock<IDmxSceneRunnerService> runnerMock = new();
 
@@ -348,5 +381,64 @@ public class DmxSceneControlActionExecutorTests
         Assert.IsFalse(success);
         Assert.IsNotNull(error);
         Assert.Contains("DMX scene control failed", error);
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_ShouldRefuse_AKioskFromAnotherCompany()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Client client = await SeedClientAsync(options, clientCompanyId: 99);
+        Guid sceneId = await SeedSceneAsync(options, client.Id);
+
+        Mock<IDmxSceneRunnerService> runnerMock = new();
+
+        DmxSceneControlActionExecutor executor = GetExecutor(options, runnerMock.Object, isClientConnected: true);
+
+        string parametersJson = $"{{\"TargetClientId\":\"{client.Id}\",\"Operation\":\"StartScene\",\"SceneId\":\"{sceneId}\"}}";
+
+        (bool success, string? error) = await executor.ExecuteAsync(GetAction(parametersJson), Guid.NewGuid());
+
+        Assert.IsFalse(success);
+        Assert.AreEqual("The action's kiosk belongs to a different company", error);
+        runnerMock.VerifyNoOtherCalls();
+    }
+
+    [TestMethod]
+    [DataRow("StartScene")]
+    [DataRow("StopScene")]
+    public async Task ExecuteAsync_ShouldRefuse_ASceneFromAnotherKiosk(string operation)
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Client client = await SeedClientAsync(options);
+        Client otherKiosk = await SeedClientAsync(options);
+        Guid sceneId = await SeedSceneAsync(options, otherKiosk.Id);
+
+        Mock<IDmxSceneRunnerService> runnerMock = new();
+
+        DmxSceneControlActionExecutor executor = GetExecutor(options, runnerMock.Object, isClientConnected: true);
+
+        string parametersJson = $"{{\"TargetClientId\":\"{client.Id}\",\"Operation\":\"{operation}\",\"SceneId\":\"{sceneId}\"}}";
+
+        (bool success, string? error) = await executor.ExecuteAsync(GetAction(parametersJson), Guid.NewGuid());
+
+        Assert.IsFalse(success);
+        Assert.AreEqual("The action's DMX scene no longer exists on that kiosk", error);
+        runnerMock.VerifyNoOtherCalls();
+    }
+
+    [TestMethod]
+    public void TryReadTargets_ReadsTheKioskAndScene_AndNoSceneForStopAll()
+    {
+        Guid clientId = Guid.NewGuid();
+        Guid sceneId = Guid.NewGuid();
+
+        Assert.IsTrue(DmxSceneControlActionExecutor.TryReadTargets($"{{\"TargetClientId\":\"{clientId}\",\"Operation\":\"StartScene\",\"SceneId\":\"{sceneId}\"}}", out Guid readClient, out Guid? readScene));
+        Assert.AreEqual(clientId, readClient);
+        Assert.AreEqual(sceneId, readScene);
+
+        Assert.IsTrue(DmxSceneControlActionExecutor.TryReadTargets($"{{\"TargetClientId\":\"{clientId}\",\"Operation\":\"StopAllScenes\",\"SceneId\":\"{sceneId}\"}}", out _, out Guid? stopAllScene));
+        Assert.IsNull(stopAllScene);
+
+        Assert.IsFalse(DmxSceneControlActionExecutor.TryReadTargets("not json", out _, out _));
     }
 }
