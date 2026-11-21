@@ -105,7 +105,7 @@ public class MusicService(IDbContextFactory<ApplicationDbContext> factory) : IMu
     protected virtual bool IsConnected(string? connectionId) =>
         !string.IsNullOrEmpty(connectionId) && Lanyard.Application.SignalR.SignalRControlHub.ConnectedIds.Contains(connectionId);
 
-    public async Task<Result<IReadOnlyDictionary<Guid, string>>> GetSongNamesAsync(IReadOnlyCollection<Guid> songIds)
+    public async Task<Result<IReadOnlyDictionary<Guid, string>>> GetSongNamesAsync(IReadOnlyCollection<Guid> songIds, int? companyId = null)
     {
         try
         {
@@ -119,7 +119,7 @@ public class MusicService(IDbContextFactory<ApplicationDbContext> factory) : IMu
             Dictionary<Guid, string> names = await context.Songs
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(s => songIds.Contains(s.Id))
+                .Where(s => songIds.Contains(s.Id) && (companyId == null || s.CompanyId == companyId))
                 .Select(s => new { s.Id, s.Name })
                 .ToDictionaryAsync(s => s.Id, s => s.Name);
 
