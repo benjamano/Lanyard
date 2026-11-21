@@ -1027,7 +1027,8 @@
       "The Execution Log shows which party a party time run was for, with an Open party button, and never the child's name.",
       "New \"A party is or isn't on\" condition for Automation rules: only run a rule while a booked party is on at a location (or in one room), or only while none is. For example, play the party version of the game lights during parties.",
       "Kiosk projection screens only play programs the kiosk itself opened: a screen's web address no longer works on another computer or for another company's program, and it no longer shows the kiosk's and program's ids while loading.",
-      "A kiosk's list of cached songs is only shown on that kiosk's own page, not on every open Clients page."
+      "A kiosk's list of cached songs is only shown on that kiosk's own page, not on every open Clients page.",
+      "Training course sections can no longer contain scripts or other unsafe content. Only the formatting the course editor offers (headings, bold, italic, lists, links and images) is kept, including in sections saved before this change."
     ]
   }
 ]

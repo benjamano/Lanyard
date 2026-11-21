@@ -444,6 +444,30 @@ public class CourseServiceTests
     }
 
     [TestMethod]
+    public async Task CourseService_SaveSection_StripsScriptFromTheBody()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+
+        Result<CourseSection> saved = await service.SaveSectionAsync(new CourseSection
+        {
+            Id = Guid.Empty,
+            CourseId = course.Id,
+            Title = "Safety",
+            BodyHtml = "<p>Read this</p><img src=x onerror=\"fetch('/steal')\"><script>alert(1)</script>"
+        }, AdminScope);
+
+        Assert.IsTrue(saved.Success, saved.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        string stored = (await ctx.CourseSections.SingleAsync(x => x.Id == saved.Data!.Id)).BodyHtml;
+        Assert.IsFalse(stored.Contains("onerror", StringComparison.OrdinalIgnoreCase), stored);
+        Assert.IsFalse(stored.Contains("<script", StringComparison.OrdinalIgnoreCase), stored);
+        Assert.IsTrue(stored.Contains("<p>Read this</p>"), stored);
+    }
+
+    [TestMethod]
     public async Task CourseService_SaveSection_UpdatesExistingSectionTitleAndBody()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
