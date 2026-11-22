@@ -205,6 +205,33 @@ public class RotaAutoBuildRulesTests
     }
 
     [TestMethod]
+    public void Assign_Under18WhoNeedsABreakRaised_CountsAsAbleToWorkTheShift()
+    {
+        // Saturday: a 09-15 Host shift with no break on the template, and a 10-14 Duty shift only Tom
+        // can work. Zoe (16) can work the Host shift once her break is raised, so it has two people
+        // who could work it and the Duty shift, with one, is filled first. Tom takes Duty and Zoe
+        // Host. Counted with the template break, both looked like one-person shifts, the earlier Host
+        // shift went first to Tom, and Duty was left open.
+        List<DemandSlot> slots = RotaAutoBuildRules.ExpandTemplates(
+            [Template(DayOfWeek.Saturday, 9, 15, (Host, "Host", 1)), Template(DayOfWeek.Saturday, 10, 14, (Duty, "Duty", 1))],
+            Saturday, Saturday);
+        AutoBuildWorker tom = Worker("Tom", Host);
+        AutoBuildWorker zoe = Worker("Zoe", Host) with { YoungWorker = Under18 };
+        Dictionary<string, Guid[]> held = new() { ["tom"] = [Host, Duty], ["zoe"] = [Host] };
+
+        // Like ShiftClaimRules.WhyCantWork in the app, which checks the young worker limits too.
+        Func<AutoBuildWorker, Shift, string?> holds = Holds(held);
+        Func<AutoBuildWorker, Shift, string?> cantWork = (worker, shift) => holds(worker, shift)
+            ?? (worker.YoungWorker is YoungWorkerProfile young ? YoungWorkerRules.Evaluate(young, shift, worker.Shifts).FirstOrDefault()?.Message : null);
+
+        List<AutoBuildPick> picks = RotaAutoBuildRules.Assign(1, slots, [tom, zoe], cantWork, "m", Now);
+
+        Assert.AreEqual("tom", picks.Single(x => x.Shift.StaffPositionId == Duty).Shift.UserId);
+        Assert.AreEqual("zoe", picks.Single(x => x.Shift.StaffPositionId == Host).Shift.UserId);
+        Assert.IsTrue(picks.All(x => !x.Line.IsOpen));
+    }
+
+    [TestMethod]
     public void Assign_AdultsKeepTheTemplateBreak()
     {
         List<DemandSlot> slots = RotaAutoBuildRules.ExpandTemplates([Template(DayOfWeek.Saturday, 9, 15, (Host, "Host", 1))], Saturday, Saturday);

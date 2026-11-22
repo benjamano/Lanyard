@@ -227,7 +227,9 @@ public static class RotaAutoBuildRules
             .Select((slot, index) =>
             {
                 Shift probe = NewShift(locationId, slot, actingUserId, nowUtc, positions);
-                int possible = workers.Count(w => cantWork(w, probe) is null && !Unavailable(w, probe));
+                // As each worker would be offered it: an under-18 gets a long shift with its break
+                // raised, so they count as able to work it.
+                int possible = workers.Count(w => ForWorker(w, probe) is Shift offered && cantWork(w, offered) is null && !Unavailable(w, offered));
 
                 return (Slot: slot, Index: index, Possible: possible);
             })
