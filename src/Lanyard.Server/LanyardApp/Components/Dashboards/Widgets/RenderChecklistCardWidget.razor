@@ -75,8 +75,11 @@ else
     private CancellationTokenSource? _cancellation;
     private (Guid?, bool, bool) _loadedSettings;
 
-    // A kiosk may tick only when the card allows it; the server checks the kiosk's token again.
-    private bool _canTick => Kiosk is not null && Widget.ChecklistCardAllowKioskTicking && _run is not null;
+    // A kiosk may tick only when the card allows it and the server accepts the kiosk's token (checked
+    // on every load, and again on every tick).
+    private bool _kioskMayTick;
+
+    private bool _canTick => Kiosk is not null && Widget.ChecklistCardAllowKioskTicking && _kioskMayTick && _run is not null;
 
     // The card decides ticking (the run read is read-only), so its own message bar stays quiet.
     private ChecklistRunView ShownRun => _run! with { CanTick = _canTick, CantTickReason = null };
@@ -134,6 +137,9 @@ else
 
         _error = null;
         _run = result.Data;
+
+        _kioskMayTick = Kiosk is not null && Widget.ChecklistCardAllowKioskTicking
+            && (await _runService.CanTickOnKioskAsync(Kiosk.ClientId, Kiosk.ViewerToken, checklistId)).Data;
         _hidden = Widget.ChecklistCardHideWhenDone && _run?.Status == ChecklistRunStatus.Complete;
     }
 

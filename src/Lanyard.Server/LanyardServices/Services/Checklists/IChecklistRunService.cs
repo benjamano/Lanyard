@@ -58,6 +58,10 @@ public interface IChecklistRunService
     // Checklist card in its company that allows kiosk ticking for that checklist.
     Task<Result<bool>> CompleteOnKioskAsync(Guid clientId, string? viewerToken, Guid runItemId, string? note, decimal? reading);
 
+    // Whether this kiosk may tick this checklist right now (its token is good, same company, and a card
+    // allows kiosk ticking), so the card can show read-only rather than fail on the first tick.
+    Task<Result<bool>> CanTickOnKioskAsync(Guid clientId, string? viewerToken, Guid checklistId);
+
     // Takes back a kiosk tick made today (not a person's).
     Task<Result<bool>> UndoOnKioskAsync(Guid clientId, string? viewerToken, Guid completionId);
 }

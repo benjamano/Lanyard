@@ -724,6 +724,33 @@ public class ChecklistRunService(
         }
     }
 
+    public async Task<Result<bool>> CanTickOnKioskAsync(Guid clientId, string? viewerToken, Guid checklistId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Result<Client> kiosk = await KioskAsync(ctx, clientId, viewerToken);
+
+            if (!kiosk.IsSuccess || kiosk.Data is null)
+            {
+                return Result<bool>.Ok(false);
+            }
+
+            bool sameCompany = await ctx.Checklists
+                .AsNoTracking()
+                .TagWithCallSite()
+                .AnyAsync(x => x.Id == checklistId && x.CompanyId == kiosk.Data.CompanyId && x.IsActive);
+
+            return Result<bool>.Ok(sameCompany && await KioskTickingAllowedAsync(ctx, kiosk.Data.CompanyId, checklistId));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to check kiosk {ClientId} may tick checklist {ChecklistId}", clientId, checklistId);
+            return Result<bool>.Fail($"Failed to check the kiosk: {ex.Message}");
+        }
+    }
+
     public async Task<Result<bool>> UndoOnKioskAsync(Guid clientId, string? viewerToken, Guid completionId)
     {
         try

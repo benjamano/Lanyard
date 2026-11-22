@@ -147,6 +147,17 @@ public class ChecklistKioskCardTests
     }
 
     [TestMethod]
+    public async Task CanTickOnKiosk_OnlyWithTheKiosksOwnTokenAndAnAllowingCard()
+    {
+        World w = await SeedAsync();
+        string token = w.Tokens.IssueViewerToken(w.LaserKiosk.Id);
+
+        Assert.IsTrue((await w.Service.CanTickOnKioskAsync(w.LaserKiosk.Id, token, w.Closing.Id)).Data);
+        Assert.IsFalse((await w.Service.CanTickOnKioskAsync(w.LaserKiosk.Id, "not-the-kiosk", w.Closing.Id)).Data);
+        Assert.IsFalse((await w.Service.CanTickOnKioskAsync(w.OtherCompanyKiosk.Id, w.Tokens.IssueViewerToken(w.OtherCompanyKiosk.Id), w.Closing.Id)).Data);
+    }
+
+    [TestMethod]
     public async Task AnotherCompanysKiosk_CantTickIt()
     {
         World w = await SeedAsync();
