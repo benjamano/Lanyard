@@ -472,7 +472,7 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
             switch (existingWidget)
             {
                 case TextAreaWidget existingTextArea when widget is TextAreaWidget incomingTextArea:
-                    existingTextArea.Content = incomingTextArea.Content;
+                    CopyTextArea(existingTextArea, incomingTextArea);
                     break;
 
                 case DigitalClockWidget existingClock when widget is DigitalClockWidget incomingClock:
@@ -852,7 +852,9 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
         {
             TextAreaWidget textAreaWidget => new TextAreaWidget
             {
-                Content = textAreaWidget.Content
+                Content = textAreaWidget.Content,
+                EditableOnKiosk = textAreaWidget.EditableOnKiosk,
+                KioskAutoSave = textAreaWidget.KioskAutoSave
             },
             DigitalClockWidget clockWidget => new DigitalClockWidget
             {
@@ -987,11 +989,26 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
     private static int ClampRowHeight(int rowHeight) =>
         rowHeight <= 0 ? Dashboard.DefaultRowHeight : Math.Clamp(rowHeight, Dashboard.MinRowHeight, Dashboard.MaxRowHeight);
 
+    // Text a kiosk can edit belongs to the kiosk: once the stored widget is kiosk-editable (and
+    // stays so), whatever the editor sends is the text as it was when the editor loaded, so
+    // copying it would throw away anything typed on the kiosk since. Turning the setting on or
+    // off still saves the editor's text.
+    private static void CopyTextArea(TextAreaWidget target, TextAreaWidget source)
+    {
+        if (!(target.EditableOnKiosk && source.EditableOnKiosk))
+        {
+            target.Content = source.Content;
+        }
+
+        target.EditableOnKiosk = source.EditableOnKiosk;
+        target.KioskAutoSave = source.KioskAutoSave;
+    }
+
     private static void UpdateTypeSpecificWidgetProperties(DashboardWidget target, DashboardWidget source)
     {
         if (target is TextAreaWidget targetTextArea && source is TextAreaWidget sourceTextArea)
         {
-            targetTextArea.Content = sourceTextArea.Content;
+            CopyTextArea(targetTextArea, sourceTextArea);
             return;
         }
 

@@ -1118,5 +1118,15 @@
       "Start a new dashboard from a ready-made layout: Staff home screen, Manager's morning, Front desk or Arena scoreboard TV. It opens in the designer straight away.",
       "Duplicate or delete a dashboard from its card."
     ]
+  },
+  {
+    "version": "1.4.38",
+    "releaseDate": "2026-11-22",
+    "summary": "Text widgets can be edited on the kiosk screen.",
+    "details": [
+      "Turn on Can be edited on the kiosk screen in a Text widget's settings, and a kiosk showing it gets an Edit button, so staff can update notices at the screen itself.",
+      "Or turn on Save automatically as people type, so the text is always ready to type into on the kiosk and saves itself a moment after typing stops.",
+      "Text widgets stay read-only everywhere else, and saving the dashboard in the designer no longer overwrites what was typed on the kiosk."
+    ]
   }
 ]

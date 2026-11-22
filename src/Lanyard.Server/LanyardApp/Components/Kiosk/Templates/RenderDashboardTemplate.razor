@@ -5,16 +5,33 @@
 
 @if (_dashboard != null)
 {
-    <DashboardGrid Widgets="_dashboard.Widgets"
-                   CompanyId="_dashboard.CompanyId"
-                   RowHeight="_dashboard.RowHeight"
-                   FitToScreen="_dashboard.FitToScreen"
-                   PreviewMode="true" />
+    <CascadingValue Value="_screen" IsFixed="true">
+        <DashboardGrid Widgets="_dashboard.Widgets"
+                       CompanyId="_dashboard.CompanyId"
+                       RowHeight="_dashboard.RowHeight"
+                       FitToScreen="_dashboard.FitToScreen"
+                       PreviewMode="true" />
+    </CascadingValue>
 }
 
 @code {
     [Parameter, EditorRequired]
     public ProjectionProgramStep Step { get; set; } = default!;
+
+    // The kiosk showing this, so widgets that act on the screen (a kiosk-editable Text widget)
+    // can say which kiosk they are.
+    [Parameter]
+    public Guid ClientId { get; set; }
+
+    [Parameter]
+    public string? ViewerToken { get; set; }
+
+    private KioskScreen? _screen;
+
+    protected override void OnInitialized()
+    {
+        _screen = new KioskScreen(ClientId, ViewerToken);
+    }
 
     private Dashboard? _dashboard;
     private string? _loadedDashboardId;

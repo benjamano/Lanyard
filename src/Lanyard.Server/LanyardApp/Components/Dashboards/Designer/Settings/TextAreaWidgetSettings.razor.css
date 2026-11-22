@@ -7,3 +7,8 @@
     flex: 1 1 auto;
     min-width: 0;
 }
+
+.text-area-settings.is-read-only {
+    height: 180px;
+    opacity: 0.85;
+}
