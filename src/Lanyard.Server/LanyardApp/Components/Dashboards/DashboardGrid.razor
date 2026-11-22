@@ -17,7 +17,7 @@
                  class="dashboard-grid-item @(widget.HideOnPhone ? "hide-on-phone" : null)"
                  id="@($"widget-{widget.Id}")"
                  style="@GetWidgetStyle(widget, phoneOrder)">
-                <DashboardWidgetHost Widget="widget" Live="PreviewMode" CompanyId="CompanyId" />
+                <DashboardWidgetHost Widget="widget" Live="PreviewMode" CompanyId="CompanyId" ControlsEnabled="ControlsEnabled" />
             </div>
         }
     </div>
@@ -32,6 +32,10 @@
     // designer (Components/Dashboards/Designer), which draws widgets itself.
     [Parameter]
     public bool PreviewMode { get; set; } = true;
+
+    // See DashboardWidgetHost.ControlsEnabled: off for previews that aren't meant to act.
+    [Parameter]
+    public bool ControlsEnabled { get; set; } = true;
 
     // The company that owns the dashboard. Kiosk displays render without a signed-in user, so
     // nothing filters their data by company - widgets that read company data scope to this.

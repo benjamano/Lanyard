@@ -19,7 +19,7 @@
             <ErrorBoundary @ref="_errorBoundary">
                 <ChildContent>
                     <DynamicComponent Type="_descriptor.Component"
-                                      Parameters="DashboardWidgetCatalog.RenderParameters(_descriptor, Widget, Live, CompanyId)" />
+                                      Parameters="DashboardWidgetCatalog.RenderParameters(_descriptor, Widget, Live, CompanyId, ControlsEnabled)" />
                 </ChildContent>
                 <ErrorContent>
                     <div class="dashboard-widget-problem">
@@ -42,6 +42,11 @@
 
     [Parameter]
     public int? CompanyId { get; set; }
+
+    // False shows a live widget whose buttons and controls don't act: the designer's Phone and
+    // TV views show the real dashboard, but tapping a button there mustn't start a projection.
+    [Parameter]
+    public bool ControlsEnabled { get; set; } = true;
 
     private WidgetDescriptor? _descriptor;
     private ErrorBoundary? _errorBoundary;
