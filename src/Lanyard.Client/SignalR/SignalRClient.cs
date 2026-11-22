@@ -17,6 +17,8 @@ using Lanyard.Infrastructure.DTO.ZoneScoreboard;
 using Lanyard.Client.PacketSniffing;
 using DirectShowLib;
 using Lanyard.Infrastructure.DTO.VideoDevices;
+using Lanyard.Client.Identify;
+using Microsoft.Win32;
 
 public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxController, IMusicPlayer musicPlayer, IGameStateService gameStateService) : ISignalRClient
 {
@@ -28,8 +30,16 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
 
     private bool _isConnected = false;
 
+    // Screens are re-sent when Windows reports a display change, so a monitor plugged in or
+    // unplugged while connected doesn't leave the server's screen list stale until a reconnect.
+    private static readonly TimeSpan DisplayChangeDebounce = TimeSpan.FromSeconds(2);
+    private int _watchingDisplayChanges;
+    private CancellationTokenSource? _displayChangeDebounce;
+
     public async Task Connect(List<Action<HubConnection>> registrations)
     {
+        WatchDisplayChanges();
+
         string serverUrl = Environment.GetEnvironmentVariable("LANYARD_SERVER_URL")! + "/websocket";
         string clientId = Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!;
         bool allowInsecureSsl = ShouldAllowInsecureSsl();
@@ -406,15 +416,19 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
         {
             _logger.LogInformation("Sending available screens to server...");
 
-            IEnumerable<ClientAvailableScreenDTO> screens = Screen.AllScreens
-                .Select(x=> new ClientAvailableScreenDTO()
+            Guid clientId = Guid.Parse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!);
+
+            // One read of the screen list, so every index comes from the same order.
+            List<ClientAvailableScreenDTO> screens = DisplaySnapshot.Take()
+                .Select(x => new ClientAvailableScreenDTO()
                 {
-                    ClientId = Guid.Parse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!),
-                    Name = x.DeviceName,
-                    Width = x.Bounds.Width,
-                    Height = x.Bounds.Height,
-                    Index = Array.IndexOf(Screen.AllScreens, x)
-                });
+                    ClientId = clientId,
+                    Name = x.Screen.DeviceName,
+                    Width = x.Screen.Bounds.Width,
+                    Height = x.Screen.Bounds.Height,
+                    Index = x.Index
+                })
+                .ToList();
 
             await _connection!.InvokeAsync("UpdateAvailableScreens", screens);
         }
@@ -422,6 +436,42 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
         {
             _logger.LogError(ex, "Error sending available screens to server: {Message}", ex.Message);
         }
+    }
+
+    private void WatchDisplayChanges()
+    {
+        // Connect runs again after a close; subscribe once for the life of the process.
+        if (Interlocked.Exchange(ref _watchingDisplayChanges, 1) == 1)
+        {
+            return;
+        }
+
+        SystemEvents.DisplaySettingsChanged += (_, _) => _ = OnDisplaySettingsChangedAsync();
+    }
+
+    private async Task OnDisplaySettingsChangedAsync()
+    {
+        // Windows raises several of these for one plug or resolution change; send once it settles.
+        CancellationTokenSource debounce = new();
+        Interlocked.Exchange(ref _displayChangeDebounce, debounce)?.Cancel();
+
+        try
+        {
+            await Task.Delay(DisplayChangeDebounce, debounce.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (!IsConnected)
+        {
+            return;
+        }
+
+        _logger.LogInformation("The display settings changed; re-sending the screen list.");
+
+        await SendAvailableScreensToServer();
     }
 
     private async Task SendAvailableAudioDevicesToServer()

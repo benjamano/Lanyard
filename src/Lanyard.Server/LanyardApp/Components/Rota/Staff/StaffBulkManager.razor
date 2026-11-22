@@ -259,7 +259,7 @@
         staff = result.IsSuccess ? result.Data ?? [] : [];
         positions = positionsResult.IsSuccess ? positionsResult.Data ?? [] : [];
 
-        Result<Dictionary<string, YoungWorkerStatus>> youngResult = await _youngWorkerService.GetForCompanyAsync(scope, RotaTime.Today(DateTime.UtcNow));
+        Result<Dictionary<string, YoungWorkerStatus>> youngResult = await _youngWorkerService.GetForCompanyAsync(scope, CompanyId, RotaTime.Today(DateTime.UtcNow));
         youngWorkers = youngResult.IsSuccess ? youngResult.Data ?? [] : [];
 
         // Keep the selection across a reload so a second change can follow the first, but drop

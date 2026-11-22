@@ -32,5 +32,10 @@ public enum CompanyFeature
     // 9 is kept for Policies (open PR #284 still says 8, which AudioClips took).
 
     // The Operations alerts page and widget: kiosk, automation and staff problems in one list.
-    OperationsAlerts = 10
+    OperationsAlerts = 10,
+
+    // Opening, closing and other location checklists: the setup and today/history pages, ticking
+    // tasks on a phone or the clock-in terminal, missed-checklist alerts and the Checklists widget.
+    // Also needs StaffScheduling, whose rota decides who can tick.
+    Checklists = 11
 }

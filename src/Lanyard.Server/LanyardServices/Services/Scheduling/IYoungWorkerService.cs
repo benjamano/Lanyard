@@ -18,9 +18,9 @@ public interface IYoungWorkerService
     // are one.
     Task<Result<YoungWorkerStatusView?>> SaveAsync(LocationScope scope, string userId, DateOnly? dateOfBirth, string actingUserId);
 
-    // Everyone in the signed-in company who is still a young worker on `today`, by user id - for
-    // the staff list and the rota.
-    Task<Result<Dictionary<string, YoungWorkerStatus>>> GetForCompanyAsync(LocationScope scope, DateOnly today);
+    // Everyone in the company who is still under 18 on `today`, by user id - for the staff list.
+    // Managers of that company, or Admins (who may be looking at any company).
+    Task<Result<Dictionary<string, YoungWorkerStatus>>> GetForCompanyAsync(LocationScope scope, int companyId, DateOnly today);
 
     // The young worker limits this draft shift (not yet saved) would break for draft.UserId, for the
     // shift dialog's warning. Empty for an open shift or anyone who isn't a young worker. Managers

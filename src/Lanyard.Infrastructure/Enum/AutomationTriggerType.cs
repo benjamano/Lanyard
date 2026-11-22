@@ -49,5 +49,15 @@ public enum AutomationTriggerType
     /// team or only <see cref="Lanyard.Infrastructure.Models.AutomationRule.TriggerTeam"/>. A draw,
     /// a solo game or a game with only one team doesn't fire it.
     /// </summary>
-    GameEnded = 5
+    GameEnded = 5,
+
+    /// <summary>
+    /// Fires once per party when a booked party at
+    /// <see cref="Lanyard.Infrastructure.Models.AutomationRule.PartyLocationId"/> reaches
+    /// <see cref="Lanyard.Infrastructure.Models.AutomationRule.PartyMilestone"/> (start, eat time,
+    /// laser tag or end), <see cref="Lanyard.Infrastructure.Models.AutomationRule.PartyLeadMinutes"/>
+    /// minutes early. Parties reaching it in the same tick fire the rule once. Like Scheduled,
+    /// TriggerClientId is only the "associated client" (audit label and alert location).
+    /// </summary>
+    PartyMilestone = 6
 }

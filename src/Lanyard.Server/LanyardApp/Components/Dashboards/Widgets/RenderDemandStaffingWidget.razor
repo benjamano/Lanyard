@@ -6,7 +6,8 @@
 
 @* Labour hours per game and the hours most out of line with staffing, for the viewing Admin or
    Manager. Anyone else - including a signed-out kiosk screen - gets a short note, and the data is
-   never requested for them. Hours only; no names and no pay. *@
+   never requested for them. Hours and counts only; no names and no pay. Flags already leave out
+   hours with a party on (see InsightsRules), so a party never shows up here as a busy hour. *@
 
 <FluentCard Height="100%">
     <div class="sw-body">
@@ -50,6 +51,13 @@
                         <span class="ds-kpi-label">games at @_summary.LocationName</span>
                     </div>
                 </div>
+
+                @if (_summary.HasPartyData && figures.Totals.Parties > 0)
+                {
+                    <div class="ds-parties">
+                        @PartyLine(figures.Totals)
+                    </div>
+                }
 
                 <div class="sw-list">
                     @if (!figures.FlagsAvailable)
@@ -144,6 +152,12 @@
         _summary = result.Data;
         _state = State.Ready;
     }
+
+    // "12 parties · 180 children · 40 party games"
+    private static string PartyLine(InsightsTotals totals) => string.Join(" · ",
+        totals.Parties == 1 ? "1 party" : $"{totals.Parties:#,0} parties",
+        totals.ExpectedChildren == 1 ? "1 child" : $"{totals.ExpectedChildren:#,0} children",
+        totals.PartyGames == 1 ? "1 party game" : $"{totals.PartyGames:#,0} party games");
 
     private void OpenPage()
     {

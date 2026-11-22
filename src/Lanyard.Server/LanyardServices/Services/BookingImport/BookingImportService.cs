@@ -1,4 +1,5 @@
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Parties;
 using Lanyard.Application.Services.OperationsAlerts;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
@@ -36,6 +37,10 @@ public sealed class BookingImportService : IBookingImportService
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<BookingImportService> _logger;
 
+    // Optional only so tests can leave it out. An import that moves or cancels parties clears its
+    // cache, so party-time automation sees Just Step's changes within a tick.
+    private readonly IPartyScheduleProvider? _partySchedule;
+
     public BookingImportService(
         IDbContextFactory<ApplicationDbContext> factory,
         ISystemDbContextFactory systemFactory,
@@ -43,8 +48,10 @@ public sealed class BookingImportService : IBookingImportService
         IOperationsAlertWriter alertWriter,
         IDataProtectionProvider dataProtection,
         TimeProvider timeProvider,
-        ILogger<BookingImportService> logger)
+        ILogger<BookingImportService> logger,
+        IPartyScheduleProvider? partySchedule = null)
     {
+        _partySchedule = partySchedule;
         _factory = factory;
         _systemFactory = systemFactory;
         _client = client;
@@ -305,6 +312,7 @@ public sealed class BookingImportService : IBookingImportService
             }
 
             await ApplyBookingsAsync(ctx, companyId, locationId, fetch.Data!, from, to, startedAt, run, cancellationToken);
+            _partySchedule?.Invalidate(locationId);
 
             bool anyChanges = run.Imported + run.Updated > 0;
             run.Status = run.Failed > 0

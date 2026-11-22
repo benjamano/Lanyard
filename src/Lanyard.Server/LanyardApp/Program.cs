@@ -59,6 +59,7 @@ using Lanyard.Application.Services.Clients;
 using Lanyard.Application.Services.ClientReleases;
 using Lanyard.Application.Services.VideoStreaming;
 using Lanyard.Application.Services.OperationsAlerts;
+using Lanyard.Application.Services.Checklists;
 using Lanyard.App.Components.Layout;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
@@ -113,6 +114,9 @@ builder.Services.AddScoped<IKioskSecurityService, KioskSecurityService>();
 builder.Services.AddSingleton<KioskConnectionRegistry>();
 builder.Services.AddScoped<ICurrentUserAccessor, CurrentUserAccessor>();
 builder.Services.AddScoped<IFileService, FileService>();
+builder.Services.AddScoped<IFileUsageService, FileUsageService>();
+builder.Services.AddScoped<IFileLibraryService, FileLibraryService>();
+builder.Services.AddSingleton<IFileLibraryEvents, FileLibraryEvents>();
 
 // One bucket client for the whole process. FileService is scoped and used to build its own
 // AmazonS3Client per instance - a new SDK client and HTTP pipeline for every request/circuit.
@@ -140,6 +144,7 @@ builder.Services.AddScoped<IClientUpdatePolicyService, ClientUpdatePolicyService
 builder.Services.AddScoped<IClientReleaseAdminService, ClientReleaseAdminService>();
 builder.Services.AddScoped<IClientDiagnosticsService, ClientDiagnosticsService>();
 builder.Services.AddScoped<IKioskSelfTestService, KioskSelfTestService>();
+builder.Services.AddScoped<IDisplayIdentifyService, DisplayIdentifyService>();
 builder.Services.AddScoped<IKioskHealthService, KioskHealthService>();
 builder.Services.AddScoped<IKioskClientListService, KioskClientListService>();
 builder.Services.AddScoped<IKioskOfflineManifestService, KioskOfflineManifestService>();
@@ -173,6 +178,7 @@ builder.Services.AddScoped<IShiftSuggestionService, ShiftSuggestionService>();
 builder.Services.AddScoped<IStaffAvailabilityService, StaffAvailabilityService>();
 builder.Services.AddScoped<IYoungWorkerService, YoungWorkerService>();
 builder.Services.AddScoped<IShiftTemplateService, ShiftTemplateService>();
+builder.Services.AddScoped<IChecklistService, ChecklistService>();
 builder.Services.AddScoped<IRotaAutoBuildService, RotaAutoBuildService>();
 builder.Services.AddScoped<IRotaHolidayService, RotaHolidayService>();
 builder.Services.AddScoped<ITemplateLearningService, TemplateLearningService>();
@@ -233,6 +239,8 @@ builder.Services.AddScoped<ITimeOffService, TimeOffService>();
 builder.Services.AddHostedService<CourseRecurrenceHostedService>();
 builder.Services.AddHostedService<TrainingDueSoonHostedService>();
 builder.Services.AddHostedService<StaffDocumentExpiryReminderHostedService>();
+builder.Services.AddHostedService<FileBinPurgeHostedService>();
+builder.Services.AddHostedService<FileThumbnailBackfillHostedService>();
 builder.Services.AddSingleton<NotificationDispatcher>();
 builder.Services.AddSingleton<INotificationDispatcher>(sp => sp.GetRequiredService<NotificationDispatcher>());
 builder.Services.AddScoped<INotificationDeliverer, NotificationDeliverer>();
@@ -253,6 +261,7 @@ builder.Services.AddHostedService<PushDeviceCleanupHostedService>();
 builder.Services.AddHostedService<NotificationDeliveryHostedService>();
 builder.Services.AddHostedService<ShiftReminderHostedService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
+builder.Services.AddScoped<Lanyard.App.Components.Dashboards.DashboardWidgetConfigurator>();
 builder.Services.AddScoped<ISignalRProjectionControlHub, SignalRControlHub>();
 builder.Services.AddScoped<ITimeService, TimeService>();
 builder.Services.AddScoped<IDmxSceneService, DmxSceneService>();
@@ -287,12 +296,19 @@ builder.Services.AddHostedService<DmxOutputStatePersister>();
 builder.Services.AddSingleton<IProjectionBindingSource, LastGameWinnerBindingSource>();
 builder.Services.AddSingleton<IProjectionBindingSource, TopScoreTodayBindingSource>();
 builder.Services.AddSingleton<IProjectionBindingSource, OpeningHoursTodayBindingSource>();
+builder.Services.AddSingleton<IProjectionBindingSource, PartyWelcomeBindingSource>();
+builder.Services.AddSingleton<IProjectionBindingSource, PartyChildNameBindingSource>();
+builder.Services.AddSingleton<IProjectionBindingSource, PartyNextUpBindingSource>();
 builder.Services.AddSingleton<IProjectionBindingResolver, ProjectionBindingResolver>();
 
 builder.Services.AddSingleton<IProjectionProgramRunnerService, ProjectionProgramRunnerService>();
 builder.Services.AddHostedService<ProjectionProgramCompletionListener>();
 
+builder.Services.AddSingleton<IPartyScheduleProvider, PartyScheduleProvider>();
 builder.Services.AddSingleton<AutomationEngineService>();
+// One instance under both types: the hosted services drain its channels through the concrete type,
+// everything else uses the interface.
+builder.Services.AddSingleton<IAutomationEngineService>(sp => sp.GetRequiredService<AutomationEngineService>());
 builder.Services.AddSingleton<IActionExecutor, MusicControlActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, StartProjectionProgramActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, StopProjectionProgramActionExecutor>();
@@ -309,6 +325,7 @@ builder.Services.Configure<KioskSelfTestOptions>(builder.Configuration.GetSectio
 builder.Services.AddHostedService<KioskSelfTestRetentionHostedService>();
 builder.Services.AddHostedService<IdleTriggerHostedService>();
 builder.Services.AddHostedService<ScheduledTriggerHostedService>();
+builder.Services.AddHostedService<PartyTriggerHostedService>();
 builder.Services.AddHostedService<KioskAlertMonitorHostedService>();
 
 builder.Services.AddScoped<IClientZoneScoreboardService, ClientZoneScoreboardService>();
