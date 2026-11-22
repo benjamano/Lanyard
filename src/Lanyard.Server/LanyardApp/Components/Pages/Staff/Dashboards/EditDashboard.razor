@@ -81,6 +81,7 @@ else
             </div>
         </header>
 
+        <CascadingValue Value="_textFlusher" IsFixed="true">
         <div class="designer-body">
             <aside class="designer-pane designer-palette-pane" aria-label="Widgets">
                 <div class="designer-pane-header">
@@ -90,7 +91,7 @@ else
                                   OnClick="@(() => _paletteOpen = false)" />
                 </div>
                 <div class="designer-pane-scroll">
-                    <WidgetPalette @ref="_palette" HiddenFeatures="_hiddenFeatures" OnAdd="AddFromKeyboardAsync" />
+                    <WidgetPalette @ref="_palette" HiddenFeatures="_hiddenFeatures" />
                 </div>
             </aside>
 
@@ -129,6 +130,7 @@ else
                 </div>
             </aside>
         </div>
+        </CascadingValue>
     </div>
 }
 
@@ -148,6 +150,8 @@ else
     private DesignerCanvas? _canvas;
     private WidgetPalette? _palette;
     private bool _paletteAttached;
+
+    private readonly TextEditorFlusher _textFlusher = new();
 
     private DashboardWidget? SelectedWidget => Dashboard?.Widgets.FirstOrDefault(w => w.Id == _selectedId);
 
@@ -211,14 +215,6 @@ else
         }
     }
 
-    private async Task AddFromKeyboardAsync(WidgetType type)
-    {
-        if (_canvas is not null)
-        {
-            await _canvas.AddWidgetAsync(type);
-        }
-    }
-
     private async Task ResizeSelectedAsync((int W, int H) size)
     {
         if (_canvas is not null && SelectedWidget is DashboardWidget widget)
@@ -257,6 +253,9 @@ else
         {
             return;
         }
+
+        // Anything just typed into a Text widget, before its editor has handed it over.
+        await _textFlusher.FlushAsync();
 
         if (string.IsNullOrWhiteSpace(Dashboard.Name))
         {

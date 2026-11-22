@@ -304,6 +304,13 @@
     [JSInvokable]
     public async Task KeyAsync(string key, bool shift, bool ctrl)
     {
+        // A drag commits the layout it previewed from its start, so a key move made meanwhile
+        // would be silently thrown away.
+        if (_dragKind != DragKind.None)
+        {
+            return;
+        }
+
         if (key == "Escape")
         {
             await SelectAsync(null);

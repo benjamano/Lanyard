@@ -57,8 +57,12 @@
             _descriptorType = Widget.Type;
         }
 
-        // Changing a widget's settings in the designer re-renders it, which is the moment to give
-        // a widget that failed earlier another go.
-        _errorBoundary?.Recover();
+        // In the designer, a re-render usually means a setting changed, which is the moment to give
+        // a widget that failed another go. On a live screen it would just retry (and log) the same
+        // failure on every render, so it stays showing the message.
+        if (!Live)
+        {
+            _errorBoundary?.Recover();
+        }
     }
 }
