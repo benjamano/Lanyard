@@ -248,7 +248,7 @@
             return;
         }
 
-        Result<bool> result = await _runService.CompleteAsync(userId, scope, tick.Item.ItemId, tick.Note, tick.Reading);
+        Result<bool> result = await _runService.CompleteAsync(userId, scope, tick.Item.ItemId, tick.Note, tick.Reading, ChecklistCompletionMethod.Manager);
 
         if (!result.IsSuccess)
         {

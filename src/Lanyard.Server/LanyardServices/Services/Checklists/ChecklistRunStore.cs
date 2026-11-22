@@ -6,6 +6,7 @@ using Lanyard.Infrastructure.DTO.Scheduling;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Lanyard.Application.Services.Checklists;
 
@@ -102,6 +103,10 @@ internal static class ChecklistRunStore
 
             if (day == today && untouched && Differs(run, checklist, tasks, due))
             {
+                // The old items are deleted outright, not soft-deleted: they are only a copy of the
+                // checklist's tasks that nobody has ticked, so nothing about them is history. If a tick
+                // lands on one in the meantime, its Restrict foreign key makes this save fail and the
+                // run keeps its items (the catch below), so a tick is never lost to a rebuild.
                 ctx.ChecklistRunItems.RemoveRange(run.Items);
                 run.Name = checklist.Name;
                 run.DueUtc = due;
@@ -121,7 +126,8 @@ internal static class ChecklistRunStore
         }
         catch (DbUpdateException)
         {
-            // Someone else made the same run a moment ago; theirs stands.
+            // Someone else made the same run a moment ago (theirs stands), or someone ticked a task
+            // on a run being rebuilt (the ticked run stands, and the next read sees it's touched).
             ctx.ChangeTracker.Clear();
         }
     }
@@ -259,4 +265,22 @@ internal static class ChecklistRunStore
     public static string WhoTicked(ChecklistCompletion completion) => completion.UserId is null
         ? completion.Client?.Name ?? "a kiosk"
         : RotaNames.Public(completion.User);
+}
+
+/// <summary>Ticks saved at the same moment as another change. Shared by every way of ticking.</summary>
+public static class ChecklistTickConflicts
+{
+    /// <summary>
+    /// What to tell someone whose tick couldn't be saved because of another change at the same moment,
+    /// or null when the failure was something else (left for the caller's logged catch-all): another
+    /// live tick on the task (the unique index), or the task itself gone in a rebuild of today's run.
+    /// </summary>
+    public static string? For(DbUpdateException ex) => ex.InnerException is PostgresException postgres
+        ? postgres.SqlState switch
+        {
+            PostgresErrorCodes.UniqueViolation => "Someone else ticked this a moment ago.",
+            PostgresErrorCodes.ForeignKeyViolation => "This checklist changed a moment ago. Look again and tick it there.",
+            _ => null
+        }
+        : null;
 }

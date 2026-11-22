@@ -41,7 +41,8 @@ public class ChecklistMissedAlertTests
         }
     }
 
-    private static async Task<Harness> BuildAsync(DateTime now, ChecklistDueRule rule = ChecklistDueRule.FixedTime)
+    private static async Task<Harness> BuildAsync(DateTime now, ChecklistDueRule rule = ChecklistDueRule.FixedTime,
+        Func<IOperationsAlertWriter, IOperationsAlertWriter>? wrapWriter = null)
     {
         DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
         (Company company, Location ipswich) = await SchedulingTestHelpers.SeedCompanyAsync(options);
@@ -84,7 +85,7 @@ public class ChecklistMissedAlertTests
         return new Harness
         {
             Options = options,
-            Sweep = new ChecklistMissedAlertHostedService(factory, writer, clock, NullLogger<ChecklistMissedAlertHostedService>.Instance),
+            Sweep = new ChecklistMissedAlertHostedService(factory, wrapWriter?.Invoke(writer) ?? writer, clock, NullLogger<ChecklistMissedAlertHostedService>.Instance),
             Dispatcher = dispatcher,
             Clock = clock,
             Company = company,
@@ -220,5 +221,44 @@ public class ChecklistMissedAlertTests
     {
         await using ApplicationDbContext ctx = new(h.Options);
         return await ctx.ChecklistRuns.Where(x => x.ChecklistId == h.Opening.Id && x.VenueDate == day).Select(x => x.Id).SingleAsync();
+    }
+
+    // Fails the first RaiseAsync, then hands everything to the real writer.
+    private sealed class FailsOnceWriter(IOperationsAlertWriter inner) : IOperationsAlertWriter
+    {
+        public int Attempts { get; private set; }
+
+        public Task<Lanyard.Infrastructure.DTO.Result<OperationsAlertRaiseOutcome>> RaiseAsync(OperationsAlertRaise raise, CancellationToken cancellationToken = default) =>
+            ++Attempts == 1
+                ? Task.FromResult(Lanyard.Infrastructure.DTO.Result<OperationsAlertRaiseOutcome>.Fail("database blip"))
+                : inner.RaiseAsync(raise, cancellationToken);
+
+        public Task<Lanyard.Infrastructure.DTO.Result<bool>> ResolveAsync(int companyId, string dedupKey, string? note = null, CancellationToken cancellationToken = default) =>
+            inner.ResolveAsync(companyId, dedupKey, note, cancellationToken);
+    }
+
+    [TestMethod]
+    public async Task ARaiseThatFails_IsTriedAgainOnTheNextSweep()
+    {
+        FailsOnceWriter? flaky = null;
+        Harness h = await BuildAsync(Today1030, wrapWriter: inner => flaky = new FailsOnceWriter(inner));
+
+        // Yesterday's run may be missed as well; whichever run's raise failed must get no alert.
+        await h.Sweep.RunSweepAsync();
+        Assert.AreEqual(flaky!.Attempts - 1, (await h.AlertsAsync()).Count, "The failed raise left no alert.");
+
+        await using (ApplicationDbContext ctx = new(h.Options))
+        {
+            Assert.IsTrue(await ctx.ChecklistRuns.AnyAsync(x => x.MissedAlertUtc == null), "The failed run's claim was handed back.");
+        }
+
+        await h.Sweep.RunSweepAsync();
+
+        await using (ApplicationDbContext ctx = new(h.Options))
+        {
+            Assert.IsFalse(await ctx.ChecklistRuns.AnyAsync(x => x.MissedAlertUtc == null), "Every missed run is now claimed.");
+        }
+
+        Assert.AreEqual(flaky.Attempts - 1, (await h.AlertsAsync()).Count, "Every successful raise made one alert, including the retry.");
     }
 }

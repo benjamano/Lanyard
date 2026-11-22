@@ -82,8 +82,14 @@ public class ChecklistRunService(
         }
     }
 
-    public async Task<Result<bool>> CompleteAsync(string userId, LocationScope scope, Guid runItemId, string? note, decimal? reading)
+    public async Task<Result<bool>> CompleteAsync(string userId, LocationScope scope, Guid runItemId, string? note, decimal? reading,
+        ChecklistCompletionMethod method = ChecklistCompletionMethod.Phone)
     {
+        if (method is not (ChecklistCompletionMethod.Phone or ChecklistCompletionMethod.Manager))
+        {
+            return Result<bool>.Fail("Ticks from here are made on a phone or by a manager.");
+        }
+
         try
         {
             DateTime now = Now;
@@ -104,7 +110,12 @@ public class ChecklistRunService(
                 return Result<bool>.Fail(location.Error ?? "That task wasn't found.");
             }
 
-            return await TickAsync(ctx, item, userId, IsManagerAt(scope, item.Run.LocationId), ChecklistCompletionMethod.Phone, null, note, reading, now);
+            if (method == ChecklistCompletionMethod.Manager && !IsManagerAt(scope, item.Run.LocationId))
+            {
+                return Result<bool>.Fail("Only a Manager or Admin here can tick from Checklists today.");
+            }
+
+            return await TickAsync(ctx, item, userId, IsManagerAt(scope, item.Run.LocationId), method, null, note, reading, now);
         }
         catch (Exception ex)
         {
@@ -186,9 +197,9 @@ public class ChecklistRunService(
         {
             await ctx.SaveChangesAsync();
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (ChecklistTickConflicts.For(ex) is string conflict)
         {
-            return Result<bool>.Fail("Someone else ticked this a moment ago.");
+            return Result<bool>.Fail(conflict);
         }
 
         _logger.LogInformation("Checklist task {RunItemId} ticked by {UserId} ({Method})", item.Id, userId, method);
@@ -474,9 +485,19 @@ public class ChecklistRunService(
 
             List<string> managers = await SchedulingRecipients.ManagersOfLocationAsync(ctx, locationId);
 
-            List<string> userIds = [.. onRota.Concat(clockedIn).Concat(managers)
+            List<string> candidates = [.. onRota.Concat(clockedIn).Concat(managers)
                 .Where(x => x != ApplicationDbContext.SystemDeletedUserPlaceholderId)
                 .Distinct()];
+
+            // Only the location's own people: the PIN check (VerifyTerminalPinAsync) and clocking in
+            // both need membership, so anyone else listed here could never get past their PIN.
+            List<string> userIds = await ctx.UserLocationMemberships
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.LocationId == locationId && candidates.Contains(x.UserId))
+                .Select(x => x.UserId)
+                .Distinct()
+                .ToListAsync();
 
             DateTimeOffset nowOffset = new(Now, TimeSpan.Zero);
 
