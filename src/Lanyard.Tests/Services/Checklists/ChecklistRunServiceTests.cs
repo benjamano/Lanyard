@@ -100,7 +100,7 @@ public class ChecklistRunServiceTests
 
         // The phone and manager paths don't touch the terminal services.
         return new ChecklistRunService(factory.Object, Mock.Of<IClockInTerminalService>(), Mock.Of<ITimeEntryService>(),
-            new TerminalEphemeralTokenService(w.Clock), w.Clock, NullLogger<ChecklistRunService>.Instance);
+            new TerminalEphemeralTokenService(w.Clock), new Lanyard.Application.Services.VideoStreaming.VideoStreamTokenService(), w.Clock, NullLogger<ChecklistRunService>.Instance);
     }
 
     private static async Task<ChecklistRunView> TodayAsync(World w, UserProfile user, LocationScope scope)

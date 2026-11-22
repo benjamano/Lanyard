@@ -1,0 +1,199 @@
+@using Lanyard.App.Components.Checklists
+@using Lanyard.App.Components.Kiosk
+@using Lanyard.Application.Services.Checklists
+@using Lanyard.Infrastructure.DTO.Checklists
+@implements IDisposable
+
+@inject IChecklistRunService _runService
+@inject TimeProvider _timeProvider
+
+@* One checklist on a dashboard, typically a wall screen such as the laser kiosk. On a kiosk (signed
+   out) the tasks can be ticked only when the card allows it, and the ticks record the kiosk. Anywhere
+   else the card is read-only, with a link to where people tick it. *@
+@if (_hidden)
+{
+    @* Done, and set to hide once done: the card's space stays empty. *@
+}
+else
+{
+    <FluentCard Height="100%">
+        <div class="cl-card-body">
+            @if (_error is not null)
+            {
+                <div class="cl-card-message">
+                    <span class="cl-card-title">@(Widget.Title ?? "Checklist")</span>
+                    <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">@_error</FluentBadge>
+                </div>
+            }
+            else if (!_loaded)
+            {
+                <FluentProgressBar />
+            }
+            else if (_run is null)
+            {
+                <div class="cl-card-message">
+                    <span class="cl-card-title">@(Widget.Title ?? "Checklist")</span>
+                    <span>Not on today.</span>
+                </div>
+            }
+            else
+            {
+                <div class="cl-card-scroll">
+                    <ChecklistRunCard @key="_run.RunId" Run="@ShownRun" Interactive="@_canTick" CurrentUserId="@null"
+                                      OnTick="@TickAsync" OnUndo="@UndoAsync" />
+                </div>
+                @if (!_canTick && Kiosk is null)
+                {
+                    <a class="cl-card-more" href="/checklists">Tick it in Checklists</a>
+                }
+            }
+        </div>
+    </FluentCard>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public required ChecklistCardWidget Widget { get; set; }
+
+    // The dashboard's company: kiosk dashboards run signed out, so nothing else scopes the read.
+    [Parameter]
+    public int? CompanyId { get; set; }
+
+    // Set when the dashboard is showing on a kiosk (RenderDashboardTemplate).
+    [CascadingParameter]
+    public KioskViewContext? Kiosk { get; set; }
+
+    // Every 30 seconds, so ticks made elsewhere (a phone, the terminal) show up, and the day rolls
+    // over at midnight on a screen that never reloads.
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(30);
+
+    private ChecklistRunView? _run;
+    private bool _loaded;
+    private string? _error;
+    private bool _hidden;
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _cancellation;
+    private (Guid?, bool, bool) _loadedSettings;
+
+    // A kiosk may tick only when the card allows it; the server checks the kiosk's token again.
+    private bool _canTick => Kiosk is not null && Widget.ChecklistCardAllowKioskTicking && _run is not null;
+
+    // The card decides ticking (the run read is read-only), so its own message bar stays quiet.
+    private ChecklistRunView ShownRun => _run! with { CanTick = _canTick, CantTickReason = null };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        (Guid?, bool, bool) settings = (Widget.ChecklistCardChecklistId, Widget.ChecklistCardAllowKioskTicking, Widget.ChecklistCardHideWhenDone);
+
+        if (!_loaded || settings != _loadedSettings)
+        {
+            await LoadAsync();
+        }
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        _cancellation = new CancellationTokenSource();
+        _timer = new PeriodicTimer(RefreshInterval);
+        _ = RunTimerAsync(_timer, _cancellation.Token);
+    }
+
+    private async Task LoadAsync()
+    {
+        _loadedSettings = (Widget.ChecklistCardChecklistId, Widget.ChecklistCardAllowKioskTicking, Widget.ChecklistCardHideWhenDone);
+
+        if (Widget.ChecklistCardChecklistId is not Guid checklistId)
+        {
+            _error = "Choose a checklist";
+            _loaded = true;
+            return;
+        }
+
+        if (CompanyId is not int companyId)
+        {
+            _error = "Couldn't load the checklist";
+            _loaded = true;
+            return;
+        }
+
+        Result<ChecklistRunView?> result = await _runService.GetCardAsync(checklistId, companyId);
+
+        _loaded = true;
+
+        if (!result.IsSuccess)
+        {
+            _error = result.Error ?? "Couldn't load the checklist";
+            _run = null;
+            return;
+        }
+
+        _error = null;
+        _run = result.Data;
+        _hidden = Widget.ChecklistCardHideWhenDone && _run?.Status == ChecklistRunStatus.Complete;
+    }
+
+    private async Task TickAsync((ChecklistItemView Item, string? Note, decimal? Reading) tick)
+    {
+        if (Kiosk is null)
+        {
+            return;
+        }
+
+        Result<bool> result = await _runService.CompleteOnKioskAsync(Kiosk.ClientId, Kiosk.ViewerToken, tick.Item.ItemId, tick.Note, tick.Reading);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't tick that task.");
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task UndoAsync(ChecklistTickView tick)
+    {
+        if (Kiosk is null)
+        {
+            return;
+        }
+
+        Result<bool> result = await _runService.UndoOnKioskAsync(Kiosk.ClientId, Kiosk.ViewerToken, tick.CompletionId);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't take that tick back.");
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task RunTimerAsync(PeriodicTimer timer, CancellationToken token)
+    {
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                await InvokeAsync(async () =>
+                {
+                    await LoadAsync();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+        {
+            // The dashboard closed.
+        }
+    }
+
+    public void Dispose()
+    {
+        _cancellation?.Cancel();
+        _cancellation?.Dispose();
+        _timer?.Dispose();
+    }
+}

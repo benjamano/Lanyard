@@ -100,7 +100,7 @@ public class ChecklistTerminalTests
         TimeEntryService timeEntries = new(factory, pins, terminals, new SchedulingSettingsService(factory), tokens, new TerminalEventBus(), clock,
             NullLogger<TimeEntryService>.Instance);
 
-        ChecklistRunService service = new(factory, terminals, timeEntries, tokens, clock, NullLogger<ChecklistRunService>.Instance);
+        ChecklistRunService service = new(factory, terminals, timeEntries, tokens, new Lanyard.Application.Services.VideoStreaming.VideoStreamTokenService(), clock, NullLogger<ChecklistRunService>.Instance);
 
         return new World(options, clock, service, timeEntries, ipswich, wisbech, ipswichTerminal, wisbechTerminal, amy, manager);
     }

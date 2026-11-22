@@ -1129,6 +1129,9 @@ namespace Lanyard.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ClientId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("ClockInTerminalId")
                         .HasColumnType("uuid");
 
@@ -1159,10 +1162,11 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("UserId")
-                        .IsRequired()
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ClientId");
 
                     b.HasIndex("ClockInTerminalId");
 
@@ -5399,6 +5403,22 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasDiscriminator().HasValue(5);
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ChecklistCardWidget", b =>
+                {
+                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
+
+                    b.Property<bool>("ChecklistCardAllowKioskTicking")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("ChecklistCardChecklistId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("ChecklistCardHideWhenDone")
+                        .HasColumnType("boolean");
+
+                    b.HasDiscriminator().HasValue(22);
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ChecklistsTodayWidget", b =>
                 {
                     b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
@@ -6108,6 +6128,11 @@ namespace Lanyard.Infrastructure.Migrations
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ChecklistCompletion", b =>
                 {
+                    b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Lanyard.Infrastructure.Models.ClockInTerminal", "ClockInTerminal")
                         .WithMany()
                         .HasForeignKey("ClockInTerminalId")
@@ -6127,8 +6152,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Client");
 
                     b.Navigation("ClockInTerminal");
 
