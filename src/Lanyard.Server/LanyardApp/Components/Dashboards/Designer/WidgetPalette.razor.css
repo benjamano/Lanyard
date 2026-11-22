@@ -43,7 +43,9 @@
     border: 1px solid var(--colorNeutralStroke2);
     background: var(--colorNeutralBackground1);
     cursor: grab;
-    touch-action: none;
+    /* Vertical swipes scroll the list (the browser cancels our pending drag); a sideways drag
+       still pulls the widget out onto the canvas. */
+    touch-action: pan-y;
     user-select: none;
     transition: background 100ms ease, border-color 100ms ease;
 }
