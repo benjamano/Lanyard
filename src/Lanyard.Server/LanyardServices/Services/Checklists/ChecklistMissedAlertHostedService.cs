@@ -112,7 +112,9 @@ public class ChecklistMissedAlertHostedService(
 
             if (!result.IsSuccess)
             {
-                _logger.LogWarning("Couldn't raise a missed checklist alert for run {RunId}: {Error}", run.RunId, result.Error);
+                // Hand the claim back, or this run would never be alerted: the next sweep tries again.
+                _logger.LogWarning("Couldn't raise a missed checklist alert for run {RunId}, will retry: {Error}", run.RunId, result.Error);
+                await ReleaseClaimAsync(run.RunId, now, cancellationToken);
             }
             else if (result.Data == OperationsAlertRaiseOutcome.Created)
             {
@@ -174,6 +176,30 @@ public class ChecklistMissedAlertHostedService(
         catch (DbUpdateConcurrencyException)
         {
             return false;
+        }
+    }
+
+    // Undoes ClaimAsync after the alert couldn't be raised. Only this sweep's own claim (same time) is
+    // cleared, so a claim another sweep made since stands.
+    private async Task ReleaseClaimAsync(Guid runId, DateTime claimedUtc, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+            ChecklistRun? run = await ctx.ChecklistRuns.FirstOrDefaultAsync(x => x.Id == runId && x.MissedAlertUtc == claimedUtc, cancellationToken);
+
+            if (run is null)
+            {
+                return;
+            }
+
+            run.MissedAlertUtc = null;
+            await ctx.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Couldn't release the missed checklist claim on run {RunId}; it won't be alerted", runId);
         }
     }
 
