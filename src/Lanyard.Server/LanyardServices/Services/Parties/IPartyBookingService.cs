@@ -26,4 +26,7 @@ public interface IPartyBookingService
 
     // Party types already used at the location, most-used first, for the form's suggestions.
     Task<Result<List<string>>> GetPartyTypeSuggestionsAsync(LocationScope scope, int locationId);
+
+    // Rooms already used at the location, most-used first, tidied so "Room 2" and "room 2 " are one.
+    Task<Result<List<string>>> GetRoomSuggestionsAsync(LocationScope scope, int locationId);
 }

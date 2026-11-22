@@ -9,6 +9,13 @@
 }
 
 .conditions-empty,
+.room-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: -6px;
+}
+
 .condition-hint {
     font-size: 0.85rem;
     color: var(--colorNeutralForeground3);

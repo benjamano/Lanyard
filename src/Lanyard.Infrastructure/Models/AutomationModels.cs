@@ -41,6 +41,20 @@ public class AutomationRule : ICompanyOwned
     // the team that has to win. Null means any team.
     public Team? TriggerTeam { get; set; }
 
+    // PartyMilestone only, null for every other trigger type. Parties at this location fire the
+    // rule. Kept on the rule rather than taken from the associated kiosk, so moving a kiosk never
+    // quietly points a rule at another venue's parties. No FK: locations are soft-deleted, and
+    // AutomationRuleService checks it belongs to the rule's company on every save.
+    public int? PartyLocationId { get; set; }
+
+    // PartyMilestone only: which moment of the party, and how many minutes before it (0-120).
+    public PartyMilestone? PartyMilestone { get; set; }
+    public int? PartyLeadMinutes { get; set; }
+
+    // PartyMilestone only, optional: only parties in this room (PartyBooking.Room, matched
+    // trimmed and ignoring case). Null = any room at the location.
+    public string? PartyRoom { get; set; }
+
     public bool IsActive { get; set; }
     public bool IsEnabled { get; set; } = true;
 
@@ -106,6 +120,20 @@ public class AutomationRuleExecution
     // Set when the trigger fired but a condition wasn't met, so no actions ran. Such a row has
     // OverallSuccess false and no action rows, and must not be read as a failure or as "fired".
     public string? SkipReason { get; set; }
+
+    // The party a PartyMilestone rule fired (or was skipped) for: the first one, when parties
+    // reaching the same moment together were merged into one run. Only the id is kept - never the
+    // child's name - so the log holds no personal data; the log screen looks the party up live.
+    // Set to null if the booking is ever deleted.
+    public Guid? PartyBookingId { get; set; }
+
+    // Set when an Admin ran the rule by hand with "Run now (test)" rather than its trigger firing.
+    // A test row stays in the log but is never "the last time the rule ran": the scheduled
+    // reseed and the dashboard widget's last run both leave it out.
+    public bool IsTestRun { get; set; }
+
+    // Who ran the test (AspNetUsers.Id), when IsTestRun is set. No FK, like the other audit ids.
+    public string? TestRunByUserId { get; set; }
 
     public virtual List<AutomationRuleActionExecution> ActionExecutions { get; set; } = [];
 }

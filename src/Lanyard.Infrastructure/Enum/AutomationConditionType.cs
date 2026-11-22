@@ -24,5 +24,10 @@ public enum AutomationConditionType
     /// <summary>
     /// Only during (or outside) a location's opening hours, as set on Companies &amp; Locations.
     /// </summary>
-    DuringOpeningHours = 3
+    DuringOpeningHours = 3,
+
+    /// <summary>
+    /// Only while a booked party is (or isn't) under way at a location, optionally in one room.
+    /// </summary>
+    PartyInProgress = 4
 }

@@ -12,6 +12,7 @@
 | Staff accounts (`UserProfile`) | Duration of employment + `12 months` | Access management; short tail for rehire/disputes |
 | Clock-in / shift / rota records | `6 years` | Employment/payroll record-keeping obligations |
 | Dates of birth of staff under 18 (`YoungWorkerStatus`) | Until their 18th birthday, then deleted automatically | Only needed while the young worker limits apply |
+| Location checklist ticks (who ticked which task, when, any note or reading) | `6 years` | Evidence that opening, closing and safety checks were done; same period as clock-in records |
 | Client device records (IP/MAC) | While the device is in service + `6 months` | Operations & troubleshooting |
 | Application/security logs | `90 days` | Security monitoring; data minimisation |
 | Kiosk hardware self-test results | `90 days` | Diagnosing venue hardware; links to the Admin who ran it |
@@ -54,6 +55,12 @@ deleted or erased, because of the 6-year payroll retention above. Both delete pa
 - scrubs their user id from "created / updated / published / approved by" attribution fields;
 - on a **GDPR erasure** only, also clears the free-text notes on their time entries (the hours
   themselves stay, anonymised, for payroll).
+
+Location checklist ticks (`ChecklistCompletion`) are treated the same way: the same
+`DetachUserAsync` step re-points each tick to the placeholder account and drops the person from
+"undone by" and from checklist/task "created / updated by"; a **GDPR erasure** also clears the
+notes typed when ticking (number readings such as a fridge temperature are kept, as they say
+nothing about the person). It covers every company's ticks, not only the erasing Admin's.
 
 Clock-in terminals store only a SHA-256 hash of each device's token; clock-in PINs are stored as
 salted hashes and deleted with the account. There is still no automated purge once the 6 years

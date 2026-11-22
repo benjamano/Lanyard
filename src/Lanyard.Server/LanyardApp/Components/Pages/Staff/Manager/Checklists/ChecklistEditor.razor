@@ -1,0 +1,448 @@
+@page "/manage/checklists/new"
+@page "/manage/checklists/{ChecklistId:guid}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.Checklists)]
+
+@using Lanyard.App.Components.Checklists
+@using Lanyard.Application.Services.Checklists
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@inject IChecklistService _checklistService
+@inject IStaffPositionService _staffPositionService
+
+<PageTitle>@(ChecklistId is null ? "New checklist" : name)</PageTitle>
+
+<div class="checklist-editor">
+    <nav class="editor-back" aria-label="Breadcrumb">
+        <a href="@ListLink">
+            <FluentIcon Value="@(new Icons.Regular.Size16.ArrowLeft())" aria-hidden="true" />
+            Checklists
+        </a>
+    </nav>
+
+    <div class="editor-header">
+        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">@(ChecklistId is null ? "New checklist" : name)</FluentText>
+        <HelpButton AreaKey="@HelpRegistry.ManageChecklists" Topic="setup" />
+    </div>
+
+    @if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else if (!loaded)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" HorizontalGap="8">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else
+    {
+        <section class="editor-section" aria-labelledby="settings-heading">
+            <h2 id="settings-heading" class="editor-section-title">Settings</h2>
+
+            @if (saveError is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@saveError</FluentMessageBar>
+            }
+
+            <FluentTextInput @bind-Value="name" Label="Name" Placeholder="e.g. Opening" Required="true" Width="100%"
+                             Maxlength="@ChecklistRules.MaxNameLength" />
+
+            <FluentTextArea @bind-Value="description" Label="Description (optional)" Rows="2" Width="100%"
+                            Maxlength="@ChecklistRules.MaxDescriptionLength" />
+
+            <div class="editor-field">
+                <span id="days-label" class="editor-label">Runs on</span>
+                <div class="day-chips" role="group" aria-labelledby="days-label">
+                    @foreach (DayOfWeek day in ChecklistRules.WeekOrder)
+                    {
+                        DayOfWeek current = day;
+                        bool on = ChecklistRules.RunsOn(days, current);
+                        <button type="button" class="day-chip @(on ? "is-on" : "")" aria-pressed="@(on ? "true" : "false")"
+                                aria-label="@RotaFormat.Uk.DateTimeFormat.GetDayName(current)" @onclick="@(() => ToggleDay(current))">
+                            @RotaFormat.Uk.DateTimeFormat.GetAbbreviatedDayName(current)
+                        </button>
+                    }
+                </div>
+                <div class="day-presets">
+                    <FluentButton Appearance="ButtonAppearance.Transparent" Size="ButtonSize.Small" OnClick="@(() => days = ChecklistDays.EveryDay)">Every day</FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Transparent" Size="ButtonSize.Small" OnClick="@(() => days = ChecklistDays.Weekdays)">Weekdays</FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Transparent" Size="ButtonSize.Small" OnClick="@(() => days = ChecklistDays.Weekends)">Weekends</FluentButton>
+                </div>
+            </div>
+
+            <FluentCheckbox @bind-Value="onlyWhenOpen" Label="Skip days the location is closed (no opening hours that day)" />
+
+            <div class="editor-pair">
+                <FluentSelect TOption="RuleOption" TValue="string" Items="@ruleOptions" OptionText="@(x => x.Label)" OptionValue="@(x => x.Value)"
+                              @bind-Value="dueRule" Label="Due" Width="100%" />
+
+                @if (SelectedRule is ChecklistDueRule.AfterOpening or ChecklistDueRule.BeforeClosing)
+                {
+                    <FluentNumberInput TValue="int" @bind-Value="offsetMinutes" Min="0" Max="@ChecklistRules.MaxOffsetMinutes" Width="100%"
+                                       Label="@(SelectedRule == ChecklistDueRule.AfterOpening ? "Minutes after opening" : "Minutes before closing")" />
+                }
+                else if (SelectedRule == ChecklistDueRule.FixedTime)
+                {
+                    <AnyTimePicker @bind-Value="dueTime" Label="Due by" />
+                }
+            </div>
+            <div class="editor-hint">
+                @PreviewLabel
+                @if (SelectedRule is ChecklistDueRule.AfterOpening or ChecklistDueRule.BeforeClosing)
+                {
+                    <text> Uses this location's opening hours, which an Admin sets under Companies &amp; Locations.</text>
+                }
+            </div>
+
+            <FluentSelect TOption="PositionOption" TValue="string" Items="@positionOptions" OptionText="@(x => x.Label)" OptionValue="@(x => x.Value)"
+                          @bind-Value="positionId" Label="Who can tick it" Width="100%" />
+            <div class="editor-hint">
+                Anyone on today's rota at this location can tick tasks, plus its Managers and Admins. Choose a position to limit it to people who hold it.
+            </div>
+
+            <div class="editor-actions">
+                <FluentButton Appearance="ButtonAppearance.Primary" Loading="@isSaving" OnClick="@SaveAsync">
+                    @(ChecklistId is null ? "Create checklist" : "Save settings")
+                </FluentButton>
+            </div>
+        </section>
+
+        @if (ChecklistId is not null)
+        {
+            <section class="editor-section" aria-labelledby="tasks-heading">
+                <div class="tasks-header">
+                    <h2 id="tasks-heading" class="editor-section-title">Tasks</h2>
+                    <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Add())" Disabled="@isBusy"
+                                  OnClick="@(() => OpenTaskDialogAsync(null))">Add task</FluentButton>
+                </div>
+
+                @if (tasks.Count == 0)
+                {
+                    <FluentText Class="editor-hint">No tasks yet. Add them in the order they're done.</FluentText>
+                }
+                else
+                {
+                    <ol class="task-list" aria-label="Tasks">
+                        @for (int i = 0; i < tasks.Count; i++)
+                        {
+                            ChecklistTask task = tasks[i];
+                            int index = i;
+                            <li class="task-item">
+                                <span class="task-number" aria-hidden="true">@(index + 1)</span>
+                                <div class="task-info">
+                                    <span class="task-title">@task.Title</span>
+                                    @if (!string.IsNullOrEmpty(task.Detail))
+                                    {
+                                        <span class="task-detail">@task.Detail</span>
+                                    }
+                                    <span class="task-response">@ChecklistDisplay.ResponseLabel(task.Response, task.Unit)</span>
+                                </div>
+                                <div class="task-actions">
+                                    <FluentButton IconStart="@(new Icons.Regular.Size16.ArrowUp())" Title="Move up" aria-label="@($"Move {task.Title} up")"
+                                                  Disabled="@(isBusy || index == 0)" OnClick="@(() => MoveAsync(task, -1))" />
+                                    <FluentButton IconStart="@(new Icons.Regular.Size16.ArrowDown())" Title="Move down" aria-label="@($"Move {task.Title} down")"
+                                                  Disabled="@(isBusy || index == tasks.Count - 1)" OnClick="@(() => MoveAsync(task, 1))" />
+                                    <FluentButton IconStart="@(new Icons.Regular.Size16.Edit())" Title="Edit" aria-label="@($"Edit {task.Title}")"
+                                                  Disabled="@isBusy" OnClick="@(() => OpenTaskDialogAsync(task))" />
+                                    <FluentButton IconStart="@(new Icons.Regular.Size16.Delete())" Title="Remove" aria-label="@($"Remove {task.Title}")"
+                                                  Disabled="@isBusy" OnClick="@(() => RemoveAsync(task))" />
+                                </div>
+                            </li>
+                        }
+                    </ol>
+                }
+            </section>
+        }
+    }
+</div>
+
+@code {
+    private record RuleOption(string Value, string Label);
+
+    private record PositionOption(string Value, string Label);
+
+    [Parameter]
+    public Guid? ChecklistId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "location")]
+    public int? LocationQuery { get; set; }
+
+    private readonly List<RuleOption> ruleOptions =
+    [
+        new(nameof(ChecklistDueRule.None), "No set time"),
+        new(nameof(ChecklistDueRule.AfterOpening), "After opening"),
+        new(nameof(ChecklistDueRule.BeforeClosing), "Before closing"),
+        new(nameof(ChecklistDueRule.FixedTime), "At a set time")
+    ];
+
+    private const string AnyonePosition = "";
+
+    private LocationScope? scope;
+    private int locationId;
+    private bool loaded;
+    private string? loadError;
+    private string? saveError;
+    private bool isSaving;
+    private bool isBusy;
+
+    private string name = string.Empty;
+    private string? description;
+    private ChecklistDays days = ChecklistDays.EveryDay;
+    private bool onlyWhenOpen = true;
+    private string dueRule = nameof(ChecklistDueRule.None);
+    private int offsetMinutes = 15;
+    private TimeOnly dueTime = new(10, 0);
+    private string positionId = AnyonePosition;
+    private List<PositionOption> positionOptions = [new(AnyonePosition, "Anyone on shift")];
+    private List<ChecklistTask> tasks = [];
+
+    private string ListLink => $"/manage/checklists?location={locationId}";
+
+    private ChecklistDueRule SelectedRule => Enum.TryParse(dueRule, out ChecklistDueRule rule) ? rule : ChecklistDueRule.None;
+
+    private string PreviewLabel => (days & ChecklistDays.EveryDay) == ChecklistDays.None
+        ? "Choose at least one day."
+        : $"Runs: {ChecklistRules.DaysLabel(days)}. Due: {ChecklistRules.DueLabel(Draft())}.";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loaded = false;
+        loadError = null;
+
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            loadError = $"Couldn't work out which location you're signed in to: {scopeResult.Error}";
+            return;
+        }
+
+        scope = scopeResult.Data;
+
+        if (ChecklistId is Guid id)
+        {
+            Result<Checklist> result = await _checklistService.GetChecklistAsync(scope, id);
+
+            if (!result.IsSuccess || result.Data is null)
+            {
+                loadError = result.Error ?? "That checklist wasn't found.";
+                return;
+            }
+
+            Fill(result.Data);
+        }
+        else
+        {
+            int? requested = LocationQuery ?? scope.LocationId;
+
+            if (requested is not int location || (!scope.IsAdmin && location != scope.LocationId))
+            {
+                loadError = "Choose a location you manage from the Checklists page first.";
+                return;
+            }
+
+            locationId = location;
+        }
+
+        await LoadPositionsAsync();
+        loaded = true;
+    }
+
+    private void Fill(Checklist checklist)
+    {
+        locationId = checklist.LocationId;
+        name = checklist.Name;
+        description = checklist.Description;
+        days = checklist.Days;
+        onlyWhenOpen = checklist.OnlyWhenOpen;
+        dueRule = checklist.DueRule.ToString();
+        offsetMinutes = checklist.DueRule is ChecklistDueRule.AfterOpening or ChecklistDueRule.BeforeClosing ? checklist.DueOffsetMinutes : 15;
+        dueTime = checklist.DueTime ?? new TimeOnly(10, 0);
+        positionId = checklist.StaffPositionId?.ToString() ?? AnyonePosition;
+        tasks = [.. checklist.Tasks.OrderBy(x => x.SortOrder)];
+    }
+
+    // The company's active positions, plus the checklist's own if it has since been archived.
+    private async Task LoadPositionsAsync()
+    {
+        int? companyId = scope?.CompanyId;
+
+        if (scope?.IsAdmin == true)
+        {
+            Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync();
+            companyId = locations.Data?.FirstOrDefault(l => l.Id == locationId)?.CompanyId ?? companyId;
+        }
+
+        if (companyId is not int company)
+        {
+            return;
+        }
+
+        Result<List<StaffPosition>> positions = await _staffPositionService.GetPositionsAsync(company, includeInactive: true);
+
+        positionOptions =
+        [
+            new(AnyonePosition, "Anyone on shift"),
+            .. (positions.Data ?? [])
+                .Where(x => x.IsActive || x.Id.ToString() == positionId)
+                .OrderBy(x => x.SortOrder)
+                .ThenBy(x => x.Name)
+                .Select(x => new PositionOption(x.Id.ToString(), x.IsActive ? x.Name : $"{x.Name} (archived)"))
+        ];
+    }
+
+    private void ToggleDay(DayOfWeek day) => days ^= ChecklistRules.DayFlag(day);
+
+    private Checklist Draft() => new()
+    {
+        Id = ChecklistId ?? Guid.Empty,
+        CompanyId = 0,
+        LocationId = locationId,
+        Name = name,
+        Description = description,
+        Days = days,
+        OnlyWhenOpen = onlyWhenOpen,
+        DueRule = SelectedRule,
+        DueOffsetMinutes = offsetMinutes,
+        DueTime = SelectedRule == ChecklistDueRule.FixedTime ? dueTime : null,
+        StaffPositionId = Guid.TryParse(positionId, out Guid position) ? position : null
+    };
+
+    private async Task SaveAsync()
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        saveError = null;
+        Checklist draft = Draft();
+
+        if (ChecklistRules.Validate(draft) is string invalid)
+        {
+            saveError = invalid;
+            return;
+        }
+
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            saveError = "Couldn't confirm who you are - try reloading the page.";
+            return;
+        }
+
+        isSaving = true;
+        Result<Checklist> result = await _checklistService.SaveChecklistAsync(scope, draft, actingUser.Data);
+        isSaving = false;
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            saveError = result.Error ?? "Couldn't save the checklist.";
+            return;
+        }
+
+        if (ChecklistId is null)
+        {
+            _toastService.ShowSuccess($"{result.Data.Name} created. Now add its tasks.");
+            _navigationManager.NavigateTo($"/manage/checklists/{result.Data.Id}", replace: true);
+            return;
+        }
+
+        _toastService.ShowSuccess($"{result.Data.Name} saved.");
+    }
+
+    private async Task ReloadTasksAsync()
+    {
+        if (scope is null || ChecklistId is not Guid id)
+        {
+            return;
+        }
+
+        Result<Checklist> result = await _checklistService.GetChecklistAsync(scope, id);
+
+        if (result.IsSuccess && result.Data is not null)
+        {
+            tasks = [.. result.Data.Tasks.OrderBy(x => x.SortOrder)];
+        }
+    }
+
+    private async Task OpenTaskDialogAsync(ChecklistTask? existing)
+    {
+        if (ChecklistId is not Guid id)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<AddEditChecklistTaskDialog>(options =>
+        {
+            options.Width = "520px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(AddEditChecklistTaskDialog.ChecklistId), id);
+            options.Parameters.Add(nameof(AddEditChecklistTaskDialog.Existing), existing);
+        });
+
+        if (result.Value is true)
+        {
+            await ReloadTasksAsync();
+        }
+    }
+
+    private async Task MoveAsync(ChecklistTask task, int direction)
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            return;
+        }
+
+        isBusy = true;
+        Result<bool> result = await _checklistService.MoveTaskAsync(scope, task.Id, direction, actingUser.Data);
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't move the task.");
+            return;
+        }
+
+        await ReloadTasksAsync();
+    }
+
+    private async Task RemoveAsync(ChecklistTask task)
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            return;
+        }
+
+        isBusy = true;
+        Result<bool> result = await _checklistService.RemoveTaskAsync(scope, task.Id, actingUser.Data);
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't remove the task.");
+            return;
+        }
+
+        _toastService.ShowSuccess($"Removed {task.Title}. Past days still show it.");
+        await ReloadTasksAsync();
+    }
+}

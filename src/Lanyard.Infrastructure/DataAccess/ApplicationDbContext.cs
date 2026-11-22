@@ -134,6 +134,11 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<TemplateSuggestionRun> TemplateSuggestionRuns { get; set; }
         public DbSet<RotaHoliday> RotaHolidays { get; set; }
         public DbSet<OperationsAlert> OperationsAlerts { get; set; }
+        public DbSet<Checklist> Checklists { get; set; }
+        public DbSet<ChecklistTask> ChecklistTasks { get; set; }
+        public DbSet<ChecklistRun> ChecklistRuns { get; set; }
+        public DbSet<ChecklistRunItem> ChecklistRunItems { get; set; }
+        public DbSet<ChecklistCompletion> ChecklistCompletions { get; set; }
         public DbSet<CompanySchedulingSettings> CompanySchedulingSettings { get; set; }
         public DbSet<Shift> Shifts { get; set; }
         public DbSet<ClockInTerminal> ClockInTerminals { get; set; }
@@ -466,6 +471,15 @@ namespace Lanyard.Infrastructure.DataAccess
                 .IsUnique()
                 .HasFilter("\"LocationId\" IS NOT NULL");
 
+            // Files browses one folder at a time, and the bin and the purge sweep look for
+            // inactive rows. Names aren't unique in the database (older rows already have
+            // duplicates); FileNameRules keeps new names unique per folder instead.
+            modelBuilder.Entity<FileMetadata>()
+                .HasIndex(x => new { x.CompanyId, x.FolderId, x.IsActive });
+
+            modelBuilder.Entity<Folder>()
+                .HasIndex(x => new { x.CompanyId, x.ParentFolderId, x.IsActive });
+
             // FileMetadata is shared across unrelated features (folders, logos, video devices,
             // staff documents, onboarding attachments). The default convention-based FK behavior
             // for a required reference is Cascade, which would let deleting a file from the
@@ -678,6 +692,67 @@ namespace Lanyard.Infrastructure.DataAccess
                 .WithMany()
                 .HasForeignKey(x => x.LocationId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Location checklists. A checklist and its tasks are configuration, archived rather than
+            // deleted. A run is one checklist on one venue day (made once, so the unique index makes
+            // two people opening it at the same moment share a run); its items are the tasks copied
+            // as they were, and its completions are the ticks, at most one live tick per item.
+            modelBuilder.Entity<Checklist>(entity =>
+            {
+                entity.HasIndex(x => new { x.LocationId, x.IsActive });
+                entity.Property(x => x.Name).HasMaxLength(ChecklistRules.MaxNameLength);
+                entity.Property(x => x.Description).HasMaxLength(ChecklistRules.MaxDescriptionLength);
+                entity.HasOne(x => x.Location).WithMany().HasForeignKey(x => x.LocationId).OnDelete(DeleteBehavior.Restrict);
+
+                // A position in use can only be archived, never deleted, so Restrict never blocks.
+                entity.HasOne(x => x.StaffPosition).WithMany().HasForeignKey(x => x.StaffPositionId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasMany(x => x.Tasks).WithOne(x => x.Checklist).HasForeignKey(x => x.ChecklistId).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<ChecklistTask>(entity =>
+            {
+                entity.HasIndex(x => new { x.ChecklistId, x.SortOrder });
+                entity.Property(x => x.Title).HasMaxLength(ChecklistRules.MaxTaskTitleLength);
+                entity.Property(x => x.Detail).HasMaxLength(ChecklistRules.MaxTaskDetailLength);
+                entity.Property(x => x.Unit).HasMaxLength(ChecklistRules.MaxUnitLength);
+            });
+
+            modelBuilder.Entity<ChecklistRun>(entity =>
+            {
+                entity.HasIndex(x => new { x.ChecklistId, x.VenueDate }).IsUnique();
+
+                // Today's board and the history read a location's runs by date.
+                entity.HasIndex(x => new { x.LocationId, x.VenueDate });
+                entity.Property(x => x.Name).HasMaxLength(ChecklistRules.MaxNameLength);
+                entity.HasOne(x => x.Location).WithMany().HasForeignKey(x => x.LocationId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.Checklist).WithMany().HasForeignKey(x => x.ChecklistId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasMany(x => x.Items).WithOne(x => x.Run).HasForeignKey(x => x.RunId).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<ChecklistRunItem>(entity =>
+            {
+                entity.Property(x => x.Title).HasMaxLength(ChecklistRules.MaxTaskTitleLength);
+                entity.Property(x => x.Detail).HasMaxLength(ChecklistRules.MaxTaskDetailLength);
+                entity.Property(x => x.Unit).HasMaxLength(ChecklistRules.MaxUnitLength);
+                entity.HasOne(x => x.Task).WithMany().HasForeignKey(x => x.TaskId).OnDelete(DeleteBehavior.SetNull);
+                entity.HasMany(x => x.Completions).WithOne(x => x.RunItem).HasForeignKey(x => x.RunItemId).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<ChecklistCompletion>(entity =>
+            {
+                // One live tick per task: two people ticking at once can't both win.
+                entity.HasIndex(x => x.RunItemId)
+                    .IsUnique()
+                    .HasFilter("\"IsActive\"");
+                entity.Property(x => x.Note).HasMaxLength(ChecklistRules.MaxNoteLength);
+                entity.Property(x => x.Reading).HasPrecision(9, 2);
+
+                // ScheduleRetention moves ticks to the deleted-user placeholder before an account
+                // goes, so Restrict never actually blocks a deletion.
+                entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.UndoneByUser).WithMany().HasForeignKey(x => x.UndoneByUserId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.ClockInTerminal).WithMany().HasForeignKey(x => x.ClockInTerminalId).OnDelete(DeleteBehavior.SetNull);
+            });
 
             // The latest run for a location is what the banner reads.
             modelBuilder.Entity<TemplateSuggestionRun>()
@@ -1220,6 +1295,22 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<AutomationRuleExecution>()
                 .HasIndex(x => new { x.AutomationRuleId, x.ExecutedAt });
 
+            // A party-time rule's run keeps the party's id only (never the child's name). SetNull, so
+            // removing a booking never takes the automation history with it. The index serves the
+            // engine's "has this rule already fired for this party" reseed after a restart.
+            modelBuilder.Entity<AutomationRuleExecution>()
+                .HasOne<PartyBooking>()
+                .WithMany()
+                .HasForeignKey(x => x.PartyBookingId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<AutomationRuleExecution>()
+                .HasIndex(x => new { x.AutomationRuleId, x.PartyBookingId });
+
+            modelBuilder.Entity<AutomationRule>()
+                .Property(x => x.PartyRoom)
+                .HasMaxLength(100);
+
             // SongAnalysisHostedService sweeps for NotAnalyzed songs every five minutes.
             modelBuilder.Entity<Song>()
                 .HasIndex(x => x.BpmAnalysisStatus);
@@ -1419,6 +1510,9 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<UserPosition>().HasQueryFilter(x => TenantFilterDisabled || x.StaffPosition!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<StaffPositionRequiredCourse>().HasQueryFilter(x => TenantFilterDisabled || x.StaffPosition!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ShiftTemplateSlot>().HasQueryFilter(x => TenantFilterDisabled || x.ShiftTemplate!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ChecklistTask>().HasQueryFilter(x => TenantFilterDisabled || x.Checklist!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ChecklistRunItem>().HasQueryFilter(x => TenantFilterDisabled || x.Run!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ChecklistCompletion>().HasQueryFilter(x => TenantFilterDisabled || x.RunItem!.Run!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ShiftTemplateSlotRegular>().HasQueryFilter(x => TenantFilterDisabled || x.ShiftTemplateSlot!.ShiftTemplate!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ChatMember>().HasQueryFilter(x => TenantFilterDisabled || x.Conversation!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ChatMessage>().HasQueryFilter(x => TenantFilterDisabled || x.Conversation!.CompanyId == TenantCompanyId);

@@ -186,13 +186,38 @@ public class YoungWorkerServiceTests
             await ctx.SaveChangesAsync();
         }
 
-        Result<Dictionary<string, YoungWorkerStatus>> result = await GetService(w.Options).GetForCompanyAsync(w.ManagerScope, Today);
+        Result<Dictionary<string, YoungWorkerStatus>> result = await GetService(w.Options).GetForCompanyAsync(w.ManagerScope, w.Company.Id, Today);
 
         Assert.IsTrue(result.IsSuccess, result.Error);
         CollectionAssert.AreEquivalent(new[] { w.Amy.Id }, result.Data!.Keys.ToList());
 
-        Result<Dictionary<string, YoungWorkerStatus>> asStaff = await GetService(w.Options).GetForCompanyAsync(w.StaffScope, Today);
+        Result<Dictionary<string, YoungWorkerStatus>> asStaff = await GetService(w.Options).GetForCompanyAsync(w.StaffScope, w.Company.Id, Today);
         Assert.IsFalse(asStaff.IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task GetForCompanyAsync_AdminLookingAtAnotherCompany_GetsThatCompanysStaff()
+    {
+        World w = await SeedAsync();
+        (Company other, Location elsewhere) = await SchedulingTestHelpers.SeedCompanyAsync(w.Options, "Other Co", "Elsewhere");
+        UserProfile olly = await SchedulingTestHelpers.SeedUserAsync(w.Options, elsewhere, "Olly");
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = w.Company.Id, UserId = w.Amy.Id, DateOfBirth = Sixteen });
+            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = other.Id, UserId = olly.Id, DateOfBirth = Sixteen });
+            await ctx.SaveChangesAsync();
+        }
+
+        // Signed in at the first company, looking at the other one.
+        LocationScope admin = new(true, w.Ipswich.Id, w.Company.Id, w.Ipswich.Name);
+        Result<Dictionary<string, YoungWorkerStatus>> result = await GetService(w.Options).GetForCompanyAsync(admin, other.Id, Today);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        CollectionAssert.AreEquivalent(new[] { olly.Id }, result.Data!.Keys.ToList());
+
+        Result<Dictionary<string, YoungWorkerStatus>> managerElsewhere = await GetService(w.Options).GetForCompanyAsync(w.ManagerScope, other.Id, Today);
+        Assert.IsFalse(managerElsewhere.IsSuccess, "a Manager only sees their own company");
     }
 
     [TestMethod]

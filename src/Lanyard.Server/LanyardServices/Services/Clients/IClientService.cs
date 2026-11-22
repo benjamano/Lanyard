@@ -42,6 +42,10 @@ public interface IClientService
     // Puts a kiosk in one of its company's active locations (or none, with null) so it follows
     // that location's music schedule. UpdateClientAsync never writes the location.
     Task<Result<bool>> SetClientLocationAsync(Guid clientId, int? locationId);
+
+    // The party room this kiosk's screen is in, for party live text. Tidied; blank clears it. A
+    // running projection program picks it up the next time it starts.
+    Task<Result<bool>> SetClientPartyRoomAsync(Guid clientId, string? partyRoom);
     Task<Result<bool>> TriggerProjectionProgramOnClientAsync(Guid clientId, Guid projectionProgramId, int? displayIndex = null);
     Task<Result<bool>> CloseTemporaryProjectionWindowOnClientAsync(Guid clientId, int displayIndex);
     Task SetClientAvailableDmxDevicesAsync(Guid clientId, IEnumerable<string> dmxDevices);

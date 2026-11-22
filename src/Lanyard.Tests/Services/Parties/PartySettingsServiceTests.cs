@@ -225,4 +225,41 @@ public class PartySettingsServiceTests
         await using ApplicationDbContext ctx = new(options);
         Assert.IsTrue((await ctx.PartyMenuItems.SingleAsync(x => x.Id == burger.Id)).IsActive);
     }
+
+    [TestMethod]
+    public async Task ShowNamesOnScreens_StartsOff_AndOnlyAnAdminCanTurnItOn()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        PartySettingsService service = GetService(options);
+        Lanyard.Application.Services.Locations.LocationScope manager = SchedulingTestHelpers.ManagerScopeFor(location);
+        Lanyard.Application.Services.Locations.LocationScope admin = new(true, location.Id, company.Id, "Ipswich");
+
+        Result<bool> initial = await service.GetShowNamesOnScreensAsync(manager, company.Id);
+        Assert.IsTrue(initial.IsSuccess, initial.Error);
+        Assert.IsFalse(initial.Data);
+
+        Result<bool> byManager = await service.SetShowNamesOnScreensAsync(manager, company.Id, true, ActingUser);
+        Assert.IsFalse(byManager.IsSuccess);
+
+        Result<bool> byAdmin = await service.SetShowNamesOnScreensAsync(admin, company.Id, true, ActingUser);
+        Assert.IsTrue(byAdmin.IsSuccess, byAdmin.Error);
+        Assert.IsTrue((await service.GetShowNamesOnScreensAsync(manager, company.Id)).Data);
+    }
+
+    [TestMethod]
+    public async Task ShowNamesOnScreens_CantBeChangedForAnotherCompany()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company own, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        (Company other, _) = await SchedulingTestHelpers.SeedCompanyAsync(options, "Partyman", "Peterborough");
+        PartySettingsService service = GetService(options);
+        Lanyard.Application.Services.Locations.LocationScope admin = new(true, location.Id, own.Id, "Ipswich");
+
+        Assert.IsFalse((await service.SetShowNamesOnScreensAsync(admin, other.Id, true, ActingUser)).IsSuccess);
+        Assert.IsFalse((await service.GetShowNamesOnScreensAsync(admin, other.Id)).IsSuccess);
+
+        await using ApplicationDbContext ctx = new(options);
+        Assert.IsFalse((await ctx.Companies.SingleAsync(c => c.Id == other.Id)).ShowPartyNamesOnScreens);
+    }
 }
