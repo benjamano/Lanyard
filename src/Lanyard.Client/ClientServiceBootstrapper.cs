@@ -1,3 +1,4 @@
+using Lanyard.Client.Identify;
 using Lanyard.Client.AudioDevices;
 using Lanyard.Client.Controllers;
 using Lanyard.Client.Diagnostics;
@@ -106,6 +107,8 @@ public static class ClientServiceBootstrapper
         services.AddSingleton<IWebView2RuntimeProbe, WebView2RuntimeProbe>();
         services.AddSingleton<KioskSelfTestRunner>();
         services.AddSingleton<KioskSelfTestController>();
+        services.AddSingleton<IDisplayIdentifyService, DisplayIdentifyService>();
+        services.AddSingleton<DisplayIdentifyController>();
 
         return services.BuildServiceProvider();
     }
@@ -127,7 +130,8 @@ public static class ClientServiceBootstrapper
             provider.GetRequiredService<AudioSettingsController>().Register,
             provider.GetRequiredService<EqualiserController>().Register,
             provider.GetRequiredService<ClientDiagnosticsController>().Register,
-            provider.GetRequiredService<KioskSelfTestController>().Register
+            provider.GetRequiredService<KioskSelfTestController>().Register,
+            provider.GetRequiredService<DisplayIdentifyController>().Register
         ];
     }
 }

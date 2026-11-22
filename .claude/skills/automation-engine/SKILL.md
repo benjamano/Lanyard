@@ -17,7 +17,7 @@ description: How AutomationEngineService actually works — why adding a new aut
 
 ## Lazy init and the rule cache
 
-The enabled flag is read once, lazily, through `EnsureEnabledInitializedAsync`: a `LazyInitializer`-cached `Task<bool>` that every caller awaits (the transition consumer and the idle and scheduled hosted services can all arrive together on startup). A failed read clears the cached task so the next tick retries. The rule cache reloads under a `SemaphoreSlim` when `_ruleCacheDirty` is set; `AutomationRuleService` sets it on every save. (An older version of this note described a blocking `.GetAwaiter().GetResult()` inside a `lock`; that code is gone.)
+The enabled flag is read once, lazily, through `EnsureEnabledInitializedAsync`: a `LazyInitializer`-cached `Task<bool>` that every caller awaits (the transition consumer and the idle and scheduled hosted services can all arrive together on startup). A failed read clears the cached task so the next tick retries. The rule cache reloads under a `SemaphoreSlim` when `IsRuleCacheDirty` is true. `InvalidateRuleCache()` (called by `AutomationRuleService` on every save) bumps `_ruleCacheVersion`, and a reload stores the version it *started* from in `_loadedRuleCacheVersion`, so a save that lands mid-reload keeps the cache dirty. Don't go back to a bool cleared at the end of the reload: that swallowed mid-reload saves (fixed in `fix/automation-rule-cache-race`, test `InvalidateRuleCache_DuringReload_IsNotLost`). (An older version of this note described a blocking `.GetAwaiter().GetResult()` inside a `lock`; that code is gone.)
 
 Transitions still go through **one channel with one consumer** (`AutomationEngineHostedService`), so per-rule state touched only by the consumer needs no locking. Keep it that way, or add locking, if you add another reader.
 
@@ -54,6 +54,17 @@ GameEnded rules run on the **status-transition channel**, not the game-data one.
 - `GameWinner.Determine` is pure: it returns the strictly highest team total, and null on a draw, a solo game, a single team or an empty game.
 - Rules match on the winner (`TriggerTeam` null means any team). The log label is `GameEnded (Red won)`.
 - A caller that passes only the status gets no snapshot, and GameEnded rules simply don't run for it.
+
+## PartyMilestone (party time)
+
+`ProcessPartyRulesAsync(nowUtc)` is ticked every 60s by `PartyTriggerHostedService` (UTC, since party times are stored in UTC). It reads parties live from `IPartyScheduleProvider` (singleton, system context, 60s cache, `Invalidate(locationId)` from `PartyBookingService` and `BookingImportService` on every write), so nothing is scheduled ahead and moves/cancellations need no extra handling. Pure timing and wording live in `PartyTriggerRules`.
+
+- Due when `0 <= now - (milestone - lead) <= ScheduleCatchUpWindow`.
+- Once per (rule, party) via `_partyFired`. Due parties in one tick are **merged into one run**, logged against the earliest with `PartyBookingId` and a "+N other" label.
+- `_partyLastRunUtc` + `EnsurePartyRuleSeededAsync` reseed from the log after a restart. The log keeps only the first party's id, so "anything due at or before the last run" covers the merged ones too.
+- **Never put the child's name in the log**: `TriggerEvent` is name-free and `AutomationRuleExecution.PartyBookingId` (FK SetNull) is the only link. A test asserts this.
+- The **PartyInProgress** condition (4) reads the same provider: `CheckConditionsAsync` fetches today's parties for the rule's party-condition locations before calling the pure evaluator (`partiesAt` lookup). A failed read gives NotMet ("couldn't be loaded"), not Misconfigured. Its location's name/company come from `_conditionLocations`, loaded alongside opening-hours locations.
+- Provisional Just Step holds, private hires and cancelled parties are excluded by the provider. A company with Parties off gets no slots, and `AutomationRuleService` refuses to save the rule.
 
 ## Saving rules: don't `ctx.Update` the detached graph
 

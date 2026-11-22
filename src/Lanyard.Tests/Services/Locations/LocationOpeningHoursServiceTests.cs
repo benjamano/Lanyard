@@ -48,7 +48,7 @@ public class LocationOpeningHoursServiceTests
             executor is null ? [] : [executor],
             new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(),
             clock ?? TimeProvider.System,
-            NullLogger<AutomationEngineService>.Instance);
+            NullLogger<AutomationEngineService>.Instance, new Lanyard.Tests.Services.Automation.NoPartiesSchedule());
     }
 
     // tenantCompanyId: the signed-in company the contexts are filtered to (null = system).

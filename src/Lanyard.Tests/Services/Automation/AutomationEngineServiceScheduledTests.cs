@@ -44,7 +44,7 @@ public class AutomationEngineServiceScheduledTests
         params IActionExecutor[] executors)
     {
         return new AutomationEngineService(
-            GetFactory(options), executors, new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+            GetFactory(options), executors, new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance, new Lanyard.Tests.Services.Automation.NoPartiesSchedule());
     }
 
     // The engine reads its enabled flag from AppSettings on first use and overwrites whatever

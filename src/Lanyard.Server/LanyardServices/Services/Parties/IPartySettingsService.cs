@@ -23,6 +23,12 @@ public interface IPartySettingsService
     // Soft delete: the item stops printing on new sheets.
     Task<Result<bool>> RemoveMenuItemAsync(LocationScope scope, Guid itemId, string actingUserId);
 
+    // Whether venue screens may show the birthday child's first name. Company-wide; anyone in the
+    // company can read it, only an Admin can change it.
+    Task<Result<bool>> GetShowNamesOnScreensAsync(LocationScope scope, int companyId);
+
+    Task<Result<bool>> SetShowNamesOnScreensAsync(LocationScope scope, int companyId, bool show, string actingUserId);
+
     // Swaps the item with its neighbour of the same kind; direction -1 = up, 1 = down.
     Task<Result<bool>> MoveMenuItemAsync(LocationScope scope, Guid itemId, int direction);
 }

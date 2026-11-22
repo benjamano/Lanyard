@@ -1,0 +1,128 @@
+@using Lanyard.Infrastructure.DTO.Files
+
+@* The folder tree: the Files rail, and the Move dialog's picker. Expand with the chevron, open with
+   the name. The top level is its own row ("Files", or "Shared files" for staff). *@
+<ul class="file-tree @(ShowRoot ? "" : "is-rootless")" role="tree" aria-label="Folders">
+    <li role="treeitem" aria-selected="@(RootSelected ? "true" : "false")" aria-expanded="true">
+        <div class="file-tree-row @(RootSelected ? "is-selected" : "")" style="--depth:0">
+            <span class="file-tree-chevron-space"></span>
+            <button type="button" class="file-tree-name" @onclick="() => SelectAsync(null)" disabled="@IsDisabled(null)">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Home())" Color="Color.Default" />
+                <span class="file-tree-label">@RootLabel</span>
+            </button>
+        </div>
+        @RenderChildren(null, ShowRoot ? 1 : 0)
+    </li>
+</ul>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<FolderNode> Folders { get; set; } = [];
+
+    /// <summary>The open folder. Null with <see cref="RootSelected"/> means the top level.</summary>
+    [Parameter] public Guid? SelectedFolderId { get; set; }
+
+    [Parameter] public bool RootSelected { get; set; }
+
+    [Parameter] public string RootLabel { get; set; } = "Files";
+
+    [Parameter] public EventCallback<Guid?> OnSelect { get; set; }
+
+    /// <summary>Folders that can't be chosen (the Move dialog greys out what's being moved).</summary>
+    [Parameter] public IReadOnlySet<Guid>? DisabledFolderIds { get; set; }
+
+    [Parameter] public bool RootDisabled { get; set; }
+
+    /// <summary>Off in the Files rail, where "All files" already opens the top level.</summary>
+    [Parameter] public bool ShowRoot { get; set; } = true;
+
+    private readonly HashSet<Guid> _expanded = [];
+    private Guid? _revealed;
+
+    private Dictionary<Guid, List<FolderNode>> _children = [];
+    private List<FolderNode> _topLevel = [];
+
+    protected override void OnParametersSet()
+    {
+        HashSet<Guid> ids = [.. Folders.Select(x => x.Id)];
+
+        _children = Folders.Where(x => x.ParentFolderId is Guid p && ids.Contains(p))
+            .GroupBy(x => x.ParentFolderId!.Value)
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList());
+
+        _topLevel = Folders.Where(x => x.ParentFolderId is null || !ids.Contains(x.ParentFolderId.Value))
+            .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        // Open the branch down to the selected folder the first time it's selected, so it's in view.
+        if (SelectedFolderId is Guid selected && _revealed != selected)
+        {
+            _revealed = selected;
+            Dictionary<Guid, FolderNode> byId = Folders.ToDictionary(x => x.Id);
+            Guid? current = byId.GetValueOrDefault(selected)?.ParentFolderId;
+            HashSet<Guid> seen = [];
+
+            while (current is Guid c && byId.TryGetValue(c, out FolderNode? node) && seen.Add(c))
+            {
+                _expanded.Add(c);
+                current = node.ParentFolderId;
+            }
+        }
+    }
+
+    private bool IsDisabled(Guid? id) => id is Guid g ? DisabledFolderIds?.Contains(g) == true : RootDisabled;
+
+    private void Toggle(Guid id)
+    {
+        if (!_expanded.Add(id))
+            _expanded.Remove(id);
+    }
+
+    private Task SelectAsync(Guid? id) => OnSelect.InvokeAsync(id);
+
+    private RenderFragment RenderChildren(Guid? parent, int depth) => __builder =>
+    {
+        List<FolderNode> children = parent is Guid p ? _children.GetValueOrDefault(p) ?? [] : _topLevel;
+
+        if (children.Count == 0)
+            return;
+
+        <ul role="group" class="file-tree-group">
+            @foreach (FolderNode folder in children)
+            {
+                bool hasChildren = _children.ContainsKey(folder.Id);
+                bool expanded = _expanded.Contains(folder.Id);
+                bool selected = !RootSelected && SelectedFolderId == folder.Id;
+
+                <li role="treeitem" aria-selected="@(selected ? "true" : "false")" aria-expanded="@(hasChildren ? (expanded ? "true" : "false") : null)" @key="folder.Id">
+                    <div class="file-tree-row @(selected ? "is-selected" : "")" style="--depth:@depth" data-drop-folder="@folder.Id" data-drop-name="@folder.Name">
+                        @if (hasChildren)
+                        {
+                            <button type="button" class="file-tree-chevron" aria-label="@(expanded ? $"Collapse {folder.Name}" : $"Expand {folder.Name}")"
+                                    @onclick="() => Toggle(folder.Id)">
+                                <FluentIcon Value="@(expanded ? (Icon)new Icons.Regular.Size16.ChevronDown() : new Icons.Regular.Size16.ChevronRight())" Color="Color.Default" />
+                            </button>
+                        }
+                        else
+                        {
+                            <span class="file-tree-chevron-space"></span>
+                        }
+                        <button type="button" class="file-tree-name" title="@folder.Name" disabled="@IsDisabled(folder.Id)" @onclick="() => SelectAsync(folder.Id)">
+                            <FluentIcon Value="@(selected ? (Icon)new Icons.Filled.Size20.FolderOpen() : new Icons.Regular.Size20.Folder())" Color="Color.Default" />
+                            <span class="file-tree-label">@folder.Name</span>
+                            @if (folder.IsSharedEffective)
+                            {
+                                <span class="file-tree-shared" title="@(folder.IsSharedWithStaff ? "Shared with staff" : "Shared with staff (from the folder above)")">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.People())" Color="Color.Default" />
+                                </span>
+                            }
+                        </button>
+                    </div>
+                    @if (hasChildren && expanded)
+                    {
+                        @RenderChildren(folder.Id, depth + 1)
+                    }
+                </li>
+            }
+        </ul>
+    };
+}

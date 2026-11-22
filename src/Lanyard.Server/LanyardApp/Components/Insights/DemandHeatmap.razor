@@ -69,6 +69,10 @@
                             <span class="heatmap-bar-track"><span class="heatmap-bar bar-@BarStep(cell)"></span></span>
                             <span class="heatmap-hour-detail">
                                 @InsightsDisplay.Format(cell.AverageGames) games · @InsightsDisplay.Format(cell.AverageStaff) staff
+                                @if (cell.PartyGames > 0)
+                                {
+                                    <span> · @InsightsDisplay.Format(cell.AveragePartyGames) party</span>
+                                }
                                 @if (InsightsDisplay.FlagGlyph(cell.Flag) is string glyph)
                                 {
                                     <span class="heatmap-hour-flag">@glyph @InsightsDisplay.FlagLabel(cell.Flag)</span>
@@ -93,6 +97,10 @@
             <span>More</span>
             <span class="heatmap-legend-flag">▲ Busy for the staff on</span>
             <span class="heatmap-legend-flag">▼ Quiet for the staff on</span>
+            @if (Cells.Any(x => x.Flag == StaffingFlag.PartyHours))
+            {
+                <span class="heatmap-legend-flag">● Mostly parties, not judged</span>
+            }
         </div>
     }
 </div>
@@ -153,6 +161,7 @@
     {
         StaffingFlag.Understaffed => "is-understaffed",
         StaffingFlag.Overstaffed => "is-overstaffed",
+        StaffingFlag.PartyHours => "is-party",
         _ => string.Empty
     };
 }

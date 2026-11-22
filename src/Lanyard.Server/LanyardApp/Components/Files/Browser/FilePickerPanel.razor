@@ -1,0 +1,451 @@
+@using Lanyard.Infrastructure.DTO.Files
+@using Lanyard.App.Components.Files
+@inject IFileLibraryService _library
+@inject IFileService _fileService
+@inject INotificationService _toast
+@inject IJSRuntime _js
+@implements IAsyncDisposable
+
+@* Choosing a file from Files without leaving the page you're on: the course editor's Insert image,
+   a projection step's video, an onboarding attachment. Browse folders or search everything,
+   with thumbnails; anything not allowed here (e.g. not a video) isn't shown. People who manage
+   files can drop or upload straight into the open folder; others get the simple uploader, as before. *@
+<div class="files-picker" @ref="_root">
+    <div class="files-picker-bar">
+        <div class="files-search">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Search())" Color="Color.Default" />
+            <input type="search" class="files-search-input" placeholder="Search all files" aria-label="Search files"
+                   value="@_search" @oninput="OnSearchInput" />
+        </div>
+        <div class="files-view-toggle" role="group" aria-label="Show">
+            <button type="button" class="files-picker-tab @(!_recent ? "is-on" : "")" aria-pressed="@(!_recent ? "true" : "false")" @onclick="() => ShowRecentAsync(false)">Folders</button>
+            <button type="button" class="files-picker-tab @(_recent ? "is-on" : "")" aria-pressed="@(_recent ? "true" : "false")" @onclick="() => ShowRecentAsync(true)">Recent</button>
+        </div>
+    </div>
+
+    @if (!_recent && string.IsNullOrWhiteSpace(_search))
+    {
+        <nav class="files-breadcrumb files-picker-path" aria-label="Folder path">
+            @if (_folderId is not null)
+            {
+                <button type="button" class="files-icon-button files-up" aria-label="Up one folder" title="Up one folder" @onclick="GoUpAsync">
+                    <FluentIcon Value="@(new Icons.Regular.Size20.ArrowUp())" Color="Color.Default" />
+                </button>
+            }
+            <ol>
+                <li>
+                    <button type="button" class="files-crumb @(_folderId is null ? "is-current" : "")" data-drop-folder="" data-drop-name="Files" @onclick="() => OpenFolderAsync(null)">Files</button>
+                </li>
+                @foreach (FolderNode crumb in _path)
+                {
+                    <li>
+                        <FluentIcon Value="@(new Icons.Regular.Size12.ChevronRight())" Color="Color.Default" Class="files-crumb-sep" />
+                        <button type="button" class="files-crumb @(crumb.Id == _folderId ? "is-current" : "")" @onclick="() => OpenFolderAsync(crumb.Id)">@crumb.Name</button>
+                    </li>
+                }
+            </ol>
+        </nav>
+    }
+
+    <div class="files-picker-content" aria-busy="@(_loading ? "true" : "false")">
+        @if (_result is null)
+        {
+            <div class="files-skeleton-grid">
+                @for (int i = 0; i < 6; i++)
+                {
+                    <div class="files-skeleton is-tile"></div>
+                }
+            </div>
+        }
+        else if (_result.Folders.Count == 0 && Visible.Count == 0)
+        {
+            <div class="files-empty">
+                <FluentIcon Value="@(new Icons.Regular.Size24.FolderOpen())" Color="Color.Default" />
+                <h2>@EmptyText</h2>
+                @if (CanQueueUploads)
+                {
+                    <p>Drop @(Kind is null ? "files" : KindWord) here, or upload one below.</p>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="files-grid" role="list">
+                @foreach (FolderNode folder in _result.Folders)
+                {
+                    <div class="files-item is-folder" role="listitem" @key="folder.Id" data-drop-folder="@(CanQueueUploads ? folder.Id.ToString() : null)" data-drop-name="@folder.Name">
+                        <button type="button" class="files-item-main" title="@folder.Name" @onclick="() => OpenFolderAsync(folder.Id)">
+                            <span class="files-item-thumb is-folder"><FluentIcon Value="@(new Icons.Filled.Size24.Folder())" Color="Color.Default" /></span>
+                            <span class="files-item-text">
+                                <span class="files-item-name">@folder.Name</span>
+                                <span class="files-item-meta">@FileBrowserFormat.FolderSummary(folder)</span>
+                            </span>
+                        </button>
+                    </div>
+                }
+                @foreach (FileListItem file in Visible)
+                {
+                    <div class="files-item" role="listitem" @key="file.Id">
+                        <button type="button" class="files-item-main" title="@($"Choose {file.FileName}")" @onclick="() => PickAsync(file)">
+                            <span class="files-item-thumb @FileBrowserFormat.TypeClass(file.TypeGroup)">
+                                @if (FileBrowserFormat.TileImageUrl(file) is string tile)
+                                {
+                                    <img src="@tile" alt="" loading="lazy" decoding="async" draggable="false" />
+                                }
+                                else
+                                {
+                                    <FluentIcon Value="@FileBrowserFormat.IconFor(file.TypeGroup, file.FileName)" Color="Color.Default" />
+                                }
+                                @if (file.Duration is TimeSpan duration && duration > TimeSpan.Zero)
+                                {
+                                    <span class="files-item-duration">@FileBrowserFormat.Duration(duration)</span>
+                                }
+                            </span>
+                            <span class="files-item-text">
+                                <span class="files-item-name">@file.FileName</span>
+                                <span class="files-item-meta">
+                                    @FileTypeInfo.FormatSize(file.FileSize)
+                                    @if ((_recent || !string.IsNullOrWhiteSpace(_search)) && file.FolderPath.Length > 0)
+                                    {
+                                        <span class="files-item-path"> · @file.FolderPath</span>
+                                    }
+                                </span>
+                            </span>
+                        </button>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <div class="files-picker-upload">
+        @if (CanQueueUploads)
+        {
+            <FluentButton IconStart="@(new Icons.Regular.Size20.ArrowUpload())" OnClick="UploadAsync">Upload @(Kind is null ? "a file" : $"a {KindWord}")</FluentButton>
+            <span class="files-picker-hint">or drop files here. They go into @(_path.LastOrDefault()?.Name ?? "Files").</span>
+            <UploadTray Items="_uploads" Inline="true" OnCancel='id => CallUploaderAsync("cancel", id)'
+                        OnRetry='id => CallUploaderAsync("retry", id)' OnClear='() => CallUploaderAsync("clearFinished")'
+                        OnShow="ShowUploadAsync" />
+        }
+        else
+        {
+            @* Without CanManageFiles the upload API refuses; this uploader goes through the circuit, as before. *@
+            <FileUploader Id="@($"files-picker-uploader-{_instance}")" SelectedFolderId="_folderId" MaximumFileCount="@MaximumFileCount"
+                          Label="Upload a file" Accept="@AcceptAttribute" OnFileUploaded="OnSimpleUploadAsync" />
+        }
+    </div>
+</div>
+
+@code {
+    /// <summary>Only these extensions can be chosen ("mp4" or ".mp4"); empty means anything.</summary>
+    [Parameter] public IReadOnlyCollection<string>? AllowedExtensions { get; set; }
+
+    /// <summary>Only this kind of file can be chosen, e.g. Image for the course editor.</summary>
+    [Parameter] public FileTypeGroup? Kind { get; set; }
+
+    [Parameter] public Guid? InitialFolderId { get; set; }
+
+    [Parameter] public int MaximumFileCount { get; set; } = 1;
+
+    /// <summary>A file was chosen, by clicking it or by uploading it here.</summary>
+    [Parameter] public EventCallback<FileListItem> OnPicked { get; set; }
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private readonly string _instance = Guid.NewGuid().ToString("N")[..8];
+    private ElementReference _root;
+    private Guid? _folderId;
+    private IReadOnlyList<FolderNode> _path = [];
+    private FileQueryResult? _result;
+    private bool _loading;
+    private bool _recent;
+    private string _search = "";
+    private CancellationTokenSource? _searchDelay;
+    private bool _canManage;
+    private HashSet<string> _extensions = new(StringComparer.OrdinalIgnoreCase);
+
+    private IJSObjectReference? _module;
+    private IJSObjectReference? _uploader;
+    private DotNetObjectReference<FilePickerPanel>? _self;
+    private IReadOnlyList<UploadTray.UploadItem> _uploads = [];
+
+    private bool CanQueueUploads => _canManage;
+
+    private string KindWord => Kind switch
+    {
+        FileTypeGroup.Image => "picture",
+        FileTypeGroup.Video => "video",
+        FileTypeGroup.Audio => "sound",
+        FileTypeGroup.Document => "document",
+        _ => "file",
+    };
+
+    private string EmptyText => !string.IsNullOrWhiteSpace(_search)
+        ? $"Nothing matches “{_search}”"
+        : _recent ? "Nothing uploaded yet" : "Nothing to choose in this folder";
+
+    private string? AcceptAttribute => _extensions.Count > 0
+        ? string.Join(',', _extensions)
+        : Kind switch { FileTypeGroup.Image => "image/*", FileTypeGroup.Video => "video/*", FileTypeGroup.Audio => "audio/*", _ => null };
+
+    private List<FileListItem> Visible => _result?.Files.Where(IsAllowed).ToList() ?? [];
+
+    private bool IsAllowed(FileListItem file) =>
+        (Kind is null || file.TypeGroup == Kind)
+        && (_extensions.Count == 0 || _extensions.Contains(Path.GetExtension(file.FileName)));
+
+    protected override async Task OnInitializedAsync()
+    {
+        _folderId = InitialFolderId;
+        _extensions = new((AllowedExtensions ?? []).Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim().StartsWith('.') ? x.Trim() : "." + x.Trim()), StringComparer.OrdinalIgnoreCase);
+
+        if (AuthState is not null)
+        {
+            System.Security.Claims.ClaimsPrincipal user = (await AuthState).User;
+            _canManage = user.IsInRole("Admin") || user.IsInRole("CanManageFiles");
+        }
+
+        await LoadAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !CanQueueUploads)
+            return;
+
+        try
+        {
+            _module = await _js.InvokeAsync<IJSObjectReference>("import", "./js/fileUploads.js");
+            _self = DotNetObjectReference.Create(this);
+            _uploader = await _module.InvokeAsync<IJSObjectReference>("attach", _root, _self,
+                new { folderId = _folderId?.ToString(), folderName = _path.LastOrDefault()?.Name ?? "Files", canUpload = true });
+        }
+        catch (Exception ex) when (ex is JSException or InvalidOperationException or TaskCanceledException)
+        {
+            // The simple uploader isn't offered here, but picking still works.
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+
+        try
+        {
+            string? search = string.IsNullOrWhiteSpace(_search) ? null : _search.Trim();
+
+            FileQuery query = search is not null
+                ? new FileQuery { AllFolders = true, Search = search, TypeGroup = Kind, Take = 200 }
+                : _recent
+                    ? new FileQuery { AllFolders = true, TypeGroup = Kind, Sort = FileSort.Uploaded, Descending = true, Take = 60 }
+                    : new FileQuery { FolderId = _folderId };
+
+            Result<FileQueryResult> result = await _library.QueryAsync(query, CancellationToken.None);
+
+            if (!result.IsSuccess && _folderId is not null && search is null && !_recent)
+            {
+                // The folder it was asked to start in has gone; start at the top instead.
+                _folderId = null;
+                result = await _library.QueryAsync(new FileQuery(), CancellationToken.None);
+            }
+
+            _result = result.Data ?? new FileQueryResult([], [], 0);
+
+            // Searching and Recent list files only (search also matches folder names, which can't be chosen).
+            if (search is not null || _recent)
+                _result = _result with { Folders = search is not null ? _result.Folders : [] };
+
+            _path = _folderId is Guid folder && search is null && !_recent
+                ? (await _library.GetPathAsync(folder, sharedOnly: false, CancellationToken.None)).Data ?? []
+                : [];
+
+            if (_uploader is not null)
+            {
+                try
+                {
+                    await _uploader.InvokeVoidAsync("setFolder", _folderId?.ToString(), _path.LastOrDefault()?.Name ?? "Files");
+                }
+                catch (Exception ex) when (ex is JSException or JSDisconnectedException or TaskCanceledException)
+                {
+                }
+            }
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OpenFolderAsync(Guid? folderId)
+    {
+        _folderId = folderId;
+        _recent = false;
+        _search = "";
+        await LoadAsync();
+    }
+
+    private Task GoUpAsync() => OpenFolderAsync(_path.Count >= 2 ? _path[^2].Id : null);
+
+    private async Task ShowRecentAsync(bool recent)
+    {
+        _recent = recent;
+        _search = "";
+        await LoadAsync();
+    }
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        _search = e.Value?.ToString() ?? "";
+        _searchDelay?.Cancel();
+        _searchDelay?.Dispose();
+        _searchDelay = new CancellationTokenSource();
+        CancellationToken token = _searchDelay.Token;
+
+        try
+        {
+            await Task.Delay(300, token);
+            await LoadAsync();
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+        {
+        }
+    }
+
+    private Task PickAsync(FileListItem file) => OnPicked.InvokeAsync(file);
+
+    // ---------- Uploading ----------
+
+    private async Task UploadAsync()
+    {
+        if (_uploader is not null)
+            await _uploader.InvokeVoidAsync("pick", _folderId?.ToString());
+    }
+
+    [JSInvokable]
+    public Task OnUploadsChanged(List<UploadTray.UploadItem> items)
+    {
+        _uploads = items;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    // What's uploaded here is chosen straight away, as long as it's allowed here. Something
+    // else (a picture dropped onto a video picker) stays in Files but isn't chosen.
+    [JSInvokable]
+    public async Task OnUploadFinished(UploadTray.UploadItem item)
+    {
+        await InvokeAsync(async () =>
+        {
+            await LoadAsync();
+
+            FileListItem? uploaded = Guid.TryParse(item.FileId, out Guid id)
+                ? (await _library.GetFileAsync(id, sharedOnly: false, CancellationToken.None)).Data
+                : null;
+
+            if (uploaded is null)
+                return;
+
+            if (IsAllowed(uploaded))
+                await OnPicked.InvokeAsync(uploaded);
+            else
+                _toast.ShowWarning($"\"{uploaded.FileName}\" was uploaded to Files, but it isn't a {KindWord} that can be used here.");
+
+            StateHasChanged();
+        });
+    }
+
+    [JSInvokable]
+    public async Task<string?> EnsureFolderPath(string? parentId, string path)
+    {
+        if (!_canManage)
+            return null;
+
+        Guid? parent = Guid.TryParse(parentId, out Guid parsed) ? parsed : null;
+
+        foreach (string segment in path.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            Result<Folder> created = await _fileService.CreateFolderAsync(segment, parent, CancellationToken.None);
+
+            if (created.Data is Folder folder)
+            {
+                parent = folder.Id;
+                continue;
+            }
+
+            // Already there: find it.
+            FolderNode? existing = (await _library.GetTreeAsync(sharedOnly: false, CancellationToken.None)).Data?
+                .FirstOrDefault(x => x.ParentFolderId == parent && FileNameRules.SameName(x.Name, segment));
+
+            if (existing is null)
+                return null;
+
+            parent = existing.Id;
+        }
+
+        return parent?.ToString();
+    }
+
+    // The picker doesn't select several or drag-move; these keep the shared script happy.
+    [JSInvokable] public Task SelectAll() => Task.CompletedTask;
+    [JSInvokable] public Task ClearSelection() => Task.CompletedTask;
+    [JSInvokable] public Task OnItemDragStart(string key) => Task.CompletedTask;
+    [JSInvokable] public Task OnItemsDropped(string? folderId) => Task.CompletedTask;
+
+    private Task ShowUploadAsync(UploadTray.UploadItem item) =>
+        OpenFolderAsync(Guid.TryParse(item.FolderId, out Guid folder) ? folder : null);
+
+    private async Task CallUploaderAsync(string method, params object?[] args)
+    {
+        if (_uploader is null)
+            return;
+
+        try
+        {
+            await _uploader.InvokeVoidAsync(method, args);
+        }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException or TaskCanceledException)
+        {
+        }
+    }
+
+    // Someone without CanManageFiles uploaded through the simple uploader.
+    private async Task OnSimpleUploadAsync(FileMetadata file)
+    {
+        await LoadAsync();
+
+        FileListItem? uploaded = (await _library.GetFileAsync(file.Id, sharedOnly: false, CancellationToken.None)).Data;
+
+        if (uploaded is not null && IsAllowed(uploaded))
+        {
+            await OnPicked.InvokeAsync(uploaded);
+            return;
+        }
+
+        // As before: a file that isn't allowed here isn't kept.
+        await _fileService.DeleteFileAsync(file.Id, CancellationToken.None);
+        _toast.ShowError($"\"{file.FileName}\" is not an allowed file type here and was not added.");
+        await LoadAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _searchDelay?.Cancel();
+        _searchDelay?.Dispose();
+
+        try
+        {
+            if (_uploader is not null)
+            {
+                await _uploader.InvokeVoidAsync("dispose");
+                await _uploader.DisposeAsync();
+            }
+
+            if (_module is not null)
+                await _module.DisposeAsync();
+        }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException or TaskCanceledException)
+        {
+        }
+
+        _self?.Dispose();
+    }
+}

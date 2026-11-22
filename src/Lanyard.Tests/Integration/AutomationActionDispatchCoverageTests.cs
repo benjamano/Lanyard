@@ -30,6 +30,17 @@ public class AutomationActionDispatchCoverageTests
         Assert.AreEqual(0, missing.Count, $"No IActionExecutor handles: {string.Join(", ", missing)}");
     }
 
+    // The engine and the rule save check every action's kiosk (and playlist, program, scene or
+    // clip) against the rule's company through AutomationActionTargets. A type it doesn't know
+    // reads as "no targets" and would skip that check, so each one must be listed there.
+    [TestMethod]
+    public void EveryActionType_HasItsTargetsCheckedForTheRulesCompany()
+    {
+        List<string> missing = ActionTypes.Where(type => !AutomationActionTargets.IsKnown(type)).ToList();
+
+        Assert.AreEqual(0, missing.Count, $"AutomationActionTargets doesn't know: {string.Join(", ", missing)}");
+    }
+
     [TestMethod]
     public void EveryActionType_IsOfferedInTheRuleDialog()
     {
