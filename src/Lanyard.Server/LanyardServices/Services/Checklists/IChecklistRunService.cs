@@ -57,14 +57,15 @@ public interface IChecklistRunService
     // CanTick is false.
     Task<Result<ChecklistRunView?>> GetCardAsync(Guid checklistId, int companyId);
 
-    // A tick made on a kiosk, recorded as the kiosk (no person). Needs the kiosk's viewer token and a
-    // Checklist card in its company that allows kiosk ticking for that checklist.
-    Task<Result<bool>> CompleteOnKioskAsync(Guid clientId, string? viewerToken, Guid runItemId, string? note, decimal? reading);
+    // A tick made on a kiosk, recorded as the kiosk (no person), through the Checklist card widgetId on
+    // its screen. Needs the kiosk's viewer token; the card must allow kiosk ticking, be on the dashboard
+    // the kiosk is showing now and be shown (its "Show only when…" conditions hold).
+    Task<Result<bool>> CompleteOnKioskAsync(Guid clientId, string? viewerToken, Guid widgetId, Guid runItemId, string? note, decimal? reading);
 
-    // Whether this kiosk may tick this checklist right now (its token is good, same company, and a card
-    // allows kiosk ticking), so the card can show read-only rather than fail on the first tick.
-    Task<Result<bool>> CanTickOnKioskAsync(Guid clientId, string? viewerToken, Guid checklistId);
+    // Whether this kiosk may tick through this card right now (the same checks), so the card can show
+    // read-only rather than fail on the first tick.
+    Task<Result<bool>> CanTickOnKioskAsync(Guid clientId, string? viewerToken, Guid widgetId);
 
-    // Takes back a kiosk tick made today (not a person's).
-    Task<Result<bool>> UndoOnKioskAsync(Guid clientId, string? viewerToken, Guid completionId);
+    // Takes back a kiosk tick made today (not a person's), through the same card.
+    Task<Result<bool>> UndoOnKioskAsync(Guid clientId, string? viewerToken, Guid widgetId, Guid completionId);
 }

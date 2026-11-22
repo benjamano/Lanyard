@@ -6,6 +6,7 @@ using Lanyard.Infrastructure.DTO.Checklists;
 using Lanyard.Infrastructure.DTO.Scheduling;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Shared.Projection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -17,6 +18,8 @@ public class ChecklistRunService(
     ITimeEntryService timeEntryService,
     ITerminalEphemeralTokenService tokenService,
     Lanyard.Application.Services.VideoStreaming.IVideoStreamTokenService viewerTokens,
+    IProjectionProgramRunnerService projectionRunner,
+    IWidgetVisibilityService widgetVisibility,
     TimeProvider timeProvider,
     ILogger<ChecklistRunService> logger) : IChecklistRunService
 {
@@ -30,6 +33,8 @@ public class ChecklistRunService(
     private readonly ITimeEntryService _timeEntryService = timeEntryService;
     private readonly ITerminalEphemeralTokenService _tokenService = tokenService;
     private readonly Lanyard.Application.Services.VideoStreaming.IVideoStreamTokenService _viewerTokens = viewerTokens;
+    private readonly IProjectionProgramRunnerService _projectionRunner = projectionRunner;
+    private readonly IWidgetVisibilityService _widgetVisibility = widgetVisibility;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger<ChecklistRunService> _logger = logger;
 
@@ -708,7 +713,7 @@ public class ChecklistRunService(
         }
     }
 
-    public async Task<Result<bool>> CompleteOnKioskAsync(Guid clientId, string? viewerToken, Guid runItemId, string? note, decimal? reading)
+    public async Task<Result<bool>> CompleteOnKioskAsync(Guid clientId, string? viewerToken, Guid widgetId, Guid runItemId, string? note, decimal? reading)
     {
         try
         {
@@ -725,15 +730,15 @@ public class ChecklistRunService(
 
             ChecklistRunItem? item = await LoadItemAsync(ctx, runItemId);
 
-            // Only the kiosk's own company, and only a checklist a card has opened up for kiosk ticking.
+            // Only the kiosk's own company, and only through the card on its screen that allows it.
             if (item?.Run is null || item.Run.CompanyId != kiosk.Data.CompanyId)
             {
                 return Result<bool>.Fail("That task wasn't found.");
             }
 
-            if (!await KioskTickingAllowedAsync(ctx, kiosk.Data.CompanyId, item.Run.ChecklistId))
+            if (await WhyKioskCantTickAsync(ctx, kiosk.Data, widgetId, item.Run.ChecklistId, now) is string refused)
             {
-                return Result<bool>.Fail("This checklist can't be ticked on a kiosk.");
+                return Result<bool>.Fail(refused);
             }
 
             return await TickAsync(ctx, item, null, false, ChecklistCompletionMethod.Kiosk, null, note, reading, now, clientId);
@@ -745,7 +750,7 @@ public class ChecklistRunService(
         }
     }
 
-    public async Task<Result<bool>> CanTickOnKioskAsync(Guid clientId, string? viewerToken, Guid checklistId)
+    public async Task<Result<bool>> CanTickOnKioskAsync(Guid clientId, string? viewerToken, Guid widgetId)
     {
         try
         {
@@ -758,21 +763,29 @@ public class ChecklistRunService(
                 return Result<bool>.Ok(false);
             }
 
-            bool sameCompany = await ctx.Checklists
+            Guid? checklistId = await ctx.DashboardWidgets
+                .OfType<ChecklistCardWidget>()
                 .AsNoTracking()
                 .TagWithCallSite()
-                .AnyAsync(x => x.Id == checklistId && x.CompanyId == kiosk.Data.CompanyId && x.IsActive);
+                .Where(w => w.Id == widgetId)
+                .Select(w => w.ChecklistCardChecklistId)
+                .FirstOrDefaultAsync();
 
-            return Result<bool>.Ok(sameCompany && await KioskTickingAllowedAsync(ctx, kiosk.Data.CompanyId, checklistId));
+            bool sameCompany = checklistId is Guid id && await ctx.Checklists
+                .AsNoTracking()
+                .TagWithCallSite()
+                .AnyAsync(x => x.Id == id && x.CompanyId == kiosk.Data.CompanyId && x.IsActive);
+
+            return Result<bool>.Ok(sameCompany && await WhyKioskCantTickAsync(ctx, kiosk.Data, widgetId, checklistId!.Value, Now) is null);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to check kiosk {ClientId} may tick checklist {ChecklistId}", clientId, checklistId);
+            _logger.LogError(ex, "Failed to check kiosk {ClientId} may tick through card {WidgetId}", clientId, widgetId);
             return Result<bool>.Fail($"Failed to check the kiosk: {ex.Message}");
         }
     }
 
-    public async Task<Result<bool>> UndoOnKioskAsync(Guid clientId, string? viewerToken, Guid completionId)
+    public async Task<Result<bool>> UndoOnKioskAsync(Guid clientId, string? viewerToken, Guid widgetId, Guid completionId)
     {
         try
         {
@@ -811,9 +824,9 @@ public class ChecklistRunService(
                 return Result<bool>.Fail("Only today's ticks can be taken back.");
             }
 
-            if (!await KioskTickingAllowedAsync(ctx, kiosk.Data.CompanyId, run.ChecklistId))
+            if (await WhyKioskCantTickAsync(ctx, kiosk.Data, widgetId, run.ChecklistId, now) is string refused)
             {
-                return Result<bool>.Fail("This checklist can't be ticked on a kiosk.");
+                return Result<bool>.Fail(refused);
             }
 
             completion.IsActive = false;
@@ -857,13 +870,51 @@ public class ChecklistRunService(
         return Result<Client>.Ok(client);
     }
 
-    private static Task<bool> KioskTickingAllowedAsync(ApplicationDbContext ctx, int companyId, Guid checklistId) =>
-        ctx.DashboardWidgets
+    // Why this kiosk can't tick this checklist through this card right now, or null when it can. The
+    // card must allow kiosk ticking for this checklist, sit on an active dashboard of the kiosk's
+    // company, be on the kiosk's screen (the step it's showing now is that dashboard) and be shown
+    // (its "Show only when…" conditions hold). So a read-only or hidden card elsewhere never opens
+    // ticking up, and neither does another kiosk in the same company.
+    private async Task<string?> WhyKioskCantTickAsync(ApplicationDbContext ctx, Client kiosk, Guid widgetId, Guid checklistId, DateTime now)
+    {
+        const string NotHere = "This checklist can't be ticked on this screen.";
+
+        ChecklistCardWidget? card = await ctx.DashboardWidgets
             .OfType<ChecklistCardWidget>()
             .AsNoTracking()
             .TagWithCallSite()
-            .AnyAsync(w => w.IsActive && w.ChecklistCardAllowKioskTicking && w.ChecklistCardChecklistId == checklistId
-                && ctx.Dashboards.Any(d => d.Id == w.DashboardId && d.IsActive && d.CompanyId == companyId));
+            .FirstOrDefaultAsync(w => w.Id == widgetId && w.IsActive && w.ChecklistCardAllowKioskTicking && w.ChecklistCardChecklistId == checklistId
+                && ctx.Dashboards.Any(d => d.Id == w.DashboardId && d.IsActive && d.CompanyId == kiosk.CompanyId));
+
+        if (card is null)
+        {
+            return NotHere;
+        }
+
+        if (!IsShowingDashboard(kiosk.Id, card.DashboardId))
+        {
+            return "This screen isn't showing that checklist right now.";
+        }
+
+        Result<WidgetVisibilityLookups> lookups = await _widgetVisibility.LoadAsync([card]);
+
+        if (!lookups.IsSuccess || lookups.Data is null || !_widgetVisibility.IsShown(card, kiosk.CompanyId, lookups.Data, now))
+        {
+            return "This checklist isn't shown on this screen right now.";
+        }
+
+        return null;
+    }
+
+    // Whether any of the kiosk's displays is on a Dashboard step for this dashboard, by the projection
+    // runner (the server's own record of what each kiosk is playing).
+    private bool IsShowingDashboard(Guid clientId, Guid dashboardId) =>
+        _projectionRunner.GetRunningStates().Any(run => run.ClientId == clientId
+            && run.CurrentStepIndex >= 0 && run.CurrentStepIndex < run.Steps.Count
+            && run.Steps[run.CurrentStepIndex] is ProjectionProgramStep step
+            && step.Template?.Name == ProjectionTemplateNames.Dashboard
+            && step.ParameterValues.Any(v => v.Parameter?.Name == ProjectionParameterNames.Dashboard
+                && Guid.TryParse(v.Value, out Guid shown) && shown == dashboardId));
 
     // The location, if the person may use its checklists: it's active, they belong to it (Admins of its
     // company excepted), and the company has checklists and shift management switched on.

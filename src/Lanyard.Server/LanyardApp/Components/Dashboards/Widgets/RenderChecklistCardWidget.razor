@@ -113,6 +113,7 @@ else
         if (Widget.ChecklistCardChecklistId is not Guid checklistId)
         {
             _error = "Choose a checklist";
+            _hidden = false;
             _loaded = true;
             return;
         }
@@ -120,6 +121,7 @@ else
         if (CompanyId is not int companyId)
         {
             _error = "Couldn't load the checklist";
+            _hidden = false;
             _loaded = true;
             return;
         }
@@ -130,8 +132,10 @@ else
 
         if (!result.IsSuccess)
         {
+            // Show why, even on a card that had hidden itself once done.
             _error = result.Error ?? "Couldn't load the checklist";
             _run = null;
+            _hidden = false;
             return;
         }
 
@@ -139,7 +143,7 @@ else
         _run = result.Data;
 
         _kioskMayTick = Kiosk is not null && Widget.ChecklistCardAllowKioskTicking
-            && (await _runService.CanTickOnKioskAsync(Kiosk.ClientId, Kiosk.ViewerToken, checklistId)).Data;
+            && (await _runService.CanTickOnKioskAsync(Kiosk.ClientId, Kiosk.ViewerToken, Widget.Id)).Data;
         _hidden = Widget.ChecklistCardHideWhenDone && _run?.Status == ChecklistRunStatus.Complete;
     }
 
@@ -150,7 +154,7 @@ else
             return;
         }
 
-        Result<bool> result = await _runService.CompleteOnKioskAsync(Kiosk.ClientId, Kiosk.ViewerToken, tick.Item.ItemId, tick.Note, tick.Reading);
+        Result<bool> result = await _runService.CompleteOnKioskAsync(Kiosk.ClientId, Kiosk.ViewerToken, Widget.Id, tick.Item.ItemId, tick.Note, tick.Reading);
 
         if (!result.IsSuccess)
         {
@@ -167,7 +171,7 @@ else
             return;
         }
 
-        Result<bool> result = await _runService.UndoOnKioskAsync(Kiosk.ClientId, Kiosk.ViewerToken, tick.CompletionId);
+        Result<bool> result = await _runService.UndoOnKioskAsync(Kiosk.ClientId, Kiosk.ViewerToken, Widget.Id, tick.CompletionId);
 
         if (!result.IsSuccess)
         {

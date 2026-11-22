@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Moq;
 
 namespace Lanyard.Tests.Services.Checklists;
 
@@ -100,7 +101,9 @@ public class ChecklistTerminalTests
         TimeEntryService timeEntries = new(factory, pins, terminals, new SchedulingSettingsService(factory), tokens, new TerminalEventBus(), clock,
             NullLogger<TimeEntryService>.Instance);
 
-        ChecklistRunService service = new(factory, terminals, timeEntries, tokens, new Lanyard.Application.Services.VideoStreaming.VideoStreamTokenService(), clock, NullLogger<ChecklistRunService>.Instance);
+        ChecklistRunService service = new(factory, terminals, timeEntries, tokens, new Lanyard.Application.Services.VideoStreaming.VideoStreamTokenService(),
+            Mock.Of<Lanyard.Application.Services.IProjectionProgramRunnerService>(), Mock.Of<Lanyard.Application.Services.IWidgetVisibilityService>(),
+            clock, NullLogger<ChecklistRunService>.Instance);
 
         return new World(options, clock, service, timeEntries, ipswich, wisbech, ipswichTerminal, wisbechTerminal, amy, manager);
     }
