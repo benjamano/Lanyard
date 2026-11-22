@@ -1049,5 +1049,17 @@
       "A checklist task can ask for just a tick, a tick with an optional note, or a number reading with a unit, such as a fridge temperature in °C. Reorder tasks with the up and down arrows.",
       "A checklist can be limited to one position, such as Duty Manager for Closing; otherwise anyone on that day's rota can tick it. Checklists can be switched on or off per company under Companies & Locations."
     ]
+  },
+  {
+    "version": "1.4.32",
+    "releaseDate": "2026-11-22",
+    "summary": "Managers can now build and edit dashboards, and dashboards get groundwork for the new drag-and-drop designer.",
+    "details": [
+      "Managers can now create, edit and delete dashboards, not just Admins.",
+      "Fixed the Text Area widget being editable on home screens and kiosk displays. It now only shows its text there, and is edited in the dashboard editor.",
+      "Fixed editing a Text Area widget saving the dashboard's unfinished layout. Nothing is saved until you press Save.",
+      "The dashboard editor's arrange buttons now push other widgets out of the way instead of overlapping them, and each widget has a Settings button (no more right-clicking).",
+      "A widget that fails to load now shows a short message instead of breaking the whole dashboard."
+    ]
   }
 ]

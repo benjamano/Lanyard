@@ -3,15 +3,20 @@
 @inject IDashboardService DashboardService
 @inject ILogger<DashboardList> Logger
 
-<FluentStack Width="20%">
-    <FluentCard Appearance="@CardAppearance.Filled" Width="auto">
-        <FluentStack HorizontalAlignment="@HorizontalAlignment.Center">
-            <FluentButton Appearance="@ButtonAppearance.Primary" 
-                        IconStart="new Icons.Regular.Size24.AddCircle()"
-                        OnClick="() => CreateBlankDashboard()">Create blank dashboard</FluentButton>
-        </FluentStack>
-    </FluentCard>
-</FluentStack>
+@* Creating and editing dashboards is for Admins and Managers - the same people who can set
+   everyone's home screen, so one role check covers both. *@
+@if (_canSetOrganisationDefault)
+{
+    <FluentStack Width="20%">
+        <FluentCard Appearance="@CardAppearance.Filled" Width="auto">
+            <FluentStack HorizontalAlignment="@HorizontalAlignment.Center">
+                <FluentButton Appearance="@ButtonAppearance.Primary" 
+                            IconStart="new Icons.Regular.Size24.AddCircle()"
+                            OnClick="() => CreateBlankDashboard()">Create blank dashboard</FluentButton>
+            </FluentStack>
+        </FluentCard>
+    </FluentStack>
+}
 
 <FluentDataGrid Items="Dashboards.AsQueryable()" 
                 Loading="IsLoading"
@@ -251,7 +256,8 @@
 
     private void OnRowClick(Guid dashboardId)
     {
-        if (dashboardId == Guid.Empty)
+        // Everyone else would only be sent to the login redirect the editor's route gives them.
+        if (dashboardId == Guid.Empty || !_canSetOrganisationDefault)
         {
             return;
         }

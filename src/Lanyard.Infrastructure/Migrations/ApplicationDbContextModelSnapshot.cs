@@ -2503,6 +2503,9 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<bool>("FitToScreen")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -2513,6 +2516,9 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<int>("RowHeight")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
@@ -2542,7 +2548,16 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<int>("GridY")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("HideOnPhone")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("PhoneOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("ShowTitle")
                         .HasColumnType("boolean");
 
                     b.Property<string>("Title")
