@@ -64,6 +64,13 @@ else
             .Cast<Client>()
             .OrderBy(x => x.Name)];
 
+        // A widget still pointing at a kiosk that's gone (or no longer qualifies) would otherwise
+        // show an empty picker, looking unset while it isn't. Show it, so it can be changed.
+        if (Value is Guid saved && clients.All(c => c.Id != saved))
+        {
+            clients.Insert(0, new Client { Id = saved, Name = "Kiosk no longer available" });
+        }
+
         // "None" first when it's a real choice, so it can be picked again after choosing a kiosk.
         if (NoneText is not null && clients.Count > 0)
         {

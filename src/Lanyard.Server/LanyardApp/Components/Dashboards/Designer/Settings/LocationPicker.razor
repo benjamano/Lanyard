@@ -43,6 +43,14 @@
         bool isAdmin = scope.Data?.IsAdmin == true;
         List<Location> pickable = [];
 
+        // Only an Admin's choice applies to these widgets (a Manager always sees their own
+        // location), so a Manager gets no picker at all - not even to clear what an Admin set.
+        if (!isAdmin && !ManagersPickTheirOwn)
+        {
+            _options = [];
+            return;
+        }
+
         if (isAdmin || ManagersPickTheirOwn)
         {
             Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync();

@@ -51,6 +51,13 @@
 
         Result<IEnumerable<ClientAvailableScreen>> result = await ClientService.GetClientAvailableScreensAsync(clientId);
 
+        // The kiosk may have been changed again while this was loading; a late answer for the
+        // previous kiosk mustn't replace the current one's screens.
+        if (ClientId != clientId)
+        {
+            return;
+        }
+
         if (result.IsSuccess && result.Data is not null)
         {
             _screens = [.. result.Data.Where(x => x.IsActive).OrderBy(x => x.Index)];

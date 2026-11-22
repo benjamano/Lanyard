@@ -5,6 +5,11 @@
     width: 100%;
 }
 
+/* No query container, so the phone rules below never apply (kiosks). */
+.dashboard-grid-container.no-phone-layout {
+    container-type: normal;
+}
+
 .dashboard-grid {
     display: grid;
     grid-template-columns: repeat(12, minmax(0, 1fr));

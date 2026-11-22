@@ -100,9 +100,6 @@
     [Parameter]
     public EventCallback<string> OnChanged { get; set; }
 
-    // Page-wide shortcuts the JS catches: "save", "undo" and "redo".
-    [Parameter]
-    public EventCallback<string> OnShortcut { get; set; }
 
     // Modules the company doesn't have. Their widgets are still shown (so they can be removed),
     // just marked as not in the plan.
@@ -300,9 +297,6 @@
     }
 
     [JSInvokable]
-    public Task ShortcutAsync(string name) => OnShortcut.InvokeAsync(name);
-
-    [JSInvokable]
     public async Task AddAsync(int type)
     {
         await AddWidgetAsync((WidgetType)type);
@@ -311,6 +305,13 @@
     [JSInvokable]
     public async Task KeyAsync(string key, bool shift, bool ctrl)
     {
+        // A drag commits the layout it previewed from its start, so a key move made meanwhile
+        // would be silently thrown away.
+        if (_dragKind != DragKind.None)
+        {
+            return;
+        }
+
         if (key == "Escape")
         {
             await SelectAsync(null);

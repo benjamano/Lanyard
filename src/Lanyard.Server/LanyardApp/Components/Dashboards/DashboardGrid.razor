@@ -7,7 +7,7 @@
 
 @inject ICompanyFeatureService CompanyFeatures
 
-<div class="dashboard-grid-container">
+<div class="dashboard-grid-container @(PhoneLayout ? null : "no-phone-layout")">
     <div class="dashboard-grid @(Fit ? "fit-to-screen" : null)" style="@GridStyle">
         @foreach ((DashboardWidget widget, int phoneOrder) in OrderedWidgets())
         {
@@ -46,6 +46,11 @@
     [Parameter]
     public bool FitToScreen { get; set; }
 
+    // Collapse to the one-column phone layout when narrow. Off on kiosks: a narrow kiosk screen
+    // isn't a phone, and widgets hidden on phones should still show there.
+    [Parameter]
+    public bool PhoneLayout { get; set; } = true;
+
     // Widgets from a module the viewer's company doesn't have (CompanyFeatureCatalog.ForWidget)
     // are left out when viewing.
     // Until the lookup finishes every module counts as hidden, so a widget the company doesn't have
@@ -63,7 +68,9 @@
         get
         {
             int rowHeight = Math.Clamp(RowHeight <= 0 ? Dashboard.DefaultRowHeight : RowHeight, Dashboard.MinRowHeight, Dashboard.MaxRowHeight);
-            int rows = Math.Max(1, DashboardLayoutEngine.RowCount(Widgets.Select(ToRect)));
+            // Only what's shown: a widget left out for a missing module mustn't keep its rows empty
+            // on a fit-to-screen TV.
+            int rows = Math.Max(1, DashboardLayoutEngine.RowCount(VisibleWidgets.Select(ToRect)));
 
             return $"--dashboard-row-height: {rowHeight}px; --dashboard-rows: {rows};";
         }
