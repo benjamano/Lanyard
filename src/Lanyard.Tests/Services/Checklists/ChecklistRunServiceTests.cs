@@ -395,4 +395,49 @@ public class ChecklistRunServiceTests
         Assert.AreEqual(0, (await service.GetMyTodayAsync(w.Amy.Id, w.AmyScope)).Data!.Runs.Count);
         Assert.AreEqual(1, (await service.GetDayBoardAsync(w.ManagerScope, "manager", w.Ipswich.Id, Today)).Data!.Runs.Count);
     }
+
+    [TestMethod]
+    public async Task CompleteAsync_FromChecklistsToday_RecordedAsAManagerTick_OnlyForManagers()
+    {
+        World w = await SeedAsync();
+        ChecklistRunView run = await TodayAsync(w, w.Amy, w.AmyScope);
+
+        Result<bool> staff = await GetService(w).CompleteAsync(w.Amy.Id, w.AmyScope, Item(run, "Unlock"), null, null, ChecklistCompletionMethod.Manager);
+        Assert.IsFalse(staff.IsSuccess, "Staff can't make a manager's tick.");
+
+        Result<bool> manager = await GetService(w).CompleteAsync(w.Tom.Id, w.ManagerScope, Item(run, "Unlock"), null, null, ChecklistCompletionMethod.Manager);
+        Assert.IsTrue(manager.IsSuccess, manager.Error);
+
+        Result<bool> terminal = await GetService(w).CompleteAsync(w.Amy.Id, w.AmyScope, Item(run, "Walk round"), null, null, ChecklistCompletionMethod.Terminal);
+        Assert.IsFalse(terminal.IsSuccess, "The terminal has its own path.");
+
+        await using ApplicationDbContext ctx = new(w.Options);
+        Assert.AreEqual(ChecklistCompletionMethod.Manager, (await ctx.ChecklistCompletions.SingleAsync()).Method);
+    }
+
+    [TestMethod]
+    public void TickConflict_NamesRacesOnly_AndLeavesOtherFailuresToTheLoggedCatchAll()
+    {
+        static DbUpdateException Failure(string sqlState) =>
+            new("save failed", new Npgsql.PostgresException("boom", "ERROR", "ERROR", sqlState));
+
+        StringAssert.Contains(ChecklistTickConflicts.For(Failure(Npgsql.PostgresErrorCodes.UniqueViolation)), "Someone else ticked");
+        StringAssert.Contains(ChecklistTickConflicts.For(Failure(Npgsql.PostgresErrorCodes.ForeignKeyViolation)), "changed a moment ago");
+        Assert.IsNull(ChecklistTickConflicts.For(Failure(Npgsql.PostgresErrorCodes.NotNullViolation)));
+        Assert.IsNull(ChecklistTickConflicts.For(new DbUpdateException("no inner")));
+    }
+
+    [TestMethod]
+    public void ATicksTask_CantBeDeletedFromUnderIt()
+    {
+        // Rebuilding today's untouched run deletes its items; a tick that lands at the same moment
+        // must make that fail (Restrict) rather than go with the item (Cascade).
+        using ApplicationDbContext ctx = new(SchedulingTestHelpers.GetInMemoryOptions());
+
+        Microsoft.EntityFrameworkCore.Metadata.IForeignKey fk = ctx.Model.FindEntityType(typeof(ChecklistCompletion))!
+            .GetForeignKeys()
+            .Single(x => x.PrincipalEntityType.ClrType == typeof(ChecklistRunItem));
+
+        Assert.AreEqual(DeleteBehavior.Restrict, fk.DeleteBehavior);
+    }
 }

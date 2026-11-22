@@ -73,8 +73,14 @@ public class ChecklistRunService(
         }
     }
 
-    public async Task<Result<bool>> CompleteAsync(string userId, LocationScope scope, Guid runItemId, string? note, decimal? reading)
+    public async Task<Result<bool>> CompleteAsync(string userId, LocationScope scope, Guid runItemId, string? note, decimal? reading,
+        ChecklistCompletionMethod method = ChecklistCompletionMethod.Phone)
     {
+        if (method is not (ChecklistCompletionMethod.Phone or ChecklistCompletionMethod.Manager))
+        {
+            return Result<bool>.Fail("Ticks from here are made on a phone or by a manager.");
+        }
+
         try
         {
             DateTime now = Now;
@@ -113,6 +119,11 @@ public class ChecklistRunService(
                 return Result<bool>.Fail($"{RotaNames.Public(already.User)} ticked this at {RotaTime.ToVenueLocal(already.CompletedUtc).ToString("HH:mm", RotaFormat.Uk)}.");
             }
 
+            if (method == ChecklistCompletionMethod.Manager && !IsManagerAt(scope, run.LocationId))
+            {
+                return Result<bool>.Fail("Only a Manager or Admin here can tick from Checklists today.");
+            }
+
             ChecklistRunStore.Viewer viewer = await ChecklistRunStore.ViewerAsync(ctx, userId, run.LocationId, run.VenueDate, IsManagerAt(scope, run.LocationId));
             Checklist? checklist = run.Checklist;
 
@@ -135,7 +146,7 @@ public class ChecklistRunService(
                 RunItemId = item.Id,
                 UserId = userId,
                 CompletedUtc = now,
-                Method = ChecklistCompletionMethod.Phone,
+                Method = method,
                 Note = answer.Data.Note,
                 Reading = answer.Data.Reading
             });
@@ -144,12 +155,12 @@ public class ChecklistRunService(
             {
                 await ctx.SaveChangesAsync();
             }
-            catch (DbUpdateException)
+            catch (DbUpdateException ex) when (ChecklistTickConflicts.For(ex) is string conflict)
             {
-                return Result<bool>.Fail("Someone else ticked this a moment ago.");
+                return Result<bool>.Fail(conflict);
             }
 
-            _logger.LogInformation("Checklist task {RunItemId} ticked by {UserId}", item.Id, userId);
+            _logger.LogInformation("Checklist task {RunItemId} ticked by {UserId} ({Method})", item.Id, userId, method);
 
             return Result<bool>.Ok(true);
         }
