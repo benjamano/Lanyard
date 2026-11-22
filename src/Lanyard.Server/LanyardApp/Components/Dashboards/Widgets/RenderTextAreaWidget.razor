@@ -60,7 +60,7 @@
                 }
                 else
                 {
-                    <span class="text-area-widget-kiosk-status">@(_kioskSaving ? "Saving…" : _kioskSavedAt is DateTime saved ? $"Saved {saved.ToLocalTime():HH:mm}" : "Changes save automatically")</span>
+                    <span class="text-area-widget-kiosk-status">@(_kioskSaving ? "Saving…" : _kioskSavedAt is DateTime saved ? $"Saved {RotaTime.ToVenueLocal(saved):HH:mm}" : "Changes save automatically")</span>
                 }
             </div>
         }
@@ -103,6 +103,7 @@
     private bool KioskAutoSaving => CanEditOnKiosk && Widget.KioskAutoSave;
 
     private string? _lastKioskSaved;
+    private string? _lastKioskFailed;
     private DateTime? _kioskSavedAt;
 
     private bool _editingOnKiosk;
@@ -172,6 +173,20 @@
     private ElementReference _editorHostRef;
     private Guid? _loadedWidgetId;
     private Timer? _syncTimer;
+    private bool _disposed;
+    private IDisposable? _flushRegistration;
+
+    // The designer's, so it can make this editor hand over what's typed before it saves.
+    [CascadingParameter]
+    public Lanyard.App.Components.Dashboards.Designer.TextEditorFlusher? Flusher { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (!PreviewMode && Flusher is not null)
+        {
+            _flushRegistration = Flusher.Register(SyncContentAsync);
+        }
+    }
     private IJSObjectReference? _editorModule;
 
     // BlazoredTextEditor (v1.1.3) does not accept its initial content as a bound parameter -
@@ -206,6 +221,11 @@
     // along with it and could be reached from any screen the widget was shown on.
     private async Task SyncContentAsync()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         if (PreviewMode || _editor is null)
         {
             return;
@@ -241,7 +261,7 @@
 
     private async Task AutoSaveOnKioskAsync()
     {
-        if (_editor is null || Kiosk is null || _kioskSaving)
+        if (_editor is null || Kiosk is null || _kioskSaving || _disposed)
         {
             return;
         }
@@ -264,7 +284,10 @@
             return;
         }
 
-        if (html == _lastKioskSaved)
+        // Nothing new since the last save - or since the last failed attempt, which isn't retried
+        // until the text changes again (a kiosk that's lost its token would otherwise try, and
+        // log a refusal, every tick until it's restarted).
+        if (html == _lastKioskSaved || html == _lastKioskFailed)
         {
             return;
         }
@@ -279,13 +302,15 @@
         if (result.IsSuccess)
         {
             _lastKioskSaved = html;
+            _lastKioskFailed = null;
             _kioskSavedAt = DateTime.UtcNow;
             _kioskError = null;
             Widget.Content = html;
         }
         else
         {
-            // Left unsaved, so the next tick tries again (a kiosk that lost its token says so).
+            // Shown on the screen; tried again as soon as the text changes.
+            _lastKioskFailed = html;
             _kioskError = result.Error;
         }
 
@@ -295,7 +320,14 @@
     private void StartSyncTimer()
     {
         _syncTimer?.Dispose();
-        _syncTimer = new Timer(_ => _ = InvokeAsync(TickAsync), null, AutoSaveInterval, AutoSaveInterval);
+        _syncTimer = new Timer(_ =>
+        {
+            // A tick already under way when the component is disposed must not reach the renderer.
+            if (!_disposed)
+            {
+                _ = InvokeAsync(TickAsync);
+            }
+        }, null, AutoSaveInterval, AutoSaveInterval);
     }
 
     private async Task InsertDividerAsync()
@@ -306,6 +338,8 @@
 
     public async ValueTask DisposeAsync()
     {
+        _disposed = true;
+        _flushRegistration?.Dispose();
         _syncTimer?.Dispose();
 
         try

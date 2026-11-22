@@ -1002,10 +1002,11 @@ public class DashboardServiceTests
         Assert.IsTrue(getResult.Success, getResult.Error);
         Assert.AreEqual(dashboard.Id, getResult.Data);
 
+        // The dashboard itself is gone, though: it no longer loads (so a kiosk or an old designer
+        // tab can't keep showing or saving it).
         Result<Dashboard> dashboardResult = await service.GetDashboardAsync(dashboard.Id);
 
-        Assert.IsTrue(dashboardResult.Success, dashboardResult.Error);
-        Assert.IsFalse(dashboardResult.Data!.IsActive);
+        Assert.IsFalse(dashboardResult.Success);
     }
 
     [TestMethod]
@@ -2311,5 +2312,26 @@ public class DashboardServiceTests
         Assert.IsTrue(updated.IsSuccess, updated.Error);
         await using ApplicationDbContext check = new(options);
         Assert.IsFalse((await check.DashboardWidgets.OfType<TextAreaWidget>().SingleAsync()).KioskAutoSave);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_DeletedDashboard_CantBeLoadedOrSaved()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        Assert.IsTrue((await service.DeleteDashboardAsync(dashboard.Id)).IsSuccess);
+
+        Result<Dashboard> load = await service.GetDashboardAsync(dashboard.Id);
+        dashboard.Name = "Back from the dead";
+        dashboard.Widgets = [new GreetingWidget()];
+        Result<bool> save = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsFalse(load.IsSuccess);
+        Assert.IsFalse(save.IsSuccess);
+        await using ApplicationDbContext ctx = new(options);
+        Assert.IsFalse((await ctx.Dashboards.SingleAsync()).IsActive);
+        Assert.AreEqual(0, await ctx.DashboardWidgets.CountAsync(x => x.IsActive));
     }
 }

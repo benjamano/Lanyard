@@ -216,6 +216,19 @@ public class WidgetDispatchCoverageTests
         Assert.IsEmpty(problems, string.Join('\n', problems));
     }
 
+    // Buttons and controls only act on a live dashboard whose controls are on - never in the
+    // designer, nor in its Phone and TV previews.
+    [TestMethod]
+    public void RenderParameters_AllowTriggerOnlyWhenLiveAndControlsEnabled()
+    {
+        WidgetDescriptor button = DashboardWidgetCatalog.Get(WidgetType.Button)!;
+        DashboardWidget widget = button.Create();
+
+        Assert.IsTrue((bool)DashboardWidgetCatalog.RenderParameters(button, widget, live: true, companyId: 1)["AllowTrigger"]!);
+        Assert.IsFalse((bool)DashboardWidgetCatalog.RenderParameters(button, widget, live: false, companyId: 1)["AllowTrigger"]!);
+        Assert.IsFalse((bool)DashboardWidgetCatalog.RenderParameters(button, widget, live: true, companyId: 1, controlsEnabled: false)["AllowTrigger"]!);
+    }
+
     private static string ReadSource(string relativePath)
     {
         DirectoryInfo? directory = new(AppContext.BaseDirectory);

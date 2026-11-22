@@ -7,7 +7,7 @@
 
 @inject ICompanyFeatureService CompanyFeatures
 
-<div class="dashboard-grid-container">
+<div class="dashboard-grid-container @(PhoneLayout ? null : "no-phone-layout")">
     <div class="dashboard-grid @(Fit ? "fit-to-screen" : null)" style="@GridStyle">
         @foreach ((DashboardWidget widget, int phoneOrder) in OrderedWidgets())
         {
@@ -17,7 +17,7 @@
                  class="dashboard-grid-item @(widget.HideOnPhone ? "hide-on-phone" : null)"
                  id="@($"widget-{widget.Id}")"
                  style="@GetWidgetStyle(widget, phoneOrder)">
-                <DashboardWidgetHost Widget="widget" Live="PreviewMode" CompanyId="CompanyId" />
+                <DashboardWidgetHost Widget="widget" Live="PreviewMode" CompanyId="CompanyId" ControlsEnabled="ControlsEnabled" />
             </div>
         }
     </div>
@@ -33,6 +33,10 @@
     [Parameter]
     public bool PreviewMode { get; set; } = true;
 
+    // See DashboardWidgetHost.ControlsEnabled: off for previews that aren't meant to act.
+    [Parameter]
+    public bool ControlsEnabled { get; set; } = true;
+
     // The company that owns the dashboard. Kiosk displays render without a signed-in user, so
     // nothing filters their data by company - widgets that read company data scope to this.
     [Parameter]
@@ -45,6 +49,11 @@
     // setting through; the home screen scrolls like any other page.
     [Parameter]
     public bool FitToScreen { get; set; }
+
+    // Collapse to the one-column phone layout when narrow. Off on kiosks: a narrow kiosk screen
+    // isn't a phone, and widgets hidden on phones should still show there.
+    [Parameter]
+    public bool PhoneLayout { get; set; } = true;
 
     // Widgets from a module the viewer's company doesn't have (CompanyFeatureCatalog.ForWidget)
     // are left out when viewing.
@@ -63,7 +72,9 @@
         get
         {
             int rowHeight = Math.Clamp(RowHeight <= 0 ? Dashboard.DefaultRowHeight : RowHeight, Dashboard.MinRowHeight, Dashboard.MaxRowHeight);
-            int rows = Math.Max(1, DashboardLayoutEngine.RowCount(Widgets.Select(ToRect)));
+            // Only what's shown: a widget left out for a missing module mustn't keep its rows empty
+            // on a fit-to-screen TV.
+            int rows = Math.Max(1, DashboardLayoutEngine.RowCount(VisibleWidgets.Select(ToRect)));
 
             return $"--dashboard-row-height: {rowHeight}px; --dashboard-rows: {rows};";
         }

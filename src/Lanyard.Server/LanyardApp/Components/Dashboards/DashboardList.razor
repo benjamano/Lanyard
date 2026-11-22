@@ -92,16 +92,20 @@ else
                         }
                         @if (card.ProjectionPrograms.Count > 0)
                         {
+                            @* The program's name is in the badge itself, not only a hover tooltip, which a
+                               touch screen can't show. *@
                             <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Important"
                                          title="@($"Shown by: {string.Join(", ", card.ProjectionPrograms)}")">
-                                On a kiosk TV
+                                @(card.ProjectionPrograms.Count == 1
+                                    ? $"On a kiosk TV: {card.ProjectionPrograms[0]}"
+                                    : $"On a kiosk TV: {card.ProjectionPrograms[0]} +{card.ProjectionPrograms.Count - 1}")
                             </FluentBadge>
                         }
                         <span class="dashboard-card-meta">
                             @card.Widgets.Count widget@(card.Widgets.Count == 1 ? "" : "s")
                             @if (card.LastUpdateDate is DateTime updated)
                             {
-                                <span> · Updated @updated.ToLocalTime().ToString("d MMM yyyy")</span>
+                                <span> · Updated @RotaTime.ToVenueLocal(updated).ToString("d MMM yyyy")</span>
                             }
                         </span>
                     </div>
