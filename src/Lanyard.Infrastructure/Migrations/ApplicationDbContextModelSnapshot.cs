@@ -1081,6 +1081,263 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("ChatSuspensions");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Checklist", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CreateByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Days")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("DueOffsetMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DueRule")
+                        .HasColumnType("integer");
+
+                    b.Property<TimeOnly?>("DueTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<bool>("OnlyWhenOpen")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("StaffPositionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UpdateByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("StaffPositionId");
+
+                    b.HasIndex("LocationId", "IsActive");
+
+                    b.ToTable("Checklists");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ChecklistCompletion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ClockInTerminalId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CompletedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Method")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<decimal?>("Reading")
+                        .HasPrecision(9, 2)
+                        .HasColumnType("numeric(9,2)");
+
+                    b.Property<Guid>("RunItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UndoneByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UndoneUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClockInTerminalId");
+
+                    b.HasIndex("RunItemId")
+                        .IsUnique()
+                        .HasFilter("\"IsActive\"");
+
+                    b.HasIndex("UndoneByUserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("ChecklistCompletions");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ChecklistRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ChecklistId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DueUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("MissedAlertUtc")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateOnly>("VenueDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("ChecklistId", "VenueDate")
+                        .IsUnique();
+
+                    b.HasIndex("LocationId", "VenueDate");
+
+                    b.ToTable("ChecklistRuns");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ChecklistRunItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Detail")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("Response")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("TaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("Unit")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RunId");
+
+                    b.HasIndex("TaskId");
+
+                    b.ToTable("ChecklistRunItems");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ChecklistTask", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ChecklistId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreateByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Detail")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Response")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("Unit")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("UpdateByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChecklistId", "SortOrder");
+
+                    b.ToTable("ChecklistTasks");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Client", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5893,6 +6150,121 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Checklist", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.StaffPosition", "StaffPosition")
+                        .WithMany()
+                        .HasForeignKey("StaffPositionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Location");
+
+                    b.Navigation("StaffPosition");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ChecklistCompletion", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.ClockInTerminal", "ClockInTerminal")
+                        .WithMany()
+                        .HasForeignKey("ClockInTerminalId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Lanyard.Infrastructure.Models.ChecklistRunItem", "RunItem")
+                        .WithMany("Completions")
+                        .HasForeignKey("RunItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "UndoneByUser")
+                        .WithMany()
+                        .HasForeignKey("UndoneByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ClockInTerminal");
+
+                    b.Navigation("RunItem");
+
+                    b.Navigation("UndoneByUser");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ChecklistRun", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Checklist", "Checklist")
+                        .WithMany()
+                        .HasForeignKey("ChecklistId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Checklist");
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Location");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ChecklistRunItem", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.ChecklistRun", "Run")
+                        .WithMany("Items")
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.ChecklistTask", "Task")
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Run");
+
+                    b.Navigation("Task");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ChecklistTask", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Checklist", "Checklist")
+                        .WithMany("Tasks")
+                        .HasForeignKey("ChecklistId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Checklist");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Client", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.Company", null)
@@ -7387,6 +7759,21 @@ namespace Lanyard.Infrastructure.Migrations
             modelBuilder.Entity("Lanyard.Infrastructure.Models.AutomationRuleExecution", b =>
                 {
                     b.Navigation("ActionExecutions");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Checklist", b =>
+                {
+                    b.Navigation("Tasks");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ChecklistRun", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ChecklistRunItem", b =>
+                {
+                    b.Navigation("Completions");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Client", b =>
