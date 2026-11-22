@@ -1,5 +1,7 @@
 #nullable enable
 
+using Lanyard.Application.Services.Features;
+using Lanyard.Application.Services.Parties;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Enum;
@@ -11,10 +13,10 @@ namespace Lanyard.Application.Services;
 
 public class AutomationRuleService(
     IDbContextFactory<ApplicationDbContext> factory,
-    AutomationEngineService engineService) : IAutomationRuleService
+    IAutomationEngineService engineService) : IAutomationRuleService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
-    private readonly AutomationEngineService _engineService = engineService;
+    private readonly IAutomationEngineService _engineService = engineService;
 
     public async Task<Result<IEnumerable<AutomationRule>>> GetRulesAsync()
     {
@@ -150,6 +152,10 @@ public class AutomationRuleService(
             existing.TriggerThreshold = rule.TriggerThreshold;
             existing.TriggerScoreScope = rule.TriggerScoreScope;
             existing.TriggerTeam = rule.TriggerTeam;
+            existing.PartyLocationId = rule.PartyLocationId;
+            existing.PartyMilestone = rule.PartyMilestone;
+            existing.PartyLeadMinutes = rule.PartyLeadMinutes;
+            existing.PartyRoom = rule.PartyRoom;
             existing.LastUpdateDate = DateTime.UtcNow;
 
             SyncActions(ctx, existing, rule.Actions);
@@ -322,6 +328,10 @@ public class AutomationRuleService(
                 TriggerThreshold = source.TriggerThreshold,
                 TriggerScoreScope = source.TriggerScoreScope,
                 TriggerTeam = source.TriggerTeam,
+                PartyLocationId = source.PartyLocationId,
+                PartyMilestone = source.PartyMilestone,
+                PartyLeadMinutes = source.PartyLeadMinutes,
+                PartyRoom = source.PartyRoom,
                 // Off until someone checks it, so a copy can't fire alongside its original.
                 IsEnabled = false,
                 IsActive = true,
@@ -409,11 +419,26 @@ public class AutomationRuleService(
     // reject it at the point of saving instead.
     private static async Task<string?> ValidateRuleAsync(ApplicationDbContext ctx, AutomationRule rule, int? ruleCompanyId)
     {
-        string? triggerError = ValidateTrigger(rule.TriggerType, rule.IdleThresholdMinutes, rule.ScheduledTimeOfDay, rule.ScheduledDaysOfWeek, rule.TriggerThreshold, rule.TriggerScoreScope);
+        NormalisePartyFields(rule);
+
+        string? triggerError = ValidateTrigger(rule.TriggerType, rule.IdleThresholdMinutes, rule.ScheduledTimeOfDay, rule.ScheduledDaysOfWeek, rule.TriggerThreshold, rule.TriggerScoreScope)
+            ?? (rule.TriggerType == AutomationTriggerType.PartyMilestone
+                ? PartyTriggerRules.Validate(rule.PartyLocationId, rule.PartyMilestone, rule.PartyLeadMinutes, rule.PartyRoom)
+                : null);
 
         if (triggerError != null)
         {
             return triggerError;
+        }
+
+        if (rule.TriggerType == AutomationTriggerType.PartyMilestone)
+        {
+            string? partyError = await ValidatePartyLocationAsync(ctx, rule.PartyLocationId!.Value, ruleCompanyId);
+
+            if (partyError != null)
+            {
+                return partyError;
+            }
         }
 
         string? conditionError = ValidateConditions(rule.Conditions);
@@ -482,22 +507,92 @@ public class AutomationRuleService(
             }
         }
 
-        return await ValidateDmxActionsAsync(ctx, rule, ruleCompanyId);
+        List<int> partyConditionLocationIds = rule.Conditions
+            .Where(c => c.IsActive && c.ConditionType == AutomationConditionType.PartyInProgress)
+            .Select(c => AutomationConditionParameters.TryParse(c.ParametersJson, out PartyInProgressConditionParameters? p) ? p.LocationId : 0)
+            .Distinct()
+            .ToList();
+
+        if (partyConditionLocationIds.Count > 0)
+        {
+            // Same explicit company check as opening hours: locations aren't tenant-filtered.
+            int? companyId = ruleCompanyId ?? (ctx.TenantFilterDisabled ? null : ctx.TenantCompanyId);
+
+            int foundCount = await ctx.Locations
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(l => partyConditionLocationIds.Contains(l.Id) && l.IsActive && (companyId == null || l.CompanyId == companyId))
+                .CountAsync();
+
+            if (foundCount != partyConditionLocationIds.Count)
+            {
+                return "A party condition refers to a location that doesn't exist.";
+            }
+        }
+
+        return await ValidateActionTargetsAsync(ctx, rule, ruleCompanyId);
     }
 
-    // A DMX action's kiosk and scene come from ParametersJson, which the scene runner trusts, so
-    // they must be the rule's own company's (and the scene must be on that kiosk).
-    private static async Task<string?> ValidateDmxActionsAsync(ApplicationDbContext ctx, AutomationRule rule, int? ruleCompanyId)
+    // Party fields only mean something on a party-time rule; anything else keeps them null, so a
+    // rule switched from Party time to another trigger doesn't carry stale party settings around.
+    private static void NormalisePartyFields(AutomationRule rule)
     {
-        foreach (AutomationRuleAction action in rule.Actions.Where(a => a.IsActive && a.ActionType == AutomationActionTypes.DmxSceneControl))
+        if (rule.TriggerType != AutomationTriggerType.PartyMilestone)
         {
-            if (!DmxSceneControlActionExecutor.TryReadTargets(action.ParametersJson, out Guid clientId, out Guid? sceneId))
+            rule.PartyLocationId = null;
+            rule.PartyMilestone = null;
+            rule.PartyLeadMinutes = null;
+            rule.PartyRoom = null;
+            return;
+        }
+
+        rule.PartyRoom = PartyRooms.Normalise(rule.PartyRoom);
+    }
+
+    // Locations aren't tenant-filtered rows, so the company check is explicit (a new rule takes the
+    // signed-in caller's company), and a company with Parties switched off can't add party rules.
+    private static async Task<string?> ValidatePartyLocationAsync(ApplicationDbContext ctx, int locationId, int? ruleCompanyId)
+    {
+        int? companyId = ruleCompanyId ?? (ctx.TenantFilterDisabled ? null : ctx.TenantCompanyId);
+
+        int? locationCompanyId = await ctx.Locations
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(l => l.Id == locationId && l.IsActive && (companyId == null || l.CompanyId == companyId))
+            .Select(l => (int?)l.CompanyId)
+            .FirstOrDefaultAsync();
+
+        if (locationCompanyId is not int owner)
+        {
+            return "A party time rule refers to a location that doesn't exist.";
+        }
+
+        if (!await CompanyFeatureQueries.IsEnabledForCompanyAsync(ctx, owner, CompanyFeature.Parties))
+        {
+            return "Parties is switched off for this company, so a party time rule can't be saved.";
+        }
+
+        return null;
+    }
+
+    // An action's kiosk, and the playlist, program, scene or clip it plays, come from
+    // ParametersJson, which the executors trust (they look kiosks up through the unfiltered system
+    // context). So every one of them must be the rule's own company's, and a scene must be on the
+    // action's kiosk. The engine checks the same again before it runs anything.
+    private static async Task<string?> ValidateActionTargetsAsync(ApplicationDbContext ctx, AutomationRule rule, int? ruleCompanyId)
+    {
+        foreach (AutomationRuleAction action in rule.Actions.Where(a => a.IsActive && AutomationActionTargets.IsKnown(a.ActionType)))
+        {
+            string described = AutomationActionTargets.Describe(action.ActionType);
+            string article = described.StartsWith("audio") ? "An" : "A";
+
+            if (!AutomationActionTargets.TryRead(action.ActionType, action.ParametersJson, out AutomationActionTarget target))
             {
-                return "A DMX action couldn't be read. Remove it and add it again.";
+                return $"{article} {described} action couldn't be read. Remove it and add it again.";
             }
 
             // Not configured yet: the executor reports that when it runs, as it always has.
-            if (clientId == Guid.Empty)
+            if (target.ClientId == Guid.Empty)
             {
                 continue;
             }
@@ -505,23 +600,41 @@ public class AutomationRuleService(
             bool clientFound = await ctx.Clients
                 .AsNoTracking()
                 .TagWithCallSite()
-                .AnyAsync(c => c.Id == clientId && (ruleCompanyId == null || c.CompanyId == ruleCompanyId));
+                .AnyAsync(c => c.Id == target.ClientId && (ruleCompanyId == null || c.CompanyId == ruleCompanyId));
 
             if (!clientFound)
             {
-                return "A DMX action refers to a kiosk that doesn't exist.";
+                return $"{article} {described} action refers to a kiosk that doesn't exist.";
             }
 
-            if (sceneId is Guid id && id != Guid.Empty)
+            foreach ((AutomationActionTargetKind kind, Guid id) in target.References)
             {
-                bool sceneFound = await ctx.DmxScenes
-                    .AsNoTracking()
-                    .TagWithCallSite()
-                    .AnyAsync(s => s.Id == id && s.ClientId == clientId && s.IsActive);
-
-                if (!sceneFound)
+                bool found = kind switch
                 {
-                    return "A DMX action refers to a scene that isn't on its kiosk.";
+                    AutomationActionTargetKind.DmxScene => await ctx.DmxScenes
+                        .AsNoTracking()
+                        .TagWithCallSite()
+                        .AnyAsync(x => x.Id == id && x.ClientId == target.ClientId && x.IsActive && (ruleCompanyId == null || x.CompanyId == ruleCompanyId)),
+                    AutomationActionTargetKind.Playlist => await ctx.Playlists
+                        .AsNoTracking()
+                        .TagWithCallSite()
+                        .AnyAsync(x => x.Id == id && (ruleCompanyId == null || x.CompanyId == ruleCompanyId)),
+                    AutomationActionTargetKind.ProjectionProgram => await ctx.ProjectionPrograms
+                        .AsNoTracking()
+                        .TagWithCallSite()
+                        .AnyAsync(x => x.Id == id && (ruleCompanyId == null || x.CompanyId == ruleCompanyId)),
+                    AutomationActionTargetKind.AudioClip => await ctx.AudioClips
+                        .AsNoTracking()
+                        .TagWithCallSite()
+                        .AnyAsync(x => x.Id == id && (ruleCompanyId == null || x.CompanyId == ruleCompanyId)),
+                    _ => false
+                };
+
+                if (!found)
+                {
+                    return kind == AutomationActionTargetKind.DmxScene
+                        ? $"{article} {described} action refers to a scene that isn't on its kiosk."
+                        : $"{article} {described} action refers to {(kind == AutomationActionTargetKind.AudioClip ? "an" : "a")} {AutomationActionTargets.Describe(kind)} that doesn't exist.";
                 }
             }
         }

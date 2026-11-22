@@ -2,6 +2,7 @@
 @using Lanyard.App.Components.Dmx
 
 @inject IClientService _clientService
+@inject Lanyard.Application.Services.Parties.IPartyBookingService _partyBookingService
 
 <FluentDialogBody>
     <TitleTemplate>
@@ -36,6 +37,25 @@
                             The kiosk plays that location's music schedule.
                         </FluentText>
                     </div>
+                    <FluentTextInput @bind-Value="_updateClientModel.PartyRoom" class="w-100 mt-2" Label="Party room (optional)"
+                                     Placeholder="Whole location" Maxlength="100" />
+                    @if (_roomSuggestions.Count > 0)
+                    {
+                        <div class="party-room-chips mt-1" role="group" aria-label="Rooms used on party bookings">
+                            @foreach (string room in _roomSuggestions)
+                            {
+                                <FluentButton Size="ButtonSize.Small"
+                                              Appearance="@(string.Equals(_updateClientModel.PartyRoom?.Trim(), room, StringComparison.OrdinalIgnoreCase) ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                              OnClick="@(() => _updateClientModel.PartyRoom = room)">@room</FluentButton>
+                            }
+                        </div>
+                    }
+                    <div class="mt-1">
+                        <FluentText Color="Color.Info" Size="TextSize.Size200">
+                            Party live text on this kiosk's screen shows the party in this room (the Room or table on the booking).
+                            Leave it blank to show the location's party. A program already playing picks it up the next time it starts.
+                        </FluentText>
+                    </div>
                     <FluentButton Class="mt-2" Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
                                   IconStart="@(new Icons.Regular.Size20.Save())">Save</FluentButton>
                 </EditForm>
@@ -44,7 +64,7 @@
                 <ClientHealthDetails ClientId="@ClientId" />
             </FluentTab>
             <FluentTab Header="Projection" IconStart="@(new Icons.Regular.Size16.ProjectionScreenText())" DeferredLoading="true">
-                <ClientProjectionCapabilities ClientId="@ClientId" />
+                <ClientProjectionCapabilities ClientId="@ClientId" ClientName="@_clientName" />
             </FluentTab>
             <FluentTab Header="Offline" IconStart="@(new Icons.Regular.Size16.CloudOff())" DeferredLoading="true">
                 <ClientOfflineFallback ClientId="@ClientId" />
@@ -93,7 +113,11 @@
     {
         public string Name { get; set; } = string.Empty;
         public string LocationValue { get; set; } = NoLocationValue;
+        public string? PartyRoom { get; set; }
     }
+
+    private string? _savedPartyRoom;
+    private List<string> _roomSuggestions = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -110,6 +134,18 @@
 
             _updateClientModel.LocationValue = result.Data.LocationId?.ToString() ?? NoLocationValue;
             _locationsLoaded = true;
+
+            _updateClientModel.PartyRoom = result.Data.PartyRoom;
+            _savedPartyRoom = result.Data.PartyRoom;
+
+            // Rooms already typed on this location's bookings, so the spelling matches.
+            Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+            if (result.Data.LocationId is int roomsLocationId && scope.IsSuccess && scope.Data is not null)
+            {
+                Result<List<string>> rooms = await _partyBookingService.GetRoomSuggestionsAsync(scope.Data, roomsLocationId);
+                _roomSuggestions = rooms.Data ?? [];
+            }
         }
         else
         {
@@ -133,6 +169,21 @@
             }
 
             _savedLocationId = locationId;
+        }
+
+        string? partyRoom = string.IsNullOrWhiteSpace(_updateClientModel.PartyRoom) ? null : _updateClientModel.PartyRoom.Trim();
+
+        if (partyRoom != _savedPartyRoom)
+        {
+            Result<bool> roomResult = await _clientService.SetClientPartyRoomAsync(ClientId, partyRoom);
+
+            if (!roomResult.IsSuccess)
+            {
+                _toastService.ShowError($"Couldn't change the party room: {roomResult.Error}");
+                return;
+            }
+
+            _savedPartyRoom = partyRoom;
         }
 
         await SaveNewClientNameAsync();

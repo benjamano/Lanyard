@@ -14,6 +14,7 @@
 @inject Lanyard.App.Services.ChatUnreadTracker ChatUnread
 @inject Lanyard.Application.Services.Chat.IChatModerationService ChatModeration
 @inject ICompanyFeatureService CompanyFeatures
+@inject IFileLibraryService FileLibrary
 @inject Lanyard.Application.Services.OperationsAlerts.IOperationsAlertService OperationsAlerts
 @inject Lanyard.Application.Services.OperationsAlerts.IOperationsAlertEventBus OperationsAlertEvents
 
@@ -31,26 +32,11 @@
 
         @if (_isAuthenticated)
         {
+            @* Everyday links everyone uses, with no heading. *@
             <FluentNavItem Href="/" IconRest="@(new Icons.Regular.Size20.Home())"
                            IconActive="@(new Icons.Filled.Size20.Home())" Match="NavLinkMatch.All">
                 Home
             </FluentNavItem>
-
-            @if (Has(CompanyFeature.Training))
-            {
-                <FluentNavItem Href="/training" IconRest="@(new Icons.Regular.Size20.BookOpen())"
-                               IconActive="@(new Icons.Filled.Size20.BookOpen())">
-                    My Training
-                </FluentNavItem>
-            }
-
-            @if (Has(CompanyFeature.StaffScheduling))
-            {
-                <FluentNavItem Href="/rota" IconRest="@(new Icons.Regular.Size20.CalendarLtr())"
-                               IconActive="@(new Icons.Filled.Size20.CalendarLtr())" Match="NavLinkMatch.All">
-                    My Shifts
-                </FluentNavItem>
-            }
 
             @if (Has(CompanyFeature.Chat))
             {
@@ -66,46 +52,87 @@
                 </FluentNavItem>
             }
 
-            @if (Has(CompanyFeature.StaffScheduling))
+            <FluentNavItem Href="/manage/dashboards" IconRest="@(new Icons.Regular.Size20.Board())"
+                           IconActive="@(new Icons.Filled.Size20.Board())">
+                Dashboards
+            </FluentNavItem>
+
+            @if (_hasSharedFiles || (_canManageFiles && !_isManager))
             {
-                <FluentNavItem Href="/rota/time-off" IconRest="@(new Icons.Regular.Size20.CalendarPerson())"
-                               IconActive="@(new Icons.Filled.Size20.CalendarPerson())">
-                    Time Off
+                <FluentNavItem Href="/files" IconRest="@(new Icons.Regular.Size20.Folder())"
+                               IconActive="@(new Icons.Filled.Size20.Folder())">
+                    @(_canManageFiles ? "Files" : "Shared files")
                 </FluentNavItem>
             }
 
-            @if (_canPostAnnouncements && Has(CompanyFeature.Announcements))
+            @* Me: the person's own work. *@
+            @if (Has(CompanyFeature.StaffScheduling) || Has(CompanyFeature.Training) || MusicLinks.Any || ShowOwnAnnouncementsLink)
             {
-                <FluentNavItem Href="/manage/announcements" IconRest="@(new Icons.Regular.Size20.Megaphone())"
-                               IconActive="@(new Icons.Filled.Size20.Megaphone())">
-                    Announcements
-                </FluentNavItem>
-            }
+                <FluentNavSectionHeader Title="My Work" />
 
-            @if (MusicLinks.Any)
-            {
-                <FluentNavCategory Title="Music" IconRest="@(new Icons.Regular.Size20.MusicNote2())"
-                                   IconActive="@(new Icons.Filled.Size20.MusicNote2())">
-                    @if (MusicLinks.Player)
-                    {
-                        <FluentNavItem Href="/music" Match="NavLinkMatch.All">Music Player</FluentNavItem>
-                    }
+                @if (Has(CompanyFeature.StaffScheduling))
+                {
+                    <FluentNavItem Href="/rota" IconRest="@(new Icons.Regular.Size20.CalendarLtr())"
+                                   IconActive="@(new Icons.Filled.Size20.CalendarLtr())" Match="NavLinkMatch.All">
+                        My Shifts
+                    </FluentNavItem>
+                    <FluentNavItem Href="/rota/time-off" IconRest="@(new Icons.Regular.Size20.CalendarPerson())"
+                                   IconActive="@(new Icons.Filled.Size20.CalendarPerson())">
+                        Time Off
+                    </FluentNavItem>
+                }
 
-                    @if (MusicLinks.AudioClips)
-                    {
-                        <FluentNavItem Href="/manage/audio-clips">Audio Clips</FluentNavItem>
-                    }
+                @if (Has(CompanyFeature.Training))
+                {
+                    <FluentNavItem Href="/training" IconRest="@(new Icons.Regular.Size20.BookOpen())"
+                                   IconActive="@(new Icons.Filled.Size20.BookOpen())">
+                        My Training
+                    </FluentNavItem>
+                }
 
-                    @if (MusicLinks.Schedule)
-                    {
-                        <FluentNavItem Href="/manage/music-schedule">Music Schedule</FluentNavItem>
-                    }
-                </FluentNavCategory>
+                @* Managers find Announcements under Communication; this is for people who can post
+                   without being a manager. *@
+                @if (ShowOwnAnnouncementsLink)
+                {
+                    <FluentNavItem Href="/manage/announcements" IconRest="@(new Icons.Regular.Size20.Megaphone())"
+                                   IconActive="@(new Icons.Filled.Size20.Megaphone())">
+                        Announcements
+                    </FluentNavItem>
+                }
+
+                @if (MusicLinks.Any)
+                {
+                    <FluentNavCategory Title="Music" IconRest="@(new Icons.Regular.Size20.MusicNote2())"
+                                       IconActive="@(new Icons.Filled.Size20.MusicNote2())">
+                        @if (MusicLinks.Player)
+                        {
+                            <FluentNavItem Href="/music" Match="NavLinkMatch.All">Music Player</FluentNavItem>
+                        }
+
+                        @if (MusicLinks.AudioClips)
+                        {
+                            <FluentNavItem Href="/manage/audio-clips">Audio Clips</FluentNavItem>
+                        }
+
+                        @if (MusicLinks.Schedule)
+                        {
+                            <FluentNavItem Href="/manage/music-schedule">Music Schedule</FluentNavItem>
+                        }
+                    </FluentNavCategory>
+                }
             }
 
             @if (_isManager)
             {
                 <FluentNavSectionHeader Title="Management" />
+
+                @if (Has(CompanyFeature.Parties))
+                {
+                    <FluentNavItem Href="/manage/whats-on" IconRest="@(new Icons.Regular.Size20.CalendarAgenda())"
+                                   IconActive="@(new Icons.Filled.Size20.CalendarAgenda())">
+                        What's On
+                    </FluentNavItem>
+                }
 
                 @if (Has(CompanyFeature.OperationsAlerts))
                 {
@@ -121,22 +148,6 @@
                     </FluentNavItem>
                 }
 
-                @if (_canManageFiles)
-                {
-                    <FluentNavItem Href="/files" IconRest="@(new Icons.Regular.Size20.Folder())"
-                                   IconActive="@(new Icons.Filled.Size20.Folder())">
-                        File Manager
-                    </FluentNavItem>
-                }
-
-                @if (Has(CompanyFeature.Training) || Has(CompanyFeature.Onboarding))
-                {
-                    <FluentNavItem Href="/manage/compliance" IconRest="@(new Icons.Regular.Size20.ShieldCheckmark())"
-                                   IconActive="@(new Icons.Filled.Size20.ShieldCheckmark())">
-                        Compliance
-                    </FluentNavItem>
-                }
-
                 @if (Has(CompanyFeature.Insights))
                 {
                     <FluentNavItem Href="/manage/insights" IconRest="@(new Icons.Regular.Size20.DataArea())"
@@ -145,62 +156,20 @@
                     </FluentNavItem>
                 }
 
-                <FluentNavCategory Title="Manage" IconRest="@(new Icons.Regular.Size20.Settings())"
-                                   IconActive="@(new Icons.Filled.Size20.Settings())">
-                    @if (_isAdmin)
-                    {
-                        <FluentNavItem Href="/manage/companies-locations">Companies &amp; Locations</FluentNavItem>
-                    }
-
-                    @if (Has(CompanyFeature.Onboarding))
-                    {
-                        <FluentNavItem Href="/manage/onboarding">Onboarding</FluentNavItem>
-                        <FluentNavItem Href="/manage/staff-documents/types">Staff Document Types</FluentNavItem>
-                    }
-                    <FluentNavItem Href="/manage/roles">Roles</FluentNavItem>
-                    <FluentNavItem Href="/manage/users">Users</FluentNavItem>
-                    @if (Has(CompanyFeature.Chat))
-                    {
-                        <FluentNavItem Href="/manage/chat/channels" Match="NavLinkMatch.All">Chat Channels</FluentNavItem>
-                        <FluentNavItem Href="/manage/chat/reports" Match="NavLinkMatch.All">
-                            <span class="nav-item-with-count">
-                                Chat Reports
-                                @if (_openChatReports > 0)
-                                {
-                                    <FluentCounterBadge Count="@_openChatReports" OverflowCount="99" aria-label="@($"{_openChatReports} reported messages to review")" />
-                                }
-                            </span>
-                        </FluentNavItem>
-                    }
-                    @if (_isPlatformAdmin)
-                    {
-                        <FluentNavItem Href="/manage/feedback" Match="NavLinkMatch.All">
-                            <span class="nav-item-with-count">
-                                Lanyard Feedback
-                                @if (_unreviewedFeedback > 0)
-                                {
-                                    <FluentCounterBadge Count="@_unreviewedFeedback" OverflowCount="99" aria-label="@($"{_unreviewedFeedback} feedback to review")" />
-                                }
-                            </span>
-                        </FluentNavItem>
-                    }
-                </FluentNavCategory>
-
-                @if (Has(CompanyFeature.Training))
+                @if (_canManageFiles)
                 {
-                    <FluentNavCategory Title="Training" IconRest="@(new Icons.Regular.Size20.BookOpen())"
-                                       IconActive="@(new Icons.Filled.Size20.BookOpen())">
-                        <FluentNavItem Href="/manage/training" Match="NavLinkMatch.All">Dashboard</FluentNavItem>
-                        <FluentNavItem Href="/manage/training/courses">Courses</FluentNavItem>
-                    </FluentNavCategory>
+                    <FluentNavItem Href="/files" IconRest="@(new Icons.Regular.Size20.Folder())"
+                                   IconActive="@(new Icons.Filled.Size20.Folder())">
+                        File Manager
+                    </FluentNavItem>
                 }
 
                 @if (Has(CompanyFeature.StaffScheduling))
                 {
-                    <FluentNavCategory Title="Rota" data-pending-count="@PendingCountAttribute" Tooltip="@RotaTooltip" IconRest="@(new Icons.Regular.Size20.People())"
-                                       IconActive="@(new Icons.Filled.Size20.People())">
+                    @* Day-to-day pages first, then the set-up pages. *@
+                    <FluentNavCategory Title="Rota" data-pending-count="@CountAttribute(_pendingTimeOff + _pendingShiftRequests)" Tooltip="@RotaTooltip"
+                                       IconRest="@(new Icons.Regular.Size20.CalendarClock())" IconActive="@(new Icons.Filled.Size20.CalendarClock())">
                         <FluentNavItem Href="/manage/rota" Match="NavLinkMatch.All">Rota Builder</FluentNavItem>
-                        <FluentNavItem Href="/manage/rota/timesheets">Timesheets</FluentNavItem>
                         <FluentNavItem Href="/manage/rota/requests" Match="NavLinkMatch.All" Tooltip="@ShiftRequestsTooltip">
                             <span class="nav-item-with-count">
                                 Shift Requests
@@ -219,16 +188,17 @@
                                 }
                             </span>
                         </FluentNavItem>
-                        <FluentNavItem Href="/manage/rota/time-off/types">Time Off Types</FluentNavItem>
-                        <FluentNavItem Href="/manage/rota/terminals">Clock-In Terminals</FluentNavItem>
+                        <FluentNavItem Href="/manage/rota/timesheets">Timesheets</FluentNavItem>
                         <FluentNavItem Href="/manage/rota/staff">Staff</FluentNavItem>
+                        <FluentNavItem Href="/manage/rota/positions">Positions</FluentNavItem>
                         <FluentNavItem Href="/manage/rota/templates">Shift Templates</FluentNavItem>
                         @if (Has(CompanyFeature.Checklists))
                         {
                             <FluentNavItem Href="/manage/checklists">Checklists</FluentNavItem>
                         }
                         <FluentNavItem Href="/manage/rota/holidays">Holidays</FluentNavItem>
-                        <FluentNavItem Href="/manage/rota/positions">Positions</FluentNavItem>
+                        <FluentNavItem Href="/manage/rota/time-off/types">Time Off Types</FluentNavItem>
+                        <FluentNavItem Href="/manage/rota/terminals">Clock-In Terminals</FluentNavItem>
                         <FluentNavItem Href="/manage/rota/settings">Rota Settings</FluentNavItem>
                     </FluentNavCategory>
                 }
@@ -239,50 +209,121 @@
                                        IconActive="@(new Icons.Filled.Size20.Balloon())">
                         <FluentNavItem Href="/manage/parties" Match="NavLinkMatch.All">Parties</FluentNavItem>
                         <FluentNavItem Href="/manage/parties/new">Book a Party</FluentNavItem>
-                        <FluentNavItem Href="/manage/parties/settings">Party Settings</FluentNavItem>
                         <FluentNavItem Href="/manage/parties/printouts">Printouts</FluentNavItem>
                         @if (_isAdmin)
                         {
                             <FluentNavItem Href="/manage/booking-import">Booking Import</FluentNavItem>
                         }
+                        <FluentNavItem Href="/manage/parties/settings">Party Settings</FluentNavItem>
                     </FluentNavCategory>
+                }
+
+                <FluentNavCategory Title="People" IconRest="@(new Icons.Regular.Size20.PeopleTeam())"
+                                   IconActive="@(new Icons.Filled.Size20.PeopleTeam())">
+                    <FluentNavItem Href="/manage/users">Users</FluentNavItem>
+                    <FluentNavItem Href="/manage/roles">Roles</FluentNavItem>
+                    @if (Has(CompanyFeature.Onboarding))
+                    {
+                        <FluentNavItem Href="/manage/onboarding">Onboarding</FluentNavItem>
+                        <FluentNavItem Href="/manage/staff-documents/types">Staff Document Types</FluentNavItem>
+                    }
+                    @if (Has(CompanyFeature.Training) || Has(CompanyFeature.Onboarding))
+                    {
+                        <FluentNavItem Href="/manage/compliance">Compliance</FluentNavItem>
+                    }
+                </FluentNavCategory>
+
+                @if (Has(CompanyFeature.Training))
+                {
+                    <FluentNavCategory Title="Training" IconRest="@(new Icons.Regular.Size20.HatGraduation())"
+                                       IconActive="@(new Icons.Filled.Size20.HatGraduation())">
+                        <FluentNavItem Href="/manage/training" Match="NavLinkMatch.All">Training Dashboard</FluentNavItem>
+                        <FluentNavItem Href="/manage/training/courses">Courses</FluentNavItem>
+                    </FluentNavCategory>
+                }
+
+                @if (ShowManagerAnnouncementsLink || Has(CompanyFeature.Chat))
+                {
+                    <FluentNavCategory Title="Communication" data-pending-count="@CountAttribute(_openChatReports)"
+                                       IconRest="@(new Icons.Regular.Size20.Megaphone())" IconActive="@(new Icons.Filled.Size20.Megaphone())">
+                        @if (ShowManagerAnnouncementsLink)
+                        {
+                            <FluentNavItem Href="/manage/announcements">Announcements</FluentNavItem>
+                        }
+                        @if (Has(CompanyFeature.Chat))
+                        {
+                            <FluentNavItem Href="/manage/chat/channels" Match="NavLinkMatch.All">Chat Channels</FluentNavItem>
+                            <FluentNavItem Href="/manage/chat/reports" Match="NavLinkMatch.All">
+                                <span class="nav-item-with-count">
+                                    Chat Reports
+                                    @if (_openChatReports > 0)
+                                    {
+                                        <FluentCounterBadge Count="@_openChatReports" OverflowCount="99" aria-label="@($"{_openChatReports} reported messages to review")" />
+                                    }
+                                </span>
+                            </FluentNavItem>
+                        }
+                    </FluentNavCategory>
+                }
+            }
+
+            @* Kiosks and the venue kit they drive. DMX has its own role, so someone with just that
+               role still gets this section with the one link. *@
+            @if (_isAdmin || _canManageDmx)
+            {
+                <FluentNavSectionHeader Title="Venue" />
+
+                @if (_isAdmin)
+                {
+                    <FluentNavCategory Title="Kiosks" IconRest="@(new Icons.Regular.Size20.Desktop())"
+                                       IconActive="@(new Icons.Filled.Size20.Desktop())">
+                        <FluentNavItem Href="/manage/clients">Clients</FluentNavItem>
+                        <FluentNavItem Href="/manage/projectionprograms">Projection Programs</FluentNavItem>
+                        <FluentNavItem Href="/manage/projectioncontrol">Projection Control</FluentNavItem>
+                        @if (_isPlatformAdmin)
+                        {
+                            <FluentNavItem Href="/manage/client-releases">Kiosk Releases</FluentNavItem>
+                        }
+                    </FluentNavCategory>
+
+                    <FluentNavItem Href="/automation" IconRest="@(new Icons.Regular.Size20.SettingsCogMultiple())"
+                                   IconActive="@(new Icons.Filled.Size20.SettingsCogMultiple())">
+                        Automation
+                    </FluentNavItem>
+                }
+
+                @if (_canManageDmx)
+                {
+                    <FluentNavItem Href="/dmx" IconRest="@(new Icons.Regular.Size20.Lightbulb())"
+                                   IconActive="@(new Icons.Filled.Size20.Lightbulb())">
+                        DMX Control
+                    </FluentNavItem>
                 }
             }
 
             @if (_isAdmin)
             {
-                <FluentNavSectionHeader Title="Clients" />
+                <FluentNavSectionHeader Title="Admin" />
 
-                <FluentNavCategory Title="Clients" IconRest="@(new Icons.Regular.Size20.Laptop())"
-                                   IconActive="@(new Icons.Filled.Size20.Laptop())">
-                    <FluentNavItem Href="/manage/clients" IconRest="@(new Icons.Regular.Size20.LaptopSettings())"
-                                   IconActive="@(new Icons.Filled.Size20.LaptopSettings())">
-                        Clients
+                <FluentNavItem Href="/manage/companies-locations" IconRest="@(new Icons.Regular.Size20.BuildingMultiple())"
+                               IconActive="@(new Icons.Filled.Size20.BuildingMultiple())">
+                    Companies &amp; Locations
+                </FluentNavItem>
+
+                @if (_isPlatformAdmin)
+                {
+                    <FluentNavItem Href="/manage/feedback" Match="NavLinkMatch.All" IconRest="@(new Icons.Regular.Size20.PersonFeedback())"
+                                   IconActive="@(new Icons.Filled.Size20.PersonFeedback())">
+                        <span class="nav-item-with-count">
+                            Lanyard Feedback
+                            @if (_unreviewedFeedback > 0)
+                            {
+                                <FluentCounterBadge Count="@_unreviewedFeedback" OverflowCount="99" aria-label="@($"{_unreviewedFeedback} feedback to review")" />
+                            }
+                        </span>
                     </FluentNavItem>
-                    <FluentNavItem Href="/manage/projectionprograms"
-                                   IconRest="@(new Icons.Regular.Size20.ProjectionScreenTextSparkle())"
-                                   IconActive="@(new Icons.Filled.Size20.ProjectionScreenTextSparkle())">Projection</FluentNavItem>
-                    <FluentNavItem Href="/manage/projectioncontrol"
-                                   IconRest="@(new Icons.Regular.Size20.ProjectionScreenText())"
-                                   IconActive="@(new Icons.Filled.Size20.ProjectionScreenText())">Projection Control</FluentNavItem>
-                    <FluentNavItem Href="/automation" IconRest="@(new Icons.Regular.Size20.SettingsCogMultiple())"
-                                   IconActive="@(new Icons.Filled.Size20.SettingsCogMultiple())">Automation</FluentNavItem>
-
-                    @if (_canManageDmx)
-                    {
-                        <FluentNavItem Href="/dmx">DMX Control</FluentNavItem>
-                    }
-
-                    @if (_isPlatformAdmin)
-                    {
-                        <FluentNavItem Href="/manage/client-releases">Kiosk Releases</FluentNavItem>
-                    }
-                </FluentNavCategory>
+                }
             }
-
-            <FluentNavSectionHeader Title="Dashboards" />
-            <FluentNavItem Href="/manage/dashboards" IconRest="@(new Icons.Regular.Size20.DataArea())"
-                           IconActive="@(new Icons.Filled.Size20.DataArea())">Dashboards</FluentNavItem>
         }
     </FluentNav>
 
@@ -326,6 +367,7 @@
     private bool _canControlMusic;
     private bool _canManageDmx;
     private bool _canManageFiles;
+    private bool _hasSharedFiles;
     private bool _canPostAnnouncements;
     private bool _canPlayAudioClips;
     private string? _displayName;
@@ -350,13 +392,20 @@
     // The category header only takes plain text, so its badge is drawn by a global style from this
     // attribute (see "Nav category badges" in App.razor) - otherwise the count would be hidden
     // whenever the Rota group is collapsed. Null leaves the attribute off, and with it the badge.
-    // It counts everything waiting in the group: time off and shift requests.
-    private string? PendingCountAttribute => (_pendingTimeOff + _pendingShiftRequests) switch
+    // Rota's counts everything waiting in the group (time off and shift requests); Communication's
+    // counts open chat reports.
+    private static string? CountAttribute(int count) => count switch
     {
-        0 => null,
+        <= 0 => null,
         > 99 => "99+",
-        int total => total.ToString()
+        _ => count.ToString()
     };
+
+    // People who can post announcements see the link under My Work, unless they're a manager, in
+    // which case it sits with the rest of Communication.
+    private bool CanSeeAnnouncements => _canPostAnnouncements && Has(CompanyFeature.Announcements);
+    private bool ShowOwnAnnouncementsLink => CanSeeAnnouncements && !_isManager;
+    private bool ShowManagerAnnouncementsLink => CanSeeAnnouncements && _isManager;
 
     private string? ShiftRequestsTooltip => _pendingShiftRequests switch
     {
@@ -398,6 +447,12 @@
             {
                 ChatUnread.Changed += OnChatUnreadChanged;
                 await ChatUnread.StartAsync();
+            }
+
+            if (!_canManageFiles)
+            {
+                Result<IReadOnlyList<Lanyard.Infrastructure.DTO.Files.FolderNode>> shared = await FileLibrary.GetTreeAsync(sharedOnly: true, CancellationToken.None);
+                _hasSharedFiles = shared.Data?.Count > 0;
             }
 
             string? name = await SecurityService.GetCurrentUserName();

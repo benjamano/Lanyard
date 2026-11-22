@@ -13,11 +13,12 @@
 
 @inject IAutomationRuleService _ruleService
 @inject IAutomationLogService _logService
-@inject AutomationEngineService _engineService
+@inject IAutomationEngineService _engineService
 @inject IClientService _clientService
 @inject INotificationService _toastService
 @inject IDialogService _dialogService
 @inject IDbContextFactory<ApplicationDbContext> _dbContextFactory
+@inject Lanyard.Application.Services.Tenancy.ITenantContext _tenant
 
 <PageTitle>Automation</PageTitle>
 
@@ -153,7 +154,16 @@
 
         // Independent reads (each opens its own DbContext) - overlap them rather than paying
         // three round-trips back to back.
-        await Task.WhenAll(LoadClientsAsync(), LoadRulesAsync(), LoadExecutionsAsync());
+        await Task.WhenAll(LoadClientsAsync(), LoadRulesAsync(), LoadExecutionsAsync(), LoadLocationsAsync());
+    }
+
+    // Names for party time rules ("... (Ipswich)"); the rule only stores the location's id.
+    private Dictionary<int, string> _locationNames = [];
+
+    private async Task LoadLocationsAsync()
+    {
+        Result<List<Location>> result = await _companyLocationService.GetLocationsAsync(_tenant.CompanyId);
+        _locationNames = (result.Data ?? []).ToDictionary(l => l.Id, l => l.Name);
     }
 
     private async Task LoadRulesAsync()
@@ -196,7 +206,7 @@
         return _clients.FirstOrDefault(c => c.Id == clientId)?.Name ?? clientId.ToString();
     }
 
-    private static string DescribeTrigger(AutomationRule rule)
+    private string DescribeTrigger(AutomationRule rule)
     {
         int conditionCount = rule.Conditions.Count(c => c.IsActive);
 
@@ -208,7 +218,7 @@
         };
     }
 
-    private static string DescribeTriggerOnly(AutomationRule rule)
+    private string DescribeTriggerOnly(AutomationRule rule)
     {
         switch (rule.TriggerType)
         {
@@ -240,6 +250,11 @@
 
             case AutomationTriggerType.GameEnded:
                 return rule.TriggerTeam is Team winningTeam ? $"Game ends, {winningTeam} wins" : "Game ends with a winner";
+
+            case AutomationTriggerType.PartyMilestone when rule.PartyMilestone is PartyMilestone milestone:
+                string where = rule.PartyLocationId is int locationId && _locationNames.TryGetValue(locationId, out string? name) ? name : "a location";
+                string room = string.IsNullOrWhiteSpace(rule.PartyRoom) ? string.Empty : $", {rule.PartyRoom}";
+                return $"{PartyTriggerRules.Describe(milestone, rule.PartyLeadMinutes ?? 0)} ({where}{room})";
 
             default:
                 return $"Game status: {rule.TriggerEvent}";

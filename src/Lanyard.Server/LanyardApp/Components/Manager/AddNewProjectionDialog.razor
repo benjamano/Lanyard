@@ -1,4 +1,5 @@
-﻿@using Lanyard.Application.Services.Authentication
+﻿@using Lanyard.Shared.Kiosk
+@using Lanyard.Application.Services.Authentication
 @using Lanyard.Infrastructure.Models
 @using Lanyard.Application.Services
 
@@ -18,9 +19,15 @@
     <ChildContent>
         @if (currentStepIndex == 0)
         {
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="12px">
+                <FluentText>Not sure which screen is which? Identify displays shows each screen's number on the screen itself for a few seconds.</FluentText>
+                <IdentifyDisplaysButton ClientId="@Content" ShowLabel="true" />
+            </FluentStack>
             <FluentDataGrid ShowHover="true" Items="@projectionSettings.AsQueryable()" GridTemplateColumns="auto 1fr 1fr 1fr">
                 <SelectColumn SelectAll="true" OnSelect="@(x=> UpdateSelectedScreen(x.Item))" Property="@(x=> x == selectedScreen)" TGridItem="ClientAvailableScreen" SelectMode="DataGridSelectMode.Single" SelectFromEntireRow="true"></SelectColumn>
-                <PropertyColumn Property="x => x.Index" Title="Display Number" />
+                <TemplateColumn Title="Screen">
+                    @DisplayIdentifyRules.ScreenTitle(context.Index)
+                </TemplateColumn>
                 <PropertyColumn Property="x => x.Name" Title="Screen Name" />
                 <TemplateColumn Title="Size">
                     @context.Width x @(context.Height)px

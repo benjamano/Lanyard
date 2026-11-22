@@ -942,6 +942,25 @@
       "Deleting a file no longer loses it if something goes wrong part way: the file is only removed from storage once it's gone from Lanyard. Moving a file out of a folder and then deleting the folder no longer deletes the moved file.",
       "A file or folder can't be uploaded into, moved into or created inside another company's folder, and an automation rule can't be set to start from another company's kiosk.",
       "Error messages from File Manager and staff documents no longer show technical details.",
+      "Deleting a file in File Manager now puts it in a Recycle bin, where it's kept for 30 days before it's removed for good. Anything still used elsewhere in Lanyard, such as a company logo or a projection program's video, is never removed for good while it's in use.",
+      "Uploading a file with the same name as one already in the folder no longer gives you two files with the same name: the new one becomes \"poster (2).png\". Renaming a file or folder to a name already used in that folder is refused.",
+      "Audio clip sounds no longer show up in File Manager. They're managed on the Audio Clips page.",
+      "File Manager is now Files, rebuilt from the ground up. Folders sit in a tree on the left, files show as picture tiles or a list, and Quick access jumps to Recent, Images, Videos, Audio or Documents from every folder at once.",
+      "Search finds files and folders by name in every folder, and shows which folder each one is in.",
+      "Select a file to see a preview, its size, who uploaded it and when, and everything in Lanyard that uses it, such as the company logo, a projection program or a training course. Preview opens images, videos, music, PDFs and text files in the page, with arrows to step through the folder.",
+      "Every file and folder has a ⋯ menu (or right-click) to rename, move or delete it, and folders can now be renamed, moved and deleted too. Files are uploaded with the Upload button, as many as you like at once.",
+      "Deleted files and folders go to the new Recycle bin, where they can be restored for 30 days. While they're in the bin they can't be opened or downloaded, unless something in Lanyard still uses them.",
+      "Share a folder with staff, and everyone can see and download what's in it from Shared files in the menu, without being able to change anything. Handy for menus, price lists and guides.",
+      "Files is in the main menu for everyone with the CanManageFiles role, not only managers.",
+      "Files works on phones: Quick access is a row of buttons, folders open with a tap, and details and menus slide up from the bottom.",
+      "Uploading in Files is much quicker to use: drag files from your computer anywhere onto the page, or onto a folder to put them straight in it. Drop a whole folder and its folders are made for you. Paste a screenshot with Ctrl+V.",
+      "Each upload shows its progress in a box at the bottom right, where you can cancel it, try it again or jump to the folder it went into. Big videos upload far more reliably, and videos can now be up to 500 MB.",
+      "Files' picture tiles load quickly: Lanyard makes a small preview of every picture, and of a frame from each video, instead of loading the full-size file. Videos also show their length.",
+      "Select several files and folders in Files at once: tick their boxes, Ctrl-click or Shift-click, or press Ctrl+A. Then download them as one .zip, move them or delete them together. A folder can be downloaded as a .zip from its ⋯ menu.",
+      "Drag files and folders onto another folder to move them, and press Undo straight after a move or delete if it was a mistake.",
+      "Copy link in Files copies a link to a file for a chat or a course, and Files now updates by itself when someone else changes something.",
+      "Choosing a file elsewhere in Lanyard now looks and works like Files: the course editor's picture button, a projection step's video and onboarding email attachments show thumbnails, can search every folder and have a Recent list. People who manage files can drop or upload straight into the open folder.",
+      "A projection step's video picker now only offers videos. It used to list every kind of file.",
       "Parties > Printouts and party documents: the PDFs are no longer kept by the browser, so Preview saved version and each party's printouts always show what's saved now. Before, some browsers (Firefox especially) kept showing the old artwork, even after a reload.",
       "Parties > Printouts: Save now waits until new artwork has finished uploading. Before, saving during the upload kept the old artwork.",
       "On the Music page, the new EQ button next to the volume opens the kiosk's equaliser: Bass, Mid and Treble sliders from -12 to +12 dB, with the change playing on the kiosk as you drag.",
@@ -965,15 +984,70 @@
   {
     "version": "1.4.25",
     "releaseDate": "2026-11-18",
-    "summary": "Copy an automation rule with one click, and opening, closing and other checklists for each location.",
+    "summary": "A tidier side menu, grouped by what you're doing.",
+    "details": [
+      "Home, Chat and Dashboards sit at the top. Your own shifts, time off, training and music are under a new My Work heading.",
+      "Management is regrouped: Operations Alerts, Insights and File Manager first, then Rota, Parties, People (users, roles, onboarding, staff documents and compliance), Training and Communication (announcements, chat channels and chat reports). The old catch-all Manage group is gone.",
+      "Rota and Parties list their day-to-day pages first and their set-up pages after.",
+      "Kiosks, projection, automation and DMX are under a new Venue heading, and Companies & Locations and Lanyard Feedback under Admin. People with the DMX role but not Admin now see DMX Control in the menu.",
+      "The Communication group shows a count when chat reports are waiting, like Rota does, so it's visible even while the group is closed."
+    ]
+  },
+  {
+    "version": "1.4.29",
+    "releaseDate": "2026-11-20",
+    "summary": "Insights counts party bookings, What's On shows venue schedules, automation rules can be copied and run at party times, and Identify displays shows which kiosk screen is which.",
+    "details": [
+      "Insights counts booked parties at the location and the children expected at them, per hour and per day. Cancelled parties are left out; provisional Just Step bookings count.",
+      "Games are split into walk-in games and party games. Each party is given its first two games: the first starting from 10 minutes before the party's laser tag time to half an hour after it, and the second within 20 minutes of the first. Parties with no laser tag time use the location's default from Party settings, and a laser tag private hire counts every game during the booking.",
+      "Busy and quiet flags, and the typical games per staff hour they are measured against, now leave out hours with a party on, so a party no longer makes a normal hour look understaffed. An hour that has a party most weeks shows as Mostly parties instead of being flagged.",
+      "On the Insights page: new Parties and Party children tiles, the Games tile shows how many games were at parties, Games per day draws walk-in and party games as separate lines, and Shade by in Typical week offers Party games and Party children. A note says how many parties had no laser tag time, with a link to Party settings to set a default.",
+      "The Demand and Staffing dashboard widget shows the parties, children and party games in its range, and never lists a party hour as busy or quiet.",
+      "The Insights help has a new Parties tab explaining how games are matched to parties and why party hours aren't flagged.",
+      "Export CSV has four new columns at the end: Walk-in games, Party games, Parties on and Expected children. Like the rest of the file they are counts only, with no names, contact details, allergies or prices.",
+      "Only for companies using Parties. Without it, Insights works as before.",
+      "New What's On page under Management (Admins and Managers): everything booked at a location for one day or one week. For now it shows parties, including ones imported from Just Step Online.",
+      "The Day view is a timeline: each party is a block from arrival to finish, with its eating and laser tag times marked, and parties that overlap sit side by side. Today's timeline has a line at the time now. On a phone the day is a list of party cards instead.",
+      "The Week view shows Monday to Sunday, side by side on a computer and one under another on a phone, with each day's parties and headcount. Click a day to open its timeline, or a party to open it.",
+      "Totals at the top add up the parties, children and adults expected, hot and cold food, parties not paid in full with the balance due, and provisional holds.",
+      "The Day view also lists everyone on the published rota that day, with their times and position.",
+      "New What's On Today dashboard widget (Admins and Managers): today's parties, children and staff on, and the parties still to come, with a link to the day's timeline. Right-click it to choose how many to list and, for Admins, which location.",
+      "New Duplicate rule button on Automation: it copies a rule with its trigger, conditions and actions as \"Copy of\" the rule's name, switched off, and opens it so you can change what's different before turning it on.",
+      "The Automation rule list now fits on a phone: each rule's name shows in full with its kiosk and trigger underneath, instead of being cut short with the switch and buttons off the side of the screen.",
+      "The Edit and Delete buttons on Automation, and the rule names in the Execution Log, now work with the keyboard and screen readers and show what they do when you hover over them.",
+      "Automation rules can now only drive your own company's kiosks, playlists, projection programs, lighting scenes and audio clips. This was already checked for lighting actions; music, projection and audio clip actions are now checked too, both when a rule is saved and every time it runs.",
+      "An automation rule saved while Lanyard was reloading its rules no longer goes unnoticed until the next save: it now starts working straight away.",
+      "New Identify displays button (the # button) for each kiosk on the Clients page, and at the top of a kiosk's Settings > Projection tab (Admins). For 8 seconds every screen on that kiosk shows a large number with its name, resolution and the program set up for it, so you can tell which Screen 1, 2 or 3 in Lanyard is which physical screen. Whatever is playing carries on underneath.",
+      "The Projection tab also lists each screen's details under the button, and marks a screen as Changed when Windows has renumbered the screens since the kiosk last reported them, for example after a screen was unplugged, so you can check its projection is still on the right screen.",
+      "Kiosks now tell Lanyard straight away when a screen is plugged in, unplugged or changes resolution, instead of only when they reconnect, and the kiosk self-test lists the screens it can see. Both need Lanyard Client 1.0.49.",
+      "Screens are now numbered Screen 1, Screen 2 and so on everywhere you pick or see one: the Screen pickers in Automation rules and the Projection Status and Button dashboard widgets, Add Projection, the Projection tab and the Screens window. Each Screen picker has the # Identify displays button beside it, as do Add Projection and the Screens window, so you can check which screen is which before choosing.",
+      "New Party time trigger for Automation rules: run lights, music or projection actions when a booked party starts, eats, plays laser tag or ends, at the time or up to 120 minutes before. Choose the location, and optionally one room.",
+      "A party time rule runs once for each party. Parties that reach the same moment together run it once, so two 2pm parties don't start the lights twice. Cancelled parties, provisional Just Step bookings and private hires don't run it.",
+      "Moving or cancelling a party, by hand or through the Just Step import, changes when its rules run straight away.",
+      "The Execution Log shows which party a party time run was for, with an Open party button, and never the child's name.",
+      "New \"A party is or isn't on\" condition for Automation rules: only run a rule while a booked party is on at a location (or in one room), or only while none is. For example, play the party version of the game lights during parties.",
+      "Training course sections can no longer contain scripts or other unsafe content. Only the formatting the course editor offers (headings, bold, italic, lists, links and images) is kept, including in sections saved before this change."
+    ]
+  },
+  {
+    "version": "1.4.30",
+    "releaseDate": "2026-11-19",
+    "summary": "Projection screens can now welcome the birthday child and show party details.",
+    "details": [
+      "Projection text steps can show the party that's on now: Party welcome (\"Happy 7th birthday, Ava!\"), the birthday child's first name, or what's next (\"Laser tag at 14:30\"). A party shows from 15 minutes before it starts until it ends.",
+      "New Party room setting on each kiosk (Settings, General tab): its screen shows the party in that room. Without one it shows a party at the kiosk's location.",
+      "Names only appear on screens once an Admin turns on \"Show the birthday child's first name on screens\" under Party settings > Venue screens. Only the first name is shown, and offline kiosks never keep it."
+    ]
+  },
+  {
+    "version": "1.4.31",
+    "releaseDate": "2026-11-22",
+    "summary": "Opening, closing and other checklists for each location.",
     "details": [
       "New Rota > Checklists page (Managers and Admins): set up the routines a location runs, such as Opening, Closing or Party room reset, each with its tasks in order.",
       "Choose the days each checklist runs and when it's due: a number of minutes after opening or before closing (from the location's opening hours), a set time such as 10:00, or no set time. Days the location is closed are skipped.",
       "A checklist task can ask for just a tick, a tick with an optional note, or a number reading with a unit, such as a fridge temperature in °C. Reorder tasks with the up and down arrows.",
-      "A checklist can be limited to one position, such as Duty Manager for Closing; otherwise anyone on that day's rota can tick it. Checklists can be switched on or off per company under Companies & Locations.",
-      "New Duplicate rule button on Automation: it copies a rule with its trigger, conditions and actions as \"Copy of\" the rule's name, switched off, and opens it so you can change what's different before turning it on.",
-      "The Automation rule list now fits on a phone: each rule's name shows in full with its kiosk and trigger underneath, instead of being cut short with the switch and buttons off the side of the screen.",
-      "The Edit and Delete buttons on Automation, and the rule names in the Execution Log, now work with the keyboard and screen readers and show what they do when you hover over them."
+      "A checklist can be limited to one position, such as Duty Manager for Closing; otherwise anyone on that day's rota can tick it. Checklists can be switched on or off per company under Companies & Locations."
     ]
   }
 ]
