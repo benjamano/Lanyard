@@ -5,8 +5,10 @@ namespace Lanyard.Application.Services.Projection.Bindings;
 /// <summary>
 /// Who a binding is resolved for. CompanyId is the program's company, which the runner has already
 /// checked matches the kiosk's; LocationId is the kiosk's location, null when none is assigned.
+/// PartyRoom is the kiosk's party room (Client.PartyRoom), read when the program starts; null =
+/// the whole location.
 /// </summary>
-public sealed record ProjectionBindingContext(int CompanyId, int? LocationId, Guid ClientId, DateTime NowUtc);
+public sealed record ProjectionBindingContext(int CompanyId, int? LocationId, Guid ClientId, DateTime NowUtc, string? PartyRoom = null);
 
 /// <summary>
 /// One live data source a projection parameter can be bound to. Sources are singletons and run

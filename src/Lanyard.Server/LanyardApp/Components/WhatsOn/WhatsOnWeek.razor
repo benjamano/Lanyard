@@ -1,0 +1,63 @@
+@* Seven days side by side on a wide screen, stacked on a phone. Each day's heading opens its Day view. *@
+
+<div class="wo-week">
+    @foreach (WhatsOnDay day in Days)
+    {
+        bool isToday = day.Date == Today;
+        int staffCount = day.Staff.Select(x => x.UserId).Distinct().Count();
+
+        <section class="wo-week-day @(isToday ? "is-today" : string.Empty) @(day.Items.Count == 0 ? "is-empty" : string.Empty)">
+            <a class="wo-week-head" href="@DayHref(day.Date)" title="Open @day.Date.ToString("dddd d MMMM", RotaFormat.Uk)">
+                <span class="wo-week-dow">@day.Date.ToString("ddd", RotaFormat.Uk)</span>
+                <span class="wo-week-date">@day.Date.ToString("d MMM", RotaFormat.Uk)</span>
+                @if (isToday)
+                {
+                    <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Brand">Today</FluentBadge>
+                }
+            </a>
+
+            <div class="wo-week-summary">
+                @if (day.Totals.Items == 0)
+                {
+                    <span>Nothing booked</span>
+                }
+                else
+                {
+                    <span>@WhatsOnFormat.Plural(day.Totals.Items, "party", "parties") · @WhatsOnFormat.Plural(day.Totals.Children, "child", "children")</span>
+                }
+                <span class="wo-week-staff">@WhatsOnFormat.Plural(staffCount, "person", "people") on</span>
+            </div>
+
+            @foreach (WhatsOnItem item in day.Items)
+            {
+                <a class="wo-chip @(item.IsCancelled ? "wo-cancelled" : string.Empty) @(item.IsProvisional ? "wo-provisional" : string.Empty)"
+                   href="@item.Href" title="@($"{item.TimeRange()} · {item.Title} · {item.Headcount()}")">
+                    <span class="wo-chip-time">@RotaFormat.LocalTime(item.StartUtc)</span>
+                    <span class="wo-chip-title">@item.Title</span>
+                    <span class="wo-chip-facts">
+                        @item.Headcount()
+                        @if (item.AllergyNotes is not null)
+                        {
+                            <FluentIcon Value="@(new Icons.Regular.Size12.Warning())" Color="Color.Warning" title="Allergies noted" />
+                        }
+                    </span>
+                    @if (item.IsProvisional || item.IsCancelled)
+                    {
+                        <span class="wo-chip-badges"><WhatsOnBadges Item="@item" ShowPayment="false" /></span>
+                    }
+                </a>
+            }
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public List<WhatsOnDay> Days { get; set; } = [];
+
+    [Parameter, EditorRequired]
+    public DateOnly Today { get; set; }
+
+    [Parameter, EditorRequired]
+    public Func<DateOnly, string> DayHref { get; set; } = default!;
+}

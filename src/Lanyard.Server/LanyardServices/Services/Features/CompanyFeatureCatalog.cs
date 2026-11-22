@@ -42,6 +42,7 @@ public static class CompanyFeatureCatalog
         WidgetType.MyShifts or WidgetType.WhoIsOnToday or WidgetType.PendingTimeOff => CompanyFeature.StaffScheduling,
         WidgetType.Announcements => CompanyFeature.Announcements,
         WidgetType.DemandStaffing => CompanyFeature.Insights,
+        WidgetType.WhatsOnToday => CompanyFeature.Parties,
         WidgetType.OperationsAlerts => CompanyFeature.OperationsAlerts,
         _ => null
     };

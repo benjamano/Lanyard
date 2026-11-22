@@ -9,11 +9,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Lanyard.Application.Services.Parties;
 
-public class PartyBookingService(IDbContextFactory<ApplicationDbContext> factory) : IPartyBookingService
+// partySchedule is optional only so tests that don't care about it can leave it out; the app
+// always registers one, and every booking write clears its cache so party-time automation and
+// venue screens see the change within a tick.
+public class PartyBookingService(IDbContextFactory<ApplicationDbContext> factory, IPartyScheduleProvider? partySchedule = null) : IPartyBookingService
 {
     private const string NoAccess = "You can only manage parties at your own location.";
 
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly IPartyScheduleProvider? _partySchedule = partySchedule;
 
     public async Task<Result<List<PartyBooking>>> GetBookingsAsync(LocationScope scope, int locationId, DateOnly from, DateOnly to, bool includeCancelled = false)
     {
@@ -123,6 +127,7 @@ public class PartyBookingService(IDbContextFactory<ApplicationDbContext> factory
 
             DateTime now = DateTime.UtcNow;
             PartyBooking saved;
+            int? previousLocationId = null;
 
             if (booking.Id == Guid.Empty)
             {
@@ -156,6 +161,7 @@ public class PartyBookingService(IDbContextFactory<ApplicationDbContext> factory
                     return Result<PartyBooking>.Fail(NoAccess);
                 }
 
+                previousLocationId = existing.LocationId;
                 existing.LocationId = booking.LocationId;
                 existing.CompanyId = location.CompanyId;
                 existing.UpdateDate = now;
@@ -166,6 +172,13 @@ public class PartyBookingService(IDbContextFactory<ApplicationDbContext> factory
             }
 
             await ctx.SaveChangesAsync();
+
+            _partySchedule?.Invalidate(saved.LocationId);
+
+            if (previousLocationId is int moved && moved != saved.LocationId)
+            {
+                _partySchedule?.Invalidate(moved);
+            }
 
             return Result<PartyBooking>.Ok(saved);
         }
@@ -232,6 +245,43 @@ public class PartyBookingService(IDbContextFactory<ApplicationDbContext> factory
         }
     }
 
+    public async Task<Result<List<string>>> GetRoomSuggestionsAsync(LocationScope scope, int locationId)
+    {
+        try
+        {
+            if (!SchedulingAccess.CanManageLocation(scope, locationId))
+            {
+                return Result<List<string>>.Fail(NoAccess);
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<string?> rooms = await ctx.PartyBookings
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.LocationId == locationId && x.Room != null && x.Room != string.Empty)
+                .GroupBy(x => x.Room)
+                .OrderByDescending(g => g.Count())
+                .ThenBy(g => g.Key)
+                .Select(g => g.Key)
+                .Take(40)
+                .ToListAsync();
+
+            // Free text, so "Room 2" and "room 2 " are the same room: keep the most used spelling.
+            List<string> tidy = [.. rooms
+                .Select(PartyRooms.Normalise)
+                .OfType<string>()
+                .DistinctBy(r => r, StringComparer.OrdinalIgnoreCase)
+                .Take(12)];
+
+            return Result<List<string>>.Ok(tidy);
+        }
+        catch (Exception ex)
+        {
+            return Result<List<string>>.Fail($"Failed to load rooms: {ex.Message}");
+        }
+    }
+
     private async Task<Result<PartyBooking>> UpdateAsync(LocationScope scope, Guid bookingId, string actingUserId, string action, Action<PartyBooking> change)
     {
         try
@@ -255,6 +305,8 @@ public class PartyBookingService(IDbContextFactory<ApplicationDbContext> factory
             booking.UpdateByUserId = actingUserId;
 
             await ctx.SaveChangesAsync();
+
+            _partySchedule?.Invalidate(booking.LocationId);
 
             return Result<PartyBooking>.Ok(booking);
         }

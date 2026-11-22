@@ -454,6 +454,19 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("PartyLeadMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PartyLocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PartyMilestone")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PartyRoom")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("ScheduledDaysOfWeek")
                         .HasColumnType("text");
 
@@ -585,14 +598,23 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<DateTime>("ExecutedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("IsTestRun")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("OverallSuccess")
                         .HasColumnType("boolean");
+
+                    b.Property<Guid?>("PartyBookingId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("RuleName")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<string>("SkipReason")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TestRunByUserId")
                         .HasColumnType("text");
 
                     b.Property<Guid>("TriggerClientId")
@@ -606,7 +628,11 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.HasIndex("ExecutedAt");
 
+                    b.HasIndex("PartyBookingId");
+
                     b.HasIndex("AutomationRuleId", "ExecutedAt");
+
+                    b.HasIndex("AutomationRuleId", "PartyBookingId");
 
                     b.ToTable("AutomationRuleExecutions");
                 });
@@ -1389,6 +1415,10 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<bool>("OfflineFallbackEnabled")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("PartyRoom")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("PinnedClientVersion")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
@@ -1959,6 +1989,9 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Property<int>("SeasonalThemeSetting")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("ShowPartyNamesOnScreens")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("ThemeColorHex")
                         .HasColumnType("text");
@@ -3082,6 +3115,13 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
                     b.Property<string>("FileName")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -3098,11 +3138,21 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<Guid?>("FolderId")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("Height")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsRestricted")
                         .HasColumnType("boolean");
+
+                    b.Property<bool>("IsSystemFile")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ThumbnailPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<DateTime>("UploadedAt")
                         .HasColumnType("timestamp with time zone");
@@ -3114,11 +3164,14 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<TimeSpan?>("VideoLength")
                         .HasColumnType("interval");
 
+                    b.Property<int?>("Width")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("CompanyId");
-
                     b.HasIndex("FolderId");
+
+                    b.HasIndex("CompanyId", "FolderId", "IsActive");
 
                     b.ToTable("FileMetadata");
                 });
@@ -3139,7 +3192,17 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("character varying(450)");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
                     b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsSharedWithStaff")
                         .HasColumnType("boolean");
 
                     b.Property<string>("Name")
@@ -3152,9 +3215,9 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CompanyId");
-
                     b.HasIndex("ParentFolderId");
+
+                    b.HasIndex("CompanyId", "ParentFolderId", "IsActive");
 
                     b.ToTable("Folders");
                 });
@@ -5629,6 +5692,21 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasDiscriminator().HasValue(2);
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.WhatsOnTodayWidget", b =>
+                {
+                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
+
+                    b.Property<int?>("LocationId")
+                        .HasColumnType("integer")
+                        .HasColumnName("WhatsOnTodayWidget_LocationId");
+
+                    b.Property<int>("MaxItems")
+                        .HasColumnType("integer")
+                        .HasColumnName("WhatsOnTodayWidget_MaxItems");
+
+                    b.HasDiscriminator().HasValue(21);
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.WhoIsOnTodayWidget", b =>
                 {
                     b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
@@ -5879,6 +5957,11 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasForeignKey("AutomationRuleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.PartyBooking", null)
+                        .WithMany()
+                        .HasForeignKey("PartyBookingId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("AutomationRule");
                 });
