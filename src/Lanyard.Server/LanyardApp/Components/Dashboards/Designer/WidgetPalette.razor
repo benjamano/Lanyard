@@ -52,8 +52,7 @@
                          data-palette-type="@((int)descriptor.Type)"
                          data-palette-label="@descriptor.Name"
                          data-w="@sample.GridW"
-                         data-h="@sample.GridH"
-                         @onkeydown="@(e => OnKeyDownAsync(e, descriptor))">
+                         data-h="@sample.GridH">
                         <span class="widget-palette-icon"><FluentIcon Value="@descriptor.Icon()" /></span>
                         <span class="widget-palette-text">
                             <span class="widget-palette-name">@descriptor.Name</span>
@@ -76,10 +75,6 @@
     [Parameter]
     public IReadOnlySet<CompanyFeature> HiddenFeatures { get; set; } = new HashSet<CompanyFeature>();
 
-    // Keyboard users add with Enter/Space; pointer users go through dashboardDesigner.js.
-    [Parameter]
-    public EventCallback<WidgetType> OnAdd { get; set; }
-
     public ElementReference Element { get; private set; }
 
     private string? _search;
@@ -94,13 +89,5 @@
                 || x.Description.Contains(term, StringComparison.OrdinalIgnoreCase)
                 || DashboardWidgetCatalog.CategoryName(x.Category).Contains(term, StringComparison.OrdinalIgnoreCase))
             .OrderBy(x => x.Category);
-    }
-
-    private async Task OnKeyDownAsync(KeyboardEventArgs e, WidgetDescriptor descriptor)
-    {
-        if (e.Key is "Enter" or " ")
-        {
-            await OnAdd.InvokeAsync(descriptor.Type);
-        }
     }
 }

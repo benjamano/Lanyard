@@ -49,8 +49,9 @@
     background: var(--colorNeutralBackground1);
     box-shadow: var(--shadow2);
     cursor: grab;
-    /* Claim touch gestures, so dragging a widget with a finger moves it instead of scrolling. */
-    touch-action: none;
+    /* With a finger, an unselected widget lets the canvas scroll (a tap selects it); only the
+       selected widget claims the gesture, so it can be dragged. */
+    touch-action: pan-x pan-y;
     user-select: none;
     transition: box-shadow 120ms ease;
 }
@@ -60,6 +61,7 @@
 }
 
 .designer-item.is-selected {
+    touch-action: none;
     outline: 2px solid var(--colorBrandStroke1);
     outline-offset: 2px;
     z-index: 3;
@@ -146,6 +148,7 @@
 /* Always shown on a selected widget and on touch screens (no hover there); otherwise on hover. */
 .designer-resize {
     position: absolute;
+    touch-action: none;
     z-index: 4;
     opacity: 0;
     transition: opacity 120ms ease;

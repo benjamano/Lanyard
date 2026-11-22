@@ -1074,7 +1074,9 @@
       "Text widgets are now typed in the side panel, and the dashboard updates as you type.",
       "Keyboard shortcuts: arrow keys move the selected widget, Shift+arrows resize it, Delete removes it and Ctrl+D duplicates it.",
       "Works with touch on tablets and phones, where the widget list and settings open as panels.",
-      "Choose a row height for each dashboard (compact, comfortable or spacious), and tidy up gaps in one go."
+      "Choose a row height for each dashboard (compact, comfortable or spacious), and tidy up gaps in one go.",
+      "Fixed a deleted dashboard still showing on kiosk screens, and a designer tab left open being able to save it back.",
+      "Fixed the last few words typed into a Text widget being lost when saving straight away."
     ]
   }
 ]

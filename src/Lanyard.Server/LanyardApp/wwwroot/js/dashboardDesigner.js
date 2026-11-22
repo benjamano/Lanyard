@@ -44,6 +44,7 @@ export function init(canvas, palette, dotNet, options) {
     const onPointerUp = event => handlePointerUp(state, event);
     const onPointerCancel = () => cancelDrag(state);
     const onKeyDown = event => handleKeyDown(state, event);
+    const onPaletteKeyDown = event => handlePaletteKeyDown(state, event);
     const onWindowKeyDown = event => {
         if (event.key === 'Escape' && state.drag) {
             event.preventDefault();
@@ -53,6 +54,7 @@ export function init(canvas, palette, dotNet, options) {
 
     canvas.addEventListener('pointerdown', onPointerDown);
     palette?.addEventListener('pointerdown', onPointerDown);
+    palette?.addEventListener('keydown', onPaletteKeyDown);
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
     window.addEventListener('pointercancel', onPointerCancel);
@@ -65,8 +67,10 @@ export function init(canvas, palette, dotNet, options) {
         },
         setPalette(element) {
             state.palette?.removeEventListener('pointerdown', onPointerDown);
+            state.palette?.removeEventListener('keydown', onPaletteKeyDown);
             state.palette = element;
             element?.addEventListener('pointerdown', onPointerDown);
+            element?.addEventListener('keydown', onPaletteKeyDown);
         },
         focus() {
             canvas.focus({ preventScroll: true });
@@ -76,6 +80,7 @@ export function init(canvas, palette, dotNet, options) {
             removeChip(state);
             canvas.removeEventListener('pointerdown', onPointerDown);
             state.palette?.removeEventListener('pointerdown', onPointerDown);
+            state.palette?.removeEventListener('keydown', onPaletteKeyDown);
             window.removeEventListener('pointermove', onPointerMove);
             window.removeEventListener('pointerup', onPointerUp);
             window.removeEventListener('pointercancel', onPointerCancel);
@@ -153,6 +158,13 @@ function handlePointerDown(state, event) {
             pointerId: event.pointerId
         };
         capture(state, event);
+        return;
+    }
+
+    // With a finger, an unselected widget isn't grabbed: the touch scrolls the canvas (its CSS
+    // allows panning), and a tap selects it. Once selected, it can be dragged.
+    if (item && event.pointerType !== 'mouse' && !item.classList.contains('is-selected')) {
+        state.drag = { kind: 'tap', id: item.dataset.widgetId, startX: event.clientX, startY: event.clientY, started: false, pointerId: event.pointerId };
         return;
     }
 
@@ -234,18 +246,42 @@ function handlePointerMove(state, event) {
     }
 
     if (!drag.started) {
-        if (!movedPastThreshold(drag, event) || drag.kind === 'background') {
+        if (!movedPastThreshold(drag, event)) {
+            return;
+        }
+
+        // A tap that turned into a swipe (the browser is scrolling), or a press on the empty
+        // canvas that moved: not ours.
+        if (drag.kind === 'tap' || drag.kind === 'background') {
+            state.drag = null;
             return;
         }
 
         drag.started = true;
+        drag.startScroll = scroller(state).scrollTop;
         startVisuals(state, drag);
     }
 
     event.preventDefault();
+    state.pointer = { clientX: event.clientX, clientY: event.clientY };
+    updateDrag(state, event);
+}
+
+// How far the canvas has scrolled since the drag started, which moves the grid under a pointer
+// that hasn't moved.
+function scrolledBy(state, drag) {
+    return scroller(state).scrollTop - (drag.startScroll ?? 0);
+}
+
+function updateDrag(state, event) {
+    const drag = state.drag;
+
+    if (!drag || !drag.started) {
+        return;
+    }
 
     if (drag.kind === 'move') {
-        drag.element.style.transform = `translate(${event.clientX - drag.startX}px, ${event.clientY - drag.startY}px)`;
+        drag.element.style.transform = `translate(${event.clientX - drag.startX}px, ${event.clientY - drag.startY + scrolledBy(state, drag)}px)`;
 
         const cell = cellAt(state, event.clientX - drag.offsetX, event.clientY - drag.offsetY, drag.w);
 
@@ -255,7 +291,6 @@ function handlePointerMove(state, event) {
             invoke(state, 'PreviewMoveAsync', drag.id, cell.x, cell.y);
         }
 
-        autoScroll(state, event);
         return;
     }
 
@@ -269,7 +304,7 @@ function handlePointerMove(state, event) {
         }
 
         if (drag.edge.includes('s')) {
-            h = Math.max(1, drag.h + Math.round((event.clientY - drag.startY) / m.rowStep));
+            h = Math.max(1, drag.h + Math.round((event.clientY - drag.startY + scrolledBy(state, drag)) / m.rowStep));
         }
 
         if (w !== drag.lastW || h !== drag.lastH) {
@@ -278,7 +313,6 @@ function handlePointerMove(state, event) {
             invoke(state, 'PreviewResizeAsync', drag.id, w, h);
         }
 
-        autoScroll(state, event);
         return;
     }
 
@@ -304,8 +338,6 @@ function handlePointerMove(state, event) {
             drag.lastY = cell.y;
             invoke(state, 'PreviewPlaceAsync', drag.type, cell.x, cell.y, drag.w, drag.h);
         }
-
-        autoScroll(state, event);
     }
 }
 
@@ -321,7 +353,7 @@ function handlePointerUp(state, event) {
 
     if (!drag.started) {
         // A click, not a drag.
-        if (drag.kind === 'move' || drag.kind === 'resize') {
+        if (drag.kind === 'move' || drag.kind === 'resize' || drag.kind === 'tap') {
             invoke(state, 'SelectAsync', drag.id);
         } else if (drag.kind === 'place') {
             invoke(state, 'AddAsync', drag.type);
@@ -356,6 +388,7 @@ function cancelDrag(state) {
 }
 
 function startVisuals(state, drag) {
+    startAutoScroll(state);
     document.body.classList.add('dashboard-designer-dragging');
     document.body.style.userSelect = 'none';
     document.body.style.cursor = drag.kind === 'resize' ? 'nwse-resize' : 'grabbing';
@@ -387,6 +420,7 @@ function startVisuals(state, drag) {
 }
 
 function stopVisuals(state, drag) {
+    stopAutoScroll(state);
     document.body.classList.remove('dashboard-designer-dragging', 'dashboard-designer-resizing');
     document.body.style.userSelect = '';
     document.body.style.cursor = '';
@@ -410,20 +444,69 @@ function removeChip(state) {
     state.chip = null;
 }
 
-// Scroll the canvas's scroll container (or the page) when a drag nears its top or bottom edge, so a
-// widget can be dragged further down than the visible area.
-function autoScroll(state, event) {
-    const scroller = state.canvas.closest('[data-designer-scroll]') ?? document.scrollingElement;
-    const rect = scroller === document.scrollingElement
-        ? { top: 0, bottom: window.innerHeight }
-        : scroller.getBoundingClientRect();
-    const edge = 48;
+function scroller(state) {
+    return state.canvas.closest('[data-designer-scroll]') ?? document.scrollingElement;
+}
 
-    if (event.clientY > rect.bottom - edge) {
-        scroller.scrollTop += 12;
-    } else if (event.clientY < rect.top + edge) {
-        scroller.scrollTop -= 12;
+// While a drag is on, scroll the canvas when the pointer sits near its top or bottom edge - every
+// frame, so holding still at the edge keeps scrolling - and re-work the cell under the pointer,
+// since the grid has moved beneath it. Lets a widget be dragged further than the visible area.
+function startAutoScroll(state) {
+    const tick = () => {
+        const drag = state.drag;
+
+        if (!drag || !drag.started || state.disposed) {
+            state.raf = null;
+            return;
+        }
+
+        const pointer = state.pointer;
+
+        if (pointer) {
+            const box = scroller(state);
+            const rect = box === document.scrollingElement
+                ? { top: 0, bottom: window.innerHeight }
+                : box.getBoundingClientRect();
+            const edge = 48;
+            const before = box.scrollTop;
+
+            if (pointer.clientY > rect.bottom - edge) {
+                box.scrollTop += 12;
+            } else if (pointer.clientY < rect.top + edge) {
+                box.scrollTop -= 12;
+            }
+
+            if (box.scrollTop !== before) {
+                updateDrag(state, pointer);
+            }
+        }
+
+        state.raf = requestAnimationFrame(tick);
+    };
+
+    state.raf = requestAnimationFrame(tick);
+}
+
+function stopAutoScroll(state) {
+    if (state.raf) {
+        cancelAnimationFrame(state.raf);
+        state.raf = null;
     }
+
+    state.pointer = null;
+}
+
+// Enter or Space on a focused palette item adds it (keyboard users can't drag). Handled here so
+// Space doesn't also scroll the list.
+function handlePaletteKeyDown(state, event) {
+    const item = event.target.closest?.('[data-palette-type]');
+
+    if (!item || (event.key !== 'Enter' && event.key !== ' ')) {
+        return;
+    }
+
+    event.preventDefault();
+    invoke(state, 'AddAsync', parseInt(item.dataset.paletteType, 10));
 }
 
 const HANDLED_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Delete', 'Backspace', 'Escape']);
