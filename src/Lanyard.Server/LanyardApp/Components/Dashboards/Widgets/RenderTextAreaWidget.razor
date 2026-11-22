@@ -48,6 +48,11 @@
     [Parameter]
     public bool PreviewMode { get; set; }
 
+    // Raised when the editor's text has been copied into the widget, so the designer can redraw
+    // the canvas and mark the dashboard as changed.
+    [Parameter]
+    public EventCallback ContentChanged { get; set; }
+
     // Rendered content comes from the WYSIWYG editor as raw HTML, which is fundamentally
     // untrusted the moment it's read back out of storage - sanitize at the point it becomes
     // live markup rather than trusting whatever produced/persisted it.
@@ -100,7 +105,13 @@
             return;
         }
 
+        if (html == (Widget.Content ?? string.Empty))
+        {
+            return;
+        }
+
         Widget.Content = html;
+        await ContentChanged.InvokeAsync();
     }
 
     // BlazoredTextEditor has no bindable change event, so poll as well as syncing on focus-out:

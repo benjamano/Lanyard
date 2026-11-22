@@ -1,0 +1,556 @@
+@* The designer's editing surface: the dashboard's widgets on its 12-column grid, which you drag to
+   move, pull by an edge to resize, and click to select. dashboardDesigner.js tracks the pointer;
+   every layout decision is made here, with DashboardLayoutEngine.
+
+   While a drag is in progress the layout shown is a preview worked out from the layout as it was
+   when the drag started, so moving back over a widget's old spot puts everything back the way it
+   was. Nothing changes in the dashboard itself until the drop (CommitAsync). *@
+
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="designer-canvas" @ref="_canvasRef" tabindex="0"
+     aria-label="Dashboard layout. Select a widget, then use the arrow keys to move it and Shift with the arrow keys to resize it.">
+    <div class="designer-grid" data-designer-grid style="@GridStyle">
+        @* The cells behind the widgets, so it's clear where things will snap to. *@
+        @for (int i = 0; i < Rows * DashboardLayoutEngine.Columns; i++)
+        {
+            int column = i % DashboardLayoutEngine.Columns;
+            int row = i / DashboardLayoutEngine.Columns;
+            <div class="designer-cell" style="grid-column: @(column + 1); grid-row: @(row + 1);"></div>
+        }
+
+        @if (_dropTarget is WidgetRect target)
+        {
+            <div class="designer-drop-target" style="@PlacementStyle(target)"></div>
+        }
+
+        @foreach (DashboardWidget widget in Widgets)
+        {
+            WidgetRect rect = DisplayRect(widget);
+            WidgetDescriptor? descriptor = DashboardWidgetCatalog.Get(widget.Type);
+            bool selected = widget.Id == SelectedId;
+            bool locked = descriptor?.Feature is CompanyFeature feature && HiddenFeatures.Contains(feature);
+
+            <div @key="widget.Id"
+                 class="designer-item @(selected ? "is-selected" : null) @(locked ? "is-locked" : null) @(_draggingId == widget.Id ? "is-source" : null)"
+                 id="@($"designer-widget-{widget.Id}")"
+                 data-widget-id="@widget.Id"
+                 data-x="@rect.X" data-y="@rect.Y" data-w="@rect.W" data-h="@rect.H"
+                 style="@PlacementStyle(rect)">
+                <div class="designer-item-content" aria-hidden="true">
+                    <DashboardWidgetHost Widget="widget" Live="false" CompanyId="CompanyId" />
+                </div>
+
+                @* Covers the widget so a press starts a drag instead of pressing the widget's own
+                   buttons, focusing its inputs or selecting its text. *@
+                <div class="designer-item-shield"></div>
+
+                <div class="designer-item-label">
+                    @if (descriptor is not null)
+                    {
+                        <FluentIcon Value="@descriptor.Icon()" Width="14px" />
+                    }
+                    <span>@(string.IsNullOrWhiteSpace(widget.Title) ? DashboardWidgetCatalog.NameOf(widget.Type) : widget.Title)</span>
+                    @if (locked)
+                    {
+                        <span class="designer-item-flag">Not in your plan</span>
+                    }
+                    else if (WidgetSetup.NeedsSetup(widget))
+                    {
+                        <span class="designer-item-flag">Needs setup</span>
+                    }
+                </div>
+
+                <div class="designer-resize designer-resize-e" data-resize-handle="e" title="Drag to resize"></div>
+                <div class="designer-resize designer-resize-s" data-resize-handle="s" title="Drag to resize"></div>
+                <div class="designer-resize designer-resize-se" data-resize-handle="se" title="Drag to resize"></div>
+            </div>
+        }
+    </div>
+
+    @if (Widgets.Count == 0 && _dropTarget is null)
+    {
+        <div class="designer-empty">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Grid())" Width="40px" />
+            <div class="designer-empty-title">Drag a widget here to start</div>
+            <div class="designer-empty-hint">Or tap one in the widget list to add it.</div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required List<DashboardWidget> Widgets { get; set; }
+
+    [Parameter]
+    public int? CompanyId { get; set; }
+
+    [Parameter]
+    public int RowHeight { get; set; } = Dashboard.DefaultRowHeight;
+
+    [Parameter]
+    public Guid? SelectedId { get; set; }
+
+    [Parameter]
+    public EventCallback<Guid?> SelectedIdChanged { get; set; }
+
+    // Raised after every change to the layout or the widget list, with a short description of
+    // what happened ("Moved Clock"), for the unsaved-changes and undo handling on the page.
+    [Parameter]
+    public EventCallback<string> OnChanged { get; set; }
+
+    // Modules the company doesn't have. Their widgets are still shown (so they can be removed),
+    // just marked as not in the plan.
+    [Parameter]
+    public IReadOnlySet<CompanyFeature> HiddenFeatures { get; set; } = new HashSet<CompanyFeature>();
+
+    // The gap between cells in pixels. Must match the grid's CSS gap: the JS turns pointer
+    // positions into cells with it.
+    private const int Gap = 8;
+
+    // Rows of empty space shown below the last widget, so there is always somewhere to drop.
+    private const int SpareRows = 3;
+    private const int MinimumRows = 6;
+
+    private ElementReference _canvasRef;
+    private IJSObjectReference? _module;
+    private IJSObjectReference? _designer;
+    private DotNetObjectReference<DesignerCanvas>? _dotNetRef;
+    private ElementReference? _paletteRef;
+    private int _initialisedRowHeight;
+
+    // Drag state. _baseline is the layout when the drag started; _preview is what it would become
+    // if dropped now; _dropTarget is the outline drawn where the dragged (or new) widget will land.
+    private List<WidgetRect>? _baseline;
+    private Dictionary<Guid, WidgetRect>? _preview;
+    private WidgetRect? _dropTarget;
+    private Guid? _draggingId;
+    private DragKind _dragKind;
+    private WidgetType? _placingType;
+
+    private enum DragKind { None, Move, Resize, Place }
+
+    private static readonly Guid PlacingId = new("00000000-0000-0000-0000-0000000000ff");
+
+    private int Rows => Math.Max(MinimumRows, DashboardLayoutEngine.RowCount(_preview?.Values ?? (IEnumerable<WidgetRect>)CurrentRects()) + SpareRows);
+
+    private string GridStyle => $"--designer-row-height: {RowHeight}px; --designer-gap: {Gap}px; --designer-rows: {Rows};";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/dashboardDesigner.js");
+            _designer = await _module.InvokeAsync<IJSObjectReference>("init", _canvasRef, _paletteRef, _dotNetRef,
+                new { columns = DashboardLayoutEngine.Columns, rowHeight = RowHeight, gap = Gap });
+            _initialisedRowHeight = RowHeight;
+
+            // The page may have handed the palette over while init was still running.
+            if (_paletteRef is ElementReference palette)
+            {
+                await _designer.InvokeVoidAsync("setPalette", palette);
+            }
+
+            return;
+        }
+
+        if (_designer is not null && _initialisedRowHeight != RowHeight)
+        {
+            _initialisedRowHeight = RowHeight;
+            await _designer.InvokeVoidAsync("setRowHeight", RowHeight);
+        }
+    }
+
+    // The palette lives in another pane, so the page hands its element over once it has rendered.
+    public async Task AttachPaletteAsync(ElementReference palette)
+    {
+        _paletteRef = palette;
+
+        if (_designer is not null)
+        {
+            await _designer.InvokeVoidAsync("setPalette", palette);
+        }
+    }
+
+    public async Task FocusAsync()
+    {
+        if (_designer is not null)
+        {
+            await _designer.InvokeVoidAsync("focus");
+        }
+    }
+
+    // ---- Called from dashboardDesigner.js ----
+
+    [JSInvokable]
+    public Task PreviewMoveAsync(Guid id, int x, int y)
+    {
+        BeginDrag(DragKind.Move, id);
+
+        _preview = DashboardLayoutEngine.Move(_baseline!, id, x, y).ToDictionary(r => r.Id);
+        _dropTarget = _preview.GetValueOrDefault(id);
+
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public Task PreviewResizeAsync(Guid id, int w, int h)
+    {
+        BeginDrag(DragKind.Resize, id);
+
+        _preview = DashboardLayoutEngine.Resize(_baseline!, id, w, h).ToDictionary(r => r.Id);
+        _dropTarget = null;
+
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public Task PreviewPlaceAsync(int type, int x, int y, int w, int h)
+    {
+        BeginDrag(DragKind.Place, PlacingId);
+        _placingType = (WidgetType)type;
+
+        if (x < 0)
+        {
+            // Off the canvas: show the layout as it was, with nothing to drop.
+            _preview = _baseline!.ToDictionary(r => r.Id);
+            _dropTarget = null;
+        }
+        else
+        {
+            _preview = DashboardLayoutEngine.Place(_baseline!, new WidgetRect(PlacingId, x, y, w, h), atPosition: true).ToDictionary(r => r.Id);
+            _dropTarget = _preview.GetValueOrDefault(PlacingId);
+        }
+
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public async Task CommitAsync()
+    {
+        if (_preview is null || _draggingId is null)
+        {
+            EndDrag();
+            return;
+        }
+
+        DragKind kind = _dragKind;
+        Guid id = _draggingId.Value;
+        Dictionary<Guid, WidgetRect> preview = _preview;
+        bool changed = _baseline!.Any(r => preview.TryGetValue(r.Id, out WidgetRect after) && after != r);
+        string? description = null;
+        Guid? select = null;
+
+        if (kind == DragKind.Place && _placingType is WidgetType type && preview.TryGetValue(PlacingId, out WidgetRect placed)
+            && DashboardWidgetCatalog.Get(type) is WidgetDescriptor descriptor)
+        {
+            DashboardWidget widget = descriptor.Create();
+            preview.Remove(PlacingId);
+            preview[widget.Id] = placed with { Id = widget.Id };
+            Widgets.Add(widget);
+            description = $"Added {descriptor.Name}";
+            select = widget.Id;
+        }
+        else if (changed)
+        {
+            string name = NameOf(id);
+            description = kind == DragKind.Resize ? $"Resized {name}" : $"Moved {name}";
+        }
+
+        Apply(preview.Values);
+        EndDrag();
+
+        if (description is not null)
+        {
+            await OnChanged.InvokeAsync(description);
+        }
+
+        await SelectAsync(select ?? id);
+    }
+
+    [JSInvokable]
+    public Task CancelAsync()
+    {
+        EndDrag();
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public async Task SelectAsync(Guid? id)
+    {
+        if (SelectedId == id)
+        {
+            StateHasChanged();
+            return;
+        }
+
+        SelectedId = id;
+        await SelectedIdChanged.InvokeAsync(id);
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public async Task AddAsync(int type)
+    {
+        await AddWidgetAsync((WidgetType)type);
+    }
+
+    [JSInvokable]
+    public async Task KeyAsync(string key, bool shift, bool ctrl)
+    {
+        if (key == "Escape")
+        {
+            await SelectAsync(null);
+            return;
+        }
+
+        DashboardWidget? widget = Widgets.FirstOrDefault(w => w.Id == SelectedId);
+
+        if (widget is null)
+        {
+            return;
+        }
+
+        if (ctrl && (key is "d" or "D"))
+        {
+            await DuplicateAsync(widget);
+            return;
+        }
+
+        if (key is "Delete" or "Backspace")
+        {
+            await RemoveAsync(widget);
+            return;
+        }
+
+        (int dx, int dy) = key switch
+        {
+            "ArrowLeft" => (-1, 0),
+            "ArrowRight" => (1, 0),
+            "ArrowUp" => (0, -1),
+            "ArrowDown" => (0, 1),
+            _ => (0, 0)
+        };
+
+        if (dx == 0 && dy == 0)
+        {
+            return;
+        }
+
+        if (shift)
+        {
+            await ResizeAsync(widget, widget.GridW + dx, widget.GridH + dy);
+        }
+        else
+        {
+            await MoveAsync(widget, widget.GridX + dx, widget.GridY + dy);
+        }
+    }
+
+    // ---- Used by the page and the inspector ----
+
+    public async Task AddWidgetAsync(WidgetType type)
+    {
+        if (DashboardWidgetCatalog.Get(type) is not WidgetDescriptor descriptor)
+        {
+            return;
+        }
+
+        DashboardWidget widget = descriptor.Create();
+        List<WidgetRect> layout = DashboardLayoutEngine.Place(CurrentRects(), ToRect(widget), atPosition: false);
+
+        Widgets.Add(widget);
+        Apply(layout);
+
+        await OnChanged.InvokeAsync($"Added {descriptor.Name}");
+        await SelectAsync(widget.Id);
+        await ScrollToAsync(widget.Id);
+    }
+
+    public async Task MoveAsync(DashboardWidget widget, int x, int y)
+    {
+        List<WidgetRect> before = CurrentRects();
+        List<WidgetRect> after = DashboardLayoutEngine.Move(before, widget.Id, x, y);
+
+        if (!before.SequenceEqual(after))
+        {
+            Apply(after);
+            await OnChanged.InvokeAsync($"Moved {NameOf(widget.Id)}");
+            StateHasChanged();
+        }
+    }
+
+    public async Task ResizeAsync(DashboardWidget widget, int w, int h)
+    {
+        List<WidgetRect> before = CurrentRects();
+        List<WidgetRect> after = DashboardLayoutEngine.Resize(before, widget.Id, w, h);
+
+        if (!before.SequenceEqual(after))
+        {
+            Apply(after);
+            await OnChanged.InvokeAsync($"Resized {NameOf(widget.Id)}");
+            StateHasChanged();
+        }
+    }
+
+    public async Task DuplicateAsync(DashboardWidget widget)
+    {
+        DashboardWidget copy = DashboardWidgetCloner.Clone(widget);
+
+        // Straight below the original, pushing anything there down.
+        List<WidgetRect> layout = DashboardLayoutEngine.Place(CurrentRects(), ToRect(copy) with { X = widget.GridX, Y = widget.GridY + widget.GridH }, atPosition: true);
+
+        Widgets.Add(copy);
+        Apply(layout);
+
+        await OnChanged.InvokeAsync($"Duplicated {NameOf(widget.Id)}");
+        await SelectAsync(copy.Id);
+        await ScrollToAsync(copy.Id);
+    }
+
+    public async Task RemoveAsync(DashboardWidget widget)
+    {
+        string name = NameOf(widget.Id);
+        Widgets.Remove(widget);
+
+        if (SelectedId == widget.Id)
+        {
+            await SelectAsync(null);
+        }
+
+        await OnChanged.InvokeAsync($"Removed {name}");
+        StateHasChanged();
+    }
+
+    // Closes every gap: all widgets float up as far as they can.
+    public async Task TidyAsync()
+    {
+        List<WidgetRect> before = CurrentRects();
+        List<WidgetRect> after = DashboardLayoutEngine.Compact(before);
+
+        if (!before.SequenceEqual(after))
+        {
+            Apply(after);
+            await OnChanged.InvokeAsync("Tidied up the layout");
+            StateHasChanged();
+        }
+    }
+
+    private async Task ScrollToAsync(Guid id)
+    {
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.InvokeVoidAsync("scrollToWidget", $"designer-widget-{id}");
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    // ---- Helpers ----
+
+    private void BeginDrag(DragKind kind, Guid id)
+    {
+        if (_baseline is not null && _draggingId == id && _dragKind == kind)
+        {
+            return;
+        }
+
+        _baseline = CurrentRects();
+        _dragKind = kind;
+        _draggingId = id;
+    }
+
+    private void EndDrag()
+    {
+        _baseline = null;
+        _preview = null;
+        _dropTarget = null;
+        _draggingId = null;
+        _placingType = null;
+        _dragKind = DragKind.None;
+    }
+
+    // Where to draw a widget right now. Mid-drag, other widgets show where they'd be pushed to,
+    // but the dragged widget stays in its old cell (the pointer carries it with a transform, and
+    // re-rendering it would reset that) and a resized widget shows its new size straight away.
+    private WidgetRect DisplayRect(DashboardWidget widget)
+    {
+        WidgetRect current = ToRect(widget);
+
+        if (_preview is null || !_preview.TryGetValue(widget.Id, out WidgetRect previewed))
+        {
+            return current;
+        }
+
+        if (_dragKind == DragKind.Move && widget.Id == _draggingId)
+        {
+            return current;
+        }
+
+        return previewed;
+    }
+
+    private List<WidgetRect> CurrentRects() => [.. Widgets.Select(ToRect)];
+
+    private static WidgetRect ToRect(DashboardWidget widget) => new(widget.Id, widget.GridX, widget.GridY, widget.GridW, widget.GridH);
+
+    private void Apply(IEnumerable<WidgetRect> layout)
+    {
+        Dictionary<Guid, DashboardWidget> byId = Widgets.ToDictionary(w => w.Id);
+
+        foreach (WidgetRect rect in layout)
+        {
+            if (byId.TryGetValue(rect.Id, out DashboardWidget? widget))
+            {
+                widget.GridX = rect.X;
+                widget.GridY = rect.Y;
+                widget.GridW = rect.W;
+                widget.GridH = rect.H;
+            }
+        }
+    }
+
+    private string NameOf(Guid id)
+    {
+        DashboardWidget? widget = Widgets.FirstOrDefault(w => w.Id == id);
+
+        return widget is null
+            ? "widget"
+            : string.IsNullOrWhiteSpace(widget.Title) ? DashboardWidgetCatalog.NameOf(widget.Type) : widget.Title;
+    }
+
+    private static string PlacementStyle(WidgetRect rect) =>
+        $"grid-column: {rect.X + 1} / span {rect.W}; grid-row: {rect.Y + 1} / span {rect.H};";
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_designer is not null)
+            {
+                await _designer.InvokeVoidAsync("dispose");
+                await _designer.DisposeAsync();
+            }
+
+            if (_module is not null)
+            {
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+
+        _dotNetRef?.Dispose();
+    }
+}

@@ -1061,5 +1061,20 @@
       "The dashboard editor's arrange buttons now push other widgets out of the way instead of overlapping them, and each widget has a Settings button (no more right-clicking).",
       "A widget that fails to load now shows a short message instead of breaking the whole dashboard."
     ]
+  },
+  {
+    "version": "1.4.33",
+    "releaseDate": "2026-11-22",
+    "summary": "A new drag-and-drop dashboard designer.",
+    "details": [
+      "Drag widgets from a searchable, grouped widget list straight onto a dashboard, or tap one to add it.",
+      "Drag widgets to move them; anything in the way moves down to make room, with an outline showing where it will land.",
+      "Resize widgets by dragging their edges or corner.",
+      "Select a widget to change its title, size, phone visibility and settings in a side panel, and duplicate or remove it.",
+      "Text widgets are now typed in the side panel, and the dashboard updates as you type.",
+      "Keyboard shortcuts: arrow keys move the selected widget, Shift+arrows resize it, Delete removes it and Ctrl+D duplicates it.",
+      "Works with touch on tablets and phones, where the widget list and settings open as panels.",
+      "Choose a row height for each dashboard (compact, comfortable or spacious), and tidy up gaps in one go."
+    ]
   }
 ]

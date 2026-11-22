@@ -151,11 +151,75 @@ public class WidgetDispatchCoverageTests
         Dictionary<WidgetType, Type> mapped = MappedWidgetTypes();
         List<string> problems = [];
 
-        foreach (WidgetDescriptor descriptor in DashboardWidgetCatalog.All.Where(x => x.HasSettings))
+        // Widgets with an inline settings panel don't need a dialog.
+        foreach (WidgetDescriptor descriptor in DashboardWidgetCatalog.All.Where(x => x.HasSettings && x.SettingsComponent is null))
         {
             if (mapped.TryGetValue(descriptor.Type, out Type? clrType) && !Regex.IsMatch(configurator, $@"case {clrType.Name} \w+:"))
             {
                 problems.Add($"{descriptor.Type}: marked HasSettings in the catalog but has no case in DashboardWidgetConfigurator.ConfigureAsync");
+            }
+        }
+
+        Assert.IsEmpty(problems, string.Join('\n', problems));
+    }
+
+    [TestMethod]
+    public void EveryInlineSettingsPanel_TakesTheWidgetAndAnOnChangedCallback()
+    {
+        List<string> problems = [];
+
+        foreach (WidgetDescriptor descriptor in DashboardWidgetCatalog.All.Where(x => x.SettingsComponent is not null))
+        {
+            Type settings = descriptor.SettingsComponent!;
+            PropertyInfo? widget = settings.GetProperty("Widget");
+            PropertyInfo? onChanged = settings.GetProperty("OnChanged");
+
+            if (widget?.GetCustomAttribute<ParameterAttribute>() is null || !widget.PropertyType.IsAssignableFrom(descriptor.Create().GetType()))
+            {
+                problems.Add($"{descriptor.Type}: {settings.Name} has no [Parameter] Widget that takes the widget");
+            }
+
+            if (onChanged?.GetCustomAttribute<ParameterAttribute>() is null || onChanged.PropertyType != typeof(EventCallback<string>))
+            {
+                problems.Add($"{descriptor.Type}: {settings.Name} has no [Parameter] EventCallback<string> OnChanged");
+            }
+        }
+
+        Assert.IsEmpty(problems, string.Join('\n', problems));
+    }
+
+    // Duplicating a widget in the designer copies it by reflection; check every type comes back as
+    // a new widget of the same type with the same settings.
+    [TestMethod]
+    public void EveryWidgetType_CanBeDuplicatedWithItsSettings()
+    {
+        List<string> problems = [];
+
+        foreach (WidgetDescriptor descriptor in DashboardWidgetCatalog.All)
+        {
+            DashboardWidget original = descriptor.Create();
+            original.DashboardId = Guid.NewGuid();
+            original.Title = "Original";
+            original.ShowTitle = true;
+            original.GridX = 3;
+            original.GridW = 5;
+            original.PhoneOrder = 4;
+
+            DashboardWidget copy = Lanyard.App.Components.Dashboards.Designer.DashboardWidgetCloner.Clone(original);
+
+            if (copy.Id == original.Id || copy.GetType() != original.GetType() || copy.Type != original.Type)
+            {
+                problems.Add($"{descriptor.Type}: the copy isn't a new widget of the same type");
+            }
+
+            if (copy.DashboardId != Guid.Empty || copy.PhoneOrder is not null)
+            {
+                problems.Add($"{descriptor.Type}: the copy kept the original's dashboard or phone order");
+            }
+
+            if (copy.Title != "Original" || !copy.ShowTitle || copy.GridW != 5)
+            {
+                problems.Add($"{descriptor.Type}: the copy lost the original's settings");
             }
         }
 

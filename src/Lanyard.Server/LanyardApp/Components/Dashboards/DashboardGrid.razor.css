@@ -31,24 +31,6 @@
     flex-direction: column;
 }
 
-.dashboard-grid-item-tools {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 2px;
-    padding-bottom: 4px;
-}
-
-.dashboard-grid-item-name {
-    flex: 1 1 auto;
-    min-width: 0;
-    font-size: var(--fontSizeBase200);
-    color: var(--colorNeutralForeground3);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
 /* A dashboard can be a user's home screen, so this is the first thing they see on a phone.
    Twelve fixed columns would render a 2-wide widget at a sixth of the screen, so collapse to a
    single stacked column instead, in the dashboard's phone order.

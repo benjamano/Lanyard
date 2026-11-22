@@ -6,7 +6,6 @@
    query, so the designer's phone preview collapses the same way inside a narrow frame. *@
 
 @inject ICompanyFeatureService CompanyFeatures
-@inject DashboardWidgetConfigurator WidgetConfigurator
 
 <div class="dashboard-grid-container">
     <div class="dashboard-grid @(Fit ? "fit-to-screen" : null)" style="@GridStyle">
@@ -18,26 +17,6 @@
                  class="dashboard-grid-item @(widget.HideOnPhone ? "hide-on-phone" : null)"
                  id="@($"widget-{widget.Id}")"
                  style="@GetWidgetStyle(widget, phoneOrder)">
-                @if (!PreviewMode)
-                {
-                    <div class="dashboard-grid-item-tools">
-                        <span class="dashboard-grid-item-name">@DashboardWidgetCatalog.NameOf(widget.Type)</span>
-                        <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" Title="Move left" IconStart="new Icons.Regular.Size16.ArrowLeft()" OnClick="@(() => Move(widget, -1, 0))" />
-                        <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" Title="Move up" IconStart="new Icons.Regular.Size16.ArrowUp()" OnClick="@(() => Move(widget, 0, -1))" />
-                        <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" Title="Move down" IconStart="new Icons.Regular.Size16.ArrowDown()" OnClick="@(() => Move(widget, 0, 1))" />
-                        <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" Title="Move right" IconStart="new Icons.Regular.Size16.ArrowRight()" OnClick="@(() => Move(widget, 1, 0))" />
-                        <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" Title="Narrower" IconStart="new Icons.Regular.Size16.SubtractCircle()" OnClick="@(() => Resize(widget, -1, 0))" />
-                        <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" Title="Wider" IconStart="new Icons.Regular.Size16.AddCircle()" OnClick="@(() => Resize(widget, 1, 0))" />
-                        <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" Title="Shorter" IconStart="new Icons.Regular.Size16.ArrowUpload()" OnClick="@(() => Resize(widget, 0, -1))" />
-                        <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" Title="Taller" IconStart="new Icons.Regular.Size16.ArrowDownload()" OnClick="@(() => Resize(widget, 0, 1))" />
-                        @if (DashboardWidgetCatalog.Get(widget.Type)?.HasSettings == true)
-                        {
-                            <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" Title="Settings" IconStart="new Icons.Regular.Size16.Settings()" OnClick="@(() => ConfigureAsync(widget))" />
-                        }
-                        <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" Title="Remove" IconStart="new Icons.Regular.Size16.Delete()" OnClick="@(() => Remove(widget))" />
-                    </div>
-                }
-
                 <DashboardWidgetHost Widget="widget" Live="PreviewMode" CompanyId="CompanyId" />
             </div>
         }
@@ -48,9 +27,11 @@
     [Parameter]
     public List<DashboardWidget> Widgets { get; set; } = [];
 
-    // True on a live dashboard; false while it's being edited.
+    // True on a live dashboard (home screen, kiosk, the designer's preview): buttons and controls
+    // act, and widgets from modules the company doesn't have are left out. Editing happens in the
+    // designer (Components/Dashboards/Designer), which draws widgets itself.
     [Parameter]
-    public bool PreviewMode { get; set; }
+    public bool PreviewMode { get; set; } = true;
 
     // The company that owns the dashboard. Kiosk displays render without a signed-in user, so
     // nothing filters their data by company - widgets that read company data scope to this.
@@ -66,7 +47,7 @@
     public bool FitToScreen { get; set; }
 
     // Widgets from a module the viewer's company doesn't have (CompanyFeatureCatalog.ForWidget)
-    // are left out when viewing. The editor still shows them so an admin can see and remove them.
+    // are left out when viewing.
     // Until the lookup finishes every module counts as hidden, so a widget the company doesn't have
     // never gets to render (and load its data) in the meantime.
     private IReadOnlySet<CompanyFeature> _hiddenFeatures = System.Enum.GetValues<CompanyFeature>().ToHashSet();
@@ -133,22 +114,6 @@
                 widget.GridW = rect.W;
                 widget.GridH = rect.H;
             }
-        }
-    }
-
-    private void Move(DashboardWidget widget, int dx, int dy) =>
-        ApplyLayout(DashboardLayoutEngine.Move([.. Widgets.Select(ToRect)], widget.Id, widget.GridX + dx, widget.GridY + dy));
-
-    private void Resize(DashboardWidget widget, int dw, int dh) =>
-        ApplyLayout(DashboardLayoutEngine.Resize([.. Widgets.Select(ToRect)], widget.Id, widget.GridW + dw, widget.GridH + dh));
-
-    private void Remove(DashboardWidget widget) => Widgets.Remove(widget);
-
-    private async Task ConfigureAsync(DashboardWidget widget)
-    {
-        if (await WidgetConfigurator.ConfigureAsync(widget))
-        {
-            StateHasChanged();
         }
     }
 
