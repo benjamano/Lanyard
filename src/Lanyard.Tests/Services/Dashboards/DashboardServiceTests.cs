@@ -1982,7 +1982,7 @@ public class DashboardServiceTests
         dashboard.Name = "Hijacked";
 
         Result<bool> save = await service.SaveDashboardAsync(dashboard);
-        Result<bool> create = await service.CreateDashboardAsync(new Dashboard { Name = "New" });
+        Result<Guid> create = await service.CreateDashboardAsync(new Dashboard { Name = "New" });
         Result<bool> delete = await service.DeleteDashboardAsync(dashboard.Id);
         Result<DashboardWidget> saveWidget = await service.SaveWidgetAsync(new DigitalClockWidget { Id = widget.Id, DashboardId = dashboard.Id, Is24HourFormat = true });
 
@@ -2120,5 +2120,118 @@ public class DashboardServiceTests
         Assert.IsTrue(first.IsSuccess, first.Error);
         Assert.IsTrue(second.IsSuccess, second.Error);
         Assert.IsNotNull(dashboard.LastUpdateDate);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_DuplicateDashboard_CopiesEveryWidgetAndSetting()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options, "Manager");
+        Dashboard source = await SeedDashboardAsync(options, "Front desk");
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            Dashboard stored = await seedCtx.Dashboards.SingleAsync();
+            stored.FitToScreen = true;
+            stored.RowHeight = 90;
+            seedCtx.DashboardWidgets.Add(new DigitalClockWidget { DashboardId = source.Id, Is24HourFormat = true, GridX = 3, Title = "Time", ShowTitle = true, PhoneOrder = 1 });
+            seedCtx.DashboardWidgets.Add(new HallOfFameWidget { DashboardId = source.Id, Period = HallOfFamePeriod.ThisWeek, HideOnPhone = true });
+            seedCtx.DashboardWidgets.Add(new GreetingWidget { DashboardId = source.Id, IsActive = false });
+            await seedCtx.SaveChangesAsync();
+        }
+
+        Result<Guid> result = await service.DuplicateDashboardAsync(source.Id);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        Dashboard copy = await ctx.Dashboards.Include(x => x.Widgets).SingleAsync(x => x.Id == result.Data);
+        Assert.AreEqual("Front desk (copy)", copy.Name);
+        Assert.IsTrue(copy.FitToScreen);
+        Assert.AreEqual(90, copy.RowHeight);
+        Assert.HasCount(2, copy.Widgets);
+
+        DigitalClockWidget clock = copy.Widgets.OfType<DigitalClockWidget>().Single();
+        Assert.IsTrue(clock.Is24HourFormat);
+        Assert.AreEqual(3, clock.GridX);
+        Assert.AreEqual("Time", clock.Title);
+        Assert.AreEqual(1, clock.PhoneOrder);
+        Assert.AreEqual(HallOfFamePeriod.ThisWeek, copy.Widgets.OfType<HallOfFameWidget>().Single().Period);
+        Assert.IsTrue(copy.Widgets.OfType<HallOfFameWidget>().Single().HideOnPhone);
+
+        // The original is untouched.
+        Assert.AreEqual(2, await ctx.DashboardWidgets.CountAsync(x => x.DashboardId == source.Id && x.IsActive));
+    }
+
+    [TestMethod]
+    public async Task DashboardService_DuplicateDashboard_IsRefusedForStaff()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options, "Staff");
+        Dashboard source = await SeedDashboardAsync(options);
+
+        Result<Guid> result = await service.DuplicateDashboardAsync(source.Id);
+
+        Assert.IsFalse(result.IsSuccess);
+        await using ApplicationDbContext ctx = new(options);
+        Assert.AreEqual(1, await ctx.Dashboards.CountAsync());
+    }
+
+    [TestMethod]
+    public async Task DashboardService_CreateDashboard_StartsWithTheGivenWidgets()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+
+        Result<Guid> result = await service.CreateDashboardAsync(new Dashboard
+        {
+            Name = "From a template",
+            RowHeight = 160,
+            Widgets = [new GreetingWidget { GridW = 8 }, new MyShiftsWidget { GridY = 1, DaysAhead = 7 }]
+        });
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        Dashboard created = await ctx.Dashboards.Include(x => x.Widgets).SingleAsync();
+        Assert.AreEqual(result.Data, created.Id);
+        Assert.AreEqual(160, created.RowHeight);
+        Assert.HasCount(2, created.Widgets);
+        Assert.AreEqual(7, created.Widgets.OfType<MyShiftsWidget>().Single().DaysAhead);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_GetDashboardCards_ListsLayoutsAndTheProgramsShowingThem()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options, "Scoreboard TV");
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(new ClientZoneLaserScoreboardWidget { DashboardId = dashboard.Id, GridX = 0, GridY = 0, GridW = 8, GridH = 4 });
+            seedCtx.DashboardWidgets.Add(new DigitalClockWidget { DashboardId = dashboard.Id, IsActive = false });
+
+            ProjectionProgramStepTemplateParameter parameter = new() { Id = Guid.NewGuid(), TemplateId = Guid.NewGuid(), Name = Lanyard.Shared.Projection.ProjectionParameterNames.Dashboard, DataType = "string", IsActive = true };
+            ProjectionProgram program = new() { Id = Guid.NewGuid(), Name = "Arena TV", IsActive = true };
+            ProjectionProgram retired = new() { Id = Guid.NewGuid(), Name = "Old TV", IsActive = false };
+            ProjectionProgramStep step = new() { Id = Guid.NewGuid(), ProjectionProgramId = program.Id, TemplateId = parameter.TemplateId, IsActive = true };
+            ProjectionProgramStep retiredStep = new() { Id = Guid.NewGuid(), ProjectionProgramId = retired.Id, TemplateId = parameter.TemplateId, IsActive = true };
+
+            seedCtx.Add(parameter);
+            seedCtx.AddRange(program, retired);
+            seedCtx.AddRange(step, retiredStep);
+            seedCtx.Add(new ProjectionProgramParameterValue { Id = Guid.NewGuid(), ProjectionProgramStepId = step.Id, ParameterId = parameter.Id, Value = dashboard.Id.ToString() });
+            seedCtx.Add(new ProjectionProgramParameterValue { Id = Guid.NewGuid(), ProjectionProgramStepId = retiredStep.Id, ParameterId = parameter.Id, Value = dashboard.Id.ToString() });
+            await seedCtx.SaveChangesAsync();
+        }
+
+        Result<IEnumerable<DashboardCard>> result = await service.GetDashboardCardsAsync();
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        DashboardCard card = result.Data!.Single();
+        Assert.AreEqual("Scoreboard TV", card.Name);
+        Assert.AreEqual(new DashboardCardWidget(WidgetType.ClientZoneLaserScoreboard, 0, 0, 8, 4), card.Widgets.Single());
+        CollectionAssert.AreEqual(new[] { "Arena TV" }, card.ProjectionPrograms.ToArray());
     }
 }

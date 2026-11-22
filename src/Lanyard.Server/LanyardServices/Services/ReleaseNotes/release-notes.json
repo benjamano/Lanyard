@@ -1108,5 +1108,15 @@
       "TV view: see a dashboard full-screen at 1920 × 1080, and turn on Fill the screen so it fits a kiosk TV exactly with no scrolling.",
       "Home screens on phones now follow each dashboard's phone order and hidden widgets."
     ]
+  },
+  {
+    "version": "1.4.37",
+    "releaseDate": "2026-11-22",
+    "summary": "A new Dashboards page, with ready-made layouts and copying.",
+    "details": [
+      "The Dashboards page now shows each dashboard as a card with a picture of its layout, and badges for your home screen, everyone's home screen and dashboards shown on kiosk TVs.",
+      "Start a new dashboard from a ready-made layout: Staff home screen, Manager's morning, Front desk or Arena scoreboard TV. It opens in the designer straight away.",
+      "Duplicate or delete a dashboard from its card."
+    ]
   }
 ]
