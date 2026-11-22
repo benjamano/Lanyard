@@ -707,7 +707,10 @@ namespace Lanyard.Infrastructure.DataAccess
                 entity.Property(x => x.Detail).HasMaxLength(ChecklistRules.MaxTaskDetailLength);
                 entity.Property(x => x.Unit).HasMaxLength(ChecklistRules.MaxUnitLength);
                 entity.HasOne(x => x.Task).WithMany().HasForeignKey(x => x.TaskId).OnDelete(DeleteBehavior.SetNull);
-                entity.HasMany(x => x.Completions).WithOne(x => x.RunItem).HasForeignKey(x => x.RunItemId).OnDelete(DeleteBehavior.Cascade);
+                // Restrict, not Cascade: today's untouched run is rebuilt when its checklist changes
+                // (ChecklistRunStore.EnsureRunsAsync), and a tick saved in the moment between "untouched"
+                // and the rebuild must make the rebuild fail rather than be deleted along with its item.
+                entity.HasMany(x => x.Completions).WithOne(x => x.RunItem).HasForeignKey(x => x.RunItemId).OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<ChecklistCompletion>(entity =>

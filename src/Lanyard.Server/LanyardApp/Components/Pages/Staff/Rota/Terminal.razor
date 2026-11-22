@@ -386,10 +386,12 @@
             roster = result.Data ?? [];
         }
 
-        // The Checklists button only shows when there's something to tick today (and the company
+        // The Checklists button only shows when there's something left to tick today (and the company
         // has checklists switched on - otherwise this fails and the count stays at none).
         Result<Lanyard.Infrastructure.DTO.Checklists.ChecklistDayView> checklists = await _checklistRunService.GetTerminalDayAsync(session.TerminalId, null);
-        checklistCount = checklists.IsSuccess && checklists.Data is not null ? checklists.Data.Runs.Count : 0;
+        checklistCount = checklists.IsSuccess && checklists.Data is not null
+            ? checklists.Data.Runs.Count(x => x.Status != Lanyard.Infrastructure.Enum.ChecklistRunStatus.Complete)
+            : 0;
     }
 
     private void OpenChecklists()

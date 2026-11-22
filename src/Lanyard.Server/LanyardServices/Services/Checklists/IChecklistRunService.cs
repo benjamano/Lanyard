@@ -1,6 +1,7 @@
 using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Checklists;
+using Lanyard.Infrastructure.Enum;
 
 namespace Lanyard.Application.Services.Checklists;
 
@@ -14,8 +15,10 @@ public interface IChecklistRunService
     Task<Result<ChecklistDayView>> GetMyTodayAsync(string userId, LocationScope scope);
 
     // Ticks a task as the signed-in person. A number task needs its reading; a note is only kept on a
-    // tick-with-note task.
-    Task<Result<bool>> CompleteAsync(string userId, LocationScope scope, Guid runItemId, string? note, decimal? reading);
+    // tick-with-note task. method is Phone (the staff page) or Manager (Checklists today, which needs a
+    // Manager or Admin at the location).
+    Task<Result<bool>> CompleteAsync(string userId, LocationScope scope, Guid runItemId, string? note, decimal? reading,
+        ChecklistCompletionMethod method = ChecklistCompletionMethod.Phone);
 
     // Takes a tick back: the person who ticked it, or a Manager/Admin of the location, on the same day.
     Task<Result<bool>> UndoAsync(string userId, LocationScope scope, Guid completionId);
