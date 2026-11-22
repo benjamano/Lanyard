@@ -109,7 +109,7 @@
             @if (!_staffingEnabled)
             {
                 <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
-                    Shift management is switched off for your company, so there are no rota or clocked hours to compare against.
+                    Shift management is switched off for this location, so there are no rota or clocked hours to compare against.
                 </FluentMessageBar>
             }
             else if (!figures.FlagsAvailable && figures.FlagsUnavailableReason is string reason)

@@ -1,3 +1,4 @@
+using Lanyard.Tests.TestUtilities;
 #nullable enable
 
 using Lanyard.Application.Services;
@@ -1049,6 +1050,7 @@ public class AutomationRuleServiceTests
         Location location = new() { CompanyId = companyId, Name = $"Location {companyId}", IsActive = isActive, CreateDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow };
         ctx.Locations.Add(location);
         await ctx.SaveChangesAsync();
+        await TestFeatures.SwitchOnEverywhereAsync(ctx);
 
         return location.Id;
     }
@@ -1529,7 +1531,7 @@ public class AutomationRuleServiceTests
 
         await using (ApplicationDbContext ctx = new(options))
         {
-            ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = 1, Feature = CompanyFeature.Parties, IsEnabled = false });
+            await TestFeatures.SwitchOffForCompanyAsync(ctx, 1, CompanyFeature.Parties);
             await ctx.SaveChangesAsync();
         }
 

@@ -84,17 +84,21 @@ public class DemandInsightsService(
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync(cancellationToken);
 
-            // Admins keep every feature, as on the page itself; a Manager whose company has
+            // Admins keep every feature, as on the page itself; a Manager whose location has
             // Insights switched off is refused here too, so a saved dashboard widget can't reach it.
-            HashSet<CompanyFeature> disabled = await CompanyFeatureQueries.GetDisabledAsync(ctx, companyId);
+            // Switches are per location: one location's figures follow that location's switches,
+            // and the whole company's follow whether any location has the feature.
+            HashSet<CompanyFeature> disabled = requestedLocationId is int switchLocationId
+                ? await CompanyFeatureQueries.GetDisabledForLocationAsync(ctx, switchLocationId, cancellationToken)
+                : await CompanyFeatureQueries.GetDisabledAsync(ctx, companyId);
 
             if (!scope.IsAdmin && disabled.Contains(CompanyFeature.Insights))
             {
-                return Result<InsightsSummary>.Fail("Insights is switched off for your company.");
+                return Result<InsightsSummary>.Fail("Insights is switched off for your location.");
             }
 
-            // Party figures follow the company's switch for everyone, Admins included, the same way
-            // the rota auto-build only adds party staff for a company using Parties.
+            // Party figures follow the switch for everyone, Admins included, the same way the rota
+            // auto-build only adds party staff for a location using Parties.
             bool partiesEnabled = !disabled.Contains(CompanyFeature.Parties);
 
             List<Location> companyLocations = await ctx.Locations

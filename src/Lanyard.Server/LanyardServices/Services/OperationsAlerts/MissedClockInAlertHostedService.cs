@@ -173,6 +173,10 @@ public class MissedClockInAlertHostedService(
             .Select(x => ToCandidate(x.shift, x.CompanyId))
             .ToList();
 
+        // Shift management is switched on per location; shifts at a location without it don't alert.
+        HashSet<int> schedulingLocationIds = await CompanyFeatureQueries.GetEnabledLocationIdsAsync(ctx, CompanyFeature.StaffScheduling, cancellationToken);
+        running = [.. running.Where(x => schedulingLocationIds.Contains(x.LocationId))];
+
         if (running.Count == 0)
         {
             return 0;

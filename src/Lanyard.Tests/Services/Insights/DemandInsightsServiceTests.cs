@@ -1,3 +1,4 @@
+using Lanyard.Tests.TestUtilities;
 using Lanyard.Application.Services.Insights;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Tenancy;
@@ -164,7 +165,7 @@ public class DemandInsightsServiceTests
     private static async Task SwitchOffAsync(Fixture f, CompanyFeature feature)
     {
         await using ApplicationDbContext ctx = new(f.Options);
-        ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = f.Company.Id, Feature = feature, IsEnabled = false });
+        await TestFeatures.SwitchOffForCompanyAsync(ctx, f.Company.Id, feature);
         await ctx.SaveChangesAsync();
     }
 
