@@ -1086,7 +1086,8 @@
     "details": [
       "Select a widget in the dashboard designer to change its settings right there, and see the change on the dashboard straight away.",
       "Kiosk, location and screen choices work the same way on every widget.",
-      "A widget that still needs something choosing, like a kiosk or an automation rule, says so on the dashboard and in its settings."
+      "A widget that still needs something choosing, like a kiosk or an automation rule, says so on the dashboard and in its settings.",
+      "A widget whose kiosk has been removed now says so in its settings, instead of looking unset."
     ]
   }
 ]
