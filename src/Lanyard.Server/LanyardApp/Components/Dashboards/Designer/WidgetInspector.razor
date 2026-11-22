@@ -109,6 +109,14 @@
         </section>
 
         <section class="inspector-section">
+            <h3 class="inspector-section-title">On kiosk TVs</h3>
+            <FluentSwitch Value="@Dashboard.FitToScreen"
+                          ValueChanged="@(v => ChangeAsync(() => Dashboard.FitToScreen = v, v ? "Turned on fill the screen" : "Turned off fill the screen"))"
+                          Label="Fill the screen" />
+            <div class="inspector-hint">Stretches the rows so the whole dashboard fits a kiosk TV with no scrolling. Use the TV view to check it.</div>
+        </section>
+
+        <section class="inspector-section">
             <h3 class="inspector-section-title">Row height</h3>
             <FluentRadioGroup TValue="int" Value="@DensityValue" ValueChanged="@(v => ChangeAsync(() => Dashboard.RowHeight = v, "Changed row height"))"
                               Orientation="Orientation.Vertical" aria-label="Row height">

@@ -1097,5 +1097,16 @@
       "Leaving the designer with unsaved changes now asks first.",
       "If someone else saved the same dashboard while you were editing it, you're told when you save instead of overwriting their work without warning."
     ]
+  },
+  {
+    "version": "1.4.36",
+    "releaseDate": "2026-11-22",
+    "summary": "Lay dashboards out for phones and kiosk TVs.",
+    "details": [
+      "New Desktop, Tablet, Phone and TV views in the dashboard designer.",
+      "Phone view: drag widgets into the order they should appear on phones and hide any you don't need there, with a live phone preview.",
+      "TV view: see a dashboard full-screen at 1920 × 1080, and turn on Fill the screen so it fits a kiosk TV exactly with no scrolling.",
+      "Home screens on phones now follow each dashboard's phone order and hidden widgets."
+    ]
   }
 ]

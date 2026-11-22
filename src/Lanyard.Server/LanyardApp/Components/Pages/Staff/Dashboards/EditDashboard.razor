@@ -27,7 +27,7 @@ else
 {
     <NavigationLock OnBeforeInternalNavigation="ConfirmLeaveAsync" ConfirmExternalNavigation="@HasUnsavedChanges" />
 
-    <div class="designer-page @(_previewing ? "is-previewing" : null) @(SelectedWidget is not null ? "has-selection" : null) @(_paletteOpen ? "palette-open" : null)">
+    <div class="designer-page device-@(_device.ToString().ToLowerInvariant()) @(_previewing || SinglePane ? "is-previewing" : null) @(SelectedWidget is not null ? "has-selection" : null) @(_paletteOpen ? "palette-open" : null)">
         <header class="designer-toolbar">
             <FluentButton Appearance="ButtonAppearance.Subtle"
                           IconStart="@(new Icons.Regular.Size20.ArrowLeft())"
@@ -54,6 +54,19 @@ else
                 </div>
             </div>
 
+            <div class="designer-devices" role="radiogroup" aria-label="Show the dashboard for">
+                @foreach ((DesignerDevice device, string label, Icon icon) in Devices)
+                {
+                    <FluentButton Appearance="@(_device == device ? ButtonAppearance.Primary : ButtonAppearance.Subtle)"
+                                  IconStart="@icon"
+                                  Title="@label"
+                                  role="radio"
+                                  aria-checked="@(_device == device ? "true" : "false")"
+                                  aria-label="@label"
+                                  OnClick="@(() => SetDevice(device))" />
+                }
+            </div>
+
             <div class="designer-toolbar-actions">
                 @if (!_previewing)
                 {
@@ -71,7 +84,10 @@ else
                                       aria-label="Redo"
                                       OnClick="RedoAsync" />
                     </div>
+                }
 
+                @if (!_previewing && !SinglePane)
+                {
                     <FluentButton Class="designer-add-button"
                                   Appearance="ButtonAppearance.Outline"
                                   IconStart="@(new Icons.Regular.Size20.Add())"
@@ -80,12 +96,15 @@ else
                     </FluentButton>
                 }
 
-                <FluentButton Appearance="ButtonAppearance.Outline"
-                              IconStart="@(_previewing ? new Icons.Regular.Size20.Edit() : new Icons.Regular.Size20.Eye())"
-                              Title="@(_previewing ? "Back to editing" : "Preview the dashboard")"
-                              OnClick="TogglePreview">
-                    <span class="designer-hide-phone">@(_previewing ? "Edit" : "Preview")</span>
-                </FluentButton>
+                @if (!SinglePane)
+                {
+                    <FluentButton Appearance="ButtonAppearance.Outline"
+                                  IconStart="@(_previewing ? new Icons.Regular.Size20.Edit() : new Icons.Regular.Size20.Eye())"
+                                  Title="@(_previewing ? "Back to editing" : "Preview the dashboard")"
+                                  OnClick="TogglePreview">
+                        <span class="designer-hide-phone">@(_previewing ? "Edit" : "Preview")</span>
+                    </FluentButton>
+                }
 
                 <FluentButton Appearance="ButtonAppearance.Primary"
                               IconStart="@(new Icons.Regular.Size20.Save())"
@@ -127,7 +146,15 @@ else
             </aside>
 
             <main class="designer-pane designer-canvas-pane" data-designer-scroll>
-                @if (_previewing)
+                @if (_device == DesignerDevice.Phone)
+                {
+                    <PhoneLayoutEditor Widgets="Dashboard.Widgets" CompanyId="Dashboard.CompanyId" RowHeight="Dashboard.RowHeight" OnChanged="OnChangedAsync" />
+                }
+                else if (_device == DesignerDevice.Tv)
+                {
+                    <TvPreview Dashboard="Dashboard" OnChanged="OnChangedAsync" />
+                }
+                else if (_previewing)
                 {
                     <div class="designer-preview">
                         <DashboardGrid Widgets="Dashboard.Widgets" CompanyId="Dashboard.CompanyId" RowHeight="Dashboard.RowHeight" PreviewMode="true" />
@@ -184,6 +211,45 @@ else
 
     private DashboardWidget? SelectedWidget => Dashboard?.Widgets.FirstOrDefault(w => w.Id == _selectedId);
 
+    private enum DesignerDevice { Desktop, Tablet, Phone, Tv }
+
+    private static readonly (DesignerDevice Device, string Label, Icon Icon)[] Devices =
+    [
+        (DesignerDevice.Desktop, "Desktop: edit the layout", new Icons.Regular.Size20.Desktop()),
+        (DesignerDevice.Tablet, "Tablet: edit the layout at tablet width", new Icons.Regular.Size20.Tablet()),
+        (DesignerDevice.Phone, "Phone: order and hide widgets for phones", new Icons.Regular.Size20.Phone()),
+        (DesignerDevice.Tv, "TV: see it full-screen on a kiosk TV", new Icons.Regular.Size20.Video())
+    ];
+
+    private DesignerDevice _device = DesignerDevice.Desktop;
+
+    // Phone and TV are their own full-width views, with no widget list or inspector.
+    private bool SinglePane => _device is DesignerDevice.Phone or DesignerDevice.Tv;
+
+    private void SetDevice(DesignerDevice device)
+    {
+        if (_device == device)
+        {
+            return;
+        }
+
+        bool canvasWasShown = !SinglePane && !_previewing;
+        _device = device;
+        _paletteOpen = false;
+
+        if (SinglePane)
+        {
+            _selectedId = null;
+            _previewing = false;
+        }
+
+        // The canvas is rebuilt when coming back from Phone or TV, so hand it the palette again.
+        if (!canvasWasShown)
+        {
+            _paletteAttached = false;
+        }
+    }
+
     private readonly DesignerHistory _history = new();
 
     // Set once the dashboard is deleted, so leaving the page isn't questioned.
@@ -223,7 +289,8 @@ else
     {
         // The palette is in another pane, so the canvas is told about it once both exist (and
         // again whenever the canvas comes back after a preview).
-        if (!_paletteAttached && _canvas is not null && _palette is not null)
+        // _canvas keeps pointing at the last canvas after it's removed, so only while one is shown.
+        if (!_paletteAttached && !SinglePane && !_previewing && _canvas is not null && _palette is not null)
         {
             _paletteAttached = true;
             await _canvas.AttachPaletteAsync(_palette.Element);
