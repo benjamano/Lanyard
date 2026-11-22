@@ -9,6 +9,8 @@
 @inject IDashboardService DashboardService
 @inject ICompanyFeatureService CompanyFeatures
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
 @if (Dashboard is null)
 {
@@ -132,6 +134,7 @@ else
             </div>
         </header>
 
+        <CascadingValue Value="_textFlusher" IsFixed="true">
         <div class="designer-body">
             <aside class="designer-pane designer-palette-pane" aria-label="Widgets">
                 <div class="designer-pane-header">
@@ -141,7 +144,7 @@ else
                                   OnClick="@(() => _paletteOpen = false)" />
                 </div>
                 <div class="designer-pane-scroll">
-                    <WidgetPalette @ref="_palette" HiddenFeatures="_hiddenFeatures" OnAdd="AddFromKeyboardAsync" />
+                    <WidgetPalette @ref="_palette" HiddenFeatures="_hiddenFeatures" />
                 </div>
             </aside>
 
@@ -169,8 +172,7 @@ else
                                         RowHeight="Dashboard.RowHeight"
                                         HiddenFeatures="_hiddenFeatures"
                                         @bind-SelectedId="_selectedId"
-                                        OnChanged="OnChangedAsync"
-                                        OnShortcut="OnShortcutAsync" />
+                                        OnChanged="OnChangedAsync" />
                     </div>
                 }
             </main>
@@ -189,6 +191,7 @@ else
                 </div>
             </aside>
         </div>
+        </CascadingValue>
     </div>
 }
 
@@ -208,6 +211,8 @@ else
     private DesignerCanvas? _canvas;
     private WidgetPalette? _palette;
     private bool _paletteAttached;
+
+    private readonly TextEditorFlusher _textFlusher = new();
 
     private DashboardWidget? SelectedWidget => Dashboard?.Widgets.FirstOrDefault(w => w.Id == _selectedId);
 
@@ -285,8 +290,19 @@ else
         }
     }
 
+    private IJSObjectReference? _jsModule;
+    private IJSObjectReference? _shortcuts;
+    private DotNetObjectReference<EditDashboard>? _dotNetRef;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/dashboardDesigner.js");
+            _shortcuts = await _jsModule.InvokeAsync<IJSObjectReference>("initShortcuts", _dotNetRef);
+        }
+
         // The palette is in another pane, so the canvas is told about it once both exist (and
         // again whenever the canvas comes back after a preview).
         // _canvas keeps pointing at the last canvas after it's removed, so only while one is shown.
@@ -314,8 +330,15 @@ else
         return Task.CompletedTask;
     }
 
-    private async Task OnShortcutAsync(string name)
+    // Ctrl+S, Ctrl+Z and Ctrl+Shift+Z / Ctrl+Y, from dashboardDesigner.js's initShortcuts.
+    [JSInvokable]
+    public async Task ShortcutAsync(string name)
     {
+        if (Dashboard is null)
+        {
+            return;
+        }
+
         switch (name)
         {
             case "save":
@@ -328,6 +351,10 @@ else
                 await RedoAsync();
                 break;
         }
+
+        // Called from JS, which (unlike a Blazor event) doesn't re-render the page by itself, so
+        // "Unsaved changes" would otherwise stay up after a Ctrl+S save.
+        StateHasChanged();
     }
 
     private Task UndoAsync() => StepHistoryAsync(undo: true);
@@ -386,14 +413,6 @@ else
         }
     }
 
-    private async Task AddFromKeyboardAsync(WidgetType type)
-    {
-        if (_canvas is not null)
-        {
-            await _canvas.AddWidgetAsync(type);
-        }
-    }
-
     private async Task ResizeSelectedAsync((int W, int H) size)
     {
         if (_canvas is not null && SelectedWidget is DashboardWidget widget)
@@ -434,6 +453,9 @@ else
         {
             return;
         }
+
+        // Anything just typed into a Text widget, before its editor has handed it over.
+        await _textFlusher.FlushAsync();
 
         if (string.IsNullOrWhiteSpace(Dashboard.Name))
         {
@@ -516,5 +538,27 @@ else
                 _toastService.ShowError($"Failed to delete dashboard '{Dashboard.Name}': {deleteResult.Error}");
             }
         }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_shortcuts is not null)
+            {
+                await _shortcuts.InvokeVoidAsync("dispose");
+                await _shortcuts.DisposeAsync();
+            }
+
+            if (_jsModule is not null)
+            {
+                await _jsModule.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+
+        _dotNetRef?.Dispose();
     }
 }
