@@ -1028,5 +1028,15 @@
       "New \"A party is or isn't on\" condition for Automation rules: only run a rule while a booked party is on at a location (or in one room), or only while none is. For example, play the party version of the game lights during parties.",
       "Training course sections can no longer contain scripts or other unsafe content. Only the formatting the course editor offers (headings, bold, italic, lists, links and images) is kept, including in sections saved before this change."
     ]
+  },
+  {
+    "version": "1.4.30",
+    "releaseDate": "2026-11-19",
+    "summary": "Projection screens can now welcome the birthday child and show party details.",
+    "details": [
+      "Projection text steps can show the party that's on now: Party welcome (\"Happy 7th birthday, Ava!\"), the birthday child's first name, or what's next (\"Laser tag at 14:30\"). A party shows from 15 minutes before it starts until it ends.",
+      "New Party room setting on each kiosk (Settings, General tab): its screen shows the party in that room. Without one it shows a party at the kiosk's location.",
+      "Names only appear on screens once an Admin turns on \"Show the birthday child's first name on screens\" under Party settings > Venue screens. Only the first name is shown, and offline kiosks never keep it."
+    ]
   }
 ]
