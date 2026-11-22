@@ -48,7 +48,10 @@ export function init(canvas, palette, dotNet, options) {
         if (event.key === 'Escape' && state.drag) {
             event.preventDefault();
             cancelDrag(state);
+            return;
         }
+
+        handleShortcut(state, event);
     };
 
     canvas.addEventListener('pointerdown', onPointerDown);
@@ -424,6 +427,35 @@ function autoScroll(state, event) {
     } else if (event.clientY < rect.top + edge) {
         scroller.scrollTop -= 12;
     }
+}
+
+// Ctrl/Cmd+S saves from anywhere on the page. Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y undo and redo the
+// designer, except while typing in a box, where they stay the browser's own text undo.
+function handleShortcut(state, event) {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey) {
+        return;
+    }
+
+    const key = event.key.toLowerCase();
+
+    if (key === 's') {
+        event.preventDefault();
+        invoke(state, 'ShortcutAsync', 'save');
+        return;
+    }
+
+    if (key !== 'z' && key !== 'y') {
+        return;
+    }
+
+    const target = event.target;
+
+    if (target instanceof Element && target.closest('input, textarea, [contenteditable="true"], .ql-editor')) {
+        return;
+    }
+
+    event.preventDefault();
+    invoke(state, 'ShortcutAsync', key === 'y' || event.shiftKey ? 'redo' : 'undo');
 }
 
 const HANDLED_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Delete', 'Backspace', 'Escape']);

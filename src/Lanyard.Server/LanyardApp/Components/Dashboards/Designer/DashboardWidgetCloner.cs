@@ -18,12 +18,11 @@ public static class DashboardWidgetCloner
 
     public static DashboardWidget Clone(DashboardWidget source)
     {
-        DashboardWidget copy = DashboardWidgetCatalog.Get(source.Type)?.Create()
-            ?? (DashboardWidget)Activator.CreateInstance(source.GetType())!;
+        DashboardWidget copy = NewOfSameType(source);
 
-        foreach (PropertyInfo property in source.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        foreach (PropertyInfo property in CopiedProperties(source.GetType()))
         {
-            if (property.CanRead && property.CanWrite && !NotCopied.Contains(property.Name) && property.GetIndexParameters().Length == 0)
+            if (!NotCopied.Contains(property.Name))
             {
                 property.SetValue(copy, property.GetValue(source));
             }
@@ -33,4 +32,26 @@ public static class DashboardWidgetCloner
 
         return copy;
     }
+
+    // An exact copy, Id and all, for the designer's undo history.
+    public static DashboardWidget CloneExact(DashboardWidget source)
+    {
+        DashboardWidget copy = NewOfSameType(source);
+
+        foreach (PropertyInfo property in CopiedProperties(source.GetType()))
+        {
+            property.SetValue(copy, property.GetValue(source));
+        }
+
+        return copy;
+    }
+
+    // Every public read/write value a widget has, leaving out the navigation back to its dashboard.
+    public static IEnumerable<PropertyInfo> CopiedProperties(Type widgetType) =>
+        widgetType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.CanRead && p.CanWrite && p.GetIndexParameters().Length == 0 && p.Name != nameof(DashboardWidget.Dashboard));
+
+    private static DashboardWidget NewOfSameType(DashboardWidget source) =>
+        DashboardWidgetCatalog.Get(source.Type)?.Create()
+            ?? (DashboardWidget)Activator.CreateInstance(source.GetType())!;
 }

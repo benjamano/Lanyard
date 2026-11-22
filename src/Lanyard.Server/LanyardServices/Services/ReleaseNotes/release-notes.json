@@ -1086,5 +1086,16 @@
       "Kiosk, location and screen choices work the same way on every widget.",
       "A widget that still needs something choosing, like a kiosk or an automation rule, says so on the dashboard and in its settings."
     ]
+  },
+  {
+    "version": "1.4.35",
+    "releaseDate": "2026-11-22",
+    "summary": "Undo, redo and safer saving in the dashboard designer.",
+    "details": [
+      "Undo and redo in the dashboard designer, with toolbar buttons and Ctrl+Z / Ctrl+Shift+Z.",
+      "Press Ctrl+S to save. The designer shows whether there are unsaved changes.",
+      "Leaving the designer with unsaved changes now asks first.",
+      "If someone else saved the same dashboard while you were editing it, you're told when you save instead of overwriting their work without warning."
+    ]
   }
 ]

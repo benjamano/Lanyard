@@ -25,6 +25,8 @@
 }
 else
 {
+    <NavigationLock OnBeforeInternalNavigation="ConfirmLeaveAsync" ConfirmExternalNavigation="@HasUnsavedChanges" />
+
     <div class="designer-page @(_previewing ? "is-previewing" : null) @(SelectedWidget is not null ? "has-selection" : null) @(_paletteOpen ? "palette-open" : null)">
         <header class="designer-toolbar">
             <FluentButton Appearance="ButtonAppearance.Subtle"
@@ -35,24 +37,54 @@ else
 
             <div class="designer-title">
                 <div class="designer-title-name" title="@Dashboard.Name">@(string.IsNullOrWhiteSpace(Dashboard.Name) ? "Untitled dashboard" : Dashboard.Name)</div>
-                <div class="designer-title-meta">@(_previewing ? "Preview: buttons and controls work" : "Designer")</div>
+                <div class="designer-title-meta">
+                    @if (HasUnsavedChanges)
+                    {
+                        <span class="designer-unsaved-dot" aria-hidden="true"></span>
+                        <span>Unsaved changes</span>
+                    }
+                    else
+                    {
+                        <span>All changes saved</span>
+                    }
+                    @if (_previewing)
+                    {
+                        <span> · Preview: buttons and controls work</span>
+                    }
+                </div>
             </div>
 
             <div class="designer-toolbar-actions">
                 @if (!_previewing)
                 {
+                    <div class="designer-history-buttons">
+                        <FluentButton Appearance="ButtonAppearance.Subtle"
+                                      IconStart="@(new Icons.Regular.Size20.ArrowUndo())"
+                                      Disabled="@(!_history.CanUndo)"
+                                      Title="@(_history.UndoLabel is string undo ? $"Undo: {undo} (Ctrl+Z)" : "Undo (Ctrl+Z)")"
+                                      aria-label="Undo"
+                                      OnClick="UndoAsync" />
+                        <FluentButton Appearance="ButtonAppearance.Subtle"
+                                      IconStart="@(new Icons.Regular.Size20.ArrowRedo())"
+                                      Disabled="@(!_history.CanRedo)"
+                                      Title="@(_history.RedoLabel is string redo ? $"Redo: {redo} (Ctrl+Shift+Z)" : "Redo (Ctrl+Shift+Z)")"
+                                      aria-label="Redo"
+                                      OnClick="RedoAsync" />
+                    </div>
+
                     <FluentButton Class="designer-add-button"
                                   Appearance="ButtonAppearance.Outline"
                                   IconStart="@(new Icons.Regular.Size20.Add())"
                                   OnClick="@(() => _paletteOpen = !_paletteOpen)">
-                        Add widget
+                        Add<span class="designer-hide-phone"> widget</span>
                     </FluentButton>
                 }
 
                 <FluentButton Appearance="ButtonAppearance.Outline"
                               IconStart="@(_previewing ? new Icons.Regular.Size20.Edit() : new Icons.Regular.Size20.Eye())"
+                              Title="@(_previewing ? "Back to editing" : "Preview the dashboard")"
                               OnClick="TogglePreview">
-                    @(_previewing ? "Edit" : "Preview")
+                    <span class="designer-hide-phone">@(_previewing ? "Edit" : "Preview")</span>
                 </FluentButton>
 
                 <FluentButton Appearance="ButtonAppearance.Primary"
@@ -110,7 +142,8 @@ else
                                         RowHeight="Dashboard.RowHeight"
                                         HiddenFeatures="_hiddenFeatures"
                                         @bind-SelectedId="_selectedId"
-                                        OnChanged="OnChangedAsync" />
+                                        OnChanged="OnChangedAsync"
+                                        OnShortcut="OnShortcutAsync" />
                     </div>
                 }
             </main>
@@ -151,6 +184,13 @@ else
 
     private DashboardWidget? SelectedWidget => Dashboard?.Widgets.FirstOrDefault(w => w.Id == _selectedId);
 
+    private readonly DesignerHistory _history = new();
+
+    // Set once the dashboard is deleted, so leaving the page isn't questioned.
+    private bool _leaving;
+
+    private bool HasUnsavedChanges => !_leaving && _history.HasUnsavedChanges;
+
     protected override async Task OnInitializedAsync()
     {
         _hiddenFeatures = await CompanyFeatures.GetHiddenFeaturesForCurrentUserAsync();
@@ -169,6 +209,8 @@ else
             {
                 (widget.GridX, widget.GridY, widget.GridW, widget.GridH) = (rect.X, rect.Y, rect.W, rect.H);
             }
+
+            _history.Reset(Dashboard);
         }
         else
         {
@@ -190,6 +232,11 @@ else
 
     private Task OnChangedAsync(string description)
     {
+        if (Dashboard is not null)
+        {
+            _history.Record(Dashboard, description);
+        }
+
         // Adding from the widget sheet (tablet and phone) closes it, to show where the widget went.
         if (description.StartsWith("Added", StringComparison.Ordinal))
         {
@@ -198,6 +245,67 @@ else
 
         StateHasChanged();
         return Task.CompletedTask;
+    }
+
+    private async Task OnShortcutAsync(string name)
+    {
+        switch (name)
+        {
+            case "save":
+                await SaveDashboardAsync();
+                break;
+            case "undo":
+                await UndoAsync();
+                break;
+            case "redo":
+                await RedoAsync();
+                break;
+        }
+    }
+
+    private Task UndoAsync() => StepHistoryAsync(undo: true);
+
+    private Task RedoAsync() => StepHistoryAsync(undo: false);
+
+    private Task StepHistoryAsync(bool undo)
+    {
+        if (Dashboard is null || _previewing)
+        {
+            return Task.CompletedTask;
+        }
+
+        bool moved = undo ? _history.Undo(Dashboard) : _history.Redo(Dashboard);
+
+        // The selected widget may not exist in the state we went back (or forward) to.
+        if (moved && SelectedWidget is null)
+        {
+            _selectedId = null;
+        }
+
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task ConfirmLeaveAsync(LocationChangingContext context)
+    {
+        if (!HasUnsavedChanges)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Leave without saving?";
+            options.Width = "450px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message), "You have changes to this dashboard that haven't been saved. They'll be lost if you leave.");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Leave");
+        });
+
+        if (result.Cancelled || result.Value is not true)
+        {
+            context.PreventNavigation();
+        }
     }
 
     private void TogglePreview()
@@ -251,7 +359,9 @@ else
         }
     }
 
-    private async Task SaveDashboardAsync()
+    private async Task SaveDashboardAsync() => await SaveDashboardAsync(overwrite: false);
+
+    private async Task SaveDashboardAsync(bool overwrite)
     {
         if (Dashboard == null || _saving)
         {
@@ -269,19 +379,41 @@ else
 
         try
         {
-            Result<bool> result = await DashboardService.SaveDashboardAsync(Dashboard);
+            Result<bool> result = await DashboardService.SaveDashboardAsync(Dashboard, overwrite);
 
-            if (!result.IsSuccess)
+            if (result.IsSuccess)
+            {
+                _history.MarkSaved(Dashboard);
+                _toastService.ShowSuccess("Dashboard saved.");
+                return;
+            }
+
+            if (result.Error != Lanyard.Application.Services.DashboardService.ChangedElsewhereMessage)
             {
                 _toastService.ShowError($"Failed to save the dashboard, {result.Error}");
                 return;
             }
-
-            _toastService.ShowSuccess("Dashboard saved.");
         }
         finally
         {
             _saving = false;
+        }
+
+        // Someone else saved since this was opened. Saving now replaces their version, so ask.
+        DialogResult choice = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Someone else saved this dashboard";
+            options.Width = "480px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message),
+                "This dashboard was saved by someone else after you opened it. Saving yours replaces their changes. " +
+                "To keep theirs instead, cancel and reload the page (your changes will be lost).");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Save mine over theirs");
+        });
+
+        if (!choice.Cancelled && choice.Value is true)
+        {
+            await SaveDashboardAsync(overwrite: true);
         }
     }
 
@@ -307,6 +439,7 @@ else
 
             if (deleteResult.IsSuccess)
             {
+                _leaving = true;
                 _toastService.ShowSuccess($"Dashboard '{Dashboard.Name}' deleted successfully.");
 
                 NavigationManager.NavigateTo("/manage/dashboards");

@@ -16,7 +16,13 @@ public interface IDashboardService
     Task<Result<Dashboard>> GetDashboardAsync(Guid dashboardId);
     Task<Result<bool>> DeleteDashboardAsync(Guid dashboardId);
     Task<Result<bool>> CreateDashboardAsync(Dashboard dashboard);
-    Task<Result<bool>> SaveDashboardAsync(Dashboard dashboard);
+    /// <summary>
+    /// Saves a dashboard and its widgets. Fails with <see cref="DashboardService.ChangedElsewhereMessage"/>
+    /// if the stored dashboard was saved after <paramref name="dashboard"/>'s LastUpdateDate,
+    /// unless <paramref name="overwrite"/> is set. On success the dashboard's LastUpdateDate is
+    /// updated to the saved time.
+    /// </summary>
+    Task<Result<bool>> SaveDashboardAsync(Dashboard dashboard, bool overwrite = false);
     Task<Result<DashboardWidget>> SaveWidgetAsync(DashboardWidget widget);
 
     /// <summary>
