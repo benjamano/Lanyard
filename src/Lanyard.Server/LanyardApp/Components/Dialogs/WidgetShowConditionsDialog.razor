@@ -1,0 +1,89 @@
+@using Lanyard.App.Components.Conditions
+@using Lanyard.Infrastructure.DTO
+
+@inject IClientService _clientService
+
+@* "Show only when…" for any dashboard widget: the same conditions as an automation rule's "Only
+   if". Edits the widget in place; the dashboard's own Save stores it, like the other widget settings. *@
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Eye())" />
+            <FluentText Weight="TextWeight.Semibold" Color="Color.Default" Size="@TextSize.Size700">
+                Show @WidgetName only when…
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        @if (_loaded)
+        {
+            <ConditionListEditor Rows="@_rows"
+                                 Clients="@_clients"
+                                 Locations="@_locations"
+                                 Label="Show only when"
+                                 Intro="On a live dashboard or kiosk, the widget only shows while every condition is true. Its space stays empty the rest of the time. Times and days are UK venue time."
+                                 EmptyText="No conditions, so the widget always shows."
+                                 Error="@_error"
+                                 OnChanged="@Validate" />
+        }
+        else
+        {
+            <FluentSpinner />
+        }
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@(!_loaded || _error is not null)" OnClick="@SaveAsync">Done</FluentButton>
+        <FluentButton OnClick="@(() => Dialog.CancelAsync())">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required DashboardWidget Widget { get; set; }
+
+    // The dashboard's company, whose locations can be chosen.
+    [Parameter]
+    public int? CompanyId { get; set; }
+
+    [Parameter]
+    public string WidgetName { get; set; } = "this widget";
+
+    private List<ConditionRow> _rows = [];
+    private IEnumerable<ClientConnectedDTO> _clients = [];
+    private IEnumerable<Location> _locations = [];
+    private string? _error;
+    private bool _loaded;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _rows = ConditionRows.From(WidgetShowConditions.Parse(Widget.ShowConditionsJson));
+
+        Result<IEnumerable<ClientConnectedDTO>> clients = await _clientService.GetClientsAsync();
+        _clients = clients.Data ?? [];
+
+        Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync(CompanyId);
+        _locations = locations.Data ?? [];
+
+        Validate();
+        _loaded = true;
+    }
+
+    private void Validate() =>
+        _error = AutomationRuleService.ValidateConditions(ConditionRows.ToConditions(_rows));
+
+    private async Task SaveAsync()
+    {
+        Validate();
+
+        if (_error is not null)
+        {
+            return;
+        }
+
+        Widget.ShowConditionsJson = WidgetShowConditions.Serialize(ConditionRows.ToConditions(_rows));
+        await Dialog.CloseAsync(true);
+    }
+}

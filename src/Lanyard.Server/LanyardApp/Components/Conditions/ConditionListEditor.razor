@@ -1,0 +1,178 @@
+@using Lanyard.Infrastructure.DTO
+@using Lanyard.Shared.Enum
+
+@* Edits a list of "only if" conditions (time of day, days, a kiosk in a game, a location open or
+   closed). The parent owns Rows, so the list survives the editor being hidden (a wizard step) and
+   the parent decides when to validate and save. Used by automation rules and dashboard widgets. *@
+<div class="conditions-step">
+    @if (Intro is not null)
+    {
+        <FluentText>@Intro</FluentText>
+    }
+
+    @if (Rows.Count == 0)
+    {
+        <div class="conditions-empty">@EmptyText</div>
+    }
+
+    @for (int i = 0; i < Rows.Count; i++)
+    {
+        int index = i;
+        ConditionRow row = Rows[index];
+
+        <div class="condition-row">
+            <div class="condition-row-header">
+                <div class="condition-type">
+                    <FluentSelect TOption="string"
+                                  TValue="string"
+                                  Label="@Label"
+                                  Width="100%"
+                                  Value="@row.ConditionType.ToString()"
+                                  ValueChanged="@((string? type) => ChangeType(row, type))">
+                        <FluentOption Value="@AutomationConditionType.TimeWindow.ToString()">Time of day is between</FluentOption>
+                        <FluentOption Value="@AutomationConditionType.DaysOfWeek.ToString()">Day of week is</FluentOption>
+                        <FluentOption Value="@AutomationConditionType.ClientGameStatus.ToString()">A kiosk is or isn't in a game</FluentOption>
+                        <FluentOption Value="@AutomationConditionType.DuringOpeningHours.ToString()">A location is open or closed</FluentOption>
+                    </FluentSelect>
+                </div>
+                <div class="condition-remove">
+                    <FluentButton IconStart="new Icons.Regular.Size20.Dismiss()"
+                                  Title="Remove condition"
+                                  aria-label="Remove condition"
+                                  OnClick="@(() => RemoveAsync(index))" />
+                </div>
+            </div>
+
+            @if (row.ConditionType == AutomationConditionType.TimeWindow)
+            {
+                <div class="condition-fields">
+                    <AnyTimePicker TValue="TimeOnly" Value="@row.Start" ValueChanged="@((TimeOnly t) => SetAsync(() => row.Start = t))" Label="From" />
+                    <AnyTimePicker TValue="TimeOnly" Value="@row.End" ValueChanged="@((TimeOnly t) => SetAsync(() => row.End = t))" Label="Until" />
+                </div>
+                @if (row.End < row.Start)
+                {
+                    <div class="condition-hint">Runs past midnight, until @row.End.ToString("HH:mm") the next morning.</div>
+                }
+            }
+            else if (row.ConditionType == AutomationConditionType.DaysOfWeek)
+            {
+                <div class="condition-days">
+                    @foreach (DayOfWeek day in AllDays)
+                    {
+                        DayOfWeek capturedDay = day;
+                        <FluentCheckbox Value="@row.Days.Contains(capturedDay)"
+                                        ValueChanged="@((bool ticked) => SetAsync(() => { if (ticked) row.Days.Add(capturedDay); else row.Days.Remove(capturedDay); }))"
+                                        Label="@(capturedDay.ToString()[..3])" />
+                    }
+                </div>
+            }
+            else if (row.ConditionType == AutomationConditionType.DuringOpeningHours)
+            {
+                <div class="condition-fields">
+                    <FluentSelect TOption="Location"
+                                  TValue="string"
+                                  Label="Location"
+                                  Placeholder="Select location"
+                                  Width="100%"
+                                  Items="@Locations"
+                                  OptionText="@(l => l?.Name ?? string.Empty)"
+                                  OptionValue="@(l => l?.Id.ToString())"
+                                  Value="@row.LocationIdString"
+                                  ValueChanged="@((string? value) => SetAsync(() => row.LocationIdString = value ?? string.Empty))" />
+                    <FluentSelect TOption="string"
+                                  TValue="string"
+                                  Label="State"
+                                  Width="100%"
+                                  Value="@(row.Open ? "open" : "closed")"
+                                  ValueChanged="@((string? state) => SetAsync(() => row.Open = state != "closed"))">
+                        <FluentOption Value="@("open")">is open</FluentOption>
+                        <FluentOption Value="@("closed")">is closed</FluentOption>
+                    </FluentSelect>
+                </div>
+                <div class="condition-hint">Uses the location's opening hours, set under Manage &gt; Companies &amp; Locations. A location with no hours set counts as closed.</div>
+            }
+            else
+            {
+                <div class="condition-fields">
+                    <FluentSelect TOption="ClientConnectedDTO"
+                                  TValue="string"
+                                  Label="Kiosk"
+                                  Placeholder="Select kiosk"
+                                  Width="100%"
+                                  Items="@Clients"
+                                  OptionText="@(c => c?.Name ?? string.Empty)"
+                                  OptionValue="@(c => c?.Id.ToString())"
+                                  Value="@row.ClientIdString"
+                                  ValueChanged="@((string? value) => SetAsync(() => row.ClientIdString = value ?? string.Empty))" />
+                    <FluentSelect TOption="string"
+                                  TValue="string"
+                                  Label="State"
+                                  Width="100%"
+                                  Value="@(row.InGame ? "in" : "out")"
+                                  ValueChanged="@((string? state) => SetAsync(() => row.InGame = state == "in"))">
+                        <FluentOption Value="@("in")">is in a game</FluentOption>
+                        <FluentOption Value="@("out")">isn't in a game</FluentOption>
+                    </FluentSelect>
+                </div>
+            }
+        </div>
+    }
+
+    <div>
+        <FluentButton Appearance="ButtonAppearance.Outline"
+                      IconStart="new Icons.Regular.Size20.Add()"
+                      OnClick="AddAsync">
+            Add condition
+        </FluentButton>
+    </div>
+
+    @if (Error is string error)
+    {
+        <FluentText Color="Color.Error">@error</FluentText>
+    }
+</div>
+
+@code {
+    private static readonly List<DayOfWeek> AllDays = [DayOfWeek.Sunday, DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday];
+
+    // The parent's list, edited in place.
+    [Parameter, EditorRequired]
+    public required List<ConditionRow> Rows { get; set; }
+
+    [Parameter]
+    public IEnumerable<ClientConnectedDTO> Clients { get; set; } = [];
+
+    [Parameter]
+    public IEnumerable<Location> Locations { get; set; } = [];
+
+    // The dropdown's label: "Only if" for a rule, "Show only when" for a widget.
+    [Parameter]
+    public string Label { get; set; } = "Only if";
+
+    [Parameter]
+    public string? Intro { get; set; }
+
+    [Parameter]
+    public string EmptyText { get; set; } = "No conditions.";
+
+    // The parent's validation message, shown under the list.
+    [Parameter]
+    public string? Error { get; set; }
+
+    // Raised after any change, so the parent can re-validate.
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private Task SetAsync(Action change)
+    {
+        change();
+        return OnChanged.InvokeAsync();
+    }
+
+    private Task ChangeType(ConditionRow row, string? type) =>
+        SetAsync(() => row.ConditionType = Enum.TryParse(type, out AutomationConditionType parsed) ? parsed : AutomationConditionType.TimeWindow);
+
+    private Task AddAsync() => SetAsync(() => Rows.Add(new ConditionRow()));
+
+    private Task RemoveAsync(int index) => SetAsync(() => Rows.RemoveAt(index));
+}

@@ -53,6 +53,10 @@ public class DashboardWidget
     public int GridH { get; set; }
 
     public bool IsActive { get; set; }
+
+    // "Show only when…": conditions (as automation rules use) that must all be true for the widget
+    // to show on a live dashboard. Null means always shown. See WidgetShowConditions.
+    public string? ShowConditionsJson { get; set; }
 }
 
 public class DigitalClockWidget : DashboardWidget

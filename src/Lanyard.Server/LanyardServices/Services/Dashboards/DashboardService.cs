@@ -287,6 +287,7 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             // IsActive is deliberately not copied - this saves a widget's configuration, and only
             // SaveDashboardAsync/DeleteDashboardAsync own the soft-delete flag.
             existingWidget.Title = widget.Title?.Trim();
+            existingWidget.ShowConditionsJson = widget.ShowConditionsJson;
             existingWidget.GridX = widget.GridX;
             existingWidget.GridY = widget.GridY;
             existingWidget.GridW = widget.GridW;
@@ -794,12 +795,14 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         UpdateCommonMutableWidgetProperties(copy, widget);
         copy.DashboardId = dashboardId;
         copy.IsActive = true;
+        copy.ShowConditionsJson = widget.ShowConditionsJson;
 
         return copy;
     }
 
     private static void UpdateCommonMutableWidgetProperties(DashboardWidget target, DashboardWidget source)
     {
+        target.ShowConditionsJson = source.ShowConditionsJson;
         target.Title = source.Title?.Trim();
         target.GridX = source.GridX;
         target.GridY = source.GridY;

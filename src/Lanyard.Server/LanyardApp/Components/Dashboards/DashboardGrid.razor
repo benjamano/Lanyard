@@ -7,6 +7,9 @@
 @inject IProjectionProgramService ProjectionProgramService
 @inject IAutomationRuleService AutomationRuleService
 @inject ICompanyFeatureService CompanyFeatures
+@inject IWidgetVisibilityService WidgetVisibilityService
+@inject ILaserGameStatusStore LaserGameStatusStore
+@implements IDisposable
 
 <FluentCard Appearance="@CardAppearance.Subtle" Padding="@Padding.Horizontal0">
     <div class="dashboard-grid">
@@ -23,13 +26,22 @@
                             HorizontalAlignment="@HorizontalAlignment.Center">
                     @if (!PreviewMode)
                     {
-                        <FluentStack HorizontalAlignment="@HorizontalAlignment.Center">
+                        <FluentStack HorizontalAlignment="@HorizontalAlignment.Center" HorizontalGap="4" VerticalAlignment="VerticalAlignment.Center">
                             <FluentButton Appearance="@buttonAppearance" 
                                             IconStart="new Icons.Regular.Size16.ArrowUp()" 
                                             OnClick="@(() => MoveWidgetUp(widget))"/>
                             <FluentButton Appearance="@buttonAppearance" 
                                             IconStart="new Icons.Regular.Size16.Delete()" 
                                             OnClick="@(() => RemoveWidget(widget))"/>
+                            <FluentButton Appearance="@buttonAppearance"
+                                            IconStart="new Icons.Regular.Size16.Eye()"
+                                            Title="Show only when…"
+                                            aria-label="@($"Show {widget.Title ?? WidgetName(widget)} only when…")"
+                                            OnClick="@(() => ShowConditionsDialogAsync(widget))"/>
+                            @if (WidgetShowConditions.Summary(widget.ShowConditionsJson) is string onlyWhen)
+                            {
+                                <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative">Only @onlyWhen</FluentBadge>
+                            }
                         </FluentStack>
                     }
                     <FluentStack Orientation="@Orientation.Horizontal" 
@@ -387,20 +399,137 @@
     // never gets to render (and load its data) in the meantime.
     private IReadOnlySet<CompanyFeature> _hiddenFeatures = System.Enum.GetValues<CompanyFeature>().ToHashSet();
 
+    // Live views also leave out widgets whose "Show only when…" conditions don't hold right now.
+    // A hidden widget keeps its grid position (every widget is placed explicitly), so its space
+    // stays empty rather than the dashboard reflowing. The editor always shows every widget.
     private IEnumerable<DashboardWidget> VisibleWidgets => PreviewMode
-        ? Widgets.Where(w => CompanyFeatureCatalog.ForWidget(w.Type) is not CompanyFeature feature || !_hiddenFeatures.Contains(feature))
+        ? Widgets.Where(w => (CompanyFeatureCatalog.ForWidget(w.Type) is not CompanyFeature feature || !_hiddenFeatures.Contains(feature))
+            && WidgetVisibilityService.IsShown(w, CompanyId ?? -1, _visibilityLookups, _visibilityNowUtc))
         : Widgets;
+
+    private static readonly TimeSpan VisibilityRecheck = TimeSpan.FromSeconds(30);
+
+    private WidgetVisibilityLookups _visibilityLookups = WidgetVisibilityLookups.Empty;
+    private DateTime _visibilityNowUtc = DateTime.UtcNow;
+    private PeriodicTimer? _visibilityTimer;
+    private CancellationTokenSource? _visibilityCancellation;
+    private bool _watchingGames;
 
     protected override async Task OnInitializedAsync()
     {
         _hiddenFeatures = await CompanyFeatures.GetHiddenFeaturesForCurrentUserAsync();
     }
 
-    protected override void OnParametersSet()
+    private bool AnyConditions => Widgets.Any(w => !string.IsNullOrWhiteSpace(w.ShowConditionsJson));
+
+    private async Task RefreshVisibilityAsync()
+    {
+        _visibilityNowUtc = DateTime.UtcNow;
+
+        if (!PreviewMode || !AnyConditions)
+        {
+            return;
+        }
+
+        Result<WidgetVisibilityLookups> lookups = await WidgetVisibilityService.LoadAsync(Widgets);
+        _visibilityLookups = lookups.Data ?? WidgetVisibilityLookups.Empty;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        // Time-of-day conditions change on their own, so a live dashboard (a kiosk runs for days)
+        // re-checks every 30 seconds, and straight away when a laser game starts or stops.
+        _visibilityCancellation = new CancellationTokenSource();
+        _visibilityTimer = new PeriodicTimer(VisibilityRecheck);
+        _ = RecheckLoopAsync(_visibilityTimer, _visibilityCancellation.Token);
+
+        LaserGameStatusStore.OnStatusUpdated += OnGameStatusUpdated;
+        _watchingGames = true;
+
+        await Task.CompletedTask;
+    }
+
+    private async Task RecheckLoopAsync(PeriodicTimer timer, CancellationToken token)
+    {
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                if (!PreviewMode || !AnyConditions)
+                {
+                    continue;
+                }
+
+                await InvokeAsync(async () =>
+                {
+                    await RefreshVisibilityAsync();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+        {
+            // The dashboard closed.
+        }
+    }
+
+    private void OnGameStatusUpdated(Lanyard.Shared.DTO.LaserGameStatusDTO status)
+    {
+        if (!PreviewMode || !Widgets.Any(w => WidgetShowConditions.Parse(w.ShowConditionsJson).Any(c => c.ConditionType == AutomationConditionType.ClientGameStatus)))
+        {
+            return;
+        }
+
+        _ = InvokeAsync(() =>
+        {
+            _visibilityNowUtc = DateTime.UtcNow;
+            StateHasChanged();
+        });
+    }
+
+    private async Task ShowConditionsDialogAsync(DashboardWidget widget)
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<WidgetShowConditionsDialog>(options =>
+        {
+            options.Modal = true;
+            options.Width = "560px";
+            options.Parameters.Add(nameof(WidgetShowConditionsDialog.Widget), widget);
+            options.Parameters.Add(nameof(WidgetShowConditionsDialog.CompanyId), CompanyId);
+            options.Parameters.Add(nameof(WidgetShowConditionsDialog.WidgetName), widget.Title ?? WidgetName(widget));
+        });
+
+        if (!result.Cancelled)
+        {
+            StateHasChanged();
+        }
+    }
+
+    // A readable name for a widget type: "ChecklistsToday" becomes "Checklists Today".
+    private static string WidgetName(DashboardWidget widget) =>
+        System.Text.RegularExpressions.Regex.Replace(widget.Type.ToString(), "(?<=[a-z])(?=[A-Z])", " ");
+
+    public void Dispose()
+    {
+        if (_watchingGames)
+        {
+            LaserGameStatusStore.OnStatusUpdated -= OnGameStatusUpdated;
+        }
+
+        _visibilityCancellation?.Cancel();
+        _visibilityCancellation?.Dispose();
+        _visibilityTimer?.Dispose();
+    }
+
+    protected override async Task OnParametersSetAsync()
     {
         SetInvalidGridPositionsToTheNextFreePosition();
 
-        base.OnParametersSet();
+        await RefreshVisibilityAsync();
     }
 
     private void SetInvalidGridPositionsToTheNextFreePosition()
