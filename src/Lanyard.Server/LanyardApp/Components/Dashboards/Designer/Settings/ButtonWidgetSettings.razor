@@ -1,0 +1,101 @@
+@inherits WidgetSettingsBase<ButtonWidget>
+
+<div class="widget-settings">
+    <FluentTextInput Value="@W.Label" ValueChanged="@(v => SetAsync(() => W.Label = v, "Changed the label"))"
+                     Immediate="true" Label="Label" Placeholder="Button label" Width="100%" />
+
+    <FluentSelect TOption="ButtonAppearance" TValue="string" Items="@Appearances"
+                  OptionText="@(a => a.ToString())" OptionValue="@(a => a.ToString())"
+                  Label="Style" Width="100%" Value="@W.Appearance.ToString()"
+                  ValueChanged="@((string? v) => SetAsync(() => W.Appearance = Enum.TryParse(v, out ButtonAppearance a) ? a : ButtonAppearance.Primary, "Changed the style"))" />
+
+    <FluentSelect TOption="ActionOption" TValue="string" Items="@Actions"
+                  OptionText="@(a => a.Label)" OptionValue="@(a => ((int)a.Action).ToString())"
+                  Label="When pressed" Width="100%"
+                  Value="@(((int)(W.ActionType ?? ButtonActionType.Unknown)).ToString())"
+                  ValueChanged="OnActionChangedAsync" />
+
+    @if (W.ActionType is ButtonActionType action && action.IsProjectionControlAction())
+    {
+        <KioskPicker Value="@W.ClientId" ValueChanged="@(v => SetAsync(() => { W.ClientId = v; W.DisplayIndex = null; }, "Chose a kiosk"))" />
+
+        @if (action == ButtonActionType.TriggerProjectionProgram)
+        {
+            @if (_programs is null)
+            {
+                <FluentSkeleton Height="56px" Width="100%" />
+            }
+            else
+            {
+                <FluentSelect TOption="ProjectionProgram" TValue="string" Items="@_programs"
+                              OptionText="@(p => p?.Name ?? string.Empty)" OptionValue="@(p => p?.Id.ToString())"
+                              Label="Projection program" Placeholder="Choose a program" Width="100%"
+                              Value="@(W.ProjectionProgramId?.ToString() ?? string.Empty)"
+                              ValueChanged="@((string? v) => SetAsync(() => W.ProjectionProgramId = Guid.TryParse(v, out Guid id) ? id : null, "Chose a program"))" />
+            }
+        }
+
+        @if (action == ButtonActionType.SkipProjectionProgramStep)
+        {
+            <FluentSelect TOption="string" TValue="string" Label="Direction" Width="100%"
+                          Value="@(W.SkipToPreviousStep ? "previous" : "next")"
+                          ValueChanged="@((string? v) => SetAsync(() => W.SkipToPreviousStep = v == "previous", "Changed the direction"))">
+                <FluentOption TValue="string" Value="@("next")">Next step</FluentOption>
+                <FluentOption TValue="string" Value="@("previous")">Previous step</FluentOption>
+            </FluentSelect>
+        }
+
+        <ScreenPicker ClientId="@W.ClientId" Value="@W.DisplayIndex"
+                      ValueChanged="@(v => SetAsync(() => W.DisplayIndex = v, "Chose a screen"))" />
+    }
+    <div class="widget-settings-note">The button only works for Admins and Managers.</div>
+</div>
+@code {
+    [Inject]
+    private IProjectionProgramService ProjectionProgramService { get; set; } = default!;
+
+    private record ActionOption(ButtonActionType Action, string Label);
+
+    private static readonly ActionOption[] Actions =
+    [
+        new(ButtonActionType.Unknown, "Do nothing"),
+        new(ButtonActionType.TriggerProjectionProgram, "Start a projection program"),
+        new(ButtonActionType.PauseProjectionProgram, "Pause the projection"),
+        new(ButtonActionType.ResumeProjectionProgram, "Resume the projection"),
+        new(ButtonActionType.SkipProjectionProgramStep, "Skip a projection step"),
+        new(ButtonActionType.StopProjectionProgram, "Stop the projection")
+    ];
+
+    private static readonly ButtonAppearance[] Appearances =
+        [ButtonAppearance.Primary, ButtonAppearance.Default, ButtonAppearance.Outline, ButtonAppearance.Subtle, ButtonAppearance.Transparent];
+
+    private List<ProjectionProgram>? _programs;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<IEnumerable<ProjectionProgram>> result = await ProjectionProgramService.GetProjectionProgramsAsync();
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Couldn't load the projection programs: {result.Error}");
+        }
+
+        _programs = [.. (result.Data ?? []).OrderBy(p => p.Name)];
+    }
+
+    private Task OnActionChangedAsync(string? value) => SetAsync(() =>
+    {
+        W.ActionType = int.TryParse(value, out int parsed) ? (ButtonActionType)parsed : ButtonActionType.Unknown;
+
+        // Clear what only another action reads, so switching away doesn't leave stale settings.
+        if (W.ActionType != ButtonActionType.TriggerProjectionProgram)
+        {
+            W.ProjectionProgramId = null;
+        }
+
+        if (W.ActionType != ButtonActionType.SkipProjectionProgramStep)
+        {
+            W.SkipToPreviousStep = false;
+        }
+    }, "Changed what the button does");
+}

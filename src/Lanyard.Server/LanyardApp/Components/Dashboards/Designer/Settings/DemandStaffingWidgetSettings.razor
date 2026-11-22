@@ -1,0 +1,10 @@
+@using Lanyard.Infrastructure.DTO.Insights
+@inherits WidgetSettingsBase<DemandStaffingWidget>
+
+<div class="widget-settings">
+    <LocationPicker Value="@W.LocationId" ValueChanged="@(v => SetAsync(() => W.LocationId = v, "Changed the location"))"
+                    NoneText="The location I signed in to" />
+    <div class="widget-settings-note">Managers always see the location they signed in to. The location set here only applies when an Admin is viewing. Staff and signed-out screens see nothing.</div>
+    <FluentNumberInput TValue="int" Value="@W.RangeDays" ValueChanged="@(v => SetAsync(() => W.RangeDays = Math.Clamp(v, DemandStaffingWidget.MinRangeDays, InsightsQuery.MaxRangeDays), "Changed the look-back period"))"
+                       Min="DemandStaffingWidget.MinRangeDays" Max="InsightsQuery.MaxRangeDays" Label="Look back over (days, ending yesterday)" />
+</div>

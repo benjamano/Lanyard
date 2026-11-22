@@ -13,7 +13,7 @@ public enum ButtonActionType
 public static class ButtonActionTypeExtensions
 {
     // Single source of truth for "does this action control a projection program" - both
-    // RenderButtonWidget.razor's security gate and ConfigureButtonDialog.razor's field
+    // RenderButtonWidget.razor's security gate and ButtonWidgetSettings.razor's field
     // visibility read this same set, so a new action type can't update one and silently
     // miss the other.
     private static readonly HashSet<ButtonActionType> ProjectionControlActionTypes =

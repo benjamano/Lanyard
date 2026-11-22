@@ -2,8 +2,6 @@
    and settings), or the dashboard's own details when nothing is selected. Every change goes
    through OnChanged so the page knows the dashboard has unsaved changes. *@
 
-@inject DashboardWidgetConfigurator WidgetConfigurator
-
 <div class="widget-inspector">
     @if (Widget is not null && Descriptor is not null)
     {
@@ -64,20 +62,11 @@
                           Label="Show this widget on phones" />
         </section>
 
-        @if (Descriptor.SettingsComponent is not null || Descriptor.HasSettings)
+        @if (Descriptor.SettingsComponent is Type settings)
         {
             <section class="inspector-section">
                 <h3 class="inspector-section-title">Settings</h3>
-                @if (Descriptor.SettingsComponent is Type settings)
-                {
-                    <DynamicComponent @key="Widget.Id" Type="settings" Parameters="@SettingsParameters" />
-                }
-                else
-                {
-                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Settings())" OnClick="OpenSettingsAsync">
-                        Widget settings…
-                    </FluentButton>
-                }
+                <DynamicComponent @key="Widget.Id" Type="settings" Parameters="@SettingsParameters" />
             </section>
         }
 
@@ -186,13 +175,5 @@
     {
         change();
         await OnChanged.InvokeAsync(description);
-    }
-
-    private async Task OpenSettingsAsync()
-    {
-        if (Widget is not null && await WidgetConfigurator.ConfigureAsync(Widget))
-        {
-            await OnChanged.InvokeAsync($"Changed {Descriptor?.Name ?? "widget"} settings");
-        }
     }
 }

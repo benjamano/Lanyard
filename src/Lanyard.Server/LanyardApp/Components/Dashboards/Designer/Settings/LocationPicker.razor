@@ -1,0 +1,80 @@
+@* Picks the location a staff widget shows. Who gets to pick depends on the widget: some let a
+   Manager choose only their own location, others only take a location from an Admin (a Manager
+   always sees where they signed in). *@
+
+@if (_options is not null && _options.Count > 1)
+{
+    <FluentSelect TOption="LocationOption"
+                  TValue="string"
+                  Items="@_options"
+                  OptionText="@(x => x.Name)"
+                  OptionValue="@(x => x.Value)"
+                  Label="Location"
+                  Value="@(Value?.ToString() ?? NoneValue)"
+                  ValueChanged="OnChangedAsync"
+                  Width="100%" />
+}
+
+@code {
+    [Parameter]
+    public int? Value { get; set; }
+
+    [Parameter]
+    public EventCallback<int?> ValueChanged { get; set; }
+
+    // The first option, meaning no location is stored ("Whoever is viewing").
+    [Parameter, EditorRequired]
+    public required string NoneText { get; set; }
+
+    // True: an Admin picks any location and a Manager their own. False: only an Admin picks;
+    // a Manager gets no picker at all, because the widget always shows them their own location.
+    [Parameter]
+    public bool ManagersPickTheirOwn { get; set; }
+
+    private const string NoneValue = "none";
+
+    private record LocationOption(string Value, string Name);
+
+    private List<LocationOption>? _options;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+        bool isAdmin = scope.Data?.IsAdmin == true;
+        List<Location> pickable = [];
+
+        if (isAdmin || ManagersPickTheirOwn)
+        {
+            Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync();
+            pickable = [.. (locations.Data ?? [])
+                .Where(x => isAdmin || x.Id == scope.Data?.LocationId)
+                .OrderBy(x => x.GetDisplayName())];
+        }
+
+        _options =
+        [
+            new(NoneValue, NoneText),
+            .. pickable.Select(x => new LocationOption(x.Id.ToString(), x.GetDisplayName())),
+            // Keep an already-saved location selectable even if this person couldn't normally pick it.
+            .. Value is int saved && pickable.All(x => x.Id != saved)
+                ? [new LocationOption(saved.ToString(), "The location already set")]
+                : Array.Empty<LocationOption>()
+        ];
+
+        // Nobody to choose between: hide the picker rather than show a one-item list.
+        if (pickable.Count == 0 && Value is null)
+        {
+            _options = [];
+        }
+    }
+
+    private async Task OnChangedAsync(string? value)
+    {
+        int? locationId = int.TryParse(value, out int id) ? id : null;
+
+        if (locationId != Value)
+        {
+            await ValueChanged.InvokeAsync(locationId);
+        }
+    }
+}

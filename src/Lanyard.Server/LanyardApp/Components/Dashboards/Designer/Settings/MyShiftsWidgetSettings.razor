@@ -1,0 +1,10 @@
+@inherits WidgetSettingsBase<MyShiftsWidget>
+
+<div class="widget-settings">
+    <div class="widget-settings-note">Each person sees their own shifts.</div>
+    <FluentNumberInput TValue="int" Value="@W.DaysAhead" ValueChanged="@(v => SetAsync(() => W.DaysAhead = Math.Clamp(v, 1, MyShiftsWidget.MaxDaysAhead), "Changed how far ahead shifts show"))"
+                       Min="1" Max="MyShiftsWidget.MaxDaysAhead" Label="Days ahead to show" />
+    <FluentNumberInput TValue="int" Value="@W.MaxItems" ValueChanged="@(v => SetAsync(() => W.MaxItems = Math.Clamp(v, 1, MyShiftsWidget.MaxSupportedItems), "Changed how many shifts show"))"
+                       Min="1" Max="MyShiftsWidget.MaxSupportedItems" Label="Most shifts to show" />
+    <FluentSwitch Value="@W.ShowTimeOff" ValueChanged="@(v => SetAsync(() => W.ShowTimeOff = v, v ? "Included time off" : "Left out time off"))" Label="Include time off" />
+</div>

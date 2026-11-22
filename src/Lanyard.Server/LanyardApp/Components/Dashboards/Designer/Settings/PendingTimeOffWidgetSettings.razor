@@ -1,0 +1,7 @@
+@inherits WidgetSettingsBase<PendingTimeOffWidget>
+
+<div class="widget-settings">
+    <div class="widget-settings-note">Shows the requests waiting at the location the manager viewing it signed in to.</div>
+    <FluentNumberInput TValue="int" Value="@W.MaxItems" ValueChanged="@(v => SetAsync(() => W.MaxItems = Math.Clamp(v, 1, PendingTimeOffWidget.MaxSupportedItems), "Changed how many requests show"))"
+                       Min="1" Max="PendingTimeOffWidget.MaxSupportedItems" Label="Most requests to show" />
+</div>

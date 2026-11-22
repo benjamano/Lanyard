@@ -1076,5 +1076,15 @@
       "Works with touch on tablets and phones, where the widget list and settings open as panels.",
       "Choose a row height for each dashboard (compact, comfortable or spacious), and tidy up gaps in one go."
     ]
+  },
+  {
+    "version": "1.4.34",
+    "releaseDate": "2026-11-22",
+    "summary": "Every dashboard widget's settings are now in the designer's side panel, with no pop-ups.",
+    "details": [
+      "Select a widget in the dashboard designer to change its settings right there, and see the change on the dashboard straight away.",
+      "Kiosk, location and screen choices work the same way on every widget.",
+      "A widget that still needs something choosing, like a kiosk or an automation rule, says so on the dashboard and in its settings."
+    ]
   }
 ]
