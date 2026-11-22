@@ -312,4 +312,33 @@ public class ChecklistTerminalTests
         Assert.IsTrue(managerView.CanTick);
         Assert.IsTrue((await w.Service.UndoOnTerminalAsync(w.IpswichTerminal.Id, manager, managerView.Items[0].Tick!.CompletionId)).IsSuccess);
     }
+
+    [TestMethod]
+    public async Task People_LeaveOutSomeoneOnTheRotaHereWhoIsntAMember()
+    {
+        // The PIN check needs membership, so listing them would only lead to "You don't work here".
+        World w = await SeedAsync();
+        UserProfile cover = await SchedulingTestHelpers.SeedUserAsync(w.Options, w.Wisbech, "Cover");
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            ctx.Shifts.Add(new Shift
+            {
+                Id = Guid.NewGuid(),
+                LocationId = w.Ipswich.Id,
+                UserId = cover.Id,
+                StartUtc = Now.AddHours(-1),
+                EndUtc = Now.AddHours(4),
+                IsActive = true,
+                PublishedDateUtc = Now.AddDays(-2),
+                CreateByUserId = "manager"
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<List<TerminalChecklistPerson>> people = await w.Service.GetTerminalPeopleAsync(w.IpswichTerminal.Id);
+
+        Assert.IsTrue(people.IsSuccess, people.Error);
+        Assert.IsFalse(people.Data!.Any(x => x.UserId == cover.Id));
+    }
 }
