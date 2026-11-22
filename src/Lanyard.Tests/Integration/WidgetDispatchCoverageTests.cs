@@ -1,9 +1,12 @@
+using System.Reflection;
 using System.Text.RegularExpressions;
+using Lanyard.App.Components.Dashboards;
 using Lanyard.Application.Services;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
+using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -18,8 +21,6 @@ namespace Lanyard.Tests.Integration;
 [TestClass]
 public class WidgetDispatchCoverageTests
 {
-    private static readonly HashSet<WidgetType> WidgetsWithoutConfigDialog = [WidgetType.Greeting, WidgetType.TextArea];
-
     private static IEnumerable<WidgetType> RealWidgetTypes =>
         Enum.GetValues<WidgetType>().Where(x => x != WidgetType.Unknown);
 
@@ -54,7 +55,9 @@ public class WidgetDispatchCoverageTests
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         Mock<IDbContextFactory<ApplicationDbContext>> factory = new();
         factory.Setup(x => x.CreateDbContextAsync(It.IsAny<CancellationToken>())).ReturnsAsync(() => new ApplicationDbContext(options));
-        DashboardService service = new(factory.Object);
+        Mock<Lanyard.Application.Services.Authentication.ISecurityService> security = new();
+        security.Setup(x => x.IsCurrentUserInRoleAsync("Admin")).ReturnsAsync(true);
+        DashboardService service = new(factory.Object, security.Object);
 
         List<string> failures = [];
 
@@ -87,36 +90,72 @@ public class WidgetDispatchCoverageTests
     }
 
     [TestMethod]
-    public void EveryWidgetType_IsRenderedConfiguredAndOfferedInTheEditor()
+    public void EveryWidgetType_HasACatalogEntryThatBuildsAndRendersIt()
     {
-        string grid = ReadSource("src/Lanyard.Server/LanyardApp/Components/Dashboards/DashboardGrid.razor");
-        string editor = ReadSource("src/Lanyard.Server/LanyardApp/Components/Pages/Staff/Dashboards/EditDashboard.razor");
         Dictionary<WidgetType, Type> mapped = MappedWidgetTypes();
-
         List<string> problems = [];
 
         foreach (WidgetType type in RealWidgetTypes)
         {
-            if (!grid.Contains($"case WidgetType.{type}:"))
-            {
-                problems.Add($"{type}: no render case in DashboardGrid.razor");
-            }
+            WidgetDescriptor? descriptor = DashboardWidgetCatalog.Get(type);
 
-            if (!mapped.TryGetValue(type, out Type? clrType))
+            if (descriptor is null)
             {
+                problems.Add($"{type}: no entry in DashboardWidgetCatalog.All");
                 continue;
             }
 
-            if (!Regex.IsMatch(editor, $@"new {clrType.Name}\(\)"))
+            DashboardWidget created = descriptor.Create();
+
+            if (created.Type != type)
             {
-                problems.Add($"{type}: no menu item creating a {clrType.Name} in EditDashboard.razor");
+                problems.Add($"{type}: the catalog's Create() makes a {created.Type} widget");
             }
 
-            // Greeting has nothing to configure and TextArea is edited in place, so neither has a
-            // config-dialog case.
-            if (!WidgetsWithoutConfigDialog.Contains(type) && !Regex.IsMatch(grid, $@"case {clrType.Name} \w+:"))
+            if (mapped.TryGetValue(type, out Type? clrType) && created.GetType() != clrType)
             {
-                problems.Add($"{type}: no config-dialog case in DashboardGrid.ShowWidgetConfigDialog");
+                problems.Add($"{type}: the catalog's Create() makes a {created.GetType().Name}, but the discriminator maps it to {clrType.Name}");
+            }
+
+            if (created.GridW < 1 || created.GridH < 1)
+            {
+                problems.Add($"{type}: {created.GetType().Name}'s constructor sets no default size");
+            }
+
+            // DynamicComponent hands the renderer a "Widget" parameter, so it must take one the
+            // widget can be assigned to, or the widget renders nothing at runtime.
+            PropertyInfo? widgetParameter = descriptor.Component.GetProperty("Widget");
+
+            if (!typeof(IComponent).IsAssignableFrom(descriptor.Component)
+                || widgetParameter?.GetCustomAttribute<ParameterAttribute>() is null
+                || !widgetParameter.PropertyType.IsAssignableFrom(created.GetType()))
+            {
+                problems.Add($"{type}: {descriptor.Component.Name} has no [Parameter] Widget that takes a {created.GetType().Name}");
+            }
+        }
+
+        List<WidgetType> duplicates = [.. DashboardWidgetCatalog.All.GroupBy(x => x.Type).Where(g => g.Count() > 1).Select(g => g.Key)];
+
+        if (duplicates.Count > 0)
+        {
+            problems.Add("Listed more than once in DashboardWidgetCatalog.All: " + string.Join(", ", duplicates));
+        }
+
+        Assert.IsEmpty(problems, string.Join('\n', problems));
+    }
+
+    [TestMethod]
+    public void EveryConfigurableWidgetType_OpensASettingsDialog()
+    {
+        string configurator = ReadSource("src/Lanyard.Server/LanyardApp/Components/Dashboards/DashboardWidgetConfigurator.cs");
+        Dictionary<WidgetType, Type> mapped = MappedWidgetTypes();
+        List<string> problems = [];
+
+        foreach (WidgetDescriptor descriptor in DashboardWidgetCatalog.All.Where(x => x.HasSettings))
+        {
+            if (mapped.TryGetValue(descriptor.Type, out Type? clrType) && !Regex.IsMatch(configurator, $@"case {clrType.Name} \w+:"))
+            {
+                problems.Add($"{descriptor.Type}: marked HasSettings in the catalog but has no case in DashboardWidgetConfigurator.ConfigureAsync");
             }
         }
 

@@ -1,4 +1,5 @@
 using Lanyard.Client.AudioDevices;
+using Lanyard.Client.Identify;
 using Lanyard.Client.PacketSniffing;
 using Lanyard.Client.ProjectionPrograms;
 using Lanyard.Infrastructure.DTO;
@@ -42,6 +43,7 @@ public sealed class KioskSelfTestRunner(
     private static readonly TimeSpan DmxTimeout = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan CaptureTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan WebView2Timeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan DisplaysTimeout = TimeSpan.FromSeconds(5);
 
     private readonly IAudioDeviceService _audioDeviceService = audioDeviceService;
     private readonly IAudioEndpointProvider _audioEndpoints = audioEndpoints;
@@ -77,7 +79,8 @@ public sealed class KioskSelfTestRunner(
                 RunGroupAsync(SelfTestCheckKeys.AudioDevice, AudioTimeout, CheckAudioAsync),
                 RunGroupAsync(SelfTestCheckKeys.DmxDriver, DmxTimeout, () => CheckDmxAsync(request.FlashDmx)),
                 RunGroupAsync(SelfTestCheckKeys.CaptureDriver, CaptureTimeout, CheckCaptureAsync),
-                RunGroupAsync(SelfTestCheckKeys.WebView2Runtime, WebView2Timeout, CheckWebView2Async));
+                RunGroupAsync(SelfTestCheckKeys.WebView2Runtime, WebView2Timeout, CheckWebView2Async),
+                RunGroupAsync(SelfTestCheckKeys.DisplaysList, DisplaysTimeout, CheckDisplaysAsync));
 
             result.Checks = groups.SelectMany(x => x).Take(SelfTestRules.MaxChecks).ToList();
             result.FinishedUtc = Now();
@@ -245,6 +248,11 @@ public sealed class KioskSelfTestRunner(
             version,
             error,
             windows.Select(w => new SelfTestRules.ProjectionWindow(w.DisplayIndex, w.IsLoaded, w.IsOffline)).ToList()));
+    }
+
+    private static Task<List<KioskSelfTestCheckDTO>> CheckDisplaysAsync()
+    {
+        return Task.FromResult(SelfTestRules.EvaluateDisplays(DisplaySnapshot.TakeFacts()));
     }
 
     private DateTime Now()

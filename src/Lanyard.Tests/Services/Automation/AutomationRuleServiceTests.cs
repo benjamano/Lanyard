@@ -54,7 +54,7 @@ public class AutomationRuleServiceTests
         AutomationEngineService engine = new(
             factory,
             [executor],
-            new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+            new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance, new Lanyard.Tests.Services.Automation.NoPartiesSchedule());
 
         return (new AutomationRuleService(factory, engine), engine, executor);
     }
@@ -715,7 +715,7 @@ public class AutomationRuleServiceTests
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options, new FixedTenantProvider(1)));
 
-        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance, new Lanyard.Tests.Services.Automation.NoPartiesSchedule());
         AutomationRuleService service = new(tenantFactory.Object, engine);
 
         AutomationRule foreign = BuildRule(ownKioskId);
@@ -775,7 +775,7 @@ public class AutomationRuleServiceTests
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options, new FixedTenantProvider(1)));
 
-        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance, new Lanyard.Tests.Services.Automation.NoPartiesSchedule());
         AutomationRuleService service = new(tenantFactory.Object, engine);
 
         AutomationRule foreignKiosk = BuildRule(ownKioskId);
@@ -794,6 +794,126 @@ public class AutomationRuleServiceTests
         Assert.AreEqual("A DMX action refers to a kiosk that doesn't exist.", foreignKioskResult.Error);
         Assert.AreEqual("A DMX action refers to a scene that isn't on its kiosk.", wrongSceneResult.Error);
         Assert.IsTrue(ownResult.IsSuccess, ownResult.Error);
+    }
+
+    private static AutomationRuleService TenantService(DbContextOptions<ApplicationDbContext> options, int companyId)
+    {
+        Mock<IDbContextFactory<ApplicationDbContext>> tenantFactory = new();
+        tenantFactory
+            .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new ApplicationDbContext(options, new FixedTenantProvider(companyId)));
+
+        AutomationEngineService engine = new(
+            GetFactory(options),
+            [],
+            new LaserGameStatusStore(),
+            new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(),
+            TimeProvider.System,
+            NullLogger<AutomationEngineService>.Instance,
+            new NoPartiesSchedule());
+
+        return new AutomationRuleService(tenantFactory.Object, engine);
+    }
+
+    private static AutomationRuleAction ActionOf(string actionType, string parametersJson) => new()
+    {
+        Id = Guid.NewGuid(),
+        ActionType = actionType,
+        ParametersJson = parametersJson,
+        SortOrder = 1,
+        IsActive = true
+    };
+
+    [TestMethod]
+    public async Task CreateRule_RejectsMusicProjectionAndAudioActionsAimedAtAnotherCompanysKiosk()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid ownKioskId = await SeedKioskAsync(options, companyId: 1);
+        Guid otherKioskId = await SeedKioskAsync(options, companyId: 2);
+        AutomationRuleService service = TenantService(options, 1);
+
+        (string Type, string Json, string Error)[] cases =
+        [
+            (AutomationActionTypes.MusicControl, $"{{\"TargetClientId\":\"{otherKioskId}\",\"Operation\":\"Pause\"}}", "A music action refers to a kiosk that doesn't exist."),
+            (AutomationActionTypes.StopProjectionProgram, $"{{\"TargetClientId\":\"{otherKioskId}\"}}", "A projection action refers to a kiosk that doesn't exist."),
+            (AutomationActionTypes.PlayAudioClip, $"{{\"TargetClientId\":\"{otherKioskId}\",\"AudioClipId\":\"{Guid.NewGuid()}\"}}", "An audio clip action refers to a kiosk that doesn't exist.")
+        ];
+
+        foreach ((string type, string json, string error) in cases)
+        {
+            AutomationRule rule = BuildRule(ownKioskId);
+            rule.Actions.Add(ActionOf(type, json));
+
+            Result<AutomationRule> result = await service.CreateRuleAsync(rule);
+
+            Assert.AreEqual(error, result.Error, type);
+        }
+    }
+
+    [TestMethod]
+    public async Task CreateRule_RejectsAnotherCompanysPlaylistProgramOrClip_AndAcceptsItsOwn()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid kioskId = await SeedKioskAsync(options, companyId: 1);
+        Guid ownPlaylist = Guid.NewGuid(), otherPlaylist = Guid.NewGuid();
+        Guid ownProgram = Guid.NewGuid(), otherProgram = Guid.NewGuid();
+        Guid ownClip = Guid.NewGuid(), otherClip = Guid.NewGuid();
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Playlists.AddRange(
+                new Playlist { Id = ownPlaylist, CompanyId = 1, Name = "Ours", CreateDate = DateTime.UtcNow },
+                new Playlist { Id = otherPlaylist, CompanyId = 2, Name = "Theirs", CreateDate = DateTime.UtcNow });
+            ctx.ProjectionPrograms.AddRange(
+                new ProjectionProgram { Id = ownProgram, CompanyId = 1, Name = "Ours" },
+                new ProjectionProgram { Id = otherProgram, CompanyId = 2, Name = "Theirs" });
+            ctx.AudioClips.AddRange(
+                new AudioClip { Id = ownClip, CompanyId = 1, Name = "Ours" },
+                new AudioClip { Id = otherClip, CompanyId = 2, Name = "Theirs" });
+            await ctx.SaveChangesAsync();
+        }
+
+        AutomationRuleService service = TenantService(options, 1);
+
+        string Music(Guid playlist) => $"{{\"TargetClientId\":\"{kioskId}\",\"Operation\":\"Play\",\"PlaylistId\":\"{playlist}\"}}";
+        string Program(Guid program) => $"{{\"TargetClientId\":\"{kioskId}\",\"Operation\":\"Start\",\"ProjectionProgramId\":\"{program}\"}}";
+        string Clip(Guid clip) => $"{{\"TargetClientId\":\"{kioskId}\",\"AudioClipId\":\"{clip}\"}}";
+
+        (string Type, string Json, string? Error)[] cases =
+        [
+            (AutomationActionTypes.MusicControl, Music(otherPlaylist), "A music action refers to a playlist that doesn't exist."),
+            (AutomationActionTypes.ProjectionProgramControl, Program(otherProgram), "A projection action refers to a projection program that doesn't exist."),
+            (AutomationActionTypes.StartProjectionProgram, Program(otherProgram), "A projection action refers to a projection program that doesn't exist."),
+            (AutomationActionTypes.PlayAudioClip, Clip(otherClip), "An audio clip action refers to an audio clip that doesn't exist."),
+            (AutomationActionTypes.MusicControl, Music(ownPlaylist), null),
+            (AutomationActionTypes.ProjectionProgramControl, Program(ownProgram), null),
+            (AutomationActionTypes.PlayAudioClip, Clip(ownClip), null)
+        ];
+
+        foreach ((string type, string json, string? error) in cases)
+        {
+            AutomationRule rule = BuildRule(kioskId);
+            rule.Actions.Add(ActionOf(type, json));
+
+            Result<AutomationRule> result = await service.CreateRuleAsync(rule);
+
+            Assert.AreEqual(error, result.Error, $"{type}: {json}");
+        }
+    }
+
+    [TestMethod]
+    public async Task CreateRule_AllowsAnActionWhoseKioskHasntBeenChosenYet()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid kioskId = await SeedKioskAsync(options, companyId: 1);
+        AutomationRuleService service = TenantService(options, 1);
+
+        AutomationRule rule = BuildRule(kioskId);
+        rule.Actions.Add(ActionOf(AutomationActionTypes.MusicControl, "{\"TargetClientId\":\"00000000-0000-0000-0000-000000000000\",\"Operation\":\"Play\"}"));
+
+        Result<AutomationRule> result = await service.CreateRuleAsync(rule);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
     }
 
     [TestMethod]
@@ -965,7 +1085,7 @@ public class AutomationRuleServiceTests
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options, new FixedTenantProvider(1)));
 
-        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance, new Lanyard.Tests.Services.Automation.NoPartiesSchedule());
         AutomationRuleService service = new(tenantFactory.Object, engine);
 
         AutomationRule foreign = BuildRule(Guid.NewGuid());
@@ -1048,7 +1168,7 @@ public class AutomationRuleServiceTests
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options, new FixedTenantProvider(1)));
 
-        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance, new Lanyard.Tests.Services.Automation.NoPartiesSchedule());
         AutomationRuleService service = new(tenantFactory.Object, engine);
 
         Result<AutomationRule> foreignResult = await service.CreateRuleAsync(BuildRule(otherKioskId));
@@ -1229,7 +1349,7 @@ public class AutomationRuleServiceTests
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options, new FixedTenantProvider(2)));
 
-        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance, new Lanyard.Tests.Services.Automation.NoPartiesSchedule());
         AutomationRuleService service = new(tenantFactory.Object, engine);
 
         Result<AutomationRule> result = await service.DuplicateRuleAsync(source.Id);
@@ -1333,5 +1453,127 @@ public class AutomationRuleServiceTests
         {
             await engine.ProcessTransitionAsync(ev, CancellationToken.None);
         }
+    }
+
+    private static AutomationRule BuildPartyRule(int locationId, int lead = 10, string? room = null)
+    {
+        AutomationRule rule = BuildRule(Guid.NewGuid(), name: "Party rule");
+        rule.TriggerType = AutomationTriggerType.PartyMilestone;
+        rule.PartyLocationId = locationId;
+        rule.PartyMilestone = PartyMilestone.LaserTag;
+        rule.PartyLeadMinutes = lead;
+        rule.PartyRoom = room;
+        return rule;
+    }
+
+    [TestMethod]
+    public async Task CreateRule_SavesAPartyRule_WithItsRoomTidied()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        int locationId = await SeedLocationAsync(options, companyId: 1);
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        Result<AutomationRule> result = await service.CreateRuleAsync(await WithKioskAsync(options, BuildPartyRule(locationId, room: "  Room   2 ")));
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        AutomationRule saved = await ctx.AutomationRules.SingleAsync();
+        Assert.AreEqual(locationId, saved.PartyLocationId);
+        Assert.AreEqual(PartyMilestone.LaserTag, saved.PartyMilestone);
+        Assert.AreEqual(10, saved.PartyLeadMinutes);
+        Assert.AreEqual("Room 2", saved.PartyRoom);
+    }
+
+    [TestMethod]
+    public async Task CreateRule_RejectsBadPartySettings()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        int locationId = await SeedLocationAsync(options, companyId: 1);
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        Result<AutomationRule> tooEarly = await service.CreateRuleAsync(await WithKioskAsync(options, BuildPartyRule(locationId, lead: 121)));
+        Result<AutomationRule> noLocation = await service.CreateRuleAsync(await WithKioskAsync(options, BuildPartyRule(999)));
+
+        StringAssert.Contains(tooEarly.Error, "between 0 and 120");
+        Assert.AreEqual("A party time rule refers to a location that doesn't exist.", noLocation.Error);
+    }
+
+    [TestMethod]
+    public async Task CreateRule_RejectsAPartyRuleForAnotherCompanysLocation()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        int ownLocationId = await SeedLocationAsync(options, companyId: 1);
+        int otherLocationId = await SeedLocationAsync(options, companyId: 2);
+
+        Mock<IDbContextFactory<ApplicationDbContext>> tenantFactory = new();
+        tenantFactory
+            .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new ApplicationDbContext(options, new FixedTenantProvider(1)));
+
+        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance, new NoPartiesSchedule());
+        AutomationRuleService service = new(tenantFactory.Object, engine);
+
+        Result<AutomationRule> foreign = await service.CreateRuleAsync(await WithKioskAsync(options, BuildPartyRule(otherLocationId)));
+        Result<AutomationRule> own = await service.CreateRuleAsync(await WithKioskAsync(options, BuildPartyRule(ownLocationId)));
+
+        Assert.IsFalse(foreign.IsSuccess);
+        Assert.IsTrue(own.IsSuccess, own.Error);
+    }
+
+    [TestMethod]
+    public async Task CreateRule_RejectsAPartyRule_WhenPartiesIsSwitchedOff()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        int locationId = await SeedLocationAsync(options, companyId: 1);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = 1, Feature = CompanyFeature.Parties, IsEnabled = false });
+            await ctx.SaveChangesAsync();
+        }
+
+        (AutomationRuleService service, _, _) = GetService(options);
+        Result<AutomationRule> result = await service.CreateRuleAsync(await WithKioskAsync(options, BuildPartyRule(locationId)));
+
+        StringAssert.Contains(result.Error, "Parties is switched off");
+    }
+
+    [TestMethod]
+    public async Task UpdateRule_ToAnotherTrigger_ClearsThePartyFields()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        int locationId = await SeedLocationAsync(options, companyId: 1);
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule rule = (await service.CreateRuleAsync(await WithKioskAsync(options, BuildPartyRule(locationId, room: "Room 2")))).Data!;
+
+        rule.TriggerType = AutomationTriggerType.GameStatusTransition;
+        Result<AutomationRule> updated = await service.UpdateRuleAsync(rule);
+        Assert.IsTrue(updated.IsSuccess, updated.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        AutomationRule saved = await ctx.AutomationRules.SingleAsync();
+        Assert.IsNull(saved.PartyLocationId);
+        Assert.IsNull(saved.PartyMilestone);
+        Assert.IsNull(saved.PartyLeadMinutes);
+        Assert.IsNull(saved.PartyRoom);
+    }
+
+    [TestMethod]
+    public async Task DuplicateRule_CopiesThePartySettings()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        int locationId = await SeedLocationAsync(options, companyId: 1);
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule rule = (await service.CreateRuleAsync(await WithKioskAsync(options, BuildPartyRule(locationId, lead: 15, room: "Room 2")))).Data!;
+        Result<AutomationRule> copy = await service.DuplicateRuleAsync(rule.Id);
+
+        Assert.IsTrue(copy.IsSuccess, copy.Error);
+        Assert.AreEqual(locationId, copy.Data!.PartyLocationId);
+        Assert.AreEqual(PartyMilestone.LaserTag, copy.Data.PartyMilestone);
+        Assert.AreEqual(15, copy.Data.PartyLeadMinutes);
+        Assert.AreEqual("Room 2", copy.Data.PartyRoom);
     }
 }

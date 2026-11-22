@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.FluentUI.AspNetCore.Components;
@@ -80,6 +80,7 @@ public static class HelpRegistry
     public const string Dmx = "dmx";
     public const string Kiosks = "kiosks";
     public const string OperationsAlerts = "operations-alerts";
+    public const string ManageChecklists = "manage-checklists";
     public const string Insights = "insights";
     public const string WhatsOn = "whats-on";
     public const string Parties = "parties";
@@ -196,15 +197,17 @@ public static class HelpRegistry
             Feature: CompanyFeature.Announcements),
 
         new(Files,
-            "File Manager",
-            "Folders, uploading, and moving, renaming and deleting your company's files.",
-            HelpAudience.Managers,
+            "Files",
+            "Finding, previewing and downloading files, uploading and organising them, sharing folders with staff, and the Recycle bin.",
+            HelpAudience.Everyone,
             () => new Icons.Regular.Size20.Folder(),
             [
-                new("overview", "File Manager")
+                new("overview", "Finding files"),
+                new("organising", "Uploading and organising"),
+                new("sharing", "Sharing with staff"),
+                new("bin", "Recycle bin")
             ],
-            ["/files"],
-            Roles: "Admin,CanManageFiles"),
+            ["/files"]),
 
         new(Music,
             "Music & Audio Clips",
@@ -273,12 +276,13 @@ public static class HelpRegistry
 
         new(Insights,
             "Insights",
-            "Comparing games played with staff hours, and the hours where staffing didn't match demand.",
+            "Comparing games and party bookings with staff hours, and the hours where staffing didn't match demand.",
             HelpAudience.Managers,
             () => new Icons.Regular.Size20.DataArea(),
             [
                 new("overview", "Figures"),
-                new("week", "Typical Week & Flags")
+                new("week", "Typical Week & Flags"),
+                new("parties", "Parties")
             ],
             ["/manage/insights"],
             Roles: "Admin,Manager",
@@ -350,6 +354,19 @@ public static class HelpRegistry
             ],
             ["/manage/users", "/manage/roles", "/manage/companies-locations"],
             Roles: "Admin,Manager"),
+
+        new(ManageChecklists,
+            "Checklists",
+            "Setting up a location's opening, closing and other checklists, and when they're due.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.TaskListLtr(),
+            [
+                new("overview", "Overview"),
+                new("setup", "Setting Up")
+            ],
+            ["/manage/checklists"],
+            Roles: "Admin,Manager",
+            Feature: CompanyFeature.Checklists),
 
         new(OperationsAlerts,
             "Operations Alerts",

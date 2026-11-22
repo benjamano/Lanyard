@@ -230,6 +230,46 @@ public class YoungWorkerRulesTests
     }
 
     [TestMethod]
+    public void Evaluate_DayAlreadyOverTheLimit_AddingToItIsStillABreach()
+    {
+        // A manager has already given them 9.5 h on Monday by hand.
+        WorkBlock longMonday = Block(Monday, 8, 0, 18, 0, 30);
+
+        CollectionAssert.Contains(Rules(Block(Monday, 19, 0, 20, 0), longMonday), YoungWorkerRule.DailyHours);
+    }
+
+    [TestMethod]
+    public void Evaluate_WeekAlreadyOver40_AnotherShiftThatWeekIsStillABreach()
+    {
+        WorkBlock[] fiftyHours = Enumerable.Range(0, 5).Select(d => Block(Monday.AddDays(d), 8, 0, 18, 30, 30)).ToArray();
+
+        CollectionAssert.Contains(Rules(Block(Monday.AddDays(5), 10, 0, 11, 0), fiftyHours), YoungWorkerRule.WeeklyHours);
+    }
+
+    [TestMethod]
+    public void Evaluate_ShortRestAlreadyThere_SplitShiftLaterThatDayIsNotBlamed()
+    {
+        // 21:00 Monday to 08:00 Tuesday is already short; an afternoon shift on Tuesday doesn't change it.
+        WorkBlock mondayLate = Block(Monday, 13, 0, 21, 0, 30);
+        WorkBlock tuesdayEarly = Block(Monday.AddDays(1), 8, 0, 11, 0);
+
+        CollectionAssert.DoesNotContain(Rules(Block(Monday.AddDays(1), 14, 0, 16, 0), mondayLate, tuesdayEarly), YoungWorkerRule.DailyRest);
+        CollectionAssert.Contains(Rules(Block(Monday.AddDays(1), 7, 0, 8, 0), mondayLate, tuesdayEarly), YoungWorkerRule.DailyRest,
+            "a shift that starts the day earlier still shortens the rest");
+    }
+
+    [TestMethod]
+    public void Weekly_InTheWeekTheyTurn18_OnlyTheUnder18DaysCount()
+    {
+        // Turns 18 on Thursday: 24 h Monday to Wednesday, then 24 h as an adult.
+        YoungWorkerProfile turns18Thursday = new(Monday.AddDays(3).AddYears(-18), YoungWorkerNightWindow.TenToSix);
+        WorkBlock[] week = Enumerable.Range(0, 6).Select(d => Block(Monday.AddDays(d), 9, 0, 17, 30, 30)).ToArray();
+
+        Assert.IsFalse(YoungWorkerRules.EvaluateWeek(turns18Thursday, Monday, week).Any(x => x.Rule == YoungWorkerRule.WeeklyHours));
+        CollectionAssert.DoesNotContain(Rules(turns18Thursday, week[2], [.. week.Where(x => x.Id != week[2].Id)]), YoungWorkerRule.WeeklyHours);
+    }
+
+    [TestMethod]
     public void Evaluate_ShiftOverload_IgnoresInactiveShifts()
     {
         Shift removed = new() { Id = Guid.NewGuid(), LocationId = 1, StartUtc = RotaTime.ToUtc(Monday, new TimeOnly(8, 0)), EndUtc = RotaTime.ToUtc(Monday, new TimeOnly(13, 0)), IsActive = false, CreateByUserId = "m" };

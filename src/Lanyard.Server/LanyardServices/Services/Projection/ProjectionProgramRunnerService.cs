@@ -96,7 +96,7 @@ public class ProjectionProgramRunnerService(
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Where(c => c.Id == clientId)
-                .Select(c => new { c.CompanyId, c.LocationId })
+                .Select(c => new { c.CompanyId, c.LocationId, c.PartyRoom })
                 .FirstOrDefaultAsync();
 
             if (client == null || client.CompanyId != program.CompanyId)
@@ -144,7 +144,7 @@ public class ProjectionProgramRunnerService(
                 Steps = steps,
                 Cts = cts,
                 IsTemporaryTrigger = isTemporaryTrigger,
-                BindingContext = new ProjectionBindingContext(program.CompanyId, client.LocationId, clientId, DateTime.UtcNow)
+                BindingContext = new ProjectionBindingContext(program.CompanyId, client.LocationId, clientId, DateTime.UtcNow, client.PartyRoom)
             };
 
             lock (_lock)

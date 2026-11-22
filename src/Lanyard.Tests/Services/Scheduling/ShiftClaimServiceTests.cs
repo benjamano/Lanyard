@@ -212,6 +212,52 @@ public class ShiftClaimServiceTests
     }
 
     [TestMethod]
+    public async Task Release_OpenShiftAnnouncement_SkipsAYoungWorkerWhoCantTakeIt()
+    {
+        World w = await SeedAsync();
+        await MarkUnder18Async(w, w.Amy);
+        Shift late = await ShiftAsync(w, w.Priya.Id, startHour: 18, hours: 5);
+
+        Result<bool> released = await w.Service.ReleaseShiftAsync(w.ManagerScope, late.Id, w.Manager.Id);
+
+        Assert.IsTrue(released.IsSuccess, released.Error);
+        List<string> told = Told(w, NotificationTopic.OpenShift);
+        CollectionAssert.Contains(told, w.Tom.Id);
+        CollectionAssert.DoesNotContain(told, w.Amy.Id, "the shift runs into the night, so Amy (under 18) isn't told about it");
+    }
+
+    [TestMethod]
+    public async Task OfferSwap_YoungWorker_CantOfferForANightShift()
+    {
+        World w = await SeedAsync();
+        await MarkUnder18Async(w, w.Amy);
+        Shift toms = await ShiftAsync(w, w.Tom.Id, startHour: 18, hours: 5);
+        Shift amys = await ShiftAsync(w, w.Amy.Id, startHour: 9, hours: 4, dayOffset: 1);
+
+        ShiftClaim swap = (await w.Service.RequestSwapAsync(w.Tom.Id, toms.Id, null)).Data!;
+        Result<ShiftClaim> offer = await w.Service.OfferSwapAsync(w.Amy.Id, swap.Id, amys.Id);
+
+        Assert.IsFalse(offer.IsSuccess);
+        StringAssert.Contains(offer.Error, "Under 18");
+    }
+
+    [TestMethod]
+    public async Task OfferSwap_YoungWorker_ShiftTheyGiveUpDoesntCountTowardsTheDay()
+    {
+        World w = await SeedAsync();
+        await MarkUnder18Async(w, w.Amy);
+
+        // Amy works 09-14; taking Tom's 15-19 as well would be 9 h, but she hands her 09-14 to Tom.
+        Shift amys = await ShiftAsync(w, w.Amy.Id, startHour: 9, hours: 5);
+        Shift toms = await ShiftAsync(w, w.Tom.Id, startHour: 15, hours: 4);
+
+        ShiftClaim swap = (await w.Service.RequestSwapAsync(w.Tom.Id, toms.Id, null)).Data!;
+        Result<ShiftClaim> offer = await w.Service.OfferSwapAsync(w.Amy.Id, swap.Id, amys.Id);
+
+        Assert.IsTrue(offer.IsSuccess, offer.Error);
+    }
+
+    [TestMethod]
     public async Task PickUp_RefusedOnApprovedTimeOff()
     {
         World w = await SeedAsync();

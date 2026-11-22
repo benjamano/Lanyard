@@ -70,9 +70,12 @@ public static class YoungWorkerRules
         _ => (new TimeOnly(22, 0), new TimeOnly(6, 0))
     };
 
-    // The limits adding `candidate` would break that aren't already broken without it. Anything the
-    // rota already gets wrong is the rota's warning, not this shift's. `others` are the person's other
-    // shifts at every location within LookAround of it; the candidate's own id is ignored among them.
+    // The limits broken with `candidate` on the rota that it is part of: its own hours, break and
+    // night work, and the day, week or rest gap it works in - including one already over the limit,
+    // since adding to it makes it worse. A limit broken somewhere the candidate doesn't touch (a long
+    // Tuesday, when it's on Thursday) is the rota's warning, not this shift's. `others` are the
+    // person's other shifts at every location within LookAround of it; the candidate's own id is
+    // ignored among them, so an edit isn't counted twice.
     public static List<YoungWorkerBreach> Evaluate(YoungWorkerProfile profile, WorkBlock candidate, IEnumerable<WorkBlock> others)
     {
         DateOnly day = RotaTime.LocalDate(candidate.StartUtc);
@@ -82,16 +85,13 @@ public static class YoungWorkerRules
             return [];
         }
 
-        List<WorkBlock> without = others.Where(x => x.Id != candidate.Id && x.EndUtc > x.StartUtc).ToList();
-        List<WorkBlock> with = [.. without, candidate];
+        List<WorkBlock> with = [.. others.Where(x => x.Id != candidate.Id && x.EndUtc > x.StartUtc), candidate];
 
         DateOnly firstDay = RotaTime.GetWeekStart(day).AddDays(-1);
         DateOnly lastDay = RotaTime.GetWeekStart(RotaTime.LocalDate(candidate.EndUtc)).AddDays(7);
 
-        HashSet<string> before = Breaches(profile, without, firstDay, lastDay).Select(x => x.Key).ToHashSet();
-
         return Breaches(profile, with, firstDay, lastDay)
-            .Where(x => !before.Contains(x.Key) && (x.BlockId is null || x.BlockId == candidate.Id))
+            .Where(x => x.Involves.Contains(candidate.Id))
             .Select(x => x.Breach)
             .ToList();
     }
@@ -124,9 +124,9 @@ public static class YoungWorkerRules
             ? MinimumBreakMinutes
             : shift.BreakMinutes;
 
-    // One breach with what identifies it (rule + day, or rule + shift), so "already broken" can be
-    // told apart from "broken by this shift".
-    private sealed record Found(string Key, DateOnly Day, Guid? BlockId, YoungWorkerBreach Breach);
+    // One breach, the day (or week start) it's on, and the shifts that make it up - so a new shift
+    // is only blamed for limits it is part of.
+    private sealed record Found(DateOnly Day, IReadOnlyCollection<Guid> Involves, YoungWorkerBreach Breach);
 
     private static List<Found> Breaches(YoungWorkerProfile profile, List<WorkBlock> blocks, DateOnly firstDay, DateOnly lastDay)
     {
@@ -145,36 +145,44 @@ public static class YoungWorkerRules
 
             if (profile.IsUnderSchoolAgeOn(day))
             {
-                found.Add(new Found($"school:{block.Id}", day, block.Id, new YoungWorkerBreach(YoungWorkerRule.UnderSchoolLeavingAge,
+                found.Add(new Found(day, [block.Id], new YoungWorkerBreach(YoungWorkerRule.UnderSchoolLeavingAge,
                     "Under school leaving age: Lanyard doesn't check child employment rules, so only a manager can roster them.")));
             }
 
             if (Overlaps(block, CoreNightStart, CoreNightEnd))
             {
-                found.Add(new Found($"core:{block.Id}", day, block.Id, new YoungWorkerBreach(YoungWorkerRule.CoreNight,
+                found.Add(new Found(day, [block.Id], new YoungWorkerBreach(YoungWorkerRule.CoreNight,
                     "Under 18: can't work between midnight and 04:00.")));
             }
             else if (Overlaps(block, nightStart, nightEnd))
             {
-                found.Add(new Found($"night:{block.Id}", day, block.Id, new YoungWorkerBreach(YoungWorkerRule.NightWork,
+                found.Add(new Found(day, [block.Id], new YoungWorkerBreach(YoungWorkerRule.NightWork,
                     $"Under 18: can't work between {nightStart:HH\\:mm} and {nightEnd:HH\\:mm}.")));
             }
 
             if (block.PaidHours > BreakNeededOverHours && block.BreakMinutes < MinimumBreakMinutes)
             {
-                found.Add(new Found($"break:{block.Id}", day, block.Id, new YoungWorkerBreach(YoungWorkerRule.Break,
+                found.Add(new Found(day, [block.Id], new YoungWorkerBreach(YoungWorkerRule.Break,
                     $"Under 18: a shift over {BreakNeededOverHours:0.#} h needs at least a {MinimumBreakMinutes} minute break.")));
             }
         }
 
-        // Hours per local day, a shift that crosses midnight split at midnight.
+        // Hours per local day, a shift that crosses midnight split at midnight, and who worked them.
         Dictionary<DateOnly, decimal> hoursByDay = [];
+        Dictionary<DateOnly, List<Guid>> blocksByDay = [];
 
         foreach (WorkBlock block in blocks)
         {
             foreach ((DateOnly day, decimal hours) in HoursByDay(block))
             {
                 hoursByDay[day] = hoursByDay.GetValueOrDefault(day) + hours;
+
+                if (!blocksByDay.TryGetValue(day, out List<Guid>? ids))
+                {
+                    blocksByDay[day] = ids = [];
+                }
+
+                ids.Add(block.Id);
             }
         }
 
@@ -182,7 +190,7 @@ public static class YoungWorkerRules
         {
             if (day >= firstDay && day <= lastDay && profile.IsUnder18On(day) && hours > MaxDailyHours)
             {
-                found.Add(new Found($"day:{day.DayNumber}", day, null, new YoungWorkerBreach(YoungWorkerRule.DailyHours,
+                found.Add(new Found(day, blocksByDay[day], new YoungWorkerBreach(YoungWorkerRule.DailyHours,
                     $"Under 18: {Hours(hours)} on {DayLabel(day)} (the limit is {MaxDailyHours:0} h a day).")));
             }
         }
@@ -195,43 +203,57 @@ public static class YoungWorkerRules
                 continue;
             }
 
-            decimal weekHours = hoursByDay.Where(x => x.Key >= week && x.Key < week.AddDays(7)).Sum(x => x.Value);
+            // Only the days they're still under 18 count: in the week of their 18th birthday, the
+            // days from it on are an adult's.
+            List<DateOnly> youngDays = hoursByDay.Keys.Where(x => x >= week && x < week.AddDays(7) && profile.IsUnder18On(x)).ToList();
+            decimal weekHours = youngDays.Sum(x => hoursByDay[x]);
 
             if (weekHours > MaxWeeklyHours)
             {
-                found.Add(new Found($"week:{week.DayNumber}", week, null, new YoungWorkerBreach(YoungWorkerRule.WeeklyHours,
+                found.Add(new Found(week, youngDays.SelectMany(x => blocksByDay[x]).Distinct().ToList(), new YoungWorkerBreach(YoungWorkerRule.WeeklyHours,
                     $"Under 18: {Hours(weekHours)} in the week of {DayLabel(week)} (the limit is {MaxWeeklyHours:0} h a week).")));
             }
 
             if (!HasWeeklyRest(blocks, week))
             {
-                found.Add(new Found($"weekrest:{week.DayNumber}", week, null, new YoungWorkerBreach(YoungWorkerRule.WeeklyRest,
+                found.Add(new Found(week, InWeek(blocks, week), new YoungWorkerBreach(YoungWorkerRule.WeeklyRest,
                     $"Under 18: no {WeeklyRest.TotalHours:0} hours off in a row in the week of {DayLabel(week)}.")));
             }
         }
 
         // 12 hours between the last work of one day and the first of the next. Gaps within a day
         // (a morning shift, then a party in the evening) are breaks, not daily rest.
-        List<(DateOnly Day, DateTime FirstStart, DateTime LastEnd)> days = blocks
+        // The rest is made by the last shift of one day and the first of the next, so those are the
+        // two it involves - not a split shift in the middle of a day.
+        List<(DateOnly Day, WorkBlock First, WorkBlock Last)> days = blocks
             .GroupBy(x => RotaTime.LocalDate(x.StartUtc))
-            .Select(g => (g.Key, g.Min(x => x.StartUtc), g.Max(x => x.EndUtc)))
+            .Select(g => (g.Key, g.MinBy(x => x.StartUtc), g.MaxBy(x => x.EndUtc)))
             .OrderBy(x => x.Key)
             .ToList();
 
         for (int i = 1; i < days.Count; i++)
         {
-            (DateOnly day, DateTime firstStart, _) = days[i];
-            DateTime previousEnd = days[i - 1].LastEnd;
-            TimeSpan rest = firstStart - previousEnd;
+            (DateOnly day, WorkBlock first, _) = days[i];
+            WorkBlock previousLast = days[i - 1].Last;
+            TimeSpan rest = first.StartUtc - previousLast.EndUtc;
 
             if (day >= firstDay && day <= lastDay && profile.IsUnder18On(day) && rest < DailyRest)
             {
-                found.Add(new Found($"rest:{day.DayNumber}", day, null, new YoungWorkerBreach(YoungWorkerRule.DailyRest,
+                found.Add(new Found(day, [first.Id, previousLast.Id], new YoungWorkerBreach(YoungWorkerRule.DailyRest,
                     $"Under 18: only {Hours((decimal)Math.Max(0, rest.TotalHours))} off before {DayLabel(day)} (they need {DailyRest.TotalHours:0} h between working days).")));
             }
         }
 
         return found;
+    }
+
+    // The shifts working any part of a Monday-Sunday week.
+    private static List<Guid> InWeek(List<WorkBlock> blocks, DateOnly week)
+    {
+        DateTime weekStartUtc = RotaTime.StartOfDayUtc(week);
+        DateTime weekEndUtc = RotaTime.StartOfDayUtc(week.AddDays(7));
+
+        return blocks.Where(x => x.StartUtc < weekEndUtc && x.EndUtc > weekStartUtc).Select(x => x.Id).ToList();
     }
 
     // Whether, between Monday 00:00 and the next Monday 00:00, there are 48 hours in a row with no

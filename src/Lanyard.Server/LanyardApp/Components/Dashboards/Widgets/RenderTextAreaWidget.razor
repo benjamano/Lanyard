@@ -1,5 +1,4 @@
 @implements IAsyncDisposable
-@inject IDashboardService DashboardService
 @inject IJSRuntime JS
 
 <FluentCard Appearance="CardAppearance.Outline"
@@ -14,7 +13,7 @@
     else
     {
         <QuillGate OnReady="StateHasChanged">
-            <div class="text-area-widget-editor-host" @ref="_editorHostRef" @onfocusout="SaveContentAsync">
+            <div class="text-area-widget-editor-host" @ref="_editorHostRef" @onfocusout="SyncContentAsync">
                 <BlazoredTextEditor @ref="_editor" Placeholder="Widget content...">
                     <ToolbarContent>
                         <span class="ql-formats">
@@ -44,6 +43,8 @@
     [Parameter]
     public required TextAreaWidget Widget { get; set; }
 
+    // True on a live dashboard (home screen, kiosk): show the content. False only in the
+    // dashboard editor, where it's an editor instead.
     [Parameter]
     public bool PreviewMode { get; set; }
 
@@ -55,8 +56,7 @@
     private BlazoredTextEditor? _editor;
     private ElementReference _editorHostRef;
     private Guid? _loadedWidgetId;
-    private string _lastSavedContent = string.Empty;
-    private Timer? _autoSaveTimer;
+    private Timer? _syncTimer;
     private IJSObjectReference? _editorModule;
 
     // BlazoredTextEditor (v1.1.3) does not accept its initial content as a bound parameter -
@@ -70,8 +70,7 @@
             {
                 await _editor.LoadHTMLContent(Widget.Content ?? string.Empty);
                 _loadedWidgetId = Widget.Id;
-                _lastSavedContent = Widget.Content ?? string.Empty;
-                StartAutoSaveTimer();
+                StartSyncTimer();
             }
             catch (Microsoft.JSInterop.JSException)
             {
@@ -80,63 +79,36 @@
         }
     }
 
-    private async Task SaveContentAsync()
+    // Copies what's in the editor into the widget, so the dashboard's Save picks it up. This
+    // used to save the widget straight to the database, which wrote the editor's unsaved layout
+    // along with it and could be reached from any screen the widget was shown on.
+    private async Task SyncContentAsync()
     {
-        if (_editor is null || Widget.DashboardId == Guid.Empty)
+        if (PreviewMode || _editor is null)
         {
             return;
         }
 
-        string html = await _editor.GetHTML();
+        string html;
 
-        if (html == (Widget.Content ?? string.Empty))
+        try
+        {
+            html = await _editor.GetHTML();
+        }
+        catch (Microsoft.JSInterop.JSException)
         {
             return;
         }
 
         Widget.Content = html;
-        await DashboardService.SaveWidgetAsync(Widget);
-        _lastSavedContent = html;
     }
 
-    // Explicit Save gives immediate feedback, but BlazoredTextEditor has no bindable
-    // change event to hook a debounced auto-save off - poll instead, so edits aren't lost
-    // if the user navigates away or closes the editor without clicking Save.
-    private void StartAutoSaveTimer()
+    // BlazoredTextEditor has no bindable change event, so poll as well as syncing on focus-out:
+    // otherwise pressing Save straight after typing (without leaving the editor) loses the edit.
+    private void StartSyncTimer()
     {
-        _autoSaveTimer?.Dispose();
-        _autoSaveTimer = new Timer(async _ => await AutoSaveIfChangedAsync(), null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
-    }
-
-    private Task AutoSaveIfChangedAsync()
-    {
-        return InvokeAsync(async () =>
-        {
-            if (PreviewMode || _editor is null || Widget.DashboardId == Guid.Empty)
-            {
-                return;
-            }
-
-            string current;
-
-            try
-            {
-                current = await _editor.GetHTML();
-            }
-            catch (Microsoft.JSInterop.JSException)
-            {
-                return;
-            }
-
-            if (current == _lastSavedContent)
-            {
-                return;
-            }
-
-            Widget.Content = current;
-            await DashboardService.SaveWidgetAsync(Widget);
-            _lastSavedContent = current;
-        });
+        _syncTimer?.Dispose();
+        _syncTimer = new Timer(_ => _ = InvokeAsync(SyncContentAsync), null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
     }
 
     private async Task InsertDividerAsync()
@@ -147,7 +119,7 @@
 
     public async ValueTask DisposeAsync()
     {
-        _autoSaveTimer?.Dispose();
+        _syncTimer?.Dispose();
 
         try
         {

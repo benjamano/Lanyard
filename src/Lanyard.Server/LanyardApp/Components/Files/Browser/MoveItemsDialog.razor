@@ -1,0 +1,66 @@
+@using Lanyard.Infrastructure.DTO.Files
+
+@* Choose where to move files and folders to. Closes with a MoveTarget (its FolderId is null for
+   the top level), so "the top level" and "cancelled" can't be confused. *@
+<FluentDialogBody>
+    <ChildContent>
+        <p class="move-dialog-what">Moving @What</p>
+        <div class="move-dialog-tree">
+            <FolderTreeView Folders="Folders" SelectedFolderId="_target" RootSelected="_target is null"
+                            DisabledFolderIds="_disabled" OnSelect="Choose" />
+        </div>
+        <p class="move-dialog-to">
+            To <strong>@TargetName</strong>
+            @if (_target == CurrentFolderId)
+            {
+                <span class="move-dialog-same"> (where it is now)</span>
+            }
+        </p>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentStack HorizontalGap="4" HorizontalAlignment="HorizontalAlignment.End">
+            <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@(_target == CurrentFolderId)"
+                          OnClick="() => Dialog.CloseAsync(new MoveTarget(_target))">Move here</FluentButton>
+            <FluentButton OnClick="() => Dialog.CancelAsync()">Cancel</FluentButton>
+        </FluentStack>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    public sealed record MoveTarget(Guid? FolderId);
+
+    [Parameter, EditorRequired] public IReadOnlyList<FolderNode> Folders { get; set; } = [];
+
+    /// <summary>The folders being moved: they and everything under them can't be the destination.</summary>
+    [Parameter] public IReadOnlyCollection<Guid> MovingFolderIds { get; set; } = [];
+
+    [Parameter] public Guid? CurrentFolderId { get; set; }
+
+    [Parameter] public string What { get; set; } = "1 item";
+
+    [CascadingParameter] public required IDialogInstance Dialog { get; set; }
+
+    private Guid? _target;
+    private HashSet<Guid> _disabled = [];
+
+    protected override void OnInitialized()
+    {
+        _target = CurrentFolderId;
+
+        ILookup<Guid?, FolderNode> byParent = Folders.ToLookup(x => x.ParentFolderId);
+        Queue<Guid> queue = new(MovingFolderIds);
+
+        while (queue.TryDequeue(out Guid id))
+        {
+            if (!_disabled.Add(id))
+                continue;
+
+            foreach (FolderNode child in byParent[id])
+                queue.Enqueue(child.Id);
+        }
+    }
+
+    private string TargetName => _target is Guid id ? Folders.FirstOrDefault(x => x.Id == id)?.Name ?? "that folder" : "Files (top level)";
+
+    private void Choose(Guid? folderId) => _target = folderId;
+}

@@ -133,11 +133,11 @@ public class YoungWorkerService(
         }
     }
 
-    public async Task<Result<Dictionary<string, YoungWorkerStatus>>> GetForCompanyAsync(LocationScope scope, DateOnly today)
+    public async Task<Result<Dictionary<string, YoungWorkerStatus>>> GetForCompanyAsync(LocationScope scope, int companyId, DateOnly today)
     {
         try
         {
-            if (scope.CompanyId is not int companyId || !SchedulingAccess.CanManageCompany(scope, companyId))
+            if (!SchedulingAccess.CanManageCompany(scope, companyId))
             {
                 return Result<Dictionary<string, YoungWorkerStatus>>.Fail("Only Managers and Admins can see who is under 18.");
             }
@@ -156,7 +156,7 @@ public class YoungWorkerService(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load young workers for company {CompanyId}", scope.CompanyId);
+            _logger.LogError(ex, "Failed to load young workers for company {CompanyId}", companyId);
             return Result<Dictionary<string, YoungWorkerStatus>>.Fail($"Failed to load young workers: {ex.Message}");
         }
     }
