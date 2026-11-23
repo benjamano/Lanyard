@@ -15,7 +15,7 @@
 @* No DefaultLayout is passed to AuthorizeRouteView here - the caller (Routes.razor) already
    wraps this component in a <LayoutView>, so passing a layout through as well would apply it
    a second time, nesting the whole page chrome inside itself. *@
-@* A page marked [RequiresFeature] is also refused when the signed-in user's company doesn't have
+@* A page marked [RequiresFeature] is also refused when the signed-in user's location doesn't have
    that feature. Nothing renders while that check is pending, so a blocked page never gets far
    enough to run its own OnInitializedAsync. *@
 @* When the user's company requires two-factor authentication and they haven't set it up, every

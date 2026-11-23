@@ -1,4 +1,5 @@
 using Lanyard.Application.Services.Demo;
+using Lanyard.Application.Services.Features;
 using Lanyard.Application.Services.Tenancy;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Application.Services.Scheduling;
@@ -421,34 +422,30 @@ public class SecurityService : ISecurityService
                     Result<List<Location>> locationsResult = autoAssignCourses.Count > 0
                         ? await _companyLocationService.GetLocationsAsync()
                         : Result<List<Location>>.Ok([]);
-                    HashSet<int> userCompanyIds = locationsResult.IsSuccess && locationsResult.Data is not null
-                        ? locationsResult.Data.Where(l => locationIds.Contains(l.Id)).Select(l => l.CompanyId).ToHashSet()
-                        : [];
 
                     // A course only auto-assigns if it belongs to one of the new user's locations,
                     // or is shared and belongs to the same company as one of those locations -
                     // mirrors CourseAssignmentService.IsCourseInScope's non-admin rule.
-                    // Companies with Training switched off don't get courses auto-assigned either,
-                    // since their staff can't open My Training to take them.
-                    HashSet<int> trainingOffCompanyIds = [];
+                    // Only the new user's locations with Training switched on count, since staff
+                    // elsewhere can't open My Training to take the courses.
+                    HashSet<int> trainingLocationIds = [];
 
                     if (autoAssignCourses.Count > 0)
                     {
                         await using ApplicationDbContext featureCtx = await _factory.CreateDbContextAsync();
 
-                        trainingOffCompanyIds = [.. await featureCtx.CompanyFeatureSettings
-                            .AsNoTracking()
-                            .TagWithCallSite()
-                            .Where(x => x.Feature == CompanyFeature.Training && !x.IsEnabled)
-                            .Select(x => x.CompanyId)
-                            .ToListAsync()];
+                        HashSet<int> enabled = await CompanyFeatureQueries.GetEnabledLocationIdsAsync(featureCtx, CompanyFeature.Training);
+                        trainingLocationIds = [.. locationIds.Where(enabled.Contains)];
                     }
+
+                    HashSet<int> trainingCompanyIds = locationsResult.IsSuccess && locationsResult.Data is not null
+                        ? locationsResult.Data.Where(l => trainingLocationIds.Contains(l.Id)).Select(l => l.CompanyId).ToHashSet()
+                        : [];
 
                     IEnumerable<Course> eligibleCourses = autoAssignCourses
                         .Where(x =>
-                            (x.LocationId is not null && locationIds.Contains(x.LocationId.Value)) ||
-                            (x.IsShared && x.Location is not null && userCompanyIds.Contains(x.Location.CompanyId)))
-                        .Where(x => x.Location is null || !trainingOffCompanyIds.Contains(x.Location.CompanyId));
+                            (x.LocationId is not null && trainingLocationIds.Contains(x.LocationId.Value)) ||
+                            (x.IsShared && x.Location is not null && trainingCompanyIds.Contains(x.Location.CompanyId)));
 
                     foreach (Course course in eligibleCourses)
                     {

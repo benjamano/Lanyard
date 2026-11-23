@@ -2,15 +2,15 @@ using Lanyard.Infrastructure.Enum;
 
 namespace Lanyard.Infrastructure.Models
 {
-    // One row per company per feature an admin has touched. No row means the feature is on, so
-    // companies that existed before feature switches keep everything, and a new CompanyFeature
-    // member ships switched on until someone turns it off.
-    public class CompanyFeatureSetting
+    // One row per location per feature a platform admin has touched. Only a row with IsEnabled
+    // means the location has the feature: no row means off, so a new location, or a newly shipped
+    // CompanyFeature member, starts with nothing until someone switches it on.
+    public class LocationFeatureSetting
     {
         public int Id { get; set; }
 
-        public required int CompanyId { get; set; }
-        public Company? Company { get; set; }
+        public required int LocationId { get; set; }
+        public Location? Location { get; set; }
 
         public required CompanyFeature Feature { get; set; }
 

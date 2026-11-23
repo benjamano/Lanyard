@@ -313,6 +313,21 @@ public static class DatabaseSeeder
             new UserLocationMembership { UserId = ApplicationDbContext.SeedAdminUserId, LocationId = ApplicationDbContext.SeedIpswichLocationId, CreateDate = ApplicationDbContext.SeedRoleCreateDateUtc },
             new UserLocationMembership { UserId = ApplicationDbContext.SeedAdminUserId, LocationId = ApplicationDbContext.SeedWisbechLocationId, CreateDate = ApplicationDbContext.SeedRoleCreateDateUtc });
 
+        // Features are off at a location until switched on, so the seeded locations get them all.
+        foreach (int locationId in new[] { ApplicationDbContext.SeedIpswichLocationId, ApplicationDbContext.SeedWisbechLocationId })
+        {
+            foreach (Lanyard.Infrastructure.Enum.CompanyFeature feature in System.Enum.GetValues<Lanyard.Infrastructure.Enum.CompanyFeature>())
+            {
+                await context.LocationFeatureSettings.AddAsync(new LocationFeatureSetting
+                {
+                    LocationId = locationId,
+                    Feature = feature,
+                    IsEnabled = true,
+                    UpdateDate = ApplicationDbContext.SeedRoleCreateDateUtc
+                });
+            }
+        }
+
         await context.SaveChangesAsync();
     }
 

@@ -1061,5 +1061,16 @@
       "The dashboard editor's arrange buttons now push other widgets out of the way instead of overlapping them, and each widget has a Settings button (no more right-clicking).",
       "A widget that fails to load now shows a short message instead of breaking the whole dashboard."
     ]
+  },
+  {
+    "version": "1.4.33",
+    "releaseDate": "2026-11-22",
+    "summary": "Features are now switched on per location instead of per company.",
+    "details": [
+      "Features for on Companies & Locations now has a switch for every feature at every location. Staff only see the features switched on for the location they signed in to.",
+      "A new location starts with every feature off. Use All on under its name to switch everything on at once.",
+      "Every existing location keeps the features its company had, so nothing changes until you change it.",
+      "Company-wide things, such as calendar feeds, onboarding emails and audio clips in automation rules, work when at least one location has the feature."
+    ]
   }
 ]
