@@ -1065,7 +1065,7 @@
   {
     "version": "1.4.33",
     "releaseDate": "2026-11-22",
-    "summary": "A new drag-and-drop dashboard designer.",
+    "summary": "A redesigned dashboard editor, and features can now be switched on per location.",
     "details": [
       "Drag widgets from a searchable, grouped widget list straight onto a dashboard, or tap one to add it.",
       "Drag widgets to move them; anything in the way moves down to make room, with an outline showing where it will land.",
@@ -1076,7 +1076,11 @@
       "Works with touch on tablets and phones, where the widget list and settings open as panels.",
       "Choose a row height for each dashboard (compact, comfortable or spacious), and tidy up gaps in one go.",
       "Fixed a deleted dashboard still showing on kiosk screens, and a designer tab left open being able to save it back.",
-      "Fixed the last few words typed into a Text widget being lost when saving straight away."
+      "Fixed the last few words typed into a Text widget being lost when saving straight away.",
+      "Features for on Companies & Locations now has a switch for every feature at every location. Staff only see the features switched on for the location they signed in to.",
+      "A new location starts with every feature off. Use All on under its name to switch everything on at once.",
+      "Every existing location keeps the features its company had, so nothing changes until you change it.",
+      "Company-wide things, such as calendar feeds, onboarding emails and audio clips in automation rules, work when at least one location has the feature."
     ]
   }
 ]

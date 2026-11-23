@@ -20,7 +20,7 @@ Every widget renders through one table, `Components/Dashboards/DashboardWidgetCa
    - `CreateWidgetCopy`'s switch expression needs a case that copies the type's settings. Its `_ => throw` fallback fails the **whole dashboard save** for an unhandled type, and that failure only shows as a toast. Types with no settings still need a bare case (`GreetingWidget => new GreetingWidget()`).
    - `UpdateTypeSpecificWidgetProperties` does the same copy for an existing widget.
    - `SaveWidgetAsync`'s switch statement.
-8. **`Services/Features/CompanyFeatureCatalog.ForWidget`**: map the widget to its paid module, so the grid hides it for a company that doesn't have it. Leave it out for widgets every company gets.
+8. **`Services/Features/CompanyFeatureCatalog.ForWidget`**: map the widget to its paid module, so the grid hides it for a location that doesn't have it switched on (switches are per location; see `CompanyFeatureService`). Leave it out for widgets everyone gets.
 
 `src/Lanyard.Tests/Integration/WidgetDispatchCoverageTests.cs` checks steps 1, 3, 4, 5, 6 and 7 for every `WidgetType`:
 - discriminator mapping

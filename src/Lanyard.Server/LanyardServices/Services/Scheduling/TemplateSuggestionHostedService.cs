@@ -93,7 +93,7 @@ public class TemplateSuggestionHostedService(
                     .AsNoTracking()
                     .AnyAsync(x => x.LocationId == location.Id && x.RunUtc >= monthStartUtc, cancellationToken);
 
-                if (ranThisMonth || !await CompanyFeatureQueries.IsEnabledForCompanyAsync(ctx, location.CompanyId, CompanyFeature.StaffScheduling, cancellationToken))
+                if (ranThisMonth || !await CompanyFeatureQueries.IsEnabledForLocationAsync(ctx, location.Id, CompanyFeature.StaffScheduling, cancellationToken))
                 {
                     continue;
                 }
