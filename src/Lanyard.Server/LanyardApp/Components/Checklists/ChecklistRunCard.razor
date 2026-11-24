@@ -166,6 +166,8 @@
         string where = tick.Method == ChecklistCompletionMethod.Terminal ? " on the terminal" : string.Empty;
         string reading = tick.Reading is decimal value ? $": {value.ToString("0.##", RotaFormat.Uk)}{(string.IsNullOrEmpty(item.Unit) ? "" : " " + item.Unit)}" : string.Empty;
 
-        return $"Ticked by {tick.Name} at {when}{where}{reading}";
+        return tick.Method == ChecklistCompletionMethod.Kiosk
+            ? $"Ticked on {tick.Name} at {when}{reading}"
+            : $"Ticked by {tick.Name} at {when}{where}{reading}";
     }
 }

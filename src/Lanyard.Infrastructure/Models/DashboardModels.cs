@@ -262,6 +262,28 @@ public class ChecklistsTodayWidget : DashboardWidget
     public bool ChecklistsHideComplete { get; set; }
 }
 
+// One chosen checklist, with its tasks, for a wall screen such as the laser kiosk's dashboard.
+// On a kiosk nobody is signed in: ticking only works there when ChecklistCardAllowKioskTicking is
+// on, and the tick records the kiosk, not a person. Signed-in viewers see it read-only.
+public class ChecklistCardWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public ChecklistCardWidget()
+    {
+        Type = WidgetType.Checklist;
+
+        GridW = 4;
+        GridH = 5;
+    }
+
+    public Guid? ChecklistCardChecklistId { get; set; }
+
+    public bool ChecklistCardAllowKioskTicking { get; set; }
+
+    // Once every task is ticked, the card's space goes empty.
+    public bool ChecklistCardHideWhenDone { get; set; }
+}
+
 public class AutomationRuleStatusWidget : DashboardWidget
 {
     [SetsRequiredMembers]
