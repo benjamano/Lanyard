@@ -1,0 +1,52 @@
+@using Lanyard.Infrastructure.Models
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+            <FluentIcon Value="@(new Icons.Regular.Size24.TaskListLtr())" />
+            <FluentText Weight="TextWeight.Semibold" Color="Color.Default" Size="@TextSize.Size700">
+                Configure Checklists Today
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+            <FluentText>Shows today's checklists at the location the viewer is signed in to, or clocked in at.</FluentText>
+            <FluentCheckbox @bind-Value="Widget.ChecklistsHideComplete" Label="Hide checklists that are already done" />
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@SaveAsync">
+            Save
+        </FluentButton>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public required ChecklistsTodayWidget Widget { get; set; }
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    // Snapshot so Cancel can revert the live-edited widget.
+    private bool _originalHideComplete;
+
+    protected override void OnInitialized()
+    {
+        _originalHideComplete = Widget.ChecklistsHideComplete;
+    }
+
+    private async Task SaveAsync()
+    {
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task CancelAsync()
+    {
+        Widget.ChecklistsHideComplete = _originalHideComplete;
+
+        await Dialog.CancelAsync();
+    }
+}

@@ -2523,6 +2523,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("ShowConditionsJson")
+                        .HasColumnType("text");
+
                     b.Property<int?>("PhoneOrder")
                         .HasColumnType("integer");
 
@@ -5474,6 +5477,16 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasDiscriminator().HasValue(5);
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ChecklistsTodayWidget", b =>
+                {
+                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
+
+                    b.Property<bool>("ChecklistsHideComplete")
+                        .HasColumnType("boolean");
+
+                    b.HasDiscriminator().HasValue(22);
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientZoneLaserGameStatusWidget", b =>
                 {
                     b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
@@ -6201,7 +6214,7 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasOne("Lanyard.Infrastructure.Models.ChecklistRunItem", "RunItem")
                         .WithMany("Completions")
                         .HasForeignKey("RunItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "UndoneByUser")

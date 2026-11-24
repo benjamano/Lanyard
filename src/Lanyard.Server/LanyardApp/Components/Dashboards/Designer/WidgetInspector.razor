@@ -2,6 +2,8 @@
    and settings), or the dashboard's own details when nothing is selected. Every change goes
    through OnChanged so the page knows the dashboard has unsaved changes. *@
 
+@using Lanyard.App.Components.Dialogs
+
 @inject DashboardWidgetConfigurator WidgetConfigurator
 
 <div class="widget-inspector">
@@ -62,6 +64,19 @@
             <FluentSwitch Value="@(!Widget.HideOnPhone)"
                           ValueChanged="@(v => ChangeAsync(() => Widget.HideOnPhone = !v, v ? "Showed on phones" : "Hid on phones"))"
                           Label="Show this widget on phones" />
+        </section>
+
+        <section class="inspector-section">
+            <h3 class="inspector-section-title">Show only when</h3>
+            @if (WidgetShowConditions.Summary(Widget.ShowConditionsJson) is string onlyWhen)
+            {
+                <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative">Only @onlyWhen</FluentBadge>
+            }
+            <FluentButton Appearance="ButtonAppearance.Outline"
+                          IconStart="@(new Icons.Regular.Size20.Eye())"
+                          OnClick="EditShowConditionsAsync">
+                Show only when…
+            </FluentButton>
         </section>
 
         @if (Descriptor.SettingsComponent is not null || Descriptor.HasSettings)
@@ -193,6 +208,28 @@
         if (Widget is not null && await WidgetConfigurator.ConfigureAsync(Widget))
         {
             await OnChanged.InvokeAsync($"Changed {Descriptor?.Name ?? "widget"} settings");
+        }
+    }
+
+    private async Task EditShowConditionsAsync()
+    {
+        if (Widget is null || Descriptor is null)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<WidgetShowConditionsDialog>(options =>
+        {
+            options.Modal = true;
+            options.Width = "560px";
+            options.Parameters.Add(nameof(WidgetShowConditionsDialog.Widget), Widget);
+            options.Parameters.Add(nameof(WidgetShowConditionsDialog.CompanyId), Dashboard?.CompanyId);
+            options.Parameters.Add(nameof(WidgetShowConditionsDialog.WidgetName), Widget.Title ?? Descriptor.Name);
+        });
+
+        if (!result.Cancelled)
+        {
+            await OnChanged.InvokeAsync($"Changed {Descriptor.Name} show conditions");
         }
     }
 }

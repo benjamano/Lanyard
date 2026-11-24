@@ -40,7 +40,7 @@ If the widget can show anything sensitive, remember a dashboard can be shown on 
   - `Move` / `Resize`: the moved widget wins and anything it overlaps is pushed down. No compaction unless `compact: true`.
   - `Place`: a new widget, either at a position or in the first free spot.
   - `Compact`
-  
+
   Don't put layout arithmetic in components; call the engine.
 - Every widget also has these layout fields, copied by `UpdateCommonMutableWidgetProperties`. A new layout field must go there too, and **not** into `SaveWidgetAsync`, which saves settings only (it used to write the grid fields and saved unfinished layouts):
   - `ShowTitle` (shows `Title` as a header)

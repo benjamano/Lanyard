@@ -326,6 +326,7 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
             // layout: copying the grid fields here used to save whatever half-finished layout was
             // on screen in the editor, without the rest of the dashboard.
             existingWidget.Title = widget.Title?.Trim();
+            existingWidget.ShowConditionsJson = widget.ShowConditionsJson;
             existingWidget.ShowTitle = widget.ShowTitle;
 
             if (existingWidget.GetType() != widget.GetType())
@@ -377,6 +378,9 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
                 case OperationsAlertsWidget existingAlerts when widget is OperationsAlertsWidget incomingAlerts:
                     existingAlerts.AlertMinimumSeverity = incomingAlerts.AlertMinimumSeverity;
                     existingAlerts.AlertOnlyUnacknowledged = incomingAlerts.AlertOnlyUnacknowledged;
+                    break;
+                case ChecklistsTodayWidget existingChecklists when widget is ChecklistsTodayWidget incomingChecklists:
+                    existingChecklists.ChecklistsHideComplete = incomingChecklists.ChecklistsHideComplete;
                     break;
                 case HallOfFameWidget existingHallOfFame when widget is HallOfFameWidget incomingHallOfFame:
                     existingHallOfFame.Period = incomingHallOfFame.Period;
@@ -766,6 +770,10 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
                 AlertMinimumSeverity = alertsWidget.AlertMinimumSeverity,
                 AlertOnlyUnacknowledged = alertsWidget.AlertOnlyUnacknowledged
             },
+            ChecklistsTodayWidget checklistsWidget => new ChecklistsTodayWidget
+            {
+                ChecklistsHideComplete = checklistsWidget.ChecklistsHideComplete
+            },
             HallOfFameWidget hallOfFameWidget => new HallOfFameWidget
             {
                 Period = hallOfFameWidget.Period,
@@ -832,12 +840,14 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
         UpdateCommonMutableWidgetProperties(copy, widget);
         copy.DashboardId = dashboardId;
         copy.IsActive = true;
+        copy.ShowConditionsJson = widget.ShowConditionsJson;
 
         return copy;
     }
 
     private static void UpdateCommonMutableWidgetProperties(DashboardWidget target, DashboardWidget source)
     {
+        target.ShowConditionsJson = source.ShowConditionsJson;
         target.Title = source.Title?.Trim();
         target.ShowTitle = source.ShowTitle;
         target.GridX = source.GridX;
@@ -916,6 +926,12 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
         {
             targetAlerts.AlertMinimumSeverity = sourceAlerts.AlertMinimumSeverity;
             targetAlerts.AlertOnlyUnacknowledged = sourceAlerts.AlertOnlyUnacknowledged;
+            return;
+        }
+
+        if (target is ChecklistsTodayWidget targetChecklists && source is ChecklistsTodayWidget sourceChecklists)
+        {
+            targetChecklists.ChecklistsHideComplete = sourceChecklists.ChecklistsHideComplete;
             return;
         }
 
