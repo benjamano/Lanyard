@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Headers;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.Models;
@@ -185,5 +185,35 @@ public class FileDownloadRangeIntegrationTests
 
         HttpResponseMessage deletedProgram = await client.GetAsync($"/api/kiosk/programs/{deletedProgramId}/steps/{stepOfDeletedProgramId}/video");
         Assert.AreEqual(HttpStatusCode.NotFound, deletedProgram.StatusCode);
+    }
+
+    // ?inline=true is for the Files preview: a PDF or text file shows in the page, but anything
+    // that could carry script (an SVG, say) is still sent as a download.
+    [TestMethod]
+    public async Task FilesDownload_Inline_OnlyForPdfAndText()
+    {
+        FileMetadata pdf = await SeedFileAsync("application/pdf", 20);
+        FileMetadata text = await SeedFileAsync("text/plain", 20);
+        FileMetadata svg = await SeedFileAsync("image/svg+xml", 20);
+        HttpClient client = _factory.CreateClient();
+        string token = await KioskTestSupport.RegisterKioskWithCredentialAsync(_factory, Guid.NewGuid());
+
+        async Task<HttpResponseMessage> GetAsync(string url)
+        {
+            using HttpRequestMessage request = new(HttpMethod.Get, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            return await client.SendAsync(request);
+        }
+
+        HttpResponseMessage pdfInline = await GetAsync($"/api/files/download/{pdf.Id}?inline=true");
+        HttpResponseMessage pdfDownload = await GetAsync($"/api/files/download/{pdf.Id}");
+        HttpResponseMessage textInline = await GetAsync($"/api/files/download/{text.Id}?inline=true");
+        HttpResponseMessage svgInline = await GetAsync($"/api/files/download/{svg.Id}?inline=true");
+
+        Assert.IsNull(pdfInline.Content.Headers.ContentDisposition, "A PDF can be shown in the preview.");
+        Assert.AreEqual("attachment", pdfDownload.Content.Headers.ContentDisposition?.DispositionType);
+        Assert.IsNull(textInline.Content.Headers.ContentDisposition);
+        StringAssert.Contains(string.Join(";", textInline.Headers.GetValues("Content-Security-Policy")), "default-src 'none'");
+        Assert.AreEqual("attachment", svgInline.Content.Headers.ContentDisposition?.DispositionType, "An SVG is never shown inline.");
     }
 }

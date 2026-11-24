@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Lanyard.Infrastructure.DataAccess;
@@ -19,6 +19,7 @@ public class FileListAccessIntegrationTests
 
     private CustomWebApplicationFactory _factory = null!;
     private Guid _fileId;
+    private Guid _sharedFolderId;
 
     [TestInitialize]
     public async Task Setup()
@@ -39,6 +40,17 @@ public class FileListAccessIntegrationTests
             CompanyId = ApplicationDbContext.SeedPlay2DayCompanyId
         });
         ctx.Folders.Add(new Folder { Id = Guid.NewGuid(), Name = "Posters", CompanyId = ApplicationDbContext.SeedPlay2DayCompanyId });
+
+        _sharedFolderId = Guid.NewGuid();
+        ctx.Folders.Add(new Folder { Id = _sharedFolderId, Name = "Menus", IsSharedWithStaff = true, CompanyId = ApplicationDbContext.SeedPlay2DayCompanyId });
+        ctx.FileMetadata.Add(new FileMetadata
+        {
+            Id = Guid.NewGuid(),
+            FileName = "kids-menu.pdf",
+            FilePath = "/srv/lanyard/uploads/kids-menu.pdf",
+            FolderId = _sharedFolderId,
+            CompanyId = ApplicationDbContext.SeedPlay2DayCompanyId
+        });
         await ctx.SaveChangesAsync();
 
         await CreateUserAsync(ctx, userManager, "plainstaff", "Staff");
@@ -134,5 +146,67 @@ public class FileListAccessIntegrationTests
 
         Assert.AreNotEqual(HttpStatusCode.Forbidden, response.StatusCode);
         Assert.AreNotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    // Files: staff who don't manage files browse only folders shared with staff.
+    [TestMethod]
+    public async Task PlainStaff_BrowsesOnlySharedFolders()
+    {
+        HttpClient client = await SignInAsync("plainstaff", Password);
+
+        string tree = await (await client.GetAsync("/api/files/tree")).Content.ReadAsStringAsync();
+        HttpResponseMessage query = await client.PostAsJsonAsync("/api/files/query", new { allFolders = true });
+        string files = await query.Content.ReadAsStringAsync();
+
+        StringAssert.Contains(tree, "Menus");
+        Assert.IsFalse(tree.Contains("Posters"), tree);
+        Assert.AreEqual(HttpStatusCode.OK, query.StatusCode, files);
+        StringAssert.Contains(files, "kids-menu.pdf");
+        Assert.IsFalse(files.Contains("rota.pdf"), "A file at the top level isn't shared.");
+        Assert.IsFalse(files.Contains("/srv/lanyard"), "The storage path leaked.");
+    }
+
+    [TestMethod]
+    public async Task PlainStaff_CannotManageFiles()
+    {
+        HttpClient client = await SignInAsync("plainstaff", Password);
+
+        // A refused POST or DELETE comes back 400/405 rather than 403: the app re-executes 403s to a
+        // page, which doesn't take that method. Either way it's refused, which is what matters.
+        HttpResponseMessage bin = await client.PostAsJsonAsync("/api/files/bin/add", new { fileIds = new[] { _fileId } });
+        Assert.IsFalse(bin.IsSuccessStatusCode, await bin.Content.ReadAsStringAsync());
+        Assert.AreEqual(HttpStatusCode.Forbidden, (await client.GetAsync("/api/files/bin")).StatusCode);
+        Assert.IsFalse((await client.DeleteAsync($"/api/files/{_fileId}")).IsSuccessStatusCode);
+
+        using IServiceScope scope = _factory.Services.CreateScope();
+        ApplicationDbContext ctx = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Assert.IsTrue((await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.SingleAsync(ctx.FileMetadata, x => x.Id == _fileId)).IsActive);
+    }
+
+    [TestMethod]
+    public async Task FileManager_SeesEverything_AndDeleteGoesToTheBin()
+    {
+        HttpClient client = await SignInAsync("filemanager", Password);
+
+        string files = await (await client.PostAsJsonAsync("/api/files/query", new { allFolders = true })).Content.ReadAsStringAsync();
+        StringAssert.Contains(files, "rota.pdf");
+        StringAssert.Contains(files, "kids-menu.pdf");
+
+        Assert.AreEqual(HttpStatusCode.OK, (await client.DeleteAsync($"/api/files/{_fileId}")).StatusCode);
+
+        string bin = await (await client.GetAsync("/api/files/bin")).Content.ReadAsStringAsync();
+        StringAssert.Contains(bin, "rota.pdf");
+    }
+
+    [TestMethod]
+    public async Task Kiosk_CannotBrowseTheLibrary()
+    {
+        HttpClient client = _factory.CreateClient();
+
+        using HttpRequestMessage request = new(HttpMethod.Get, "/api/files/tree");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", await KioskTestSupport.RegisterKioskWithCredentialAsync(_factory, Guid.NewGuid()));
+        HttpResponseMessage response = await client.SendAsync(request);
+
+        Assert.IsTrue(response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized, response.StatusCode.ToString());
     }
 }

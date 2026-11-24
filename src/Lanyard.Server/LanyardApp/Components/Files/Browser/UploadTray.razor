@@ -1,0 +1,131 @@
+@using Lanyard.Infrastructure.DTO.Files
+
+@* The upload queue, bottom right (a sheet along the bottom on a phone): every file with its
+   progress, and what happened to it. The uploading itself is fileUploads.js. *@
+@if (Items.Count > 0)
+{
+    <section class="files-uploads @(_collapsed ? "is-collapsed" : "") @(Inline ? "is-inline" : "")" aria-label="Uploads">
+        <header class="files-uploads-header">
+            <button type="button" class="files-uploads-toggle" aria-expanded="@(_collapsed ? "false" : "true")" @onclick="() => _collapsed = !_collapsed">
+                <span class="files-uploads-title" role="status" aria-live="polite">@Title</span>
+                @if (Running > 0)
+                {
+                    <span class="files-uploads-bar" aria-hidden="true"><span style="width:@(OverallPercent)%"></span></span>
+                }
+                <FluentIcon Value="@(_collapsed ? (Icon)new Icons.Regular.Size16.ChevronUp() : new Icons.Regular.Size16.ChevronDown())" Color="Color.Default" />
+            </button>
+            @if (Running == 0)
+            {
+                <button type="button" class="files-icon-button is-small" aria-label="Close uploads" title="Close" @onclick="OnClear">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Color="Color.Default" />
+                </button>
+            }
+        </header>
+
+        @if (!_collapsed)
+        {
+            <ul class="files-uploads-list">
+                @foreach (UploadItem item in Items.OrderBy(x => Order(x.Status)).ThenBy(x => x.Id))
+                {
+                    <li class="files-upload is-@item.Status" @key="item.Id">
+                        <span class="files-upload-icon @FileBrowserFormat.TypeClass(FileTypeInfo.GroupOf(item.Name))">
+                            <FluentIcon Value="@FileBrowserFormat.IconFor(FileTypeInfo.GroupOf(item.Name), item.Name)" Color="Color.Default" />
+                        </span>
+                        <span class="files-upload-text">
+                            <span class="files-upload-name" title="@item.Name">@item.Name</span>
+                            <span class="files-upload-meta">@Describe(item)</span>
+                            @if (item.Status == "uploading")
+                            {
+                                <span class="files-upload-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Percent(item)">
+                                    <span style="width:@(Percent(item))%"></span>
+                                </span>
+                            }
+                        </span>
+                        @switch (item.Status)
+                        {
+                            case "queued" or "uploading":
+                                <button type="button" class="files-icon-button is-small" aria-label="@($"Cancel {item.Name}")" title="Cancel" @onclick="() => OnCancel.InvokeAsync(item.Id)">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Color="Color.Default" />
+                                </button>
+                                break;
+                            case "failed" or "cancelled":
+                                <button type="button" class="files-icon-button is-small" aria-label="@($"Try {item.Name} again")" title="Try again" @onclick="() => OnRetry.InvokeAsync(item.Id)">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.ArrowClockwise())" Color="Color.Default" />
+                                </button>
+                                break;
+                            case "done":
+                                <button type="button" class="files-icon-button is-small" aria-label="@($"Show {item.FinalName ?? item.Name} in its folder")" title="Show in folder" @onclick="() => OnShow.InvokeAsync(item)">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.FolderOpen())" Color="Color.Default" />
+                                </button>
+                                break;
+                        }
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+}
+
+@code {
+    /// <summary>One file in the queue, as fileUploads.js reports it.</summary>
+    public sealed record UploadItem(int Id, string Name, string? RelativeDir, string? FolderId, string Status, long Loaded, long Total, string? Error, string? FinalName, string? FileId);
+
+    [Parameter, EditorRequired] public IReadOnlyList<UploadItem> Items { get; set; } = [];
+
+    /// <summary>In the page's flow rather than pinned to the corner (inside a picker dialog).</summary>
+    [Parameter] public bool Inline { get; set; }
+
+    [Parameter] public EventCallback<int> OnCancel { get; set; }
+
+    [Parameter] public EventCallback<int> OnRetry { get; set; }
+
+    [Parameter] public EventCallback OnClear { get; set; }
+
+    [Parameter] public EventCallback<UploadItem> OnShow { get; set; }
+
+    private bool _collapsed;
+
+    private int Running => Items.Count(x => x.Status is "queued" or "uploading");
+
+    private int Done => Items.Count(x => x.Status == "done");
+
+    private int Failed => Items.Count(x => x.Status == "failed");
+
+    private string Title => Running > 0
+        ? $"{Done} of {Items.Count(x => x.Status != "cancelled")} uploaded"
+        : Failed > 0
+            ? $"{FileBrowserFormat.Plural(Done, "file")} uploaded, {Failed} failed"
+            : $"{FileBrowserFormat.Plural(Done, "upload")} complete";
+
+    private int OverallPercent
+    {
+        get
+        {
+            long total = Items.Where(x => x.Status != "cancelled").Sum(x => x.Total);
+            long loaded = Items.Where(x => x.Status != "cancelled").Sum(x => x.Status == "done" ? x.Total : x.Loaded);
+            return total == 0 ? 0 : (int)Math.Round(100.0 * loaded / total);
+        }
+    }
+
+    private static int Percent(UploadItem item) => item.Total == 0 ? 0 : (int)Math.Round(100.0 * item.Loaded / item.Total);
+
+    private static int Order(string status) => status switch
+    {
+        "uploading" => 0,
+        "queued" => 1,
+        "failed" => 2,
+        _ => 3,
+    };
+
+    private static string Describe(UploadItem item) => item.Status switch
+    {
+        "queued" => $"Waiting · {FileTypeInfo.FormatSize(item.Total)}{Into(item)}",
+        "uploading" => $"{FileTypeInfo.FormatSize(item.Loaded)} of {FileTypeInfo.FormatSize(item.Total)}{Into(item)}",
+        "failed" => item.Error ?? "The upload failed.",
+        "cancelled" => "Cancelled",
+        _ when item.FinalName is string final && final != item.Name => $"Saved as “{final}”, as that name was taken",
+        _ => $"Uploaded{Into(item)}",
+    };
+
+    private static string Into(UploadItem item) => string.IsNullOrEmpty(item.RelativeDir) ? "" : $" · into {item.RelativeDir}";
+}

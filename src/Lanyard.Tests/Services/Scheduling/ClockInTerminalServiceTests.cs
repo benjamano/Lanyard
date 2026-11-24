@@ -1,3 +1,4 @@
+using Lanyard.Tests.TestUtilities;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
@@ -55,7 +56,7 @@ public class ClockInTerminalServiceTests
 
         await using (ApplicationDbContext ctx = new(options))
         {
-            ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = company.Id, Feature = CompanyFeature.StaffScheduling, IsEnabled = false });
+            await TestFeatures.SwitchOffForCompanyAsync(ctx, company.Id, CompanyFeature.StaffScheduling);
             await ctx.SaveChangesAsync();
         }
 
@@ -68,8 +69,8 @@ public class ClockInTerminalServiceTests
         // Other features being off doesn't matter to a terminal.
         await using (ApplicationDbContext ctx = new(options))
         {
-            CompanyFeatureSetting setting = await ctx.CompanyFeatureSettings.SingleAsync();
-            setting.Feature = CompanyFeature.Training;
+            await TestFeatures.SwitchOnEverywhereAsync(ctx);
+            await TestFeatures.SwitchOffForCompanyAsync(ctx, company.Id, CompanyFeature.Training);
             await ctx.SaveChangesAsync();
         }
 

@@ -19,6 +19,12 @@ public sealed record ClientGameStatusConditionParameters(Guid ClientId, bool InG
 public sealed record OpeningHoursConditionParameters(int LocationId, bool Open);
 
 /// <summary>
+/// InProgress true passes while a booked party at the location (in Room, when one is given) is
+/// between its start and end; false passes while none is.
+/// </summary>
+public sealed record PartyInProgressConditionParameters(int LocationId, string? Room, bool InProgress);
+
+/// <summary>
 /// Shared parse/serialize/validate logic for condition parameters, so the engine, the rule
 /// service and the edit dialog all agree on the same JSON and the same rules.
 /// </summary>
@@ -107,6 +113,24 @@ public static class AutomationConditionParameters
                 if (hours.LocationId <= 0)
                 {
                     return "Pick a location for the opening hours condition.";
+                }
+
+                return null;
+
+            case AutomationConditionType.PartyInProgress:
+                if (!TryParse(parametersJson, out PartyInProgressConditionParameters? party))
+                {
+                    return "A party condition is not valid.";
+                }
+
+                if (party.LocationId <= 0)
+                {
+                    return "Pick a location for the party condition.";
+                }
+
+                if (party.Room is not null && party.Room.Trim().Length > 100)
+                {
+                    return "A party condition's room can be at most 100 characters.";
                 }
 
                 return null;
