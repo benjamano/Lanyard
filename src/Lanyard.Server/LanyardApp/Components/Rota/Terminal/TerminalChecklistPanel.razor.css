@@ -1,0 +1,176 @@
+/* Full screen over the terminal, sized for a wall tablet: names on the left, checklists on the
+   right; stacked on anything narrower. */
+.checklist-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 15;
+    display: flex;
+    flex-direction: column;
+    background: var(--colorNeutralBackground2);
+    color: var(--colorNeutralForeground1);
+}
+
+.panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 24px;
+    background: var(--colorBrandBackground);
+    color: var(--colorNeutralForegroundOnBrand);
+}
+
+.panel-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.panel-title {
+    margin: 0;
+    font-size: 1.6rem;
+    font-weight: 700;
+}
+
+.panel-sub {
+    font-size: 1.05rem;
+}
+
+.panel-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.panel-button {
+    min-height: 56px;
+    min-width: 120px;
+    padding: 0 22px;
+    border: 2px solid currentColor;
+    border-radius: 10px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 1.1rem;
+    font-weight: 700;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.panel-done {
+    background: var(--colorNeutralBackground1);
+    color: var(--colorBrandForeground1);
+    border-color: var(--colorNeutralBackground1);
+}
+
+.panel-button:focus-visible {
+    outline: 3px solid var(--colorStrokeFocus2);
+    outline-offset: 2px;
+}
+
+.panel-message {
+    margin: 12px 24px 0;
+    padding: 12px 16px;
+    border-radius: 10px;
+    background: var(--colorNeutralBackground1);
+    border-left: 6px solid var(--colorBrandBackground);
+    font-size: 1.05rem;
+}
+
+.panel-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(260px, 340px) 1fr;
+    gap: 24px;
+    padding: 20px 24px;
+    overflow: hidden;
+}
+
+.panel-people,
+.panel-runs {
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.panel-runs {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    grid-column: 2;
+}
+
+.panel-section-title {
+    margin: 0 0 12px;
+    font-size: 1.3rem;
+    font-weight: 700;
+}
+
+.panel-muted {
+    color: var(--colorNeutralForeground3);
+}
+
+.people-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.person-button {
+    min-height: 64px;
+    padding: 0 18px;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: 12px;
+    background: var(--colorNeutralBackground1);
+    color: inherit;
+    font: inherit;
+    font-size: 1.25rem;
+    font-weight: 700;
+    text-align: left;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.person-button:active {
+    background: var(--colorNeutralBackground3);
+}
+
+.person-button:focus-visible {
+    outline: 3px solid var(--colorStrokeFocus2);
+    outline-offset: 2px;
+}
+
+@media (max-width: 860px) {
+    .panel-body {
+        grid-template-columns: 1fr;
+        grid-auto-rows: auto;
+        align-content: start;
+        overflow-y: auto;
+    }
+
+    .panel-people,
+    .panel-runs {
+        overflow: visible;
+    }
+
+    .panel-runs {
+        grid-column: auto;
+    }
+
+    .panel-header {
+        padding: 12px 16px;
+    }
+
+    .panel-body {
+        padding: 16px;
+    }
+}
+
+/* Once someone is ticking, the names go and the checklists take the whole width. */
+.panel-body.is-ticking {
+    grid-template-columns: 1fr;
+}
+
+.panel-body.is-ticking .panel-runs {
+    grid-column: auto;
+}

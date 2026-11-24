@@ -1,5 +1,6 @@
 using Lanyard.Application.Services.Checklists;
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Checklists;
@@ -97,7 +98,9 @@ public class ChecklistRunServiceTests
         Mock<IDbContextFactory<ApplicationDbContext>> factory = new();
         factory.Setup(x => x.CreateDbContextAsync(It.IsAny<CancellationToken>())).ReturnsAsync(() => new ApplicationDbContext(w.Options));
 
-        return new ChecklistRunService(factory.Object, w.Clock, NullLogger<ChecklistRunService>.Instance);
+        // The phone and manager paths don't touch the terminal services.
+        return new ChecklistRunService(factory.Object, Mock.Of<IClockInTerminalService>(), Mock.Of<ITimeEntryService>(),
+            new TerminalEphemeralTokenService(w.Clock), w.Clock, NullLogger<ChecklistRunService>.Instance);
     }
 
     private static async Task<ChecklistRunView> TodayAsync(World w, UserProfile user, LocationScope scope)

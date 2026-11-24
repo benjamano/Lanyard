@@ -13,14 +13,21 @@ namespace Lanyard.Application.Services.Checklists;
 
 public class ChecklistRunService(
     IDbContextFactory<ApplicationDbContext> factory,
+    IClockInTerminalService terminalService,
+    ITimeEntryService timeEntryService,
+    ITerminalEphemeralTokenService tokenService,
     TimeProvider timeProvider,
     ILogger<ChecklistRunService> logger) : IChecklistRunService
 {
     public const int MaxHistoryDays = 62;
 
     private const string FeatureOff = "Checklists aren't switched on for this company.";
+    private const string GrantLapsed = "Enter your PIN again to keep ticking.";
 
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly IClockInTerminalService _terminalService = terminalService;
+    private readonly ITimeEntryService _timeEntryService = timeEntryService;
+    private readonly ITerminalEphemeralTokenService _tokenService = tokenService;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger<ChecklistRunService> _logger = logger;
 
@@ -87,88 +94,102 @@ public class ChecklistRunService(
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            ChecklistRunItem? item = await ctx.ChecklistRunItems
-                .TagWithCallSite()
-                .Include(x => x.Run)
-                .ThenInclude(x => x!.Checklist)
-                .ThenInclude(x => x!.StaffPosition)
-                .Include(x => x.Completions.Where(c => c.IsActive))
-                .ThenInclude(x => x.User)
-                .FirstOrDefaultAsync(x => x.Id == runItemId);
+            ChecklistRunItem? item = await LoadItemAsync(ctx, runItemId);
 
             if (item?.Run is null)
             {
                 return Result<bool>.Fail("That task wasn't found.");
             }
 
-            ChecklistRun run = item.Run;
-            Result<Location> location = await LocationForStaffAsync(ctx, userId, scope, run.LocationId);
+            Result<Location> location = await LocationForStaffAsync(ctx, userId, scope, item.Run.LocationId);
 
             if (!location.IsSuccess)
             {
                 return Result<bool>.Fail(location.Error ?? "That task wasn't found.");
             }
 
-            if (run.VenueDate != RotaTime.Today(now))
-            {
-                return Result<bool>.Fail("Only today's checklists can be ticked.");
-            }
-
-            if (item.Completions.FirstOrDefault() is ChecklistCompletion already)
-            {
-                return Result<bool>.Fail($"{RotaNames.Public(already.User)} ticked this at {RotaTime.ToVenueLocal(already.CompletedUtc).ToString("HH:mm", RotaFormat.Uk)}.");
-            }
-
-            if (method == ChecklistCompletionMethod.Manager && !IsManagerAt(scope, run.LocationId))
+            if (method == ChecklistCompletionMethod.Manager && !IsManagerAt(scope, item.Run.LocationId))
             {
                 return Result<bool>.Fail("Only a Manager or Admin here can tick from Checklists today.");
             }
 
-            ChecklistRunStore.Viewer viewer = await ChecklistRunStore.ViewerAsync(ctx, userId, run.LocationId, run.VenueDate, IsManagerAt(scope, run.LocationId));
-            Checklist? checklist = run.Checklist;
-
-            if (ChecklistRules.WhyCantTick(viewer.IsManagerAtLocation, viewer.IsOnRota,
-                    checklist?.StaffPositionId is Guid p && viewer.Positions.Contains(p),
-                    checklist?.StaffPositionId, checklist?.StaffPosition?.Name, run.Name) is string reason)
-            {
-                return Result<bool>.Fail(reason);
-            }
-
-            Result<(string? Note, decimal? Reading)> answer = Answer(item.Response, note, reading);
-
-            if (!answer.IsSuccess)
-            {
-                return Result<bool>.Fail(answer.Error!);
-            }
-
-            ctx.ChecklistCompletions.Add(new ChecklistCompletion
-            {
-                RunItemId = item.Id,
-                UserId = userId,
-                CompletedUtc = now,
-                Method = method,
-                Note = answer.Data.Note,
-                Reading = answer.Data.Reading
-            });
-
-            try
-            {
-                await ctx.SaveChangesAsync();
-            }
-            catch (DbUpdateException ex) when (ChecklistTickConflicts.For(ex) is string conflict)
-            {
-                return Result<bool>.Fail(conflict);
-            }
-
-            _logger.LogInformation("Checklist task {RunItemId} ticked by {UserId} ({Method})", item.Id, userId, method);
-
-            return Result<bool>.Ok(true);
+            return await TickAsync(ctx, item, userId, IsManagerAt(scope, item.Run.LocationId), method, null, note, reading, now);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to tick checklist task {RunItemId}", runItemId);
             return Result<bool>.Fail($"Failed to tick the task: {ex.Message}");
         }
+    }
+
+    private static Task<ChecklistRunItem?> LoadItemAsync(ApplicationDbContext ctx, Guid runItemId) =>
+        ctx.ChecklistRunItems
+            .TagWithCallSite()
+            .Include(x => x.Run)
+            .ThenInclude(x => x!.Checklist)
+            .ThenInclude(x => x!.StaffPosition)
+            .Include(x => x.Completions.Where(c => c.IsActive))
+            .ThenInclude(x => x.User)
+            .FirstOrDefaultAsync(x => x.Id == runItemId);
+
+    // A tick from any path (phone, manager, terminal), once the caller has checked the person may use
+    // the location: only today's tasks, one live tick per task, the eligibility rule, and the
+    // answer the task asks for.
+    private async Task<Result<bool>> TickAsync(ApplicationDbContext ctx, ChecklistRunItem item, string userId, bool isManagerAtLocation,
+        ChecklistCompletionMethod method, Guid? terminalId, string? note, decimal? reading, DateTime now)
+    {
+        ChecklistRun run = item.Run!;
+
+        if (run.VenueDate != RotaTime.Today(now))
+        {
+            return Result<bool>.Fail("Only today's checklists can be ticked.");
+        }
+
+        if (item.Completions.FirstOrDefault() is ChecklistCompletion already)
+        {
+            return Result<bool>.Fail($"{RotaNames.Public(already.User)} ticked this at {RotaTime.ToVenueLocal(already.CompletedUtc).ToString("HH:mm", RotaFormat.Uk)}.");
+        }
+
+        ChecklistRunStore.Viewer viewer = await ChecklistRunStore.ViewerAsync(ctx, userId, run.LocationId, run.VenueDate, isManagerAtLocation);
+        Checklist? checklist = run.Checklist;
+
+        if (ChecklistRules.WhyCantTick(viewer.IsManagerAtLocation, viewer.IsOnRota,
+                checklist?.StaffPositionId is Guid p && viewer.Positions.Contains(p),
+                checklist?.StaffPositionId, checklist?.StaffPosition?.Name, run.Name) is string reason)
+        {
+            return Result<bool>.Fail(reason);
+        }
+
+        Result<(string? Note, decimal? Reading)> answer = Answer(item.Response, note, reading);
+
+        if (!answer.IsSuccess)
+        {
+            return Result<bool>.Fail(answer.Error!);
+        }
+
+        ctx.ChecklistCompletions.Add(new ChecklistCompletion
+        {
+            RunItemId = item.Id,
+            UserId = userId,
+            CompletedUtc = now,
+            Method = method,
+            ClockInTerminalId = terminalId,
+            Note = answer.Data.Note,
+            Reading = answer.Data.Reading
+        });
+
+        try
+        {
+            await ctx.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (ChecklistTickConflicts.For(ex) is string conflict)
+        {
+            return Result<bool>.Fail(conflict);
+        }
+
+        _logger.LogInformation("Checklist task {RunItemId} ticked by {UserId} ({Method})", item.Id, userId, method);
+
+        return Result<bool>.Ok(true);
     }
 
     // What a tick keeps for its task's response: a number task needs a valid reading; only a
@@ -370,6 +391,267 @@ public class ChecklistRunService(
             _logger.LogError(ex, "Failed to load checklist history for {LocationId}", locationId);
             return Result<List<ChecklistHistoryRow>>.Fail($"Failed to load the checklist history: {ex.Message}");
         }
+    }
+
+    public async Task<Result<ChecklistDayView>> GetTerminalDayAsync(Guid terminalId, string? grantToken)
+    {
+        try
+        {
+            DateTime now = Now;
+            DateOnly today = RotaTime.Today(now);
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Result<(TerminalSession Session, Location Location)> terminal = await TerminalLocationAsync(ctx, terminalId);
+
+            if (!terminal.IsSuccess)
+            {
+                return Result<ChecklistDayView>.Fail(terminal.Error!);
+            }
+
+            (TerminalSession session, Location location) = terminal.Data;
+
+            await ChecklistRunStore.EnsureRunsAsync(ctx, location, today, now);
+
+            ChecklistRunStore.Viewer? viewer = null;
+
+            if (_tokenService.TouchChecklistGrant(grantToken, terminalId) is string userId)
+            {
+                bool isManager = (await SchedulingRecipients.ManagersOfLocationAsync(ctx, session.LocationId)).Contains(userId);
+                viewer = await ChecklistRunStore.ViewerAsync(ctx, userId, session.LocationId, today, isManager);
+            }
+
+            List<ChecklistRunView> runs = await ChecklistRunStore.LoadRunsAsync(ctx, session.LocationId, today, now, viewer, staffView: true);
+
+            return Result<ChecklistDayView>.Ok(new ChecklistDayView(session.LocationId, session.LocationName, today, runs));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load checklists for terminal {TerminalId}", terminalId);
+            return Result<ChecklistDayView>.Fail($"Failed to load the checklists: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<List<TerminalChecklistPerson>>> GetTerminalPeopleAsync(Guid terminalId)
+    {
+        try
+        {
+            Result<TerminalSession> session = await _terminalService.GetActiveSessionAsync(terminalId);
+
+            if (!session.IsSuccess || session.Data is null)
+            {
+                return Result<List<TerminalChecklistPerson>>.Fail(session.Error ?? "This device has been unpaired.");
+            }
+
+            int locationId = session.Data.LocationId;
+            DateOnly today = RotaTime.Today(Now);
+            DateTime start = RotaTime.StartOfDayUtc(today);
+            DateTime end = RotaTime.StartOfDayUtc(today.AddDays(1));
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            // The same people ChecklistRunStore.ViewerAsync counts as on the rota - a published shift
+            // here starting today, or clocked in here now - plus the location's Managers. Unlike the
+            // clock-in roster, nobody drops off once their clock-in window has passed.
+            List<string> onRota = await ctx.Shifts
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.IsActive && x.PublishedDateUtc != null && x.UserId != null && x.LocationId == locationId
+                    && x.StartUtc >= start && x.StartUtc < end)
+                .Select(x => x.UserId!)
+                .ToListAsync();
+
+            List<string> clockedIn = await ctx.TimeEntries
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.IsActive && x.LocationId == locationId && x.ClockOutUtc == null)
+                .Select(x => x.UserId)
+                .ToListAsync();
+
+            List<string> managers = await SchedulingRecipients.ManagersOfLocationAsync(ctx, locationId);
+
+            List<string> candidates = [.. onRota.Concat(clockedIn).Concat(managers)
+                .Where(x => x != ApplicationDbContext.SystemDeletedUserPlaceholderId)
+                .Distinct()];
+
+            // Only the location's own people: the PIN check (VerifyTerminalPinAsync) and clocking in
+            // both need membership, so anyone else listed here could never get past their PIN.
+            List<string> userIds = await ctx.UserLocationMemberships
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.LocationId == locationId && candidates.Contains(x.UserId))
+                .Select(x => x.UserId)
+                .Distinct()
+                .ToListAsync();
+
+            DateTimeOffset nowOffset = new(Now, TimeSpan.Zero);
+
+            List<UserProfile> users = await ctx.Users
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => userIds.Contains(x.Id) && (x.LockoutEnd == null || x.LockoutEnd < nowOffset))
+                .ToListAsync();
+
+            HashSet<string> withPin = [.. await ctx.UserClockInPins
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => userIds.Contains(x.UserId))
+                .Select(x => x.UserId)
+                .ToListAsync()];
+
+            return Result<List<TerminalChecklistPerson>>.Ok([.. users
+                .Select(x => new TerminalChecklistPerson(x.Id, RotaNames.Public(x), withPin.Contains(x.Id)))
+                .OrderBy(x => x.DisplayName)]);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load who can tick checklists at terminal {TerminalId}", terminalId);
+            return Result<List<TerminalChecklistPerson>>.Fail($"Failed to load the names: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<string>> StartTerminalTickingAsync(Guid terminalId, string userId, string pin)
+    {
+        Result<TerminalSession> verified = await _timeEntryService.VerifyTerminalPinAsync(terminalId, userId, pin);
+
+        if (!verified.IsSuccess)
+        {
+            return Result<string>.Fail(verified.Error ?? "Couldn't check your PIN.");
+        }
+
+        _logger.LogInformation("{UserId} started ticking checklists at terminal {TerminalId}", userId, terminalId);
+
+        return Result<string>.Ok(_tokenService.IssueChecklistGrant(terminalId, userId));
+    }
+
+    public async Task<Result<bool>> CompleteOnTerminalAsync(Guid terminalId, string? grantToken, Guid runItemId, string? note, decimal? reading)
+    {
+        try
+        {
+            DateTime now = Now;
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Result<(TerminalSession Session, Location Location)> terminal = await TerminalLocationAsync(ctx, terminalId);
+
+            if (!terminal.IsSuccess)
+            {
+                return Result<bool>.Fail(terminal.Error!);
+            }
+
+            if (_tokenService.TouchChecklistGrant(grantToken, terminalId) is not string userId)
+            {
+                return Result<bool>.Fail(GrantLapsed);
+            }
+
+            int locationId = terminal.Data.Session.LocationId;
+            ChecklistRunItem? item = await LoadItemAsync(ctx, runItemId);
+
+            // Only the terminal's own location: an item id from anywhere else is "not found".
+            if (item?.Run is null || item.Run.LocationId != locationId)
+            {
+                return Result<bool>.Fail("That task wasn't found.");
+            }
+
+            bool isManager = (await SchedulingRecipients.ManagersOfLocationAsync(ctx, locationId)).Contains(userId);
+
+            return await TickAsync(ctx, item, userId, isManager, ChecklistCompletionMethod.Terminal, terminalId, note, reading, now);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to tick checklist task {RunItemId} at terminal {TerminalId}", runItemId, terminalId);
+            return Result<bool>.Fail($"Failed to tick the task: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> UndoOnTerminalAsync(Guid terminalId, string? grantToken, Guid completionId)
+    {
+        try
+        {
+            DateTime now = Now;
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Result<(TerminalSession Session, Location Location)> terminal = await TerminalLocationAsync(ctx, terminalId);
+
+            if (!terminal.IsSuccess)
+            {
+                return Result<bool>.Fail(terminal.Error!);
+            }
+
+            if (_tokenService.TouchChecklistGrant(grantToken, terminalId) is not string userId)
+            {
+                return Result<bool>.Fail(GrantLapsed);
+            }
+
+            int locationId = terminal.Data.Session.LocationId;
+
+            ChecklistCompletion? completion = await ctx.ChecklistCompletions
+                .TagWithCallSite()
+                .Include(x => x.RunItem)
+                .ThenInclude(x => x!.Run)
+                .FirstOrDefaultAsync(x => x.Id == completionId && x.IsActive);
+
+            ChecklistRun? run = completion?.RunItem?.Run;
+
+            if (completion is null || run is null || run.LocationId != locationId)
+            {
+                return Result<bool>.Fail("That tick wasn't found.");
+            }
+
+            if (completion.UserId != userId && !(await SchedulingRecipients.ManagersOfLocationAsync(ctx, locationId)).Contains(userId))
+            {
+                return Result<bool>.Fail("Only the person who ticked it, or a manager, can take it back.");
+            }
+
+            if (run.VenueDate != RotaTime.Today(now))
+            {
+                return Result<bool>.Fail("Only today's ticks can be taken back.");
+            }
+
+            completion.IsActive = false;
+            completion.UndoneUtc = now;
+            completion.UndoneByUserId = userId;
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to take back checklist tick {CompletionId} at terminal {TerminalId}", completionId, terminalId);
+            return Result<bool>.Fail($"Failed to take the tick back: {ex.Message}");
+        }
+    }
+
+    public void EndTerminalTicking(string? grantToken) => _tokenService.RevokeChecklistGrant(grantToken);
+
+    // The terminal's live session and its location, with checklists switched on for its company.
+    private async Task<Result<(TerminalSession Session, Location Location)>> TerminalLocationAsync(ApplicationDbContext ctx, Guid terminalId)
+    {
+        Result<TerminalSession> session = await _terminalService.GetActiveSessionAsync(terminalId);
+
+        if (!session.IsSuccess || session.Data is null)
+        {
+            return Result<(TerminalSession, Location)>.Fail(session.Error ?? "This device has been unpaired.");
+        }
+
+        Location? location = await ctx.Locations
+            .AsNoTracking()
+            .TagWithCallSite()
+            .FirstOrDefaultAsync(x => x.Id == session.Data.LocationId && x.IsActive);
+
+        if (location is null)
+        {
+            return Result<(TerminalSession, Location)>.Fail("This device has been unpaired.");
+        }
+
+        if (!await ChecklistRunStore.FeaturesOnAsync(ctx, location.CompanyId))
+        {
+            return Result<(TerminalSession, Location)>.Fail(FeatureOff);
+        }
+
+        return Result<(TerminalSession, Location)>.Ok((session.Data, location));
     }
 
     // The location, if the person may use its checklists: it's active, they belong to it (Admins of its
