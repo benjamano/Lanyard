@@ -113,7 +113,7 @@
         }
 
         loadedFor = LocationId;
-        schedulingEnabled = await _companyFeatureService.IsEnabledForCompanyAsync(CompanyId, CompanyFeature.StaffScheduling);
+        schedulingEnabled = await _companyFeatureService.IsEnabledForLocationAsync(LocationId, CompanyFeature.StaffScheduling);
 
         if (!schedulingEnabled)
         {

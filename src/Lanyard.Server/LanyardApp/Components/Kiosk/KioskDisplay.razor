@@ -15,7 +15,7 @@ else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.Templat
 }
 else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.TemplateNames.Dashboard)
 {
-    <RenderDashboardTemplate Step="CurrentProjectionStep" />
+    <RenderDashboardTemplate Step="CurrentProjectionStep" ClientId="ClientId" ViewerToken="@ViewerToken" />
 }
 else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.TemplateNames.LiveCapture)
 {

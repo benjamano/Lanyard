@@ -1,8 +1,10 @@
+using Lanyard.Application.Services.Features;
 using Lanyard.Application.Services.Tenancy;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using System.Text.RegularExpressions;
 
 namespace Lanyard.Application.Services.Locations;
@@ -11,8 +13,12 @@ namespace Lanyard.Application.Services.Locations;
 // company boundary is enforced here instead: a signed-in user may only see and manage their own
 // company's locations and memberships, and only platform admins can create, deactivate or reach
 // other companies. A null tenant (tests, system callers) is unrestricted.
-public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> factory, ITenantContext? tenant = null) : ICompanyLocationService
+public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> factory, ITenantContext? tenant = null, IMemoryCache? cache = null) : ICompanyLocationService
 {
+    // Cleared when a location is added, renamed or deactivated, so the feature switches (which
+    // are per location) pick up the change straight away.
+    private readonly IMemoryCache? _cache = cache;
+
     private const string NoAccessToCompany = "You do not have access to that company.";
 
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
@@ -254,6 +260,8 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
 
             await ctx.SaveChangesAsync();
 
+            CompanyFeatureService.Evict(_cache, target.CompanyId);
+
             return Result<Location>.Ok(target);
         }
         catch (Exception ex)
@@ -284,6 +292,8 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
             location.UpdateDate = DateTime.UtcNow;
 
             await ctx.SaveChangesAsync();
+
+            CompanyFeatureService.Evict(_cache, location.CompanyId);
 
             return Result<bool>.Ok(true);
         }

@@ -71,7 +71,7 @@ public class PartyScheduleProvider(ISystemDbContextFactory factory, TimeProvider
             .TagWithCallSite()
             .AnyAsync(l => l.Id == locationId && l.CompanyId == companyId && l.IsActive, cancellationToken);
 
-        if (!locationOk || !await CompanyFeatureQueries.IsEnabledForCompanyAsync(ctx, companyId, CompanyFeature.Parties, cancellationToken))
+        if (!locationOk || !await CompanyFeatureQueries.IsEnabledForLocationAsync(ctx, locationId, CompanyFeature.Parties, cancellationToken))
         {
             return [];
         }

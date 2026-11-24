@@ -1,0 +1,70 @@
+@using Lanyard.Application.Services.Checklists
+@using Lanyard.Application.Services.Locations
+@using Lanyard.Infrastructure.Models
+@inherits WidgetSettingsBase<ChecklistCardWidget>
+
+@inject IChecklistService ChecklistService
+
+<div class="widget-settings">
+    @if (_error is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">@_error</FluentMessageBar>
+    }
+    else if (_loading)
+    {
+        <p>Loading checklists…</p>
+    }
+    else if (_checklists.Count == 0)
+    {
+        <p>There are no checklists yet. Set one up under Rota &gt; Checklists first.</p>
+    }
+    else
+    {
+        <FluentSelect TOption="ChecklistOption" TValue="string" Items="@_checklists"
+                      OptionText="@(x => x.Label)" OptionValue="@(x => x.Value)"
+                      Value="@W.ChecklistCardChecklistId?.ToString()" ValueChanged="@OnChecklistChangedAsync"
+                      Placeholder="Choose a checklist" Label="Checklist" Width="100%" />
+    }
+
+    <FluentSwitch Value="@W.ChecklistCardAllowKioskTicking"
+                  ValueChanged="@(v => SetAsync(() => W.ChecklistCardAllowKioskTicking = v, v ? "Allowed kiosk ticking" : "Disabled kiosk ticking"))"
+                  Label="Allow ticking on a kiosk" />
+    <FluentSwitch Value="@W.ChecklistCardHideWhenDone"
+                  ValueChanged="@(v => SetAsync(() => W.ChecklistCardHideWhenDone = v, v ? "Hid the card when done" : "Showed the card when done"))"
+                  Label="Hide the card once every task is ticked" />
+</div>
+
+@code {
+    private sealed record ChecklistOption(string Value, string Label);
+
+    private List<ChecklistOption> _checklists = [];
+    private string? _error;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (!scope.IsSuccess || scope.Data is null)
+        {
+            _error = "Couldn't work out which checklists you can choose.";
+            _loading = false;
+            return;
+        }
+
+        Result<List<Checklist>> checklists = await ChecklistService.GetPickableChecklistsAsync(scope.Data);
+
+        if (!checklists.IsSuccess || checklists.Data is null)
+        {
+            _error = checklists.Error;
+            _loading = false;
+            return;
+        }
+
+        _checklists = [.. checklists.Data.Select(x => new ChecklistOption(x.Id.ToString(), $"{x.Name} ({x.Location?.Name ?? "location"})"))];
+        _loading = false;
+    }
+
+    private Task OnChecklistChangedAsync(string? value) =>
+        SetAsync(() => W.ChecklistCardChecklistId = Guid.TryParse(value, out Guid id) ? id : null, "Changed checklist");
+}

@@ -1,3 +1,4 @@
+using Lanyard.Tests.TestUtilities;
 using Lanyard.Application.Services.Parties;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
@@ -44,6 +45,7 @@ public class PartyScheduleProviderTests
         await using ApplicationDbContext ctx = new(options);
         ctx.Locations.Add(new Location { Id = id, CompanyId = companyId, Name = $"Location {id}", IsActive = active });
         await ctx.SaveChangesAsync();
+        await TestFeatures.SwitchOnEverywhereAsync(ctx);
     }
 
     private static async Task<PartyBooking> SeedPartyAsync(
@@ -131,7 +133,7 @@ public class PartyScheduleProviderTests
 
         await using (ApplicationDbContext ctx = new(options))
         {
-            ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = CompanyId, Feature = CompanyFeature.Parties, IsEnabled = false });
+            await TestFeatures.SwitchOffForCompanyAsync(ctx, CompanyId, CompanyFeature.Parties);
             await ctx.SaveChangesAsync();
         }
 

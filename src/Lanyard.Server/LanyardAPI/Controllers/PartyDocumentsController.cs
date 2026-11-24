@@ -118,7 +118,7 @@ namespace Lanyard.API.Controllers
 
         // The pages' RequiresFeature gate, for this endpoint. ICompanyFeatureService's
         // current-user checks read the Blazor authentication state, which a plain HTTP request
-        // doesn't have, so the company comes from the scope instead. Admins keep every module,
+        // doesn't have, so the location comes from the scope instead. Admins keep every module,
         // as on the pages.
         private async Task<bool> HasPartiesAsync(LocationScope scope)
         {
@@ -127,15 +127,12 @@ namespace Lanyard.API.Controllers
                 return true;
             }
 
-            if (scope.CompanyId is not int companyId)
+            if (scope.LocationId is not int locationId)
             {
                 return false;
             }
 
-            Result<List<CompanyFeatureState>> features = await _companyFeatures.GetFeaturesAsync(companyId);
-
-            return features.IsSuccess
-                && features.Data?.Any(x => x.Info.Feature == CompanyFeature.Parties && x.IsEnabled) == true;
+            return await _companyFeatures.IsEnabledForLocationAsync(locationId, CompanyFeature.Parties);
         }
     }
 }

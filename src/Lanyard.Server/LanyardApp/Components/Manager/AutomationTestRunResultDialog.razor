@@ -1,0 +1,77 @@
+@using Lanyard.Application.Services
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            @if (Result.Skipped)
+            {
+                <FluentIcon Value="@(new Icons.Regular.Size24.Info())" Color="Color.Info" />
+            }
+            else if (Result.AllPassed)
+            {
+                <FluentIcon Value="@(new Icons.Regular.Size24.CheckmarkCircle())" Color="Color.Success" />
+            }
+            else
+            {
+                <FluentIcon Value="@(new Icons.Regular.Size24.DismissCircle())" Color="Color.Error" />
+            }
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">@Headline</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+            <FluentText>@Summary</FluentText>
+
+            @if (Result.Skipped)
+            {
+                <FluentText><strong>Why:</strong> @Result.SkipReason</FluentText>
+                <FluentText Size="TextSize.Size200">Untick "Check the rule's conditions first" to run the actions anyway.</FluentText>
+            }
+
+            @foreach (AutomationTestActionResult action in Result.Actions)
+            {
+                <AutomationActionResultCard Success="@action.Success"
+                                            Heading="@DescribeAction(action)"
+                                            Error="@action.ErrorMessage" />
+            }
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@CloseAsync">Close</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+#nullable enable
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter]
+    public required string RuleName { get; set; }
+
+    [Parameter]
+    public required AutomationTestRunResult Result { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<AutomationActionDescription> Descriptions { get; set; } = [];
+
+    private int Passed => Result.Actions.Count(a => a.Success);
+
+    private string Headline => Result.Skipped
+        ? "Nothing ran"
+        : Result.AllPassed ? "Test passed" : "Test failed";
+
+    private string Summary => Result.Skipped
+        ? $"A condition on \"{RuleName}\" doesn't hold right now, so its actions didn't run."
+        : Result.AllPassed
+            ? Result.Actions.Count == 1
+                ? $"The action of \"{RuleName}\" worked."
+                : $"All {Result.Actions.Count} actions of \"{RuleName}\" worked."
+            : $"{Passed} of {Result.Actions.Count} {(Result.Actions.Count == 1 ? "action" : "actions")} of \"{RuleName}\" worked. Fix the ones below, then test again.";
+
+    private string DescribeAction(AutomationTestActionResult action) =>
+        Descriptions.FirstOrDefault(d => d.ActionId == action.ActionId)?.Text ?? action.ActionType;
+
+    private async Task CloseAsync() => await Dialog.CloseAsync();
+}
