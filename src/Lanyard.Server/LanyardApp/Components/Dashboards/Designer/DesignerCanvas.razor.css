@@ -127,6 +127,7 @@
 }
 
 .designer-item-label span {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
 }
@@ -138,6 +139,8 @@
 }
 
 .designer-item-flag {
+    /* Never shrinks: on a narrow widget the name gives way first, so the flag stays readable. */
+    flex: 0 0 auto;
     margin-left: 4px;
     padding: 0 6px;
     border-radius: var(--borderRadiusCircular);

@@ -145,28 +145,18 @@ public class WidgetDispatchCoverageTests
     }
 
     [TestMethod]
-    public void EveryConfigurableWidgetType_OpensASettingsDialog()
-    {
-        string configurator = ReadSource("src/Lanyard.Server/LanyardApp/Components/Dashboards/DashboardWidgetConfigurator.cs");
-        Dictionary<WidgetType, Type> mapped = MappedWidgetTypes();
-        List<string> problems = [];
-
-        // Widgets with an inline settings panel don't need a dialog.
-        foreach (WidgetDescriptor descriptor in DashboardWidgetCatalog.All.Where(x => x.HasSettings && x.SettingsComponent is null))
-        {
-            if (mapped.TryGetValue(descriptor.Type, out Type? clrType) && !Regex.IsMatch(configurator, $@"case {clrType.Name} \w+:"))
-            {
-                problems.Add($"{descriptor.Type}: marked HasSettings in the catalog but has no case in DashboardWidgetConfigurator.ConfigureAsync");
-            }
-        }
-
-        Assert.IsEmpty(problems, string.Join('\n', problems));
-    }
-
-    [TestMethod]
     public void EveryInlineSettingsPanel_TakesTheWidgetAndAnOnChangedCallback()
     {
         List<string> problems = [];
+
+        // Greeting is the only widget with nothing to set.
+        foreach (WidgetType type in DashboardWidgetCatalog.All.Where(x => x.SettingsComponent is null).Select(x => x.Type))
+        {
+            if (type != WidgetType.Greeting)
+            {
+                problems.Add($"{type}: no SettingsComponent in DashboardWidgetCatalog, so it can't be configured in the designer");
+            }
+        }
 
         foreach (WidgetDescriptor descriptor in DashboardWidgetCatalog.All.Where(x => x.SettingsComponent is not null))
         {

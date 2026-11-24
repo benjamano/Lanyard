@@ -1,0 +1,5 @@
+@inherits WidgetSettingsBase<ClientZoneLaserScoreboardWidget>
+
+<div class="widget-settings">
+    <KioskPicker Value="@W.ClientId" ValueChanged="@(v => SetAsync(() => { W.ClientId = v; }, "Chose a kiosk"))" Label="Laser game kiosk" LaserGameKiosksOnly="true" />
+</div>

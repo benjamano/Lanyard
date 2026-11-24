@@ -1,18 +1,9 @@
 @using Lanyard.App.Components.Dashboards.Widgets
+@inherits WidgetSettingsBase<TextAreaWidget>
 
-@* The Text widget's content, edited in the inspector rather than on the canvas, where a press
-   starts a drag. The canvas shows the result as you type. *@
+@* The Text widget's content, edited here rather than on the canvas, where a press starts a drag.
+   The canvas shows the result as you type. *@
 
 <div class="text-area-settings">
-    <RenderTextAreaWidget Widget="TextArea" PreviewMode="false" ContentChanged="@(() => OnChanged.InvokeAsync("Edited text"))" />
+    <RenderTextAreaWidget Widget="W" PreviewMode="false" ContentChanged="@(() => OnChanged.InvokeAsync("Edited text"))" />
 </div>
-
-@code {
-    [Parameter, EditorRequired]
-    public required DashboardWidget Widget { get; set; }
-
-    [Parameter]
-    public EventCallback<string> OnChanged { get; set; }
-
-    private TextAreaWidget TextArea => (TextAreaWidget)Widget;
-}

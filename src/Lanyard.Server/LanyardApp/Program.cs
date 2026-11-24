@@ -262,7 +262,6 @@ builder.Services.AddHostedService<NotificationDeliveryHostedService>();
 builder.Services.AddHostedService<ShiftReminderHostedService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IWidgetVisibilityService, WidgetVisibilityService>();
-builder.Services.AddScoped<Lanyard.App.Components.Dashboards.DashboardWidgetConfigurator>();
 builder.Services.AddScoped<ISignalRProjectionControlHub, SignalRControlHub>();
 builder.Services.AddScoped<ITimeService, TimeService>();
 builder.Services.AddScoped<IDmxSceneService, DmxSceneService>();
