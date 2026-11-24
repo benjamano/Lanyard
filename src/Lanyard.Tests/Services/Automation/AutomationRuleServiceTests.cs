@@ -1465,7 +1465,7 @@ public class AutomationRuleServiceTests
             .ReturnsAsync(() => new ApplicationDbContext(options, new FixedTenantProvider(companyId)));
 
         RecordingActionExecutor executor = new();
-        AutomationEngineService engine = new(GetFactory(options), [executor], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+        AutomationEngineService engine = new(GetFactory(options), [executor], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance, new Lanyard.Tests.Services.Automation.NoPartiesSchedule());
 
         return (new AutomationRuleService(tenantFactory.Object, engine, new FakeCurrentUser(userId)), executor);
     }

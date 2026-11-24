@@ -1,11 +1,8 @@
 #nullable enable
 
-<<<<<<< HEAD
 using Lanyard.Application.Services.Authentication;
-=======
 using Lanyard.Application.Services.Features;
 using Lanyard.Application.Services.Parties;
->>>>>>> e8f281310115c42c9ea5a04d2aff9659169eb638
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Enum;
