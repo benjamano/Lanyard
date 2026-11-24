@@ -216,6 +216,7 @@ builder.Services.AddScoped<IOperationsAlertService, OperationsAlertService>();
 builder.Services.Configure<OperationsAlertOptions>(builder.Configuration.GetSection(OperationsAlertOptions.SectionName));
 builder.Services.AddHostedService<OperationsAlertRetentionHostedService>();
 builder.Services.AddHostedService<MissedClockInAlertHostedService>();
+builder.Services.AddHostedService<ChecklistMissedAlertHostedService>();
 builder.Services.AddHostedService<ComplianceAlertSweepHostedService>();
 builder.Services.AddSingleton<IKioskClientListCache, KioskClientListCache>();
 builder.Services.AddScoped<IShiftClaimService, ShiftClaimService>();

@@ -73,8 +73,11 @@
 
     private bool Fit => FitToScreen && PreviewMode;
 
+    // Checklists resolves the viewer's working location from their open time entry; its service applies that location's feature switch.
     private IEnumerable<DashboardWidget> VisibleWidgets => PreviewMode
-        ? Widgets.Where(w => CompanyFeatureCatalog.ForWidget(w.Type) is not CompanyFeature feature || !_hiddenFeatures.Contains(feature))
+        ? Widgets.Where(w => w is ChecklistsTodayWidget
+            || CompanyFeatureCatalog.ForWidget(w.Type) is not CompanyFeature feature
+            || !_hiddenFeatures.Contains(feature))
         : Widgets;
 
     private string GridStyle

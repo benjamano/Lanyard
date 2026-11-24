@@ -5474,6 +5474,16 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasDiscriminator().HasValue(5);
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ChecklistsTodayWidget", b =>
+                {
+                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
+
+                    b.Property<bool>("ChecklistsHideComplete")
+                        .HasColumnType("boolean");
+
+                    b.HasDiscriminator().HasValue(22);
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientZoneLaserGameStatusWidget", b =>
                 {
                     b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");

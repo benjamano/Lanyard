@@ -14,7 +14,13 @@ public enum OperationsAlertType
 
     // The Just Step Online booking import couldn't run (bad credentials, site down, parse failure),
     // raised by JustStepImportHostedService / BookingImportService.
-    PartyBookingImportFailed = 8
+    PartyBookingImportFailed = 8,
+
+    // 9-11 are kept for the producers named above (policies, rota holidays, DMX output faults).
+
+    // A location checklist went past its due time (or its day ended) with tasks left, raised by
+    // ChecklistMissedAlertHostedService and cleared if it's finished late.
+    ChecklistMissed = 12
 }
 
 // Higher is more urgent, so "at least Warning" is a plain comparison. Always shown with its text

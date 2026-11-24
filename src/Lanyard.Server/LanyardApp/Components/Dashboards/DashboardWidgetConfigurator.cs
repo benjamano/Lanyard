@@ -64,6 +64,8 @@ public sealed class DashboardWidgetConfigurator(
                 return await ShowSimpleConfigDialog<ConfigureMyShiftsDialog>(nameof(ConfigureMyShiftsDialog.Widget), myShiftsWidget);
             case WhoIsOnTodayWidget whoIsOnTodayWidget:
                 return await ShowConfigureWhoIsOnTodayDialog(whoIsOnTodayWidget);
+            case ChecklistsTodayWidget checklistsTodayWidget:
+                return await ShowSimpleConfigDialog<ConfigureChecklistsTodayDialog>(nameof(ConfigureChecklistsTodayDialog.Widget), checklistsTodayWidget);
             case PendingTimeOffWidget pendingTimeOffWidget:
                 return await ShowSimpleConfigDialog<ConfigurePendingTimeOffDialog>(nameof(ConfigurePendingTimeOffDialog.Widget), pendingTimeOffWidget);
             case ComplianceSummaryWidget complianceSummaryWidget:

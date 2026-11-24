@@ -306,6 +306,7 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasValue<AutomationRuleStatusWidget>(WidgetType.AutomationRuleStatus)
                 .HasValue<KioskHealthWidget>(WidgetType.KioskHealth)
                 .HasValue<OperationsAlertsWidget>(WidgetType.OperationsAlerts)
+                .HasValue<ChecklistsTodayWidget>(WidgetType.ChecklistsToday)
                 .HasValue<HallOfFameWidget>(WidgetType.HallOfFame)
                 .HasValue<MyTrainingWidget>(WidgetType.MyTraining)
                 .HasValue<GreetingWidget>(WidgetType.Greeting)

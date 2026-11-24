@@ -377,6 +377,9 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
                     existingAlerts.AlertMinimumSeverity = incomingAlerts.AlertMinimumSeverity;
                     existingAlerts.AlertOnlyUnacknowledged = incomingAlerts.AlertOnlyUnacknowledged;
                     break;
+                case ChecklistsTodayWidget existingChecklists when widget is ChecklistsTodayWidget incomingChecklists:
+                    existingChecklists.ChecklistsHideComplete = incomingChecklists.ChecklistsHideComplete;
+                    break;
                 case HallOfFameWidget existingHallOfFame when widget is HallOfFameWidget incomingHallOfFame:
                     existingHallOfFame.Period = incomingHallOfFame.Period;
                     existingHallOfFame.ShowTopScore = incomingHallOfFame.ShowTopScore;
@@ -765,6 +768,10 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
                 AlertMinimumSeverity = alertsWidget.AlertMinimumSeverity,
                 AlertOnlyUnacknowledged = alertsWidget.AlertOnlyUnacknowledged
             },
+            ChecklistsTodayWidget checklistsWidget => new ChecklistsTodayWidget
+            {
+                ChecklistsHideComplete = checklistsWidget.ChecklistsHideComplete
+            },
             HallOfFameWidget hallOfFameWidget => new HallOfFameWidget
             {
                 Period = hallOfFameWidget.Period,
@@ -915,6 +922,12 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
         {
             targetAlerts.AlertMinimumSeverity = sourceAlerts.AlertMinimumSeverity;
             targetAlerts.AlertOnlyUnacknowledged = sourceAlerts.AlertOnlyUnacknowledged;
+            return;
+        }
+
+        if (target is ChecklistsTodayWidget targetChecklists && source is ChecklistsTodayWidget sourceChecklists)
+        {
+            targetChecklists.ChecklistsHideComplete = sourceChecklists.ChecklistsHideComplete;
             return;
         }
 
