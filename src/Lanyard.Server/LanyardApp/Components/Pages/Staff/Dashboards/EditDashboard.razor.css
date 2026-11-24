@@ -61,6 +61,24 @@
     border-right: 1px solid var(--colorNeutralStroke2);
 }
 
+.designer-devices {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: var(--borderRadiusMedium);
+    background: var(--colorNeutralBackground3);
+    order: 2;
+}
+
+/* Tablet: the same 12-column layout, at a tablet's width. */
+.designer-page.device-tablet .designer-canvas-frame {
+    max-width: 820px;
+    margin: 0 auto;
+    background: var(--colorNeutralBackground2);
+    box-shadow: var(--shadow8);
+}
+
 .designer-toolbar-actions {
     flex: 0 0 auto;
     display: flex;
@@ -191,6 +209,14 @@
 
     .designer-toolbar-extras {
         order: 2;
+    }
+
+    .designer-devices {
+        order: 3;
+    }
+
+    .designer-toolbar-actions {
+        order: 4;
     }
 
     .designer-toolbar-actions {

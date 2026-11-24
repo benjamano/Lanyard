@@ -588,3 +588,126 @@ function invoke(state, method, ...args) {
         // The circuit went away mid-drag; nothing to undo on this side.
     });
 }
+
+// ---- Phone order list ----------------------------------------------------------------------
+//
+// Drag-to-reorder for the phone layout list (Designer/PhoneLayoutEditor). Rows carry
+// data-reorder-id; a press on a row's [data-reorder-handle] starts a drag, the row follows the
+// pointer, and on release .NET's ReorderAsync(id, newIndex) is called. Pointer events, so it
+// works with a finger as well as a mouse.
+export function initReorderList(list, dotNet) {
+    let drag = null;
+
+    const rows = () => [...list.querySelectorAll('[data-reorder-id]')];
+
+    const onDown = event => {
+        const handle = event.target.closest('[data-reorder-handle]');
+        const row = handle?.closest('[data-reorder-id]');
+
+        if (!row || event.button !== 0) {
+            return;
+        }
+
+        event.preventDefault();
+        // Where the other rows sit before anything moves; the drop index is worked out against these.
+        const others = rows().filter(r => r !== row);
+        drag = {
+            row,
+            id: row.dataset.reorderId,
+            startY: event.clientY,
+            pointerId: event.pointerId,
+            index: rows().indexOf(row),
+            middles: others.map(r => { const b = r.getBoundingClientRect(); return b.top + b.height / 2; }),
+            startMiddle: (() => { const b = row.getBoundingClientRect(); return b.top + b.height / 2; })(),
+            height: row.getBoundingClientRect().height + 6
+        };
+        row.classList.add('is-dragging');
+        try { handle.setPointerCapture(event.pointerId); } catch { }
+    };
+
+    const onMove = event => {
+        if (!drag || event.pointerId !== drag.pointerId) {
+            return;
+        }
+
+        event.preventDefault();
+        const dy = event.clientY - drag.startY;
+        drag.row.style.transform = `translateY(${dy}px)`;
+
+        // The new index is how many of the other rows' (original) middles the dragged row's middle has passed.
+        const middle = drag.startMiddle + dy;
+        const index = drag.middles.filter(m => middle > m).length;
+        drag.target = index;
+
+        // Slide the rows in between out of the way, so the gap shows where it will land.
+        rows().filter(r => r !== drag.row).forEach((other, i) => {
+            let shift = 0;
+
+            if (drag.index <= i && i < index) {
+                shift = -drag.height;
+            } else if (index <= i && i < drag.index) {
+                shift = drag.height;
+            }
+
+            other.style.transform = shift ? `translateY(${shift}px)` : '';
+        });
+    };
+
+    const finish = commit => {
+        if (!drag) {
+            return;
+        }
+
+        const { row, id, target, index } = drag;
+        drag = null;
+        rows().forEach(r => { r.style.transform = ''; r.classList.remove('is-dragging'); });
+
+        if (commit && target !== undefined && target !== index) {
+            dotNet.invokeMethodAsync('ReorderAsync', id, target).catch(() => { });
+        }
+    };
+
+    const onUp = event => { if (drag && event.pointerId === drag.pointerId) { finish(true); } };
+    const onCancel = () => finish(false);
+    const onKey = event => { if (event.key === 'Escape') { finish(false); } };
+
+    list.addEventListener('pointerdown', onDown);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
+    window.addEventListener('keydown', onKey);
+
+    return {
+        dispose() {
+            list.removeEventListener('pointerdown', onDown);
+            window.removeEventListener('pointermove', onMove);
+            window.removeEventListener('pointerup', onUp);
+            window.removeEventListener('pointercancel', onCancel);
+            window.removeEventListener('keydown', onKey);
+        }
+    };
+}
+
+// ---- Scaled device frames --------------------------------------------------------------------
+//
+// Shows a fixed-size screen (a 1920x1080 TV) scaled down to fit its container, so the preview
+// lays out exactly as the real screen would, just smaller. Sets --frame-scale on the frame
+// whenever the container resizes.
+export function fitFrame(container, frame, width, height) {
+    const apply = () => {
+        const available = container.clientWidth;
+        const scale = Math.min(1, available / width);
+        frame.style.setProperty('--frame-scale', scale.toString());
+        container.style.height = `${Math.ceil(height * scale)}px`;
+    };
+
+    const observer = new ResizeObserver(apply);
+    observer.observe(container);
+    apply();
+
+    return {
+        dispose() {
+            observer.disconnect();
+        }
+    };
+}

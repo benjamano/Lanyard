@@ -1,0 +1,145 @@
+.phone-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 24px;
+    padding: 16px;
+    align-items: start;
+}
+
+.phone-layout-list-pane {
+    min-width: 0;
+    max-width: 560px;
+}
+
+.phone-layout-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.phone-layout-title {
+    font-size: var(--fontSizeBase400);
+    font-weight: var(--fontWeightSemibold);
+}
+
+.phone-layout-hint {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}
+
+.phone-layout-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.phone-layout-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusMedium);
+    background: var(--colorNeutralBackground1);
+    transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.phone-layout-row.is-dragging {
+    position: relative;
+    z-index: 2;
+    transition: none;
+    box-shadow: var(--shadow16);
+}
+
+.phone-layout-row.is-hidden .phone-layout-icon,
+.phone-layout-row.is-hidden .phone-layout-name {
+    opacity: 0.5;
+}
+
+.phone-layout-handle {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 32px;
+    cursor: grab;
+    touch-action: none;
+    color: var(--colorNeutralForeground3);
+}
+
+.phone-layout-handle ::deep svg,
+.phone-layout-icon ::deep svg {
+    fill: currentColor;
+}
+
+.phone-layout-icon {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--borderRadiusMedium);
+    background: var(--colorBrandBackground2);
+    color: var(--colorBrandForeground1);
+}
+
+.phone-layout-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-weight: var(--fontWeightSemibold);
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.phone-layout-tag {
+    display: block;
+    font-weight: var(--fontWeightRegular);
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}
+
+.phone-layout-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.phone-layout-empty {
+    padding: 24px;
+    text-align: center;
+    color: var(--colorNeutralForeground3);
+}
+
+/* A phone-sized frame around the live dashboard. DashboardGrid collapses to one column by
+   container query, so in a 390px frame it shows exactly what a phone shows. */
+.phone-frame {
+    width: 390px;
+    height: 720px;
+    padding: 14px 10px;
+    box-sizing: border-box;
+    border-radius: 36px;
+    border: 8px solid var(--colorNeutralForeground1);
+    background: var(--colorNeutralBackground1);
+    box-shadow: var(--shadow16);
+}
+
+.phone-frame-screen {
+    height: 100%;
+    overflow-y: auto;
+    border-radius: 20px;
+}
+
+/* On a real phone there's no room for the preview beside the list; the list is what matters. */
+@media (max-width: 900px) {
+    .phone-layout {
+        grid-template-columns: minmax(0, 1fr);
+        padding: 12px;
+    }
+
+    .phone-layout-preview-pane {
+        display: none;
+    }
+}

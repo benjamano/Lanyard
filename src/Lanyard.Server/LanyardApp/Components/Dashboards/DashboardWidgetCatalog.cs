@@ -117,14 +117,14 @@ public static class DashboardWidgetCatalog
     //  - PreviewMode:  Text Area shows its content rather than an editor. Always true here: its
     //                  editor lives in the designer's inspector (TextAreaWidgetSettings).
     //  - CompanyId:    a kiosk renders signed out, so company data is scoped to the dashboard's company.
-    public static Dictionary<string, object?> RenderParameters(WidgetDescriptor descriptor, DashboardWidget widget, bool live, int? companyId)
+    public static Dictionary<string, object?> RenderParameters(WidgetDescriptor descriptor, DashboardWidget widget, bool live, int? companyId, bool controlsEnabled = true)
     {
         HashSet<string> declared = DeclaredParameters.GetOrAdd(descriptor.Component, ReadParameters);
         Dictionary<string, object?> parameters = new() { ["Widget"] = widget };
 
         if (declared.Contains("AllowTrigger"))
         {
-            parameters["AllowTrigger"] = live;
+            parameters["AllowTrigger"] = live && controlsEnabled;
         }
 
         if (declared.Contains("PreviewMode"))

@@ -179,6 +179,7 @@ public static class HelpRegistry
             [
                 new("overview", "Overview"),
                 new("editing", "Editing a Dashboard"),
+                new("devices", "Phones & TVs"),
                 new("widgets", "Widgets")
             ],
             ["/manage/dashboards"]),
