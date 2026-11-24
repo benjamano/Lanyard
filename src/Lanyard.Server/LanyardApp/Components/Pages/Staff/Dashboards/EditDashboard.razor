@@ -1,136 +1,287 @@
 ﻿@page "/manage/dashboards/{DashboardId:guid}"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
 @using Lanyard.App.Components.Dashboards
+@using Lanyard.App.Components.Dashboards.Designer
 @using Lanyard.App.Components.Dialogs
 
-<PageTitle>Edit Dashboard</PageTitle>
+<PageTitle>@(Dashboard is null ? "Edit Dashboard" : $"{Dashboard.Name} - Dashboard designer")</PageTitle>
 
 @inject IDashboardService DashboardService
+@inject ICompanyFeatureService CompanyFeatures
 @inject NavigationManager NavigationManager
 
-@if (Dashboard != null)
+@if (Dashboard is null)
 {
-    CardAppearance cardAppearance = IsPreviewing ? CardAppearance.Default : CardAppearance.Default;
-    string padding = IsPreviewing ? Padding.All0 : Padding.All3;
-
-    <FluentCard Appearance="cardAppearance" Padding="@padding">
-        <FluentStack Orientation="@Orientation.Horizontal" VerticalAlignment="@VerticalAlignment.Center" HorizontalAlignment="@HorizontalAlignment.Start">
-            @if (IsEditingDashboardName)
-            {
-                <EditForm Model="@Dashboard" OnValidSubmit="async () => IsEditingDashboardName = false">
-                    <FluentTextInput Placeholder="Name" @bind-Value="Dashboard.Name" Required="true">
-                        <StartTemplate>
-                            <FluentIcon Value="new Icons.Regular.Size20.TextEditStyle()"/>
-                        </StartTemplate>
-                    </FluentTextInput>
-                </EditForm>
-            }
-            else if (!IsPreviewing)
-            {
-                <FluentButton Appearance="@ButtonAppearance.Subtle" OnClick="() => IsEditingDashboardName = IsPreviewing ? false : true">
-                    @Dashboard.Name
-                </FluentButton>
-            }
-            else
-            {
-                <FluentText Padding="@Padding.Horizontal2">
-                    @Dashboard.Name
-                </FluentText>
-            }
-
-            @{
-                Icon previewIcon = IsPreviewing ? new Icons.Filled.Size24.PreviewLink() : new Icons.Regular.Size24.PreviewLink();
-            }
-
-            <FluentButton Appearance="ButtonAppearance.Transparent" 
-                            IconStart="new Icons.Regular.Size24.Save()"
-                            Tooltip="Save Dashboard"
-                            OnClick="SaveDashboardAsync">
-            </FluentButton>
-
-            <FluentButton Appearance="ButtonAppearance.Transparent" 
-                            IconStart="previewIcon"
-                            OnClick="() => IsPreviewing = !IsPreviewing"
-                            Tooltip="Toggle Preview Dashboard">
-            </FluentButton>
-
-            <FluentButton Appearance="ButtonAppearance.Transparent" 
-                            Id="DashboardWidgetList"
-                            IconStart="new Icons.Regular.Size24.AddCircle()">
-            </FluentButton>
-            <FluentMenu Trigger="DashboardWidgetList">
-                <FluentMenuList>
-                    @foreach (WidgetDescriptor descriptor in DashboardWidgetCatalog.All)
-                    {
-                        <FluentMenuItem OnClick="@(() => Dashboard.Widgets.Add(descriptor.Create()))">
-                            @descriptor.Name
-                        </FluentMenuItem>
-                    }
-                </FluentMenuList>
-            </FluentMenu>
-
-            <FluentButton Appearance="ButtonAppearance.Transparent" 
-                            IconStart="new Icons.Regular.Size24.BinRecycle()"
-                            OnClick="DeleteDashboardAsync"
-                            Tooltip="Delete Dashboard">
-            </FluentButton>
-
-            <HelpButton AreaKey="@HelpRegistry.Dashboards" Topic="editing" Compact="true" />
-        </FluentStack>
-    </FluentCard>
-
-    <DashboardGrid Widgets="Dashboard.Widgets" CompanyId="Dashboard.CompanyId" RowHeight="Dashboard.RowHeight" PreviewMode="IsPreviewing"/>
+    <FluentStack HorizontalAlignment="@HorizontalAlignment.Center" Padding="@Padding.All3">
+        @if (_loadError is string error)
+        {
+            <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@error</FluentMessageBar>
+        }
+        else
+        {
+            <FluentSpinner />
+        }
+    </FluentStack>
 }
 else
 {
-    <FluentStack HorizontalAlignment="@HorizontalAlignment.Center" Padding="@Padding.All3">
-        <FluentSpinner/>
-    </FluentStack>
+    <div class="designer-page @(_previewing ? "is-previewing" : null) @(SelectedWidget is not null ? "has-selection" : null) @(_paletteOpen ? "palette-open" : null)">
+        <header class="designer-toolbar">
+            <FluentButton Appearance="ButtonAppearance.Subtle"
+                          IconStart="@(new Icons.Regular.Size20.ArrowLeft())"
+                          Title="Back to dashboards"
+                          aria-label="Back to dashboards"
+                          OnClick="@(() => NavigationManager.NavigateTo("/manage/dashboards"))" />
+
+            <div class="designer-title">
+                <div class="designer-title-name" title="@Dashboard.Name">@(string.IsNullOrWhiteSpace(Dashboard.Name) ? "Untitled dashboard" : Dashboard.Name)</div>
+                <div class="designer-title-meta">@(_previewing ? "Preview: buttons and controls work" : "Designer")</div>
+            </div>
+
+            <div class="designer-toolbar-actions">
+                @if (!_previewing)
+                {
+                    <FluentButton Class="designer-add-button"
+                                  Appearance="ButtonAppearance.Outline"
+                                  IconStart="@(new Icons.Regular.Size20.Add())"
+                                  OnClick="@(() => _paletteOpen = !_paletteOpen)">
+                        Add widget
+                    </FluentButton>
+                }
+
+                <FluentButton Appearance="ButtonAppearance.Outline"
+                              IconStart="@(_previewing ? new Icons.Regular.Size20.Edit() : new Icons.Regular.Size20.Eye())"
+                              OnClick="TogglePreview">
+                    @(_previewing ? "Edit" : "Preview")
+                </FluentButton>
+
+                <FluentButton Appearance="ButtonAppearance.Primary"
+                              IconStart="@(new Icons.Regular.Size20.Save())"
+                              Loading="_saving"
+                              OnClick="SaveDashboardAsync">
+                    Save
+                </FluentButton>
+
+            </div>
+
+            <div class="designer-toolbar-extras">
+                <FluentButton Id="designer-more" Appearance="ButtonAppearance.Subtle"
+                              IconStart="@(new Icons.Regular.Size20.MoreHorizontal())"
+                              Title="More"
+                              aria-label="More actions" />
+                <FluentMenu Trigger="designer-more">
+                    <FluentMenuList>
+                        <FluentMenuItem OnClick="DeleteDashboardAsync">
+                            Delete dashboard
+                        </FluentMenuItem>
+                    </FluentMenuList>
+                </FluentMenu>
+
+                <HelpButton AreaKey="@HelpRegistry.Dashboards" Topic="editing" Compact="true" />
+            </div>
+        </header>
+
+        <CascadingValue Value="_textFlusher" IsFixed="true">
+        <div class="designer-body">
+            <aside class="designer-pane designer-palette-pane" aria-label="Widgets">
+                <div class="designer-pane-header">
+                    <span>Widgets</span>
+                    <FluentButton Appearance="ButtonAppearance.Subtle"
+                                  IconStart="@(new Icons.Regular.Size20.Dismiss())" aria-label="Close widget list"
+                                  OnClick="@(() => _paletteOpen = false)" />
+                </div>
+                <div class="designer-pane-scroll">
+                    <WidgetPalette @ref="_palette" HiddenFeatures="_hiddenFeatures" />
+                </div>
+            </aside>
+
+            <main class="designer-pane designer-canvas-pane" data-designer-scroll>
+                @if (_previewing)
+                {
+                    <div class="designer-preview">
+                        <DashboardGrid Widgets="Dashboard.Widgets" CompanyId="Dashboard.CompanyId" RowHeight="Dashboard.RowHeight" PreviewMode="true" />
+                    </div>
+                }
+                else
+                {
+                    <div class="designer-canvas-frame">
+                        <DesignerCanvas @ref="_canvas"
+                                        Widgets="Dashboard.Widgets"
+                                        CompanyId="Dashboard.CompanyId"
+                                        RowHeight="Dashboard.RowHeight"
+                                        HiddenFeatures="_hiddenFeatures"
+                                        @bind-SelectedId="_selectedId"
+                                        OnChanged="OnChangedAsync" />
+                    </div>
+                }
+            </main>
+
+            <aside class="designer-pane designer-inspector-pane" aria-label="@(SelectedWidget is null ? "Dashboard details" : "Widget details")">
+                <div class="designer-pane-scroll">
+                    <WidgetInspector Dashboard="Dashboard"
+                                     Widget="@(_previewing ? null : SelectedWidget)"
+                                     HiddenFeatures="_hiddenFeatures"
+                                     OnChanged="OnChangedAsync"
+                                     OnResize="ResizeSelectedAsync"
+                                     OnDuplicate="DuplicateSelectedAsync"
+                                     OnRemove="RemoveSelectedAsync"
+                                     OnDeselect="@(() => _selectedId = null)"
+                                     OnTidy="TidyAsync" />
+                </div>
+            </aside>
+        </div>
+        </CascadingValue>
+    </div>
 }
 
 @code {
     [Parameter]
     public Guid DashboardId { get; set; } = Guid.Empty;
 
-    public Dashboard? Dashboard { get; set; } = null;
+    public Dashboard? Dashboard { get; set; }
 
-    public bool IsPreviewing = true;
+    private string? _loadError;
+    private bool _previewing;
+    private bool _saving;
+    private bool _paletteOpen;
+    private Guid? _selectedId;
+    private IReadOnlySet<CompanyFeature> _hiddenFeatures = new HashSet<CompanyFeature>();
 
-    public bool IsEditingDashboardName = false;
+    private DesignerCanvas? _canvas;
+    private WidgetPalette? _palette;
+    private bool _paletteAttached;
+
+    private readonly TextEditorFlusher _textFlusher = new();
+
+    private DashboardWidget? SelectedWidget => Dashboard?.Widgets.FirstOrDefault(w => w.Id == _selectedId);
 
     protected override async Task OnInitializedAsync()
     {
+        _hiddenFeatures = await CompanyFeatures.GetHiddenFeaturesForCurrentUserAsync();
+
         Result<Dashboard> result = await DashboardService.GetDashboardAsync(DashboardId);
 
         if (result.IsSuccess && result.Data != null)
         {
             Dashboard = result.Data;
+
+            // Saved layouts can predate the layout engine (overlaps, widgets past the edge); tidy
+            // those up front so the canvas only ever works on a valid layout.
+            List<WidgetRect> normalized = DashboardLayoutEngine.Normalize(Dashboard.Widgets.Select(w => new WidgetRect(w.Id, w.GridX, w.GridY, w.GridW, w.GridH)));
+
+            foreach ((DashboardWidget widget, WidgetRect rect) in Dashboard.Widgets.Zip(normalized))
+            {
+                (widget.GridX, widget.GridY, widget.GridW, widget.GridH) = (rect.X, rect.Y, rect.W, rect.H);
+            }
         }
         else
         {
-            _toastService.ShowError($"Failed to load the dashboard, {result.Error}");
+            _loadError = $"Couldn't load the dashboard: {result.Error}";
+            _toastService.ShowError(_loadError);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // The palette is in another pane, so the canvas is told about it once both exist (and
+        // again whenever the canvas comes back after a preview).
+        if (!_paletteAttached && _canvas is not null && _palette is not null)
+        {
+            _paletteAttached = true;
+            await _canvas.AttachPaletteAsync(_palette.Element);
+        }
+    }
+
+    private Task OnChangedAsync(string description)
+    {
+        // Adding from the widget sheet (tablet and phone) closes it, to show where the widget went.
+        if (description.StartsWith("Added", StringComparison.Ordinal))
+        {
+            _paletteOpen = false;
+        }
+
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private void TogglePreview()
+    {
+        _previewing = !_previewing;
+        _paletteOpen = false;
+
+        if (!_previewing)
+        {
+            _paletteAttached = false;
+        }
+    }
+
+    private async Task ResizeSelectedAsync((int W, int H) size)
+    {
+        if (_canvas is not null && SelectedWidget is DashboardWidget widget)
+        {
+            await _canvas.ResizeAsync(widget, size.W, size.H);
+        }
+    }
+
+    private async Task DuplicateSelectedAsync()
+    {
+        if (_canvas is not null && SelectedWidget is DashboardWidget widget)
+        {
+            await _canvas.DuplicateAsync(widget);
+        }
+    }
+
+    private async Task RemoveSelectedAsync()
+    {
+        if (_canvas is not null && SelectedWidget is DashboardWidget widget)
+        {
+            await _canvas.RemoveAsync(widget);
+        }
+    }
+
+    private async Task TidyAsync()
+    {
+        if (_canvas is not null)
+        {
+            await _canvas.TidyAsync();
         }
     }
 
     private async Task SaveDashboardAsync()
     {
-        if (Dashboard == null)
+        if (Dashboard == null || _saving)
         {
             return;
         }
 
-        Result<bool> result = await DashboardService.SaveDashboardAsync(Dashboard);
+        // Anything just typed into a Text widget, before its editor has handed it over.
+        await _textFlusher.FlushAsync();
 
-        if (!result.IsSuccess)
+        if (string.IsNullOrWhiteSpace(Dashboard.Name))
         {
-            _toastService.ShowError($"Failed to save the dashboard, {result.Error}");
-
+            _selectedId = null;
+            _toastService.ShowError("Give the dashboard a name before saving.");
             return;
         }
 
-        IsEditingDashboardName = false;
+        _saving = true;
 
-        _toastService.ShowSuccess("Dashboard saved successfully.");
+        try
+        {
+            Result<bool> result = await DashboardService.SaveDashboardAsync(Dashboard);
+
+            if (!result.IsSuccess)
+            {
+                _toastService.ShowError($"Failed to save the dashboard, {result.Error}");
+                return;
+            }
+
+            _toastService.ShowSuccess("Dashboard saved.");
+        }
+        finally
+        {
+            _saving = false;
+        }
     }
 
     private async Task DeleteDashboardAsync()
@@ -152,7 +303,7 @@ else
         if (!result.Cancelled && result.Value is true)
         {
             Result<bool> deleteResult = await DashboardService.DeleteDashboardAsync(Dashboard.Id);
-            
+
             if (deleteResult.IsSuccess)
             {
                 _toastService.ShowSuccess($"Dashboard '{Dashboard.Name}' deleted successfully.");

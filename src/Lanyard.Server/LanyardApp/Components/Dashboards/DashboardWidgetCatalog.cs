@@ -22,7 +22,8 @@ public enum WidgetCategory
 }
 
 // Everything the dashboard needs to know about one widget type, in one place: what to call it,
-// how to make a new one and which component draws it. The grid, the designer's palette and the
+// how to make a new one, which component draws it and which edits its settings in the designer's
+// inspector (SettingsComponent, which takes the widget and an OnChanged callback). The grid, the designer's palette and the
 // tests all read this, so adding a widget type means one entry here instead of a case in several
 // hand-written switches (see the dashboard-widgets skill).
 public sealed record WidgetDescriptor(
@@ -33,7 +34,8 @@ public sealed record WidgetDescriptor(
     Func<Icon> Icon,
     Func<DashboardWidget> Create,
     Type Component,
-    bool HasSettings = true)
+    bool HasSettings = true,
+    Type? SettingsComponent = null)
 {
     // The paid module this widget belongs to, or null for widgets every company gets.
     public CompanyFeature? Feature => CompanyFeatureCatalog.ForWidget(Type);
@@ -48,7 +50,8 @@ public static class DashboardWidgetCatalog
         new(WidgetType.DigitalClock, "Clock", "The time, and optionally the date.",
             WidgetCategory.General, () => new Icons.Regular.Size20.Clock(), () => new DigitalClockWidget(), typeof(RenderDigitalClockWidget)),
         new(WidgetType.TextArea, "Text", "Formatted text: notices, instructions, prices.",
-            WidgetCategory.General, () => new Icons.Regular.Size20.TextAddT(), () => new TextAreaWidget(), typeof(RenderTextAreaWidget), HasSettings: false),
+            WidgetCategory.General, () => new Icons.Regular.Size20.TextAddT(), () => new TextAreaWidget(), typeof(RenderTextAreaWidget),
+            SettingsComponent: typeof(Designer.Settings.TextAreaWidgetSettings)),
         new(WidgetType.Button, "Button", "Starts, skips or stops a projection program on a kiosk.",
             WidgetCategory.KiosksAndProjection, () => new Icons.Regular.Size20.FlashPlay(), () => new ButtonWidget(), typeof(RenderButtonWidget)),
         new(WidgetType.ProjectionStatus, "Projection status", "What a kiosk is projecting right now, with optional controls.",
@@ -112,7 +115,8 @@ public static class DashboardWidgetCatalog
     // ones are only passed to renderers that declare them, since DynamicComponent throws on a
     // parameter the component doesn't have.
     //  - AllowTrigger: buttons and controls only act on a live dashboard, never in the designer.
-    //  - PreviewMode:  Text Area shows its content instead of an editor on a live dashboard.
+    //  - PreviewMode:  Text Area shows its content rather than an editor. Always true here: its
+    //                  editor lives in the designer's inspector (TextAreaWidgetSettings).
     //  - CompanyId:    a kiosk renders signed out, so company data is scoped to the dashboard's company.
     public static Dictionary<string, object?> RenderParameters(WidgetDescriptor descriptor, DashboardWidget widget, bool live, int? companyId)
     {
@@ -126,7 +130,7 @@ public static class DashboardWidgetCatalog
 
         if (declared.Contains("PreviewMode"))
         {
-            parameters["PreviewMode"] = live;
+            parameters["PreviewMode"] = true;
         }
 
         if (declared.Contains("CompanyId"))

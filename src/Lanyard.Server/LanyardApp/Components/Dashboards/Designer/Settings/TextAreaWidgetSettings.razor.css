@@ -1,0 +1,9 @@
+.text-area-settings {
+    height: 280px;
+    display: flex;
+}
+
+.text-area-settings > ::deep * {
+    flex: 1 1 auto;
+    min-width: 0;
+}

@@ -88,7 +88,7 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
             Dashboard? dashboard = await ctx.Dashboards
                 .AsNoTracking()
                 .Include(x => x.Widgets.Where(w => w.IsActive))
-                .FirstOrDefaultAsync(x => x.Id == dashboardId);
+                .FirstOrDefaultAsync(x => x.Id == dashboardId && x.IsActive);
 
             if (dashboard is null)
             {
@@ -219,11 +219,12 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             Dashboard? existingDashboard = await ctx.Dashboards
-                .FirstOrDefaultAsync(x => x.Id == dashboard.Id);
+                .FirstOrDefaultAsync(x => x.Id == dashboard.Id && x.IsActive);
 
+            // A deleted dashboard can't be saved back to life from a tab that still has it open.
             if (existingDashboard is null)
             {
-                return Result<bool>.Fail("Dashboard not found.");
+                return Result<bool>.Fail("Dashboard not found. It may have been deleted.");
             }
 
             existingDashboard.Name = dashboard.Name.Trim();
