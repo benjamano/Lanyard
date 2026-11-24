@@ -15,14 +15,14 @@ namespace Lanyard.Application.Services.Locations;
 // locations, platform admins any. A null tenant (tests, system callers) is unrestricted.
 public class LocationOpeningHoursService(
     IDbContextFactory<ApplicationDbContext> factory,
-    AutomationEngineService engineService,
+    IAutomationEngineService engineService,
     ILogger<LocationOpeningHoursService> logger,
     ITenantContext? tenant = null) : ILocationOpeningHoursService
 {
     private const string NoAccessToLocation = "You do not have access to that location.";
 
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
-    private readonly AutomationEngineService _engineService = engineService;
+    private readonly IAutomationEngineService _engineService = engineService;
     private readonly ILogger<LocationOpeningHoursService> _logger = logger;
     private readonly ITenantContext? _tenant = tenant;
 

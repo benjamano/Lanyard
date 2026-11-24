@@ -32,6 +32,10 @@
                         <FluentOption Value="@AutomationConditionType.TimeWindow.ToString()">Time of day is between</FluentOption>
                         <FluentOption Value="@AutomationConditionType.DaysOfWeek.ToString()">Day of week is</FluentOption>
                         <FluentOption Value="@AutomationConditionType.ClientGameStatus.ToString()">A kiosk is or isn't in a game</FluentOption>
+                        @if (PartiesEnabled || row.ConditionType == AutomationConditionType.PartyInProgress)
+                        {
+                            <FluentOption Value="@AutomationConditionType.PartyInProgress.ToString()">A party is or isn't on</FluentOption>
+                        }
                         <FluentOption Value="@AutomationConditionType.DuringOpeningHours.ToString()">A location is open or closed</FluentOption>
                     </FluentSelect>
                 </div>
@@ -65,6 +69,39 @@
                                         Label="@(capturedDay.ToString()[..3])" />
                     }
                 </div>
+            }
+            else if (row.ConditionType == AutomationConditionType.PartyInProgress)
+            {
+                <div class="condition-fields">
+                    <FluentSelect TOption="Location"
+                                  TValue="string"
+                                  Label="Location"
+                                  Placeholder="Select location"
+                                  Width="100%"
+                                  Items="@Locations"
+                                  OptionText="@(l => l?.Name ?? string.Empty)"
+                                  OptionValue="@(l => l?.Id.ToString())"
+                                  Value="@row.LocationIdString"
+                                  ValueChanged="@((string? value) => SetAsync(() => row.LocationIdString = value ?? string.Empty))" />
+                    <FluentSelect TOption="string"
+                                  TValue="string"
+                                  Label="State"
+                                  Width="100%"
+                                  Value="@(row.PartyInProgress ? "on" : "off")"
+                                  ValueChanged="@((string? state) => SetAsync(() => row.PartyInProgress = state != "off"))">
+                        <FluentOption Value="@("on")">a party is on</FluentOption>
+                        <FluentOption Value="@("off")">no party is on</FluentOption>
+                    </FluentSelect>
+                </div>
+                <div class="condition-room">
+                    <FluentTextInput Label="Room (optional)"
+                                     Placeholder="Any room"
+                                     Maxlength="100"
+                                     Appearance="TextInputAppearance.Outline"
+                                     Value="@row.Room"
+                                     ValueChanged="@((string? value) => SetAsync(() => row.Room = value))" />
+                </div>
+                <div class="condition-hint">A party is on from its start time until its finish time. Cancelled parties, provisional bookings and private hires don't count.</div>
             }
             else if (row.ConditionType == AutomationConditionType.DuringOpeningHours)
             {
@@ -144,6 +181,9 @@
 
     [Parameter]
     public IEnumerable<Location> Locations { get; set; } = [];
+
+    [Parameter]
+    public bool PartiesEnabled { get; set; }
 
     // The dropdown's label: "Only if" for a rule, "Show only when" for a widget.
     [Parameter]

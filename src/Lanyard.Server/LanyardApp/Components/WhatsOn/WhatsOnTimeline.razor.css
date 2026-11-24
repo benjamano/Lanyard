@@ -1,0 +1,145 @@
+.wo-timeline {
+    position: relative;
+    margin: 10px 0 14px;
+    min-width: 0;
+}
+
+.wo-hour {
+    position: absolute;
+    left: 56px;
+    right: 0;
+    border-top: 1px solid var(--colorNeutralStroke2);
+}
+
+.wo-hour-label {
+    position: absolute;
+    top: -0.65em;
+    left: -56px;
+    width: 48px;
+    text-align: right;
+    color: var(--colorNeutralForeground3);
+    font-size: 0.8rem;
+    line-height: 1.3;
+    font-variant-numeric: tabular-nums;
+}
+
+.wo-lanes {
+    position: absolute;
+    inset: 0 0 0 56px;
+}
+
+.wo-block {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 8px;
+    overflow: hidden;
+    border: 1px solid var(--colorBrandStroke2, var(--colorNeutralStroke1));
+    border-left: 4px solid var(--colorBrandStroke1);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--colorBrandBackground2) 80%, var(--colorNeutralBackground1));
+    color: var(--colorNeutralForeground1);
+    text-decoration: none;
+    box-sizing: border-box;
+    transition: box-shadow 0.15s ease;
+}
+
+.wo-block:hover,
+.wo-block:focus-visible {
+    box-shadow: var(--shadow8);
+    z-index: 2;
+}
+
+.wo-provisional {
+    border-left-style: dashed;
+    border-left-color: var(--colorStatusWarningBorder2, var(--colorPaletteYellowBorder2));
+}
+
+.wo-cancelled {
+    opacity: 0.55;
+    border-left-color: var(--colorNeutralStroke1);
+    background: var(--colorNeutralBackground3);
+    text-decoration: line-through;
+}
+
+.wo-block-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 6px;
+}
+
+.wo-block-time {
+    font-weight: 600;
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+    color: color-mix(in srgb, var(--colorBrandForeground1) 70%, var(--colorNeutralForeground1));
+}
+
+.wo-block-badges {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 4px;
+}
+
+.wo-block-title {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.wo-block-facts {
+    color: var(--colorNeutralForeground2);
+    font-size: 0.85rem;
+}
+
+/* A short entry has room for one line: keep the time and title, drop the rest. */
+.wo-block-short .wo-block-facts,
+.wo-block-short .wo-block-markers,
+.wo-block-short .wo-block-badges {
+    display: none;
+}
+
+.wo-block-short {
+    flex-direction: row;
+    gap: 8px;
+    padding-top: 3px;
+}
+
+.wo-block-markers {
+    color: var(--colorNeutralForeground2);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+/* A short tick on the block's right edge at the eat / laser time; the time itself is in the text. */
+.wo-marker {
+    position: absolute;
+    right: 0;
+    width: 28px;
+    border-top: 2px dotted var(--colorNeutralForeground3);
+}
+
+.wo-now {
+    position: absolute;
+    left: -8px;
+    right: 0;
+    border-top: 2px solid var(--colorPaletteRedBorder2, #d13438);
+    z-index: 3;
+    pointer-events: none;
+}
+
+.wo-now::before {
+    content: "";
+    position: absolute;
+    left: -4px;
+    top: -6px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--colorPaletteRedBorder2, #d13438);
+}

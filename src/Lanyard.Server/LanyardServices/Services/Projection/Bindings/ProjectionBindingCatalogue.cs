@@ -11,6 +11,9 @@ public static class ProjectionBindingKeys
     public const string LastGameWinner = "game.last-winner";
     public const string TopScoreToday = "game.top-score-today";
     public const string OpeningHoursToday = "location.opening-hours-today";
+    public const string PartyWelcome = "party.welcome";
+    public const string PartyChildName = "party.child-name";
+    public const string PartyNextUp = "party.next-up";
 }
 
 public sealed record ProjectionBindingDescriptor(string Key, string DisplayName, string Description, string DefaultFallback);
@@ -37,7 +40,22 @@ public static class ProjectionBindingCatalogue
         new(ProjectionBindingKeys.OpeningHoursToday,
             "Opening hours today",
             "Today's opening hours for this kiosk's location.",
-            "Ask a member of staff for today's opening hours.")
+            "Ask a member of staff for today's opening hours."),
+
+        new(ProjectionBindingKeys.PartyWelcome,
+            "Party welcome",
+            "\"Happy 7th birthday, Ava!\" for the party on now in this kiosk's party room (or at its location), from 15 minutes before it starts. Only the first name, and only when Party settings allows names on screens.",
+            "Welcome to the party!"),
+
+        new(ProjectionBindingKeys.PartyChildName,
+            "Birthday child's first name",
+            "Just the first name of the child whose party is on now in this kiosk's party room (or at its location). Only when Party settings allows names on screens.",
+            "Birthday star"),
+
+        new(ProjectionBindingKeys.PartyNextUp,
+            "Party: what's next",
+            "The next laser tag or food time for the party on now, such as \"Laser tag at 14:30\". Shows no name.",
+            "Have a great party!")
     ];
 
     private static readonly Dictionary<string, ProjectionBindingDescriptor> ByKey =

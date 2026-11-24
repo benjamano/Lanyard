@@ -1,0 +1,18 @@
+@page "/help/whats-on"
+@attribute [Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.Parties)]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.WhatsOn
+
+<HelpPage AreaKey="@HelpRegistry.WhatsOn">
+    <FluentTab Id="help-day" Header="Day View" IconStart="@(new Icons.Regular.Size16.CalendarDay())">
+        <WhatsOnDayHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-week" Header="Week View" IconStart="@(new Icons.Regular.Size16.CalendarWorkWeek())" DeferredLoading="true">
+        <WhatsOnWeekHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-staff" Header="Totals &amp; Staff" IconStart="@(new Icons.Regular.Size16.People())" DeferredLoading="true">
+        <WhatsOnStaffHelpTab />
+    </FluentTab>
+</HelpPage>

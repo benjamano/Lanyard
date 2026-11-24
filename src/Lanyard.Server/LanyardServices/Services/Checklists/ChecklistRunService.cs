@@ -21,7 +21,7 @@ public class ChecklistRunService(
 {
     public const int MaxHistoryDays = 62;
 
-    private const string FeatureOff = "Checklists aren't switched on for this company.";
+    private const string FeatureOff = "Checklists aren't switched on for this location.";
     private const string GrantLapsed = "Enter your PIN again to keep ticking.";
 
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
@@ -646,7 +646,7 @@ public class ChecklistRunService(
             return Result<(TerminalSession, Location)>.Fail("This device has been unpaired.");
         }
 
-        if (!await ChecklistRunStore.FeaturesOnAsync(ctx, location.CompanyId))
+        if (!await ChecklistRunStore.FeaturesOnAsync(ctx, location.Id))
         {
             return Result<(TerminalSession, Location)>.Fail(FeatureOff);
         }
@@ -673,7 +673,7 @@ public class ChecklistRunService(
             return Result<Location>.Fail("You don't work at that location.");
         }
 
-        if (!await ChecklistRunStore.FeaturesOnAsync(ctx, location.CompanyId))
+        if (!await ChecklistRunStore.FeaturesOnAsync(ctx, location.Id))
         {
             return Result<Location>.Fail(FeatureOff);
         }

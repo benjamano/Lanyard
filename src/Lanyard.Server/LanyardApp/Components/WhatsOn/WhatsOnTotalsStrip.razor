@@ -1,0 +1,49 @@
+@* The headline numbers for a day or a week. Cancelled entries never count. *@
+
+<div class="wo-totals" aria-label="@AriaLabel">
+    <div class="wo-total">
+        <span class="wo-total-value">@Totals.Items</span>
+        <span class="wo-total-label">@(Totals.Items == 1 ? "party" : "parties")</span>
+    </div>
+    <div class="wo-total">
+        <span class="wo-total-value">@Totals.Children</span>
+        <span class="wo-total-label">children</span>
+    </div>
+    <div class="wo-total">
+        <span class="wo-total-value">@Totals.Adults</span>
+        <span class="wo-total-label">adults</span>
+    </div>
+    <div class="wo-total">
+        <span class="wo-total-value">@Totals.HotFood / @Totals.ColdFood</span>
+        <span class="wo-total-label">hot / cold food</span>
+    </div>
+    <div class="wo-total @(Totals.Unpaid > 0 ? "wo-total-warn" : string.Empty)">
+        <span class="wo-total-value">@Totals.Unpaid</span>
+        <span class="wo-total-label">not paid in full@(Totals.BalanceDue > 0 ? $" · {PartyDisplayExtensions.Money(Totals.BalanceDue)} due" : string.Empty)</span>
+    </div>
+    @if (StaffCount is int staff)
+    {
+        <div class="wo-total">
+            <span class="wo-total-value">@staff</span>
+            <span class="wo-total-label">staff on</span>
+        </div>
+    }
+    @if (Totals.Provisional > 0)
+    {
+        <div class="wo-total wo-total-warn">
+            <span class="wo-total-value">@Totals.Provisional</span>
+            <span class="wo-total-label">provisional</span>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public WhatsOnTotals Totals { get; set; } = default!;
+
+    [Parameter]
+    public int? StaffCount { get; set; }
+
+    [Parameter]
+    public string AriaLabel { get; set; } = "Totals";
+}

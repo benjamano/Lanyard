@@ -32,6 +32,11 @@ public class Client : ICompanyOwned
     public int? LocationId { get; set; }
     public Location? Location { get; set; }
 
+    // The party room this kiosk's screen is in (matched to PartyBooking.Room, ignoring case and
+    // extra spaces), so its party live text shows that room's party. Null = the whole location.
+    [System.ComponentModel.DataAnnotations.MaxLength(100)]
+    public string? PartyRoom { get; set; }
+
     // Set when someone changes the music by hand while the location's schedule is on: the
     // schedule leaves this kiosk alone until then (the start of its next part of the day). Kept in
     // the database so a server restart doesn't undo a manager's choice. Only MusicScheduleEngine

@@ -1,4 +1,5 @@
 using Lanyard.Application.Services;
+using Lanyard.Application.Services.Authentication;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
@@ -130,7 +131,9 @@ public class WidgetVisibilityTests
         DbContextOptions<ApplicationDbContext> options = new DbContextOptionsBuilder<ApplicationDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
         Mock<IDbContextFactory<ApplicationDbContext>> factory = new();
         factory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>())).ReturnsAsync(() => new ApplicationDbContext(options));
-        DashboardService service = new(factory.Object);
+        Mock<ISecurityService> security = new();
+        security.Setup(x => x.IsCurrentUserInRoleAsync(It.IsAny<string>())).ReturnsAsync(true);
+        DashboardService service = new(factory.Object, security.Object);
 
         Dashboard dashboard = new() { Id = Guid.NewGuid(), Name = "Laser", IsActive = true, CreateDate = DateTime.UtcNow };
         await using (ApplicationDbContext ctx = new(options))

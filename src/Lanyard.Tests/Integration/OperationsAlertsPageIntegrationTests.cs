@@ -1,3 +1,4 @@
+using Lanyard.Tests.TestUtilities;
 using System.Net;
 using System.Net.Http.Json;
 using Lanyard.Application.Services.OperationsAlerts;
@@ -159,10 +160,7 @@ public class OperationsAlertsPageIntegrationTests
         using (IServiceScope scope = _factory.Services.CreateScope())
         {
             ApplicationDbContext ctx = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting
-            {
-                CompanyId = ApplicationDbContext.SeedPlay2DayCompanyId, Feature = CompanyFeature.OperationsAlerts, IsEnabled = false
-            });
+            await TestFeatures.SwitchOffForCompanyAsync(ctx, ApplicationDbContext.SeedPlay2DayCompanyId, CompanyFeature.OperationsAlerts);
             await ctx.SaveChangesAsync();
         }
 

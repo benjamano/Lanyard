@@ -1,0 +1,10 @@
+@using Lanyard.App.Components.Home
+
+@* Shares GreetingCard with the standard home page. Nothing to configure, but it takes the widget
+   like every other renderer so the dashboard can render any widget the same way. *@
+<GreetingCard />
+
+@code {
+    [Parameter]
+    public required GreetingWidget Widget { get; set; }
+}

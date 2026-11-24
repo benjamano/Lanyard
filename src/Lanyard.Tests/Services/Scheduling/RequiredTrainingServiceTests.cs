@@ -1,3 +1,4 @@
+using Lanyard.Tests.TestUtilities;
 using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Scheduling;
@@ -99,6 +100,7 @@ internal static class RequiredTrainingTestHelpers
         Location location = new() { CompanyId = company.Id, Name = name, IsActive = true };
         ctx.Locations.Add(location);
         await ctx.SaveChangesAsync();
+        await TestFeatures.SwitchOnEverywhereAsync(ctx);
 
         return location;
     }
@@ -240,7 +242,7 @@ public class RequiredTrainingServiceTests
 
         await using (ApplicationDbContext ctx = new(w.Options))
         {
-            ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = w.Company.Id, Feature = CompanyFeature.Training, IsEnabled = false });
+            await TestFeatures.SwitchOffForCompanyAsync(ctx, w.Company.Id, CompanyFeature.Training);
             await ctx.SaveChangesAsync();
         }
 

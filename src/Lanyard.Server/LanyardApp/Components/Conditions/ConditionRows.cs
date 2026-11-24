@@ -16,6 +16,8 @@ public sealed class ConditionRow
     public bool InGame { get; set; }
     public string LocationIdString { get; set; } = string.Empty;
     public bool Open { get; set; } = true;
+    public bool PartyInProgress { get; set; } = true;
+    public string? Room { get; set; }
 }
 
 // To and from the stored condition shape (type + JSON parameters, see AutomationConditionParameters).
@@ -38,6 +40,10 @@ public static class ConditionRows
             {
                 AutomationConditionType.TimeWindow => AutomationConditionParameters.Serialize(new TimeWindowConditionParameters(row.Start, row.End)),
                 AutomationConditionType.DaysOfWeek => AutomationConditionParameters.Serialize(new DaysOfWeekConditionParameters(AutomationScheduleDays.Serialize(row.Days))),
+                AutomationConditionType.PartyInProgress => AutomationConditionParameters.Serialize(new PartyInProgressConditionParameters(
+                    int.TryParse(row.LocationIdString, out int partyLocationId) ? partyLocationId : 0,
+                    string.IsNullOrWhiteSpace(row.Room) ? null : row.Room.Trim(),
+                    row.PartyInProgress)),
                 AutomationConditionType.DuringOpeningHours => AutomationConditionParameters.Serialize(new OpeningHoursConditionParameters(
                     int.TryParse(row.LocationIdString, out int locationId) ? locationId : 0,
                     row.Open)),
@@ -85,6 +91,12 @@ public static class ConditionRows
             case AutomationConditionType.ClientGameStatus when AutomationConditionParameters.TryParse(parametersJson, out ClientGameStatusConditionParameters? kiosk):
                 row.ClientIdString = kiosk.ClientId == Guid.Empty ? string.Empty : kiosk.ClientId.ToString();
                 row.InGame = kiosk.InGame;
+                break;
+
+            case AutomationConditionType.PartyInProgress when AutomationConditionParameters.TryParse(parametersJson, out PartyInProgressConditionParameters? party):
+                row.LocationIdString = party.LocationId > 0 ? party.LocationId.ToString() : string.Empty;
+                row.Room = party.Room;
+                row.PartyInProgress = party.InProgress;
                 break;
 
             case AutomationConditionType.DuringOpeningHours when AutomationConditionParameters.TryParse(parametersJson, out OpeningHoursConditionParameters? hours):

@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Features;
 using Lanyard.Application.Services.OperationsAlerts;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
@@ -130,27 +131,22 @@ public class ChecklistMissedAlertHostedService(
     // Active locations of active, non-demo companies with checklists (and shift management) on.
     private static async Task<List<Location>> LiveLocationsAsync(ApplicationDbContext ctx, CancellationToken cancellationToken)
     {
-        List<int> companyIds = await ctx.Companies
+        List<int> activeCompanyIds = await ctx.Companies
             .AsNoTracking()
             .TagWithCallSite()
             .Where(x => x.IsActive && !x.IsDemo)
             .Select(x => x.Id)
             .ToListAsync(cancellationToken);
 
-        List<int> live = [];
-
-        foreach (int companyId in companyIds)
-        {
-            if (await ChecklistRunStore.FeaturesOnAsync(ctx, companyId, cancellationToken))
-            {
-                live.Add(companyId);
-            }
-        }
+        HashSet<int> enabledLocationIds = await CompanyFeatureQueries.GetEnabledLocationIdsAsync(ctx, CompanyFeature.Checklists, cancellationToken);
+        HashSet<int> schedulingLocationIds = await CompanyFeatureQueries.GetEnabledLocationIdsAsync(ctx, CompanyFeature.StaffScheduling, cancellationToken);
+        enabledLocationIds.IntersectWith(schedulingLocationIds);
 
         return await ctx.Locations
             .AsNoTracking()
             .TagWithCallSite()
-            .Where(x => x.IsActive && live.Contains(x.CompanyId) && ctx.Checklists.Any(c => c.LocationId == x.Id && c.IsActive))
+            .Where(x => x.IsActive && activeCompanyIds.Contains(x.CompanyId) && enabledLocationIds.Contains(x.Id)
+                && ctx.Checklists.Any(c => c.LocationId == x.Id && c.IsActive))
             .ToListAsync(cancellationToken);
     }
 

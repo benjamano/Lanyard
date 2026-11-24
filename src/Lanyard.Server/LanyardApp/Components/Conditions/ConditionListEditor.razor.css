@@ -54,6 +54,11 @@
     max-width: none;
 }
 
+.condition-room ::deep fluent-text-input {
+    width: 100%;
+    max-width: none;
+}
+
 .condition-days {
     display: flex;
     flex-wrap: wrap;

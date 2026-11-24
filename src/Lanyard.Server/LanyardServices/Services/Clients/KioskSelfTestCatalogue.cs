@@ -26,6 +26,7 @@ public static class KioskSelfTestCatalogue
         [SelfTestCheckKeys.CaptureTraffic] = "Game messages arriving",
         [SelfTestCheckKeys.WebView2Runtime] = "WebView2 runtime",
         [SelfTestCheckKeys.WebView2Windows] = "Projection screens",
+        [SelfTestCheckKeys.DisplaysList] = "Screens connected",
     };
 
     private static readonly Dictionary<string, string> GroupTitles = new()
@@ -34,6 +35,7 @@ public static class KioskSelfTestCatalogue
         [SelfTestCheckKeys.GroupDmx] = "DMX lighting",
         [SelfTestCheckKeys.GroupCapture] = "Laser tag network",
         [SelfTestCheckKeys.GroupWebView2] = "Projection display",
+        [SelfTestCheckKeys.GroupDisplays] = "Screens",
     };
 
     private const string RestartHint = "Restart the kiosk from the Clients page (Restart, then Restart Lanyard Client). If it happens again, send the kiosk's log from Diagnostics.";
@@ -72,6 +74,7 @@ public static class KioskSelfTestCatalogue
         [(SelfTestCheckKeys.WebView2Runtime, SelfTestCodes.Missing)] = "Install the Evergreen WebView2 Runtime from Microsoft, then restart the kiosk.",
         [(SelfTestCheckKeys.WebView2Runtime, SelfTestCodes.Outdated)] = "Run Windows Update, or reinstall the Evergreen WebView2 Runtime from Microsoft.",
         [(SelfTestCheckKeys.WebView2Windows, SelfTestCodes.WindowNotLoaded)] = "Use Screens on the Clients page to see what's showing, then restart the kiosk.",
+        [(SelfTestCheckKeys.DisplaysList, SelfTestCodes.NoDisplays)] = "Check the screens are switched on and their cables are plugged into the PC, then restart the kiosk.",
         [(SelfTestCheckKeys.WebView2Windows, SelfTestCodes.ShowingOffline)] = "The kiosk lost the server and is showing its offline copy. Check the PC's internet connection; it switches back on its own.",
     };
 
@@ -84,7 +87,7 @@ public static class KioskSelfTestCatalogue
     public static int GroupOrder(string group)
     {
         int index = Array.IndexOf(
-            [SelfTestCheckKeys.GroupAudio, SelfTestCheckKeys.GroupDmx, SelfTestCheckKeys.GroupCapture, SelfTestCheckKeys.GroupWebView2],
+            [SelfTestCheckKeys.GroupAudio, SelfTestCheckKeys.GroupDmx, SelfTestCheckKeys.GroupCapture, SelfTestCheckKeys.GroupWebView2, SelfTestCheckKeys.GroupDisplays],
             group);
 
         return index < 0 ? int.MaxValue : index;
