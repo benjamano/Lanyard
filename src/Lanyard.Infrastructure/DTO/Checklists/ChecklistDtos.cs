@@ -2,10 +2,10 @@ using Lanyard.Infrastructure.Enum;
 
 namespace Lanyard.Infrastructure.DTO.Checklists;
 
-// Who ticked a task, as shown on a checklist.
+// Who ticked a task, as shown on a checklist. A kiosk tick has no UserId; Name is then the kiosk's.
 public sealed record ChecklistTickView(
     Guid CompletionId,
-    string UserId,
+    string? UserId,
     string Name,
     DateTime CompletedUtc,
     ChecklistCompletionMethod Method,

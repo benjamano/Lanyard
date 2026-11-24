@@ -44,7 +44,7 @@ public static class CompanyFeatureCatalog
         WidgetType.DemandStaffing => CompanyFeature.Insights,
         WidgetType.WhatsOnToday => CompanyFeature.Parties,
         WidgetType.OperationsAlerts => CompanyFeature.OperationsAlerts,
-        WidgetType.ChecklistsToday => CompanyFeature.Checklists,
+        WidgetType.ChecklistsToday or WidgetType.Checklist => CompanyFeature.Checklists,
         _ => null
     };
 

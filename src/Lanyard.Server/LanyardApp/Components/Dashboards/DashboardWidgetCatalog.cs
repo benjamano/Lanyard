@@ -77,6 +77,8 @@ public static class DashboardWidgetCatalog
             WidgetCategory.Staff, () => new Icons.Regular.Size20.PeopleTeam(), () => new WhoIsOnTodayWidget(), typeof(RenderWhoIsOnTodayWidget)),
         new(WidgetType.ChecklistsToday, "Checklists today", "Today's checklists at a location, with completion progress.",
             WidgetCategory.Management, () => new Icons.Regular.Size20.TaskListLtr(), () => new ChecklistsTodayWidget(), typeof(RenderChecklistsTodayWidget)),
+        new(WidgetType.Checklist, "Checklist card", "A chosen checklist with task ticking on a kiosk.",
+            WidgetCategory.Management, () => new Icons.Regular.Size20.TaskListLtr(), () => new ChecklistCardWidget(), typeof(RenderChecklistCardWidget)),
         new(WidgetType.PendingTimeOff, "Time off to approve", "Time-off requests waiting for the viewing manager.",
             WidgetCategory.Management, () => new Icons.Regular.Size20.CalendarClock(), () => new PendingTimeOffWidget(), typeof(RenderPendingTimeOffWidget)),
         new(WidgetType.ComplianceSummary, "Compliance at a glance", "Overdue training and expiring staff documents.",

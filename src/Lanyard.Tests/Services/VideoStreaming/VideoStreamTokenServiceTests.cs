@@ -1,6 +1,5 @@
 using System;
 using Lanyard.Application.Services.VideoStreaming;
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Lanyard.Tests.Services.VideoStreaming
@@ -71,31 +70,52 @@ namespace Lanyard.Tests.Services.VideoStreaming
             Assert.IsTrue(service.ValidatePublisherToken(clientId, first), "Issuing a second token must not invalidate the first.");
             Assert.IsTrue(service.ValidatePublisherToken(clientId, second));
         }
-    
-        // The kiosk page's URL carries this token and is reloaded after a lost connection, so it
-        // must still work after the server restarts (a new service instance, same key ring).
+        // A kiosk window keeps its token in its URL across a server restart; the new server must
+        // take it back (same Data Protection keys), for that kiosk only.
         [TestMethod]
-        public void ViewerToken_SurvivesARestart()
+        public void ViewerToken_StillWorksAfterARestart_ForThatKioskOnly()
         {
-            EphemeralDataProtectionProvider keyRing = new();
+            Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider keys = new();
+            Lanyard.Tests.Services.Scheduling.TestClock clock = new(DateTime.UtcNow);
             Guid clientId = Guid.NewGuid();
 
-            string token = new VideoStreamTokenService(keyRing).IssueViewerToken(clientId);
+            string token = new VideoStreamTokenService(keys, clock).IssueViewerToken(clientId);
+            VideoStreamTokenService restarted = new(keys, clock);
 
-            VideoStreamTokenService afterRestart = new(keyRing);
-            Assert.IsTrue(afterRestart.ValidateViewerToken(clientId, token));
-            Assert.IsFalse(afterRestart.ValidateViewerToken(Guid.NewGuid(), token));
+            Assert.IsFalse(restarted.ValidateViewerToken(Guid.NewGuid(), token), "Another kiosk can't use it.");
+            Assert.IsTrue(restarted.ValidateViewerToken(clientId, token));
+            Assert.IsTrue(restarted.ValidateViewerToken(clientId, token), "And it slides as before.");
+            Assert.IsFalse(restarted.ValidatePublisherToken(clientId, token));
+            Assert.IsFalse(restarted.ValidateViewerToken(clientId, token[..^2] + "xx"), "A tampered token is refused.");
+            Assert.IsFalse(new VideoStreamTokenService().ValidateViewerToken(clientId, token), "Other keys don't accept it.");
         }
 
         [TestMethod]
-        public void ViewerToken_FromAnotherKeyRingOrTamperedWith_IsRefused()
+        public void ViewerToken_TooOldToComeBackAfterARestart()
         {
+            Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider keys = new();
+            Lanyard.Tests.Services.Scheduling.TestClock clock = new(DateTime.UtcNow);
             Guid clientId = Guid.NewGuid();
-            string token = new VideoStreamTokenService(new EphemeralDataProtectionProvider()).IssueViewerToken(clientId);
-            VideoStreamTokenService other = new(new EphemeralDataProtectionProvider());
 
-            Assert.IsFalse(other.ValidateViewerToken(clientId, token));
-            Assert.IsFalse(other.ValidateViewerToken(clientId, token[..^2] + "xx"));
+            string token = new VideoStreamTokenService(keys, clock).IssueViewerToken(clientId);
+            clock.Advance(VideoStreamTokenService.MaxViewerTokenAge + TimeSpan.FromDays(1));
+
+            Assert.IsFalse(new VideoStreamTokenService(keys, clock).ValidateViewerToken(clientId, token));
+        }
+
+        [TestMethod]
+        public void ViewerToken_LeftIdlePastItsLifetime_DoesNotComeBack()
+        {
+            Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider keys = new();
+            Lanyard.Tests.Services.Scheduling.TestClock clock = new(DateTime.UtcNow);
+            VideoStreamTokenService service = new(keys, clock);
+            Guid clientId = Guid.NewGuid();
+
+            string token = service.IssueViewerToken(clientId);
+            clock.Advance(TimeSpan.FromHours(13));
+
+            Assert.IsFalse(service.ValidateViewerToken(clientId, token), "Idle for 13 hours on the same server: lapsed, signed or not.");
+            Assert.IsFalse(service.ValidateViewerToken(clientId, token));
         }
     }
 }

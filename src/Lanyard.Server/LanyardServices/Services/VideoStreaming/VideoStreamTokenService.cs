@@ -6,29 +6,26 @@ namespace Lanyard.Application.Services.VideoStreaming;
 
 public class VideoStreamTokenService : IVideoStreamTokenService
 {
-    // Publisher tokens only need to survive one Edge cold-start, so they live in memory.
+    // Publisher tokens only need to survive one Edge cold-start; viewer tokens must live as
+    // long as a kiosk runs, so their expiry slides forward on every successful validation.
     private static readonly TimeSpan PublisherTokenLifetime = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan ViewerTokenLifetime = TimeSpan.FromHours(12);
 
-    // Viewer tokens are in the kiosk page's URL, and the page now refuses to start a program
-    // without one (Security Issue 9.3). The kiosk window reloads that same URL after a lost
-    // connection, so the token has to outlive a server restart or deploy: it's signed with the
-    // Data Protection key ring (kept in the database) instead of held in memory, and lasts long
-    // enough for a kiosk that runs for weeks. The kiosk gets a new one each time it opens a window.
-    private static readonly TimeSpan ViewerTokenLifetime = TimeSpan.FromDays(30);
+    /// <summary>
+    /// The longest a viewer token works after a server restart. Tokens are held in memory, but a
+    /// kiosk window keeps its token in its URL for as long as it stays open (the client leaves a
+    /// running window alone when it reconnects), so viewer tokens are also signed with the app's
+    /// persisted Data Protection keys. After a restart a signed token up to this old is taken back
+    /// and slides as before; an older one needs the kiosk window reopening.
+    /// </summary>
+    public static readonly TimeSpan MaxViewerTokenAge = TimeSpan.FromDays(30);
+
     private const string ViewerPurpose = "Lanyard.KioskViewerToken.v1";
-
-    private readonly ITimeLimitedDataProtector _viewerProtector;
-
-    public VideoStreamTokenService(IDataProtectionProvider? dataProtectionProvider = null)
-    {
-        _viewerProtector = (dataProtectionProvider ?? new EphemeralDataProtectionProvider())
-            .CreateProtector(ViewerPurpose)
-            .ToTimeLimitedDataProtector();
-    }
 
     private enum TokenPurpose
     {
-        Publisher
+        Publisher,
+        Viewer
     }
 
     private sealed class TokenEntry
@@ -36,44 +33,30 @@ public class VideoStreamTokenService : IVideoStreamTokenService
         public required Guid ClientId { get; init; }
         public required TokenPurpose Purpose { get; init; }
         public required DateTime ExpiresUtc { get; set; }
+
+        // A signed viewer token: kept (lapsed) until this, so one left idle past its 12 hours
+        // can't come back through the restart path.
+        public DateTime? SignedUntilUtc { get; init; }
     }
 
     private readonly ConcurrentDictionary<string, TokenEntry> _tokens = new();
+    private readonly ITimeLimitedDataProtector _viewerProtector;
+    private readonly TimeProvider _timeProvider;
+
+    // For tests and callers with no Data Protection: viewer tokens then don't outlive the instance.
+    public VideoStreamTokenService() : this(new EphemeralDataProtectionProvider(), TimeProvider.System)
+    {
+    }
+
+    public VideoStreamTokenService(IDataProtectionProvider dataProtectionProvider, TimeProvider timeProvider)
+    {
+        _viewerProtector = dataProtectionProvider.CreateProtector(ViewerPurpose).ToTimeLimitedDataProtector();
+        _timeProvider = timeProvider;
+    }
+
+    private DateTime Now => _timeProvider.GetUtcNow().UtcDateTime;
 
     public string IssuePublisherToken(Guid clientId)
-    {
-        return IssueToken(clientId, TokenPurpose.Publisher, PublisherTokenLifetime);
-    }
-
-    public bool ValidatePublisherToken(Guid clientId, string? token)
-    {
-        return ValidateToken(clientId, TokenPurpose.Publisher, token);
-    }
-
-    public string IssueViewerToken(Guid clientId)
-    {
-        return _viewerProtector.Protect(clientId.ToString("N"), DateTimeOffset.UtcNow.Add(ViewerTokenLifetime));
-    }
-
-    public bool ValidateViewerToken(Guid clientId, string? token)
-    {
-        if (string.IsNullOrEmpty(token))
-        {
-            return false;
-        }
-
-        try
-        {
-            // Unprotect throws for a tampered, expired or foreign-key token.
-            return _viewerProtector.Unprotect(token) == clientId.ToString("N");
-        }
-        catch (CryptographicException)
-        {
-            return false;
-        }
-    }
-
-    private string IssueToken(Guid clientId, TokenPurpose purpose, TimeSpan lifetime)
     {
         PruneExpired();
 
@@ -85,11 +68,77 @@ public class VideoStreamTokenService : IVideoStreamTokenService
         _tokens[token] = new TokenEntry
         {
             ClientId = clientId,
-            Purpose = purpose,
-            ExpiresUtc = DateTime.UtcNow.Add(lifetime)
+            Purpose = TokenPurpose.Publisher,
+            ExpiresUtc = Now.Add(PublisherTokenLifetime)
         };
 
         return token;
+    }
+
+    public bool ValidatePublisherToken(Guid clientId, string? token)
+    {
+        return ValidateToken(clientId, TokenPurpose.Publisher, token);
+    }
+
+    public string IssueViewerToken(Guid clientId)
+    {
+        PruneExpired();
+
+        DateTime signedUntil = Now.Add(MaxViewerTokenAge);
+
+        // The client id plus random bytes, so two tokens for one kiosk always differ.
+        string token = _viewerProtector.Protect($"{clientId:N}.{Convert.ToHexString(RandomNumberGenerator.GetBytes(16))}",
+            new DateTimeOffset(signedUntil, TimeSpan.Zero));
+
+        _tokens[token] = new TokenEntry
+        {
+            ClientId = clientId,
+            Purpose = TokenPurpose.Viewer,
+            ExpiresUtc = Now.Add(ViewerTokenLifetime),
+            SignedUntilUtc = signedUntil
+        };
+
+        return token;
+    }
+
+    public bool ValidateViewerToken(Guid clientId, string? token)
+    {
+        if (string.IsNullOrEmpty(token))
+        {
+            return false;
+        }
+
+        // Not known here: a token this server issued before it restarted.
+        if (!_tokens.ContainsKey(token) && SignedViewerUntil(clientId, token) is DateTime signedUntil)
+        {
+            _tokens.TryAdd(token, new TokenEntry
+            {
+                ClientId = clientId,
+                Purpose = TokenPurpose.Viewer,
+                ExpiresUtc = Now.Add(ViewerTokenLifetime),
+                SignedUntilUtc = signedUntil
+            });
+        }
+
+        return ValidateToken(clientId, TokenPurpose.Viewer, token);
+    }
+
+    // When a signed viewer token for this kiosk stops working, or null if it isn't one.
+    private DateTime? SignedViewerUntil(Guid clientId, string token)
+    {
+        try
+        {
+            string payload = _viewerProtector.Unprotect(token, out DateTimeOffset expiration);
+
+            return expiration.UtcDateTime > Now && payload.StartsWith($"{clientId:N}.", StringComparison.Ordinal)
+                ? expiration.UtcDateTime
+                : null;
+        }
+        catch (CryptographicException)
+        {
+            // Not a viewer token, tampered with, expired, or signed with a key this server doesn't have.
+            return null;
+        }
     }
 
     private bool ValidateToken(Guid clientId, TokenPurpose purpose, string? token)
@@ -109,10 +158,21 @@ public class VideoStreamTokenService : IVideoStreamTokenService
             return false;
         }
 
-        if (entry.ExpiresUtc <= DateTime.UtcNow)
+        DateTime now = Now;
+
+        if (entry.ExpiresUtc <= now)
         {
-            _tokens.TryRemove(token, out _);
+            if (entry.SignedUntilUtc is null)
+            {
+                _tokens.TryRemove(token, out _);
+            }
+
             return false;
+        }
+
+        if (purpose == TokenPurpose.Viewer)
+        {
+            entry.ExpiresUtc = now.Add(ViewerTokenLifetime);
         }
 
         return true;
@@ -120,11 +180,11 @@ public class VideoStreamTokenService : IVideoStreamTokenService
 
     private void PruneExpired()
     {
-        DateTime nowUtc = DateTime.UtcNow;
+        DateTime nowUtc = Now;
 
         foreach (KeyValuePair<string, TokenEntry> pair in _tokens)
         {
-            if (pair.Value.ExpiresUtc <= nowUtc)
+            if (pair.Value.ExpiresUtc <= nowUtc && (pair.Value.SignedUntilUtc is null || pair.Value.SignedUntilUtc <= nowUtc))
             {
                 _tokens.TryRemove(pair.Key, out _);
             }

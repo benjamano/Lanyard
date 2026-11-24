@@ -381,6 +381,11 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
                 case ChecklistsTodayWidget existingChecklists when widget is ChecklistsTodayWidget incomingChecklists:
                     existingChecklists.ChecklistsHideComplete = incomingChecklists.ChecklistsHideComplete;
                     break;
+                case ChecklistCardWidget existingCard when widget is ChecklistCardWidget incomingCard:
+                    existingCard.ChecklistCardChecklistId = incomingCard.ChecklistCardChecklistId;
+                    existingCard.ChecklistCardAllowKioskTicking = incomingCard.ChecklistCardAllowKioskTicking;
+                    existingCard.ChecklistCardHideWhenDone = incomingCard.ChecklistCardHideWhenDone;
+                    break;
                 case HallOfFameWidget existingHallOfFame when widget is HallOfFameWidget incomingHallOfFame:
                     existingHallOfFame.Period = incomingHallOfFame.Period;
                     existingHallOfFame.ShowTopScore = incomingHallOfFame.ShowTopScore;
@@ -773,6 +778,12 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
             {
                 ChecklistsHideComplete = checklistsWidget.ChecklistsHideComplete
             },
+            ChecklistCardWidget cardWidget => new ChecklistCardWidget
+            {
+                ChecklistCardChecklistId = cardWidget.ChecklistCardChecklistId,
+                ChecklistCardAllowKioskTicking = cardWidget.ChecklistCardAllowKioskTicking,
+                ChecklistCardHideWhenDone = cardWidget.ChecklistCardHideWhenDone
+            },
             HallOfFameWidget hallOfFameWidget => new HallOfFameWidget
             {
                 Period = hallOfFameWidget.Period,
@@ -931,6 +942,14 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
         if (target is ChecklistsTodayWidget targetChecklists && source is ChecklistsTodayWidget sourceChecklists)
         {
             targetChecklists.ChecklistsHideComplete = sourceChecklists.ChecklistsHideComplete;
+            return;
+        }
+
+        if (target is ChecklistCardWidget targetCard && source is ChecklistCardWidget sourceCard)
+        {
+            targetCard.ChecklistCardChecklistId = sourceCard.ChecklistCardChecklistId;
+            targetCard.ChecklistCardAllowKioskTicking = sourceCard.ChecklistCardAllowKioskTicking;
+            targetCard.ChecklistCardHideWhenDone = sourceCard.ChecklistCardHideWhenDone;
             return;
         }
 

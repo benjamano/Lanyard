@@ -5,22 +5,38 @@
 
 @if (_dashboard != null)
 {
-    <DashboardGrid Widgets="_dashboard.Widgets"
-                   CompanyId="_dashboard.CompanyId"
-                   RowHeight="_dashboard.RowHeight"
-                   FitToScreen="_dashboard.FitToScreen"
-                   PreviewMode="true" />
+    <CascadingValue Value="@_kiosk" IsFixed="false">
+        <DashboardGrid Widgets="_dashboard.Widgets"
+                       CompanyId="_dashboard.CompanyId"
+                       RowHeight="_dashboard.RowHeight"
+                       FitToScreen="_dashboard.FitToScreen"
+                       PreviewMode="true" />
+    </CascadingValue>
 }
 
 @code {
     [Parameter, EditorRequired]
     public ProjectionProgramStep Step { get; set; } = default!;
 
+    // The kiosk this is showing on, for widgets that act as the kiosk (a Checklist card's ticks).
+    [Parameter]
+    public Guid ClientId { get; set; }
+
+    [Parameter]
+    public string? ViewerToken { get; set; }
+
+    private KioskViewContext? _kiosk;
+
     private Dashboard? _dashboard;
     private string? _loadedDashboardId;
 
     protected override async Task OnParametersSetAsync()
     {
+        if (ClientId != Guid.Empty && (_kiosk?.ClientId != ClientId || _kiosk.ViewerToken != ViewerToken))
+        {
+            _kiosk = new KioskViewContext(ClientId, ViewerToken);
+        }
+
         string? dashboardId = GetStepParameterValue(KioskTemplateConstants.ParameterNames.Dashboard);
 
         // The kiosk host re-renders this template several times per step (and on every

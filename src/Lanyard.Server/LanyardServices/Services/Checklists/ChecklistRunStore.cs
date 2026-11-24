@@ -212,6 +212,9 @@ internal static class ChecklistRunStore
             .Include(x => x.Items)
             .ThenInclude(x => x.Completions.Where(c => c.IsActive))
             .ThenInclude(x => x.User)
+            .Include(x => x.Items)
+            .ThenInclude(x => x.Completions.Where(c => c.IsActive))
+            .ThenInclude(x => x.Client)
             .AsSplitQuery()
             .Where(x => x.LocationId == locationId && x.VenueDate == day)
             .ToListAsync(cancellationToken);
@@ -255,8 +258,13 @@ internal static class ChecklistRunStore
 
     private static ChecklistTickView? Tick(ChecklistCompletion? completion) => completion is null
         ? null
-        : new ChecklistTickView(completion.Id, completion.UserId, RotaNames.Public(completion.User), completion.CompletedUtc,
+        : new ChecklistTickView(completion.Id, completion.UserId, WhoTicked(completion), completion.CompletedUtc,
             completion.Method, completion.Note, completion.Reading);
+
+    // "Amy C.", or the kiosk's name for a tick made on a kiosk dashboard.
+    public static string WhoTicked(ChecklistCompletion completion) => completion.UserId is null
+        ? completion.Client?.Name ?? "a kiosk"
+        : RotaNames.Public(completion.User);
 }
 
 /// <summary>Ticks saved at the same moment as another change. Shared by every way of ticking.</summary>
