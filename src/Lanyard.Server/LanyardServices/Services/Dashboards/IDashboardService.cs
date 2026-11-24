@@ -15,7 +15,22 @@ public interface IDashboardService
     Task<Result<IEnumerable<Dashboard>>> GetDashboardSummariesAsync();
     Task<Result<Dashboard>> GetDashboardAsync(Guid dashboardId);
     Task<Result<bool>> DeleteDashboardAsync(Guid dashboardId);
-    Task<Result<bool>> CreateDashboardAsync(Dashboard dashboard);
+    /// <summary>
+    /// What the dashboards gallery shows: every active dashboard with its widgets' places (for
+    /// the layout thumbnail) and the projection programs that show it on a kiosk.
+    /// </summary>
+    Task<Result<IEnumerable<DashboardCard>>> GetDashboardCardsAsync();
+
+    /// <summary>
+    /// Creates a dashboard, with any widgets it already has (a template's), and returns its id.
+    /// </summary>
+    Task<Result<Guid>> CreateDashboardAsync(Dashboard dashboard);
+
+    /// <summary>
+    /// Copies a dashboard and all of its widgets as a new dashboard named "… (copy)", returning
+    /// the copy's id. Admins and Managers only.
+    /// </summary>
+    Task<Result<Guid>> DuplicateDashboardAsync(Guid dashboardId);
     /// <summary>
     /// Saves a dashboard and its widgets. Fails with <see cref="DashboardService.ChangedElsewhereMessage"/>
     /// if the stored dashboard was saved after <paramref name="dashboard"/>'s LastUpdateDate,

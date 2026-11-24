@@ -2,6 +2,7 @@
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Shared.Projection;
 using Microsoft.EntityFrameworkCore;
 
 namespace Lanyard.Application.Services;
@@ -83,6 +84,115 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
         }
     }
 
+    public async Task<Result<IEnumerable<DashboardCard>>> GetDashboardCardsAsync()
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            var dashboards = await ctx.Dashboards
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.Name)
+                .Select(x => new
+                {
+                    x.Id,
+                    x.Name,
+                    x.Description,
+                    x.LastUpdateDate,
+                    Widgets = x.Widgets
+                        .Where(w => w.IsActive)
+                        .Select(w => new DashboardCardWidget(w.Type, w.GridX, w.GridY, w.GridW, w.GridH))
+                        .ToList()
+                })
+                .ToListAsync();
+
+            // A dashboard reaches a kiosk TV as the Dashboard parameter of a projection step,
+            // stored as the dashboard's id in text.
+            var uses = await ctx.Set<ProjectionProgramParameterValue>()
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.Parameter!.Name == ProjectionParameterNames.Dashboard
+                    && x.Value != null
+                    && x.ProjectionProgramStep!.IsActive
+                    && x.ProjectionProgramStep.ProjectionProgram!.IsActive)
+                .Select(x => new { x.Value, ProgramName = x.ProjectionProgramStep!.ProjectionProgram!.Name })
+                .ToListAsync();
+
+            Dictionary<string, List<string>> programsByDashboard = uses
+                .GroupBy(x => x.Value!.Trim(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.Select(x => x.ProgramName).Distinct().OrderBy(n => n).ToList(), StringComparer.OrdinalIgnoreCase);
+
+            List<DashboardCard> cards = [.. dashboards.Select(d => new DashboardCard(
+                d.Id,
+                d.Name,
+                d.Description,
+                d.LastUpdateDate,
+                d.Widgets,
+                programsByDashboard.GetValueOrDefault(d.Id.ToString()) ?? []))];
+
+            return Result<IEnumerable<DashboardCard>>.Ok(cards);
+        }
+        catch (Exception ex)
+        {
+            return Result<IEnumerable<DashboardCard>>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<Guid>> DuplicateDashboardAsync(Guid dashboardId)
+    {
+        try
+        {
+            if (!await CanEditDashboardsAsync())
+            {
+                return Result<Guid>.Fail(NotAllowedToEditMessage);
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Dashboard? source = await ctx.Dashboards
+                .AsNoTracking()
+                .Include(x => x.Widgets.Where(w => w.IsActive))
+                .FirstOrDefaultAsync(x => x.Id == dashboardId && x.IsActive);
+
+            if (source is null)
+            {
+                return Result<Guid>.Fail("Dashboard not found.");
+            }
+
+            string name = $"{source.Name} (copy)";
+
+            Dashboard copy = new()
+            {
+                Id = Guid.NewGuid(),
+                Name = name.Length > 100 ? name[..100] : name,
+                Description = source.Description,
+                IsActive = true,
+                CreateDate = DateTime.UtcNow,
+                LastUpdateDate = DateTime.UtcNow,
+                FitToScreen = source.FitToScreen,
+                RowHeight = source.RowHeight
+            };
+
+            ctx.Dashboards.Add(copy);
+
+            foreach (DashboardWidget widget in source.Widgets)
+            {
+                widget.Id = Guid.Empty;
+                ctx.DashboardWidgets.Add(CreateWidgetCopy(widget, copy.Id));
+            }
+
+            await ctx.SaveChangesAsync();
+
+            return Result<Guid>.Ok(copy.Id);
+        }
+        catch (Exception ex)
+        {
+            return Result<Guid>.Fail(ex.Message);
+        }
+    }
+
     public async Task<Result<Dashboard>> GetDashboardAsync(Guid dashboardId)
     {
         try
@@ -161,24 +271,25 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
         }
     }
 
-    public async Task<Result<bool>> CreateDashboardAsync(Dashboard dashboard)
+    public async Task<Result<Guid>> CreateDashboardAsync(Dashboard dashboard)
     {
         try
         {
             if (string.IsNullOrWhiteSpace(dashboard.Name))
             {
-                return Result<bool>.Fail("Dashboard name is required.");
+                return Result<Guid>.Fail("Dashboard name is required.");
             }
 
             if (!await CanEditDashboardsAsync())
             {
-                return Result<bool>.Fail(NotAllowedToEditMessage);
+                return Result<Guid>.Fail(NotAllowedToEditMessage);
             }
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             Dashboard newDashboard = new()
             {
+                Id = Guid.NewGuid(),
                 Name = dashboard.Name.Trim(),
                 Description = dashboard.Description?.Trim(),
                 IsActive = true,
@@ -189,13 +300,21 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
             };
 
             ctx.Dashboards.Add(newDashboard);
+
+            // A dashboard made from a template starts with its widgets.
+            foreach (DashboardWidget widget in dashboard.Widgets ?? [])
+            {
+                widget.Id = Guid.Empty;
+                ctx.DashboardWidgets.Add(CreateWidgetCopy(widget, newDashboard.Id));
+            }
+
             await ctx.SaveChangesAsync();
 
-            return Result<bool>.Ok(true);
+            return Result<Guid>.Ok(newDashboard.Id);
         }
         catch (Exception ex)
         {
-            return Result<bool>.Fail(ex.Message);
+            return Result<Guid>.Fail(ex.Message);
         }
     }
 
