@@ -6201,7 +6201,7 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasOne("Lanyard.Infrastructure.Models.ChecklistRunItem", "RunItem")
                         .WithMany("Completions")
                         .HasForeignKey("RunItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "UndoneByUser")
