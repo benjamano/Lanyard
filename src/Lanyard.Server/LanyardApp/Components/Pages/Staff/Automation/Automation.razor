@@ -13,11 +13,12 @@
 
 @inject IAutomationRuleService _ruleService
 @inject IAutomationLogService _logService
-@inject AutomationEngineService _engineService
+@inject IAutomationEngineService _engineService
 @inject IClientService _clientService
 @inject INotificationService _toastService
 @inject IDialogService _dialogService
 @inject IDbContextFactory<ApplicationDbContext> _dbContextFactory
+@inject Lanyard.Application.Services.Tenancy.ITenantContext _tenant
 
 <PageTitle>Automation</PageTitle>
 
@@ -38,32 +39,52 @@
         </div>
     </FluentStack>
 
-    <FluentDataGrid Items="@_rules.AsQueryable()" GridTemplateColumns="1fr 1fr 1fr auto auto" Style="width: 100%;">
-        <EmptyContent>
-            No automation rules configured.
-        </EmptyContent>
-        <ChildContent>
-            <PropertyColumn Title="Name" Property="@(r => r.Name)" />
-            <TemplateColumn Title="Trigger Client">
-                @GetClientName(context.TriggerClientId)
-            </TemplateColumn>
-            <TemplateColumn Title="Trigger">
-                @DescribeTrigger(context)
-            </TemplateColumn>
-            <TemplateColumn Title="Enabled">
-                <FluentSwitch Value="@context.IsEnabled"
-                              ValueChanged="@((bool isEnabled) => OnRuleEnabledToggleChangedAsync(context, isEnabled))" />
-            </TemplateColumn>
-            <TemplateColumn Title="Actions">
-                <div class="d-flex align-items-center">
-                    <FluentIcon Icon="Icons.Regular.Size20.Edit" Color="Color.Primary"
-                                OnClick="@(() => OpenEditRuleDialogAsync(context))" />
-                    <FluentIcon Icon="Icons.Regular.Size20.Delete" Color="Color.Error"
-                                OnClick="@(() => ConfirmDeleteRuleAsync(context))" />
+    @* A flex list, not a FluentDataGrid: fixed grid columns truncated every rule name on a phone and
+       pushed the switch and buttons off the side of the screen. *@
+    @if (!_rules.Any())
+    {
+        <div class="automation-rules-empty">No automation rules configured.</div>
+    }
+    else
+    {
+        <div class="automation-rules-list">
+            @foreach (AutomationRule rule in _rules)
+            {
+                <div class="automation-rules-item" @key="rule.Id">
+                    <div class="automation-rules-info">
+                        <div class="automation-rules-name">@rule.Name</div>
+                        <div class="automation-rules-meta">@GetClientName(rule.TriggerClientId) &middot; @DescribeTrigger(rule)</div>
+                    </div>
+                    <div class="automation-rules-controls">
+                        <FluentSwitch Value="@rule.IsEnabled"
+                                      Title="@(rule.IsEnabled ? "Switch this rule off" : "Switch this rule on")"
+                                      aria-label="@($"{rule.Name} enabled")"
+                                      ValueChanged="@((bool isEnabled) => OnRuleEnabledToggleChangedAsync(rule, isEnabled))" />
+                        <FluentButton Appearance="ButtonAppearance.Transparent"
+                                      Title="@(rule.IsEnabled ? "Run now (test)" : "Switch the rule on to test it")"
+                                      aria-label="@($"Test {rule.Name} now")"
+                                      IconStart="@(new Icons.Regular.Size20.Play())"
+                                      Loading="@(_testingRuleId == rule.Id)"
+                                      Disabled="@(!rule.IsEnabled || _testingRuleId != null)"
+                                      OnClick="@(() => TestRuleAsync(rule))" />
+                        <FluentButton Appearance="ButtonAppearance.Transparent"
+                                      Title="Edit rule" aria-label="@($"Edit {rule.Name}")"
+                                      IconStart="@(new Icons.Regular.Size20.Edit())"
+                                      OnClick="@(() => OpenEditRuleDialogAsync(rule))" />
+                        <FluentButton Appearance="ButtonAppearance.Transparent"
+                                      Title="Duplicate rule" aria-label="@($"Duplicate {rule.Name}")"
+                                      IconStart="@(new Icons.Regular.Size20.Copy())"
+                                      Disabled="@(_duplicatingRuleId != null)"
+                                      OnClick="@(() => DuplicateRuleAsync(rule))" />
+                        <FluentButton Appearance="ButtonAppearance.Transparent"
+                                      Title="Delete rule" aria-label="@($"Delete {rule.Name}")"
+                                      IconStart="@(new Icons.Regular.Size20.Delete())"
+                                      OnClick="@(() => ConfirmDeleteRuleAsync(rule))" />
+                    </div>
                 </div>
-            </TemplateColumn>
-        </ChildContent>
-    </FluentDataGrid>
+            }
+        </div>
+    }
 </FluentCard>
 
 <FluentDivider Class="my-2" />
@@ -78,38 +99,51 @@
         </FluentStack>
     </FluentStack>
 
-    <FluentDataGrid Items="@FilteredExecutions.AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr auto" Style="width: 100%;">
-        <EmptyContent>
-            No execution log entries found.
-        </EmptyContent>
-        <ChildContent>
-            <TemplateColumn Title="Rule Name">
-                <span style="cursor: pointer; text-decoration: underline;"
-                      @onclick="@(() => OpenExecutionDetailDialogAsync(context))">
-                    @context.RuleName
-                </span>
-            </TemplateColumn>
-            <PropertyColumn Title="Trigger Event" Property="@(e => e.TriggerEvent)" />
-            <TemplateColumn Title="Trigger Client">
-                @GetClientName(context.TriggerClientId)
-            </TemplateColumn>
-            <PropertyColumn Title="Executed At" Property="@(e => e.ExecutedAt)" />
-            <TemplateColumn Title="Result">
-                @if (context.SkipReason != null)
-                {
-                    <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative" title="@context.SkipReason">Skipped</FluentBadge>
-                }
-                else if (context.OverallSuccess)
-                {
-                    <FluentIcon Icon="Icons.Regular.Size20.CheckmarkCircle" Color="Color.Success" />
-                }
-                else
-                {
-                    <FluentIcon Icon="Icons.Regular.Size20.DismissCircle" Color="Color.Error" />
-                }
-            </TemplateColumn>
-        </ChildContent>
-    </FluentDataGrid>
+    @* A list rather than a grid, for the same reason as the rules above: five fixed columns didn't fit
+       on a phone. *@
+    @if (!FilteredExecutions.Any())
+    {
+        <div class="automation-rules-empty">No execution log entries found.</div>
+    }
+    else
+    {
+        <div class="automation-rules-list">
+            @foreach (AutomationRuleExecution execution in FilteredExecutions)
+            {
+                <div class="automation-rules-item" @key="execution.Id">
+                    <div class="automation-rules-info">
+                        <button type="button" class="automation-log-name"
+                                title="Show what happened"
+                                aria-label="@($"Show what happened when {execution.RuleName} ran")"
+                                @onclick="@(() => OpenExecutionDetailDialogAsync(execution))">
+                            @execution.RuleName
+                        </button>
+                        <div class="automation-rules-meta">
+                            @execution.TriggerEvent &middot; @GetClientName(execution.TriggerClientId) &middot; @RotaTime.ToVenueLocal(execution.ExecutedAt).ToString("d MMM yyyy HH:mm")
+                        </div>
+                    </div>
+                    <div class="automation-rules-controls">
+                        @if (execution.IsTestRun)
+                        {
+                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Brand" title="Run by hand with Run now (test)">Test</FluentBadge>
+                        }
+                        @if (execution.SkipReason != null)
+                        {
+                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative" title="@execution.SkipReason">Skipped</FluentBadge>
+                        }
+                        else if (execution.OverallSuccess)
+                        {
+                            <FluentIcon Value="@(new Icons.Regular.Size20.CheckmarkCircle())" Color="Color.Success" aria-label="Worked" title="Worked" />
+                        }
+                        else
+                        {
+                            <FluentIcon Value="@(new Icons.Regular.Size20.DismissCircle())" Color="Color.Error" aria-label="Failed" title="Failed" />
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
 </FluentCard>
 
 @code {
@@ -120,6 +154,8 @@
     private IEnumerable<AutomationRuleExecution> _executions = [];
     private bool _engineEnabled;
     private bool _showFailuresOnly;
+    private Guid? _duplicatingRuleId;
+    private Guid? _testingRuleId;
 
     private IEnumerable<AutomationRuleExecution> FilteredExecutions =>
         _showFailuresOnly
@@ -137,7 +173,16 @@
 
         // Independent reads (each opens its own DbContext) - overlap them rather than paying
         // three round-trips back to back.
-        await Task.WhenAll(LoadClientsAsync(), LoadRulesAsync(), LoadExecutionsAsync());
+        await Task.WhenAll(LoadClientsAsync(), LoadRulesAsync(), LoadExecutionsAsync(), LoadLocationsAsync());
+    }
+
+    // Names for party time rules ("... (Ipswich)"); the rule only stores the location's id.
+    private Dictionary<int, string> _locationNames = [];
+
+    private async Task LoadLocationsAsync()
+    {
+        Result<List<Location>> result = await _companyLocationService.GetLocationsAsync(_tenant.CompanyId);
+        _locationNames = (result.Data ?? []).ToDictionary(l => l.Id, l => l.Name);
     }
 
     private async Task LoadRulesAsync()
@@ -180,7 +225,7 @@
         return _clients.FirstOrDefault(c => c.Id == clientId)?.Name ?? clientId.ToString();
     }
 
-    private static string DescribeTrigger(AutomationRule rule)
+    private string DescribeTrigger(AutomationRule rule)
     {
         int conditionCount = rule.Conditions.Count(c => c.IsActive);
 
@@ -192,7 +237,7 @@
         };
     }
 
-    private static string DescribeTriggerOnly(AutomationRule rule)
+    private string DescribeTriggerOnly(AutomationRule rule)
     {
         switch (rule.TriggerType)
         {
@@ -224,6 +269,11 @@
 
             case AutomationTriggerType.GameEnded:
                 return rule.TriggerTeam is Team winningTeam ? $"Game ends, {winningTeam} wins" : "Game ends with a winner";
+
+            case AutomationTriggerType.PartyMilestone when rule.PartyMilestone is PartyMilestone milestone:
+                string where = rule.PartyLocationId is int locationId && _locationNames.TryGetValue(locationId, out string? name) ? name : "a location";
+                string room = string.IsNullOrWhiteSpace(rule.PartyRoom) ? string.Empty : $", {rule.PartyRoom}";
+                return $"{PartyTriggerRules.Describe(milestone, rule.PartyLeadMinutes ?? 0)} ({where}{room})";
 
             default:
                 return $"Game status: {rule.TriggerEvent}";
@@ -297,6 +347,105 @@
         if (result.Value is true)
         {
             await LoadRulesAsync();
+        }
+    }
+
+    private async Task DuplicateRuleAsync(AutomationRule rule)
+    {
+        if (_duplicatingRuleId != null)
+        {
+            return;
+        }
+
+        _duplicatingRuleId = rule.Id;
+
+        try
+        {
+            Result<AutomationRule> result = await _ruleService.DuplicateRuleAsync(rule.Id);
+
+            if (!result.IsSuccess || result.Data is not AutomationRule copy)
+            {
+                _toastService.ShowError(result.Error ?? "Couldn't copy the rule.");
+                return;
+            }
+
+            await LoadRulesAsync();
+            _toastService.ShowSuccess($"Copied as \"{copy.Name}\". It's switched off until you turn it on.");
+
+            // Straight into the copy, so it can be renamed and changed before it's switched on.
+            AutomationRule? reloaded = _rules.FirstOrDefault(r => r.Id == copy.Id);
+
+            if (reloaded != null)
+            {
+                await OpenEditRuleDialogAsync(reloaded);
+            }
+        }
+        finally
+        {
+            _duplicatingRuleId = null;
+        }
+    }
+
+    private async Task TestRuleAsync(AutomationRule rule)
+    {
+        if (_testingRuleId != null || !rule.IsEnabled)
+        {
+            return;
+        }
+
+        Result<List<AutomationActionDescription>> described = await _ruleService.DescribeActionsAsync(rule.Id);
+
+        if (!described.IsSuccess || described.Data is not List<AutomationActionDescription> descriptions)
+        {
+            _toastService.ShowError(described.Error ?? "Couldn't read the rule's actions.");
+            return;
+        }
+
+        DialogResult confirm = await _dialogService.ShowDialogAsync<ConfirmAutomationTestRunDialog>(options =>
+        {
+            options.Width = "560px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmAutomationTestRunDialog.Rule), rule);
+            options.Parameters.Add(nameof(ConfirmAutomationTestRunDialog.KioskName), GetClientName(rule.TriggerClientId));
+            options.Parameters.Add(nameof(ConfirmAutomationTestRunDialog.EngineEnabled), _engineEnabled);
+            options.Parameters.Add(nameof(ConfirmAutomationTestRunDialog.Actions), descriptions);
+        });
+
+        if (confirm.Cancelled || confirm.Value is not bool checkConditions)
+        {
+            return;
+        }
+
+        _testingRuleId = rule.Id;
+        StateHasChanged();
+
+        try
+        {
+            Result<AutomationTestRunResult> result = await _ruleService.TestRunRuleAsync(rule.Id, checkConditions);
+
+            await LoadExecutionsAsync();
+
+            if (!result.IsSuccess || result.Data is not AutomationTestRunResult run)
+            {
+                _toastService.ShowError(result.Error ?? "The test couldn't run.");
+                return;
+            }
+
+            _testingRuleId = null;
+            StateHasChanged();
+
+            await _dialogService.ShowDialogAsync<AutomationTestRunResultDialog>(options =>
+            {
+                options.Width = "560px";
+                options.Modal = true;
+                options.Parameters.Add(nameof(AutomationTestRunResultDialog.RuleName), rule.Name);
+                options.Parameters.Add(nameof(AutomationTestRunResultDialog.Result), run);
+                options.Parameters.Add(nameof(AutomationTestRunResultDialog.Descriptions), descriptions);
+            });
+        }
+        finally
+        {
+            _testingRuleId = null;
         }
     }
 

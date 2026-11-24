@@ -1,0 +1,38 @@
+.my-checklists {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 8px;
+    max-width: 760px;
+}
+
+.my-checklists-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.my-checklists-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.my-checklists ::deep .my-checklists-sub {
+    color: var(--colorNeutralForeground3);
+}
+
+/* Read out by screen readers after each tick, never shown. */
+.my-checklists-live {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}

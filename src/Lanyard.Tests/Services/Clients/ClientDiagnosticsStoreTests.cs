@@ -149,4 +149,23 @@ public class ClientDiagnosticsStoreTests
         clock.Advance(TimeSpan.FromSeconds(1));
         Assert.IsTrue(store.TryBeginScreenshots(clientId, out _));
     }
+
+    [TestMethod]
+    public void TryBeginIdentify_BlocksWhileRunningAndForTheShortCooldown_ThenAllowsAgain()
+    {
+        TestClock clock = new(Now);
+        ClientDiagnosticsStore store = new(clock);
+        Guid clientId = Guid.NewGuid();
+
+        Assert.IsTrue(store.TryBeginIdentify(clientId, out _));
+        Assert.IsFalse(store.TryBeginIdentify(clientId, out string? busy));
+        StringAssert.Contains(busy, "already being identified");
+
+        store.EndIdentify(clientId);
+        Assert.IsFalse(store.TryBeginIdentify(clientId, out _), "A double click is absorbed");
+        Assert.IsTrue(store.TryBeginSelfTest(clientId, out _), "Identify has its own guard");
+
+        clock.Advance(ClientDiagnosticsStore.IdentifyCooldown);
+        Assert.IsTrue(store.TryBeginIdentify(clientId, out _));
+    }
 }

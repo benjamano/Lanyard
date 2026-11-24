@@ -206,7 +206,14 @@ public class DemoResetServiceTests
         {
             Company demo = await ctx.Companies.SingleAsync(x => x.Id == demoId);
             demo.ThemeColorHex = "#00FF00";
-            ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = demoId, Feature = CompanyFeature.Training, IsEnabled = false });
+            List<int> locationIds = await ctx.Locations.Where(x => x.CompanyId == demoId).Select(x => x.Id).ToListAsync();
+            List<LocationFeatureSetting> trainingSettings = await ctx.LocationFeatureSettings
+                .Where(x => locationIds.Contains(x.LocationId) && x.Feature == CompanyFeature.Training)
+                .ToListAsync();
+            foreach (LocationFeatureSetting setting in trainingSettings)
+            {
+                setting.IsEnabled = false;
+            }
             await ctx.SaveChangesAsync();
         }
 

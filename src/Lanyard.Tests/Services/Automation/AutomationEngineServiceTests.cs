@@ -44,7 +44,7 @@ public class AutomationEngineServiceTests
         return new AutomationEngineService(
             GetFactory(options),
             executors,
-            new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+            new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance, new Lanyard.Tests.Services.Automation.NoPartiesSchedule());
     }
 
     // The engine reads its enabled flag from AppSettings on the first ProcessTransitionAsync and
@@ -404,6 +404,63 @@ public class AutomationEngineServiceTests
             3,
             executor.ExecutedActionIds,
             "After invalidating, the second pass should run both rules (1 + 2 = 3 executions).");
+    }
+
+    [TestMethod]
+    public async Task InvalidateRuleCache_DuringReload_IsNotLost()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = Guid.NewGuid();
+
+        await SeedEngineEnabledAsync(options, enabled: true);
+        await SeedRuleAsync(options, clientId, GameStatus.InGame);
+
+        // The engine's first context reads the enabled flag; its second is the rule-cache reload,
+        // which this holds open so a save can land while it is still in flight.
+        int calls = 0;
+        TaskCompletionSource reloadStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource releaseReload = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Mock<ISystemDbContextFactory> factoryMock = new();
+        factoryMock
+            .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .Returns(async (CancellationToken _) =>
+            {
+                if (Interlocked.Increment(ref calls) == 2)
+                {
+                    reloadStarted.SetResult();
+                    await releaseReload.Task;
+                }
+
+                return new ApplicationDbContext(options);
+            });
+
+        RecordingActionExecutor executor = new();
+        AutomationEngineService engine = new(
+            factoryMock.Object,
+            [executor],
+            new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance, new Lanyard.Tests.Services.Automation.NoPartiesSchedule());
+
+        GameStatusTransitionEvent ev = new(clientId, GameStatus.NotStarted, GameStatus.InGame);
+
+        Task first = engine.ProcessTransitionAsync(ev, CancellationToken.None);
+        await reloadStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        // A rule saved mid-reload: the service invalidates, but the reload still finishes with the
+        // rule set it started from.
+        engine.InvalidateRuleCache();
+        releaseReload.SetResult();
+        await first;
+        Assert.HasCount(1, executor.ExecutedActionIds);
+
+        await SeedRuleAsync(options, clientId, GameStatus.InGame);
+
+        await engine.ProcessTransitionAsync(ev, CancellationToken.None);
+
+        Assert.HasCount(
+            3,
+            executor.ExecutedActionIds,
+            "The invalidation made during the first reload must survive it, so the second pass "
+            + "reloads and runs both rules (1 + 2 = 3 executions).");
     }
 
     [TestMethod]

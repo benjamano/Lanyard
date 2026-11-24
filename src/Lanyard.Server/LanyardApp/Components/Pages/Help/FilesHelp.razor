@@ -1,11 +1,20 @@
 @page "/help/files"
-@attribute [Authorize(Roles = "Admin,CanManageFiles")]
+@attribute [Authorize]
 
 @using Microsoft.AspNetCore.Authorization
 @using Lanyard.App.Components.Help.Files
 
 <HelpPage AreaKey="@HelpRegistry.Files">
-    <FluentTab Id="help-overview" Header="File Manager" IconStart="@(new Icons.Regular.Size16.Folder())">
-        <FilesHelpTab />
+    <FluentTab Id="help-overview" Header="Finding files" IconStart="@(new Icons.Regular.Size16.Search())">
+        <FilesBrowsingHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-organising" Header="Uploading and organising" IconStart="@(new Icons.Regular.Size16.FolderArrowUp())">
+        <FilesOrganisingHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-sharing" Header="Sharing with staff" IconStart="@(new Icons.Regular.Size16.People())">
+        <FilesSharingHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-bin" Header="Recycle bin" IconStart="@(new Icons.Regular.Size16.Delete())">
+        <FilesBinHelpTab />
     </FluentTab>
 </HelpPage>

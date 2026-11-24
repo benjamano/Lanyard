@@ -1,0 +1,7 @@
+@inherits WidgetSettingsBase<ClientZoneLaserGameStatusWidget>
+
+<div class="widget-settings">
+    <KioskPicker Value="@W.ClientId" ValueChanged="@(v => SetAsync(() => { W.ClientId = v; }, "Chose a kiosk"))" Label="Laser game kiosk" LaserGameKiosksOnly="true" />
+    <FluentSwitch Value="@W.ShowCurrentGameStatus" ValueChanged="@(v => SetAsync(() => W.ShowCurrentGameStatus = v, v ? "Showed game status" : "Hid game status"))" Label="Show whether a game is on" />
+    <FluentSwitch Value="@W.ShowTimeLeft" ValueChanged="@(v => SetAsync(() => W.ShowTimeLeft = v, v ? "Showed time left" : "Hid time left"))" Label="Show the time left" />
+</div>

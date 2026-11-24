@@ -1,0 +1,73 @@
+@* Draws one widget, the same way on a live dashboard and in the designer: the optional title,
+   then the widget's own renderer from DashboardWidgetCatalog. *@
+
+<div class="dashboard-widget-frame @(ShowHeader ? "has-title" : null)">
+    @if (ShowHeader)
+    {
+        <div class="dashboard-widget-title" title="@Widget.Title">@Widget.Title</div>
+    }
+
+    <div class="dashboard-widget-body">
+        @if (_descriptor is null)
+        {
+            <div class="dashboard-widget-problem">This widget type isn't available.</div>
+        }
+        else
+        {
+            @* One broken widget mustn't take the whole dashboard down - a kiosk TV can run for
+               days with nobody there to refresh it. *@
+            <ErrorBoundary @ref="_errorBoundary">
+                <ChildContent>
+                    <DynamicComponent Type="_descriptor.Component"
+                                      Parameters="DashboardWidgetCatalog.RenderParameters(_descriptor, Widget, Live, CompanyId, ControlsEnabled)" />
+                </ChildContent>
+                <ErrorContent>
+                    <div class="dashboard-widget-problem">
+                        @_descriptor.Name couldn't load.
+                    </div>
+                </ErrorContent>
+            </ErrorBoundary>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required DashboardWidget Widget { get; set; }
+
+    // True on a real dashboard (home screen, kiosk, the designer's preview): buttons act and
+    // Text Area shows its content. False in the designer, where widgets are only being arranged.
+    [Parameter]
+    public bool Live { get; set; }
+
+    [Parameter]
+    public int? CompanyId { get; set; }
+
+    // False shows a live widget whose buttons and controls don't act: the designer's Phone and
+    // TV views show the real dashboard, but tapping a button there mustn't start a projection.
+    [Parameter]
+    public bool ControlsEnabled { get; set; } = true;
+
+    private WidgetDescriptor? _descriptor;
+    private ErrorBoundary? _errorBoundary;
+    private WidgetType? _descriptorType;
+
+    private bool ShowHeader => Widget.ShowTitle && !string.IsNullOrWhiteSpace(Widget.Title);
+
+    protected override void OnParametersSet()
+    {
+        if (_descriptorType != Widget.Type)
+        {
+            _descriptor = DashboardWidgetCatalog.Get(Widget.Type);
+            _descriptorType = Widget.Type;
+        }
+
+        // In the designer, a re-render usually means a setting changed, which is the moment to give
+        // a widget that failed another go. On a live screen it would just retry (and log) the same
+        // failure on every render, so it stays showing the message.
+        if (!Live)
+        {
+            _errorBoundary?.Recover();
+        }
+    }
+}

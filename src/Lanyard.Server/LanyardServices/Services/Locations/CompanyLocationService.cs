@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Features;
 using Lanyard.Application.Services.Tenancy;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
@@ -264,6 +265,7 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
             await ctx.SaveChangesAsync();
 
             _cache.Remove(BrandingCache.LocationScope(target.Id));
+            CompanyFeatureService.Evict(_cache, target.CompanyId);
 
             return Result<Location>.Ok(target);
         }
@@ -297,6 +299,7 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
             await ctx.SaveChangesAsync();
 
             _cache.Remove(BrandingCache.LocationScope(locationId));
+            CompanyFeatureService.Evict(_cache, location.CompanyId);
 
             return Result<bool>.Ok(true);
         }

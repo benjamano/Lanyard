@@ -1,0 +1,43 @@
+.cl-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    height: 100%;
+    width: 100%;
+    min-width: 0;
+}
+
+/* The checklist scrolls inside the card on a short widget, rather than spilling out of it. */
+.cl-card-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* The card's own border is enough; the checklist inside doesn't need a second one. */
+.cl-card-scroll ::deep .run-card {
+    border: none;
+    padding: 0;
+    background: transparent;
+}
+
+.cl-card-message {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    color: var(--colorNeutralForeground2);
+}
+
+.cl-card-title {
+    font-weight: var(--fontWeightSemibold);
+    color: var(--colorNeutralForeground1);
+}
+
+.cl-card-more {
+    align-self: flex-start;
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+    color: var(--colorBrandForeground1);
+}

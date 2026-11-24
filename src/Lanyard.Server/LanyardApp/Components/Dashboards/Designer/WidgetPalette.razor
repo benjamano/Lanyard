@@ -1,0 +1,93 @@
+@* The list of widgets to add, grouped and searchable. Drag one onto the canvas to place it where
+   you drop it, or tap it to add it in the first free space. dashboardDesigner.js handles both (it
+   reads the data-palette-* attributes), so this component is markup only. *@
+
+<div class="widget-palette" @ref="Element">
+    <div class="widget-palette-search">
+        <FluentTextInput @bind-Value="_search" @bind-Value:after="StateHasChanged"
+                         Immediate="true"
+                         Placeholder="Search widgets"
+                         aria-label="Search widgets"
+                         Width="100%">
+            <StartTemplate>
+                <FluentIcon Value="@(new Icons.Regular.Size16.Search())" />
+            </StartTemplate>
+        </FluentTextInput>
+    </div>
+
+    <div class="widget-palette-hint">Drag onto the dashboard, or tap to add.</div>
+
+    @{
+        bool any = false;
+    }
+
+    @foreach (IGrouping<WidgetCategory, WidgetDescriptor> group in Matching().GroupBy(x => x.Category))
+    {
+        any = true;
+        <div class="widget-palette-group">
+            <div class="widget-palette-group-name">@DashboardWidgetCatalog.CategoryName(group.Key)</div>
+
+            @foreach (WidgetDescriptor descriptor in group)
+            {
+                bool locked = descriptor.Feature is CompanyFeature feature && HiddenFeatures.Contains(feature);
+                DashboardWidget sample = descriptor.Create();
+
+                if (locked)
+                {
+                    <div class="widget-palette-item is-locked" title="@($"{descriptor.Name} isn't part of your plan")">
+                        <span class="widget-palette-icon"><FluentIcon Value="@descriptor.Icon()" /></span>
+                        <span class="widget-palette-text">
+                            <span class="widget-palette-name">@descriptor.Name</span>
+                            <span class="widget-palette-description">Not in your plan</span>
+                        </span>
+                        <FluentIcon Value="@(new Icons.Regular.Size16.LockClosed())" Class="widget-palette-lock" />
+                    </div>
+                }
+                else
+                {
+                    <div class="widget-palette-item"
+                         role="button"
+                         tabindex="0"
+                         title="@descriptor.Description"
+                         data-palette-type="@((int)descriptor.Type)"
+                         data-palette-label="@descriptor.Name"
+                         data-w="@sample.GridW"
+                         data-h="@sample.GridH">
+                        <span class="widget-palette-icon"><FluentIcon Value="@descriptor.Icon()" /></span>
+                        <span class="widget-palette-text">
+                            <span class="widget-palette-name">@descriptor.Name</span>
+                            <span class="widget-palette-description">@descriptor.Description</span>
+                        </span>
+                        <FluentIcon Value="@(new Icons.Regular.Size16.ReOrderDotsVertical())" Class="widget-palette-grip" />
+                    </div>
+                }
+            }
+        </div>
+    }
+
+    @if (!any)
+    {
+        <div class="widget-palette-none">No widgets match "@_search".</div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public IReadOnlySet<CompanyFeature> HiddenFeatures { get; set; } = new HashSet<CompanyFeature>();
+
+    public ElementReference Element { get; private set; }
+
+    private string? _search;
+
+    private IEnumerable<WidgetDescriptor> Matching()
+    {
+        string term = _search?.Trim() ?? string.Empty;
+
+        return DashboardWidgetCatalog.All
+            .Where(x => term.Length == 0
+                || x.Name.Contains(term, StringComparison.OrdinalIgnoreCase)
+                || x.Description.Contains(term, StringComparison.OrdinalIgnoreCase)
+                || DashboardWidgetCatalog.CategoryName(x.Category).Contains(term, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(x => x.Category);
+    }
+}

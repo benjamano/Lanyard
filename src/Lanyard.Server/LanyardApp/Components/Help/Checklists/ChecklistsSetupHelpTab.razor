@@ -1,0 +1,50 @@
+<HelpTab>
+    <HelpSection Title="Making a checklist">
+        <ol>
+            <li>Open <a href="/manage/checklists">Checklists</a> and press <strong>New checklist</strong>.</li>
+            <li>Give it a <strong>Name</strong>, such as Opening, and an optional <strong>Description</strong>.</li>
+            <li>Under <strong>Runs on</strong>, tap the days it runs. <strong>Every day</strong>, <strong>Weekdays</strong>
+                and <strong>Weekends</strong> pick those days in one go.</li>
+            <li>Leave <strong>Skip days the location is closed</strong> ticked so it doesn't run on a day with no opening
+                hours. A location with no opening hours set up at all counts as open every day. A day marked closed under
+                Rota &gt; Holidays is always skipped.</li>
+            <li>Choose when it's <strong>Due</strong> (see below) and press <strong>Create checklist</strong>.</li>
+            <li>Press <strong>Add task</strong> for each task, in the order they're done.</li>
+        </ol>
+    </HelpSection>
+
+    <HelpSection Title="When it's due">
+        <ul>
+            <li><strong>After opening</strong>: a number of minutes after the location opens that day, such as 15 minutes
+                after opening.</li>
+            <li><strong>Before closing</strong>: a number of minutes before the location closes that day. Use 0 for "by
+                closing time". If the location closes after midnight, that counts as the same day.</li>
+            <li><strong>At a set time</strong>: a time of day, such as 10:00.</li>
+            <li><strong>No set time</strong>: it only counts as missed if the day ends with tasks still to tick.</li>
+        </ul>
+        <FluentText>
+            Opening and closing times come from the location's opening hours, which an Admin sets under Companies &amp;
+            Locations. On a day with no opening hours, an opening or closing checklist has no due time.
+        </FluentText>
+    </HelpSection>
+
+    <HelpSection Title="Who can tick it">
+        <FluentText>
+            By default anyone on that day's rota at the location can tick the tasks, and so can its Managers and Admins.
+            Choose a position under <strong>Who can tick it</strong> to limit it to people who hold that position, such as
+            Duty Manager for Closing.
+        </FluentText>
+    </HelpSection>
+
+    <HelpSection Title="Tasks">
+        <ul>
+            <li>Each task has a title and optional details, such as where the keys are kept.</li>
+            <li><strong>Ticking it asks for</strong>: <strong>Just a tick</strong>; <strong>A tick, with an optional
+                note</strong>; or <strong>A number reading</strong>, with an optional unit such as °C for a fridge
+                temperature.</li>
+            <li>Use the up and down arrows to change the order, the pencil to edit a task, and the bin to remove it.</li>
+            <li>Changes apply from the next day the checklist runs. Today's tasks change too, as long as nobody has ticked
+                anything yet today.</li>
+        </ul>
+    </HelpSection>
+</HelpTab>

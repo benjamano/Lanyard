@@ -1,0 +1,38 @@
+@inherits WidgetSettingsBase<AutomationRuleStatusWidget>
+
+<div class="widget-settings">
+    @if (_rules is null)
+    {
+        <FluentSkeleton Height="56px" Width="100%" />
+    }
+    else if (_rules.Count == 0)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">There are no automation rules yet.</FluentMessageBar>
+    }
+    else
+    {
+        <FluentSelect TOption="AutomationRule" TValue="string" Items="@_rules"
+                      OptionText="@(r => r?.Name ?? string.Empty)" OptionValue="@(r => r?.Id.ToString())"
+                      Label="Automation rule" Placeholder="Choose a rule" Width="100%"
+                      Value="@(W.AutomationRuleId?.ToString() ?? string.Empty)"
+                      ValueChanged="@((string? v) => SetAsync(() => W.AutomationRuleId = Guid.TryParse(v, out Guid id) ? id : null, "Chose a rule"))" />
+    }
+</div>
+@code {
+    [Inject]
+    private IAutomationRuleService AutomationRuleService { get; set; } = default!;
+
+    private List<AutomationRule>? _rules;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<IEnumerable<AutomationRule>> result = await AutomationRuleService.GetRulesAsync();
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Couldn't load the automation rules: {result.Error}");
+        }
+
+        _rules = [.. (result.Data ?? []).OrderBy(r => r.Name)];
+    }
+}

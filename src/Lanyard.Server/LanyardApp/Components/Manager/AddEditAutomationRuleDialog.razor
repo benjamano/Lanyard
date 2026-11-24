@@ -1,4 +1,6 @@
-﻿@using Lanyard.App.Components.ProjectionPrograms
+﻿@using Lanyard.Shared.Kiosk
+@using Lanyard.App.Components.ProjectionPrograms
+@using Lanyard.App.Components.Conditions
 @using Lanyard.Application.Services
 @using Lanyard.Infrastructure.Models
 @using Lanyard.Infrastructure.Enum
@@ -17,6 +19,7 @@
 @inject ILogger<AddEditAutomationRuleDialog> _logger
 @inject Lanyard.Application.Services.Tenancy.ITenantContext _tenant
 @inject ICompanyFeatureService _companyFeatures
+@inject Lanyard.Application.Services.Parties.IPartyBookingService _partyBookingService
 
 <FluentDialogBody>
     <TitleTemplate>
@@ -35,7 +38,7 @@
                                  Appearance="TextInputAppearance.Outline"
                                  Style="width: 100%;" />
 
-                <FluentSelect Label="@(_triggerTypeString == AutomationTriggerType.Scheduled.ToString() ? "Associated Client" : "Trigger Client")"
+                <FluentSelect Label="@(IsClientOnlyALabel ? "Associated Client" : "Trigger Client")"
                               TOption="ClientConnectedDTO"
                               TValue="string"
                               Items="@_clients"
@@ -50,6 +53,12 @@
                         A scheduled rule isn't triggered by this client - it's only recorded as a label on the execution log.
                     </FluentText>
                 }
+                else if (_triggerTypeString == AutomationTriggerType.PartyMilestone.ToString())
+                {
+                    <FluentText Color="Color.Default">
+                        A party time rule isn't triggered by this client - it's recorded on the execution log, and its location is where a failure alert goes.
+                    </FluentText>
+                }
 
                 <FluentSelect Label="Trigger Type"
                               TOption="string"
@@ -62,6 +71,10 @@
                     <FluentOption Value="@AutomationTriggerType.TimeRemainingBelow.ToString()">Time remaining drops below</FluentOption>
                     <FluentOption Value="@AutomationTriggerType.ScoreThreshold.ToString()">Score reaches</FluentOption>
                     <FluentOption Value="@AutomationTriggerType.GameEnded.ToString()">Game ends with a winner</FluentOption>
+                    @if (_partiesEnabled || _triggerTypeString == AutomationTriggerType.PartyMilestone.ToString())
+                    {
+                        <FluentOption Value="@AutomationTriggerType.PartyMilestone.ToString()">Party time</FluentOption>
+                    }
                 </FluentSelect>
 
                 @if (_triggerTypeString == AutomationTriggerType.ClientIdle.ToString())
@@ -136,6 +149,63 @@
                         Runs once per game, the first time the score is reached on the trigger client.
                     </div>
                 }
+                else if (_triggerTypeString == AutomationTriggerType.PartyMilestone.ToString())
+                {
+                    <FluentSelect TOption="Location"
+                                  TValue="string"
+                                  Label="Parties at"
+                                  Placeholder="Select location"
+                                  Width="100%"
+                                  Items="@_locations"
+                                  OptionText="@(l => l?.Name ?? string.Empty)"
+                                  OptionValue="@(l => l?.Id.ToString())"
+                                  Value="@_partyLocationIdString"
+                                  ValueChanged="@((string? id) => OnPartyLocationChangedAsync(id))" />
+                    <div class="condition-fields">
+                        <FluentSelect TOption="string"
+                                      TValue="string"
+                                      Label="When"
+                                      Width="100%"
+                                      @bind-Value="_partyMilestoneString">
+                            <FluentOption Value="@PartyMilestone.Start.ToString()">Party starts</FluentOption>
+                            <FluentOption Value="@PartyMilestone.EatTime.ToString()">Eat time</FluentOption>
+                            <FluentOption Value="@PartyMilestone.LaserTag.ToString()">Laser tag time</FluentOption>
+                            <FluentOption Value="@PartyMilestone.End.ToString()">Party ends</FluentOption>
+                        </FluentSelect>
+                        <FluentNumberInput TValue="int?"
+                                           Label="Minutes before (0 = at the time)"
+                                           Min="0"
+                                           Max="@PartyTriggerRules.MaxLeadMinutes"
+                                           Width="100%"
+                                           Value="@_partyLeadMinutes"
+                                           ValueChanged="@((int? minutes) => _partyLeadMinutes = minutes)" />
+                    </div>
+                    <FluentTextInput Label="Room (optional)"
+                                     Placeholder="Any room"
+                                     Maxlength="100"
+                                     Appearance="TextInputAppearance.Outline"
+                                     Style="width: 100%;"
+                                     @bind-Value="_partyRoom" />
+                    @if (_roomSuggestions.Count > 0)
+                    {
+                        <div class="room-chips" role="group" aria-label="Rooms used at this location">
+                            @foreach (string room in _roomSuggestions)
+                            {
+                                <FluentButton Size="ButtonSize.Small"
+                                              Appearance="@(string.Equals(_partyRoom?.Trim(), room, StringComparison.OrdinalIgnoreCase) ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                              OnClick="@(() => _partyRoom = room)">@room</FluentButton>
+                            }
+                        </div>
+                    }
+                    @* Before a location is picked the empty select already says what's missing. *@
+                    @if (PartyLocationId is not null && PartyTriggerError is string partyError)
+                    {
+                        <FluentText Color="Color.Error">@partyError</FluentText>
+                    }
+                    <div class="condition-hint">
+                        Runs once for each booked party at this location (or only parties in this room). Parties that reach this moment together run it once. Cancelled parties, provisional holds and private hires don't run it. Moving or cancelling a party before its moment changes the run straight away.
+                    </div>
+                }
                 else if (_triggerTypeString == AutomationTriggerType.GameEnded.ToString())
                 {
                     <FluentSelect TOption="string"
@@ -166,129 +236,15 @@
         }
         else if (_currentStepIndex == 1)
         {
-            <div class="conditions-step">
-                <FluentText>
-                    Optional. The rule only runs if every condition is true at the moment it's triggered. Times and days are UK venue time.
-                </FluentText>
-
-                @if (_conditionRows.Count == 0)
-                {
-                    <div class="conditions-empty">No conditions, so the rule runs every time it's triggered.</div>
-                }
-
-                @for (int i = 0; i < _conditionRows.Count; i++)
-                {
-                    int index = i;
-                    ConditionRow row = _conditionRows[index];
-
-                    <div class="condition-row">
-                        <div class="condition-row-header">
-                            <div class="condition-type">
-                                <FluentSelect TOption="string"
-                                              TValue="string"
-                                              Label="Only if"
-                                              Width="100%"
-                                              Value="@row.ConditionType.ToString()"
-                                              ValueChanged="@((string? type) => row.ConditionType = Enum.TryParse(type, out AutomationConditionType parsed) ? parsed : AutomationConditionType.TimeWindow)">
-                                    <FluentOption Value="@AutomationConditionType.TimeWindow.ToString()">Time of day is between</FluentOption>
-                                    <FluentOption Value="@AutomationConditionType.DaysOfWeek.ToString()">Day of week is</FluentOption>
-                                    <FluentOption Value="@AutomationConditionType.ClientGameStatus.ToString()">A kiosk is or isn't in a game</FluentOption>
-                                    <FluentOption Value="@AutomationConditionType.DuringOpeningHours.ToString()">A location is open or closed</FluentOption>
-                                </FluentSelect>
-                            </div>
-                            <div class="condition-remove">
-                                <FluentButton IconStart="new Icons.Regular.Size20.Dismiss()"
-                                              Title="Remove condition"
-                                              OnClick="@(() => _conditionRows.RemoveAt(index))" />
-                            </div>
-                        </div>
-
-                        @if (row.ConditionType == AutomationConditionType.TimeWindow)
-                        {
-                            <div class="condition-fields">
-                                <AnyTimePicker TValue="TimeOnly" @bind-Value="row.Start" Label="From" />
-                                <AnyTimePicker TValue="TimeOnly" @bind-Value="row.End" Label="Until" />
-                            </div>
-                            @if (row.End < row.Start)
-                            {
-                                <div class="condition-hint">Runs past midnight, until @row.End.ToString("HH:mm") the next morning.</div>
-                            }
-                        }
-                        else if (row.ConditionType == AutomationConditionType.DaysOfWeek)
-                        {
-                            <div class="condition-days">
-                                @foreach (DayOfWeek day in _allDaysOfWeek)
-                                {
-                                    DayOfWeek capturedDay = day;
-                                    <FluentCheckbox Value="@row.Days.Contains(capturedDay)"
-                                                    ValueChanged="@((bool ticked) => OnConditionDayToggled(row, capturedDay, ticked))"
-                                                    Label="@(capturedDay.ToString()[..3])" />
-                                }
-                            </div>
-                        }
-                        else if (row.ConditionType == AutomationConditionType.DuringOpeningHours)
-                        {
-                            <div class="condition-fields">
-                                <FluentSelect TOption="Location"
-                                              TValue="string"
-                                              Label="Location"
-                                              Placeholder="Select location"
-                                              Width="100%"
-                                              Items="@_locations"
-                                              OptionText="@(l => l?.Name ?? string.Empty)"
-                                              OptionValue="@(l => l?.Id.ToString())"
-                                              @bind-Value="row.LocationIdString" />
-                                <FluentSelect TOption="string"
-                                              TValue="string"
-                                              Label="State"
-                                              Width="100%"
-                                              Value="@(row.Open ? "open" : "closed")"
-                                              ValueChanged="@((string? state) => row.Open = state != "closed")">
-                                    <FluentOption Value="@("open")">is open</FluentOption>
-                                    <FluentOption Value="@("closed")">is closed</FluentOption>
-                                </FluentSelect>
-                            </div>
-                            <div class="condition-hint">Uses the location's opening hours, set under Manage &gt; Companies &amp; Locations. A location with no hours set counts as closed.</div>
-                        }
-                        else
-                        {
-                            <div class="condition-fields">
-                                <FluentSelect TOption="ClientConnectedDTO"
-                                              TValue="string"
-                                              Label="Kiosk"
-                                              Placeholder="Select kiosk"
-                                              Width="100%"
-                                              Items="@_clients"
-                                              OptionText="@(c => c?.Name ?? string.Empty)"
-                                              OptionValue="@(c => c?.Id.ToString())"
-                                              @bind-Value="row.ClientIdString" />
-                                <FluentSelect TOption="string"
-                                              TValue="string"
-                                              Label="State"
-                                              Width="100%"
-                                              Value="@(row.InGame ? "in" : "out")"
-                                              ValueChanged="@((string? state) => row.InGame = state == "in")">
-                                    <FluentOption Value="@("in")">is in a game</FluentOption>
-                                    <FluentOption Value="@("out")">isn't in a game</FluentOption>
-                                </FluentSelect>
-                            </div>
-                        }
-                    </div>
-                }
-
-                <div>
-                    <FluentButton Appearance="ButtonAppearance.Outline"
-                                  IconStart="new Icons.Regular.Size20.Add()"
-                                  OnClick="AddConditionRow">
-                        Add condition
-                    </FluentButton>
-                </div>
-
-                @if (ConditionsError is string conditionsError)
-                {
-                    <FluentText Color="Color.Error">@conditionsError</FluentText>
-                }
-            </div>
+            <ConditionListEditor Rows="@_conditionRows"
+                                 Clients="@_clients"
+                                 Locations="@_locations"
+                                 PartiesEnabled="@_partiesEnabled"
+                                 Label="Only if"
+                                 Intro="Optional. The rule only runs if every condition is true at the moment it's triggered. Times and days are UK venue time."
+                                 EmptyText="No conditions, so the rule runs every time it's triggered."
+                                 Error="@ConditionsError"
+                                 OnChanged="@StateHasChanged" />
         }
         else if (_currentStepIndex == 2)
         {
@@ -296,7 +252,7 @@
                 @for (int i = 0; i < _actionRows.Count; i++)
                 {
                     int index = i;
-                    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
+                    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8" VerticalGap="8" Wrap="true">
                         <div>
                             <FluentSelect TOption="string"
                                 TValue="string"
@@ -329,7 +285,7 @@
                         @if (_actionRows[index].ActionType == AutomationActionTypes.StopProjectionProgram)
                         {
                             @* No program picker: stopping targets whatever is on the display. *@
-                            <div>
+                            <DisplayPickerRow ClientId="@RowClientId(index)" ClientName="@RowClient(index)?.Name" IsConnected="@(RowClient(index)?.IsCurrentlyConnected ?? false)">
                                 <FluentSelect TOption="string"
                                     TValue="string"
                                     Label="Screen"
@@ -339,10 +295,10 @@
                                     <FluentOption TValue="string" Value="default">Client default</FluentOption>
                                     @foreach (ClientAvailableScreen screen in _actionRows[index].Screens)
                                     {
-                                        <FluentOption TValue="string" Value="@screen.Index.ToString()">@($"{screen.Name} ({screen.Width}x{screen.Height})")</FluentOption>
+                                        <FluentOption TValue="string" Value="@screen.Index.ToString()">@DisplayIdentifyRules.PickerLabel(screen.Index, screen.Name, screen.Width, screen.Height)</FluentOption>
                                     }
                                 </FluentSelect>
-                            </div>
+                            </DisplayPickerRow>
                         }
                         else if (_actionRows[index].ActionType == AutomationActionTypes.StartProjectionProgram)
                         {
@@ -358,7 +314,7 @@
                                     ValueChanged="@((string? id) => _actionRows[index].ProjectionProgramIdString = id ?? string.Empty)"
                                     Style="flex: 1;" />
                             </div>
-                            <div>
+                            <DisplayPickerRow ClientId="@RowClientId(index)" ClientName="@RowClient(index)?.Name" IsConnected="@(RowClient(index)?.IsCurrentlyConnected ?? false)">
                                 <FluentSelect TOption="string"
                                     TValue="string"
                                     Label="Screen"
@@ -368,10 +324,10 @@
                                     <FluentOption TValue="string" Value="default">Client default</FluentOption>
                                     @foreach (ClientAvailableScreen screen in _actionRows[index].Screens)
                                     {
-                                        <FluentOption TValue="string" Value="@screen.Index.ToString()">@($"{screen.Name} ({screen.Width}x{screen.Height})")</FluentOption>
+                                        <FluentOption TValue="string" Value="@screen.Index.ToString()">@DisplayIdentifyRules.PickerLabel(screen.Index, screen.Name, screen.Width, screen.Height)</FluentOption>
                                     }
                                 </FluentSelect>
-                            </div>
+                            </DisplayPickerRow>
                         }
                         else if (_actionRows[index].ActionType == AutomationActionTypes.ProjectionProgramControl)
                         {
@@ -405,7 +361,7 @@
                                         Style="flex: 1;" />
                                 </div>
                             }
-                            <div>
+                            <DisplayPickerRow ClientId="@RowClientId(index)" ClientName="@RowClient(index)?.Name" IsConnected="@(RowClient(index)?.IsCurrentlyConnected ?? false)">
                                 <FluentSelect TOption="string"
                                     TValue="string"
                                     Label="Screen"
@@ -415,10 +371,10 @@
                                     <FluentOption TValue="string" Value="default">Client default</FluentOption>
                                     @foreach (ClientAvailableScreen screen in _actionRows[index].Screens)
                                     {
-                                        <FluentOption TValue="string" Value="@screen.Index.ToString()">@($"{screen.Name} ({screen.Width}x{screen.Height})")</FluentOption>
+                                        <FluentOption TValue="string" Value="@screen.Index.ToString()">@DisplayIdentifyRules.PickerLabel(screen.Index, screen.Name, screen.Width, screen.Height)</FluentOption>
                                     }
                                 </FluentSelect>
-                            </div>
+                            </DisplayPickerRow>
                         }
                         else if (_actionRows[index].ActionType == AutomationActionTypes.DmxSceneControl)
                         {
@@ -609,111 +565,13 @@
     private int _currentStepIndex = 0;
     private List<string> _steps = ["Rule Details", "Conditions", "Actions"];
 
-    private sealed class ConditionRow
-    {
-        public Guid? ExistingConditionId { get; set; }
-        public AutomationConditionType ConditionType { get; set; } = AutomationConditionType.TimeWindow;
-        public TimeOnly Start { get; set; } = new(18, 0);
-        public TimeOnly End { get; set; } = new(22, 0);
-        public HashSet<DayOfWeek> Days { get; set; } = [];
-        public string ClientIdString { get; set; } = string.Empty;
-        public bool InGame { get; set; }
-        public string LocationIdString { get; set; } = string.Empty;
-        public bool Open { get; set; } = true;
-    }
-
     private IEnumerable<Location> _locations = [];
 
     private List<ConditionRow> _conditionRows = [];
 
     // Same validation CreateRuleAsync/UpdateRuleAsync apply, so a condition the service would
     // reject can't be carried through to the actions step.
-    private string? ConditionsError => AutomationRuleService.ValidateConditions(BuildConditions());
-
-    private void AddConditionRow()
-    {
-        _conditionRows.Add(new ConditionRow());
-    }
-
-    private static void OnConditionDayToggled(ConditionRow row, DayOfWeek day, bool ticked)
-    {
-        if (ticked)
-        {
-            row.Days.Add(day);
-        }
-        else
-        {
-            row.Days.Remove(day);
-        }
-    }
-
-    private List<AutomationRuleCondition> BuildConditions()
-    {
-        List<AutomationRuleCondition> conditions = [];
-
-        for (int i = 0; i < _conditionRows.Count; i++)
-        {
-            ConditionRow row = _conditionRows[i];
-
-            string parametersJson = row.ConditionType switch
-            {
-                AutomationConditionType.TimeWindow => AutomationConditionParameters.Serialize(new TimeWindowConditionParameters(row.Start, row.End)),
-                AutomationConditionType.DaysOfWeek => AutomationConditionParameters.Serialize(new DaysOfWeekConditionParameters(AutomationScheduleDays.Serialize(row.Days))),
-                AutomationConditionType.DuringOpeningHours => AutomationConditionParameters.Serialize(new OpeningHoursConditionParameters(
-                    int.TryParse(row.LocationIdString, out int locationId) ? locationId : 0,
-                    row.Open)),
-                _ => AutomationConditionParameters.Serialize(new ClientGameStatusConditionParameters(
-                    Guid.TryParse(row.ClientIdString, out Guid clientId) ? clientId : Guid.Empty,
-                    row.InGame))
-            };
-
-            conditions.Add(new AutomationRuleCondition
-            {
-                Id = row.ExistingConditionId ?? Guid.NewGuid(),
-                ConditionType = row.ConditionType,
-                ParametersJson = parametersJson,
-                SortOrder = i,
-                IsActive = true
-            });
-        }
-
-        return conditions;
-    }
-
-    private static ConditionRow ToConditionRow(AutomationRuleCondition condition)
-    {
-        ConditionRow row = new()
-        {
-            ExistingConditionId = condition.Id,
-            ConditionType = condition.ConditionType
-        };
-
-        switch (condition.ConditionType)
-        {
-            case AutomationConditionType.TimeWindow when AutomationConditionParameters.TryParse(condition.ParametersJson, out TimeWindowConditionParameters? window):
-                row.Start = window.Start;
-                row.End = window.End;
-                break;
-
-            case AutomationConditionType.DaysOfWeek when AutomationConditionParameters.TryParse(condition.ParametersJson, out DaysOfWeekConditionParameters? days)
-                && !string.IsNullOrWhiteSpace(days.Days)
-                && AutomationScheduleDays.TryParse(days.Days, out List<DayOfWeek> parsedDays):
-                row.Days = [.. parsedDays];
-                break;
-
-            case AutomationConditionType.ClientGameStatus when AutomationConditionParameters.TryParse(condition.ParametersJson, out ClientGameStatusConditionParameters? kiosk):
-                row.ClientIdString = kiosk.ClientId == Guid.Empty ? string.Empty : kiosk.ClientId.ToString();
-                row.InGame = kiosk.InGame;
-                break;
-
-            case AutomationConditionType.DuringOpeningHours when AutomationConditionParameters.TryParse(condition.ParametersJson, out OpeningHoursConditionParameters? hours):
-                row.LocationIdString = hours.LocationId > 0 ? hours.LocationId.ToString() : string.Empty;
-                row.Open = hours.Open;
-                break;
-        }
-
-        return row;
-    }
+    private string? ConditionsError => AutomationRuleService.ValidateConditions(ConditionRows.ToConditions(_conditionRows));
 
     private string _ruleName = string.Empty;
     private string _triggerClientIdString = string.Empty;
@@ -723,13 +581,59 @@
     // Delegates to the same validation CreateRuleAsync/UpdateRuleAsync will apply, so a rule the
     // service would reject cannot be carried through to the actions step in the first place.
     private bool IsTriggerConfigured =>
-        AutomationRuleService.ValidateTrigger(
+        (Enum.Parse<AutomationTriggerType>(_triggerTypeString) != AutomationTriggerType.PartyMilestone || PartyTriggerError is null)
+        && AutomationRuleService.ValidateTrigger(
             Enum.Parse<AutomationTriggerType>(_triggerTypeString),
             _idleThresholdMinutes,
             _scheduledTimeOfDay,
             AutomationScheduleDays.Serialize(_scheduledDays),
             Enum.Parse<AutomationTriggerType>(_triggerTypeString) == AutomationTriggerType.ScoreThreshold ? _scoreThreshold : _timeRemainingSeconds,
             Enum.Parse<AutomationScoreScope>(_scoreScopeString)) is null;
+
+    // Scheduled and party time rules don't watch the chosen kiosk: it's only a label.
+    private bool IsClientOnlyALabel =>
+        _triggerTypeString == AutomationTriggerType.Scheduled.ToString()
+        || _triggerTypeString == AutomationTriggerType.PartyMilestone.ToString();
+
+    private bool _partiesEnabled;
+    private string _partyLocationIdString = string.Empty;
+    private string _partyMilestoneString = PartyMilestone.Start.ToString();
+    private int? _partyLeadMinutes = 0;
+    private string? _partyRoom;
+    private List<string> _roomSuggestions = [];
+
+    private int? PartyLocationId => int.TryParse(_partyLocationIdString, out int id) ? id : null;
+
+    // The same check the save applies.
+    private string? PartyTriggerError => PartyTriggerRules.Validate(
+        PartyLocationId,
+        Enum.TryParse(_partyMilestoneString, out PartyMilestone milestone) ? milestone : null,
+        _partyLeadMinutes,
+        _partyRoom);
+
+    private async Task OnPartyLocationChangedAsync(string? locationId)
+    {
+        _partyLocationIdString = locationId ?? string.Empty;
+        await LoadRoomSuggestionsAsync();
+    }
+
+    private async Task LoadRoomSuggestionsAsync()
+    {
+        _roomSuggestions = [];
+
+        if (PartyLocationId is not int locationId || !_partiesEnabled)
+        {
+            return;
+        }
+
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (scope.IsSuccess && scope.Data is not null)
+        {
+            Result<List<string>> rooms = await _partyBookingService.GetRoomSuggestionsAsync(scope.Data, locationId);
+            _roomSuggestions = rooms.Data ?? [];
+        }
+    }
 
     private int? _timeRemainingSeconds = 60;
     private int? _scoreThreshold = 1000;
@@ -793,7 +697,12 @@
             ? [.. parsedDays]
             : [];
 
-        _conditionRows = [.. saved.Conditions.Where(c => c.IsActive).OrderBy(c => c.SortOrder).Select(ToConditionRow)];
+        _partyLocationIdString = saved.PartyLocationId?.ToString() ?? string.Empty;
+        _partyMilestoneString = (saved.PartyMilestone ?? PartyMilestone.Start).ToString();
+        _partyLeadMinutes = saved.PartyLeadMinutes ?? 0;
+        _partyRoom = saved.PartyRoom;
+
+        _conditionRows = ConditionRows.From(saved.Conditions);
     }
 
     protected override async Task OnInitializedAsync()
@@ -815,6 +724,11 @@
         // see every feature, but the play would still be refused for a company without clips.
         _audioClipsEnabled = _tenant.CompanyId is int companyId
             && await _companyFeatures.IsEnabledForCompanyAsync(companyId, CompanyFeature.AudioClips);
+
+        // Same reasoning: whether the company has Parties, not whether this user sees the page.
+        _partiesEnabled = _tenant.CompanyId is int partiesCompanyId
+            && await _companyFeatures.IsEnabledForCompanyAsync(partiesCompanyId, CompanyFeature.Parties);
+        await LoadRoomSuggestionsAsync();
 
         Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
         if (_audioClipsEnabled && scopeResult.IsSuccess && scopeResult.Data is not null)
@@ -1031,6 +945,14 @@
         }
     }
 
+    // The row's target kiosk, for its Identify displays button.
+    private ClientConnectedDTO? RowClient(int index)
+    {
+        return Guid.TryParse(_actionRows[index].TargetClientIdString, out Guid id) ? _clients.FirstOrDefault(c => c.Id == id) : null;
+    }
+
+    private Guid? RowClientId(int index) => RowClient(index)?.Id;
+
     private async Task LoadScreensForRowAsync(int index)
     {
         ActionRow row = _actionRows[index];
@@ -1118,6 +1040,11 @@
             AutomationTriggerType.GameEnded when Enum.TryParse(_winningTeamString, out Team winningTeam) => winningTeam,
             _ => null
         };
+        bool isPartyRule = triggerType == AutomationTriggerType.PartyMilestone;
+        int? partyLocationId = isPartyRule ? PartyLocationId : null;
+        PartyMilestone? partyMilestone = isPartyRule && Enum.TryParse(_partyMilestoneString, out PartyMilestone milestone) ? milestone : null;
+        int? partyLeadMinutes = isPartyRule ? _partyLeadMinutes : null;
+        string? partyRoom = isPartyRule && !string.IsNullOrWhiteSpace(_partyRoom) ? _partyRoom.Trim() : null;
 
         List<AutomationRuleAction> newActions = [];
         for (int i = 0; i < _actionRows.Count; i++)
@@ -1198,7 +1125,7 @@
 
         Result<AutomationRule> saveResult;
 
-        List<AutomationRuleCondition> newConditions = BuildConditions();
+        List<AutomationRuleCondition> newConditions = ConditionRows.ToConditions(_conditionRows);
 
         if (Content != null)
         {
@@ -1216,6 +1143,10 @@
                 TriggerThreshold = triggerThreshold,
                 TriggerScoreScope = triggerScoreScope,
                 TriggerTeam = triggerTeam,
+                PartyLocationId = partyLocationId,
+                PartyMilestone = partyMilestone,
+                PartyLeadMinutes = partyLeadMinutes,
+                PartyRoom = partyRoom,
                 IsActive = true,
                 CreateDate = Content.CreateDate,
                 Actions = newActions,
@@ -1242,6 +1173,10 @@
                 TriggerThreshold = triggerThreshold,
                 TriggerScoreScope = triggerScoreScope,
                 TriggerTeam = triggerTeam,
+                PartyLocationId = partyLocationId,
+                PartyMilestone = partyMilestone,
+                PartyLeadMinutes = partyLeadMinutes,
+                PartyRoom = partyRoom,
                 Actions = newActions,
                 Conditions = newConditions
             };

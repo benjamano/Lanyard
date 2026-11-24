@@ -1,4 +1,4 @@
-using Lanyard.Infrastructure.Models;
+﻿using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.DTO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -10,7 +10,14 @@ namespace Lanyard.Application.Services;
 // IsRestricted: the file belongs to a feature that decides who may read it (a staff HR document). The
 // File Manager paths below treat it as not found; only the *Restricted* methods reach it, and only
 // the owning feature's services call those.
-public sealed record FileUploadOptions(bool AddAudioToMusicLibrary = true, bool IsRestricted = false);
+// IsSystemFile: the file belongs to a feature that manages it on its own page (an audio clip's
+// sound). It is served by id like any other file but never shows when browsing Files.
+// Media and Poster: what the browser worked out before uploading (Files' upload queue): a picture's or
+// video's size, a video's or song's length, and a frame from a video to make its thumbnail from.
+public sealed record FileUploadOptions(bool AddAudioToMusicLibrary = true, bool IsRestricted = false, bool IsSystemFile = false,
+    UploadedMedia? Media = null, IFormFile? Poster = null);
+
+public sealed record UploadedMedia(int? Width, int? Height, double? DurationSeconds);
 
 public interface IFileService
 {
@@ -23,6 +30,11 @@ public interface IFileService
     Task<Result<FileMetadata>> UploadFileAsync(IFormFile file, Guid? folderId, string uploadedBy, FileUploadOptions options, CancellationToken cancellationToken);
     Task<Result<FileMetadata>> UploadFileAsync(IFormFile file, Guid? folderId, CancellationToken cancellationToken);
     Task<Result<FileMetadata>> RenameFileAsync(Guid fileId, string newName, CancellationToken cancellationToken);
+    /// <summary>
+    /// Deletes the file for good, bytes and all. Files and the API send files to the Recycle bin
+    /// through <see cref="IFileLibraryService"/> instead; this is for the bin's purge, GDPR erasure
+    /// and cleaning up an upload that was refused.
+    /// </summary>
     Task<Result<bool>> DeleteFileAsync(Guid fileId, CancellationToken cancellationToken);
     Task<Result<FileMetadata>> GetFileMetadataAsync(Guid fileId, CancellationToken cancellationToken);
     Task<Result<IReadOnlyList<FileMetadata>>> ListFilesAsync(Guid? folderId, CancellationToken cancellationToken);
@@ -51,5 +63,11 @@ public interface IFileService
 
     /// <summary>Removes a restricted file, e.g. when the record it was uploaded for couldn't be saved.</summary>
     Task<Result<bool>> DeleteRestrictedFileAsync(Guid fileId, CancellationToken cancellationToken);
+    /// <summary>The small WebP Files shows in its grid, when the file has one.</summary>
+    Task<Result<Stream>> OpenThumbnailAsync(Guid fileId, CancellationToken cancellationToken);
+
+    /// <summary>Makes the thumbnail for a file uploaded before thumbnails existed. False when there can't be one.</summary>
+    Task<Result<bool>> CreateMissingThumbnailAsync(Guid fileId, CancellationToken cancellationToken);
+
     Task<Result<FileMetadata>> MoveFileAsync(Guid fileId, Guid? destinationFolderId, CancellationToken cancellationToken);
 }

@@ -1,3 +1,4 @@
+using Lanyard.Tests.TestUtilities;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Onboarding;
@@ -51,6 +52,11 @@ public class OnboardingServiceTests
         ctx.Companies.Add(company);
         await ctx.SaveChangesAsync();
 
+        // Onboarding is company-wide, so it's on when any location has it switched on.
+        ctx.Locations.Add(new Location { Name = "Head office", CompanyId = company.Id, IsActive = true });
+        await ctx.SaveChangesAsync();
+        await TestFeatures.SwitchOnEverywhereAsync(ctx);
+
         return company;
     }
 
@@ -61,6 +67,7 @@ public class OnboardingServiceTests
         Location location = new() { Name = "Ipswich", CompanyId = companyId, IsActive = true };
         ctx.Locations.Add(location);
         await ctx.SaveChangesAsync();
+        await TestFeatures.SwitchOnEverywhereAsync(ctx);
 
         return location;
     }
@@ -293,7 +300,7 @@ public class OnboardingServiceTests
                 WelcomeEmailSubject = "Welcome",
                 WelcomeEmailBodyHtml = "<p>Hi</p>"
             });
-            ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = company.Id, Feature = CompanyFeature.Onboarding, IsEnabled = false });
+            await TestFeatures.SwitchOffForCompanyAsync(ctx, company.Id, CompanyFeature.Onboarding);
             await ctx.SaveChangesAsync();
             userId = user.Id;
         }

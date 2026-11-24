@@ -13,5 +13,5 @@ public interface IProjectionBindingResolver
     Task<IReadOnlyDictionary<Guid, string>> ResolveStepAsync(ProjectionBindingContext context, ProjectionProgramStep step, CancellationToken cancellationToken);
 
     /// <summary>What a source would show right now, for the editor. Null data means "no data yet".</summary>
-    Task<Result<string?>> PreviewAsync(string bindingKey, int companyId, int? locationId, CancellationToken cancellationToken = default);
+    Task<Result<string?>> PreviewAsync(string bindingKey, int companyId, int? locationId, CancellationToken cancellationToken = default, string? partyRoom = null);
 }

@@ -1,37 +1,65 @@
+.dashboard-grid-container {
+    /* The phone layout below is a container query, so it follows the space the grid is given
+       (a narrow designer preview frame as much as a phone), not the window. */
+    container-type: inline-size;
+    width: 100%;
+}
+
+/* No query container, so the phone rules below never apply (kiosks). */
+.dashboard-grid-container.no-phone-layout {
+    container-type: normal;
+}
+
 .dashboard-grid {
     display: grid;
     grid-template-columns: repeat(12, minmax(0, 1fr));
-    grid-auto-rows: minmax(120px, auto);
+    grid-auto-rows: minmax(var(--dashboard-row-height, 120px), auto);
     gap: 0.5rem;
     width: 100%;
+}
+
+/* Fit to screen (a kiosk TV): exactly as many rows as the layout uses, sharing the full height,
+   so the dashboard fills the screen with no scrollbar. The designer's TV preview sets
+   --dashboard-fit-height to its frame's height. */
+.dashboard-grid.fit-to-screen {
+    height: var(--dashboard-fit-height, 100dvh);
+    grid-template-rows: repeat(var(--dashboard-rows, 1), minmax(0, 1fr));
+    grid-auto-rows: minmax(0, 1fr);
+    box-sizing: border-box;
+    padding: 0.5rem;
 }
 
 .dashboard-grid-item {
     min-width: 0;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
 }
 
 /* A dashboard can be a user's home screen, so this is the first thing they see on a phone.
    Twelve fixed columns would render a 2-wide widget at a sixth of the screen, so collapse to a
-   single stacked column instead.
+   single stacked column instead, in the dashboard's phone order.
 
    The !important is load-bearing: GetWidgetStyle writes grid-column/grid-row as an inline style,
-   which otherwise beats anything in this file. The grid renders widgets ordered by GridY then
-   GridX so the stack reads in the same order as the desktop layout. */
-@media (max-width: 768px) {
-    .dashboard-grid {
+   which otherwise beats anything in this file. */
+@container (max-width: 768px) {
+    .dashboard-grid,
+    .dashboard-grid.fit-to-screen {
         grid-template-columns: 1fr;
+        grid-template-rows: none;
+        grid-auto-rows: minmax(var(--dashboard-row-height, 120px), auto);
+        height: auto;
     }
 
     .dashboard-grid-item {
         grid-column: 1 / -1 !important;
         grid-row: auto !important;
+        order: var(--phone-order, 0);
     }
-}
 
-.dashboard-widget-host {
-    height: 100%;
-    width: 100%;
+    .dashboard-grid-item.hide-on-phone {
+        display: none;
+    }
 }
 
 .text-area-widget-content {

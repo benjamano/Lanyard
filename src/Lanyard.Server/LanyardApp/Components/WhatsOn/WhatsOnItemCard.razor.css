@@ -1,0 +1,76 @@
+.wo-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-left: 4px solid var(--colorBrandStroke1);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+    color: inherit;
+    text-decoration: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.wo-card:hover,
+.wo-card:focus-visible {
+    border-color: var(--colorBrandStroke1);
+    box-shadow: var(--shadow4);
+}
+
+.wo-cancelled {
+    opacity: 0.6;
+    border-left-color: var(--colorNeutralStroke1);
+}
+
+.wo-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.wo-card-heading {
+    min-width: 0;
+}
+
+.wo-card-time {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: color-mix(in srgb, var(--colorBrandForeground1) 70%, var(--colorNeutralForeground1));
+}
+
+.wo-card-title {
+    font-weight: 600;
+    font-size: 1.05rem;
+    overflow-wrap: anywhere;
+}
+
+.wo-card-subtitle {
+    color: var(--colorNeutralForeground2);
+    font-size: 0.9rem;
+}
+
+.wo-card-badges {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.wo-card-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    color: var(--colorNeutralForeground3);
+    font-size: 0.9rem;
+}
+
+.wo-card-allergy {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: 0.9rem;
+    overflow-wrap: anywhere;
+}
