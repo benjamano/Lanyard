@@ -5737,6 +5737,12 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<string>("Content")
                         .HasColumnType("text");
 
+                    b.Property<bool>("EditableOnKiosk")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("KioskAutoSave")
+                        .HasColumnType("boolean");
+
                     b.HasDiscriminator().HasValue(2);
                 });
 

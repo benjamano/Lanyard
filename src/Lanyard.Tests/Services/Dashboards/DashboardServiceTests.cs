@@ -2237,6 +2237,84 @@ public class DashboardServiceTests
     }
 
     [TestMethod]
+    public async Task DashboardService_SaveDashboard_KeepsTextTypedOnTheKiosk()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+        TextAreaWidget stored = new() { DashboardId = dashboard.Id, Content = "<p>Typed on the kiosk</p>", EditableOnKiosk = true };
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(stored);
+            await seedCtx.SaveChangesAsync();
+        }
+
+        // The designer's copy was loaded before the kiosk edit, so it has the old words.
+        dashboard.Widgets = [new TextAreaWidget { Id = stored.Id, Content = "<p>Stale</p>", EditableOnKiosk = true, GridX = 4 }];
+        Result<bool> result = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        await using ApplicationDbContext ctx = new(options);
+        TextAreaWidget saved = await ctx.DashboardWidgets.OfType<TextAreaWidget>().SingleAsync();
+        Assert.AreEqual("<p>Typed on the kiosk</p>", saved.Content);
+        Assert.AreEqual(4, saved.GridX);
+    }
+
+    [TestMethod]
+    [DataRow(false, true)]
+    [DataRow(true, false)]
+    [DataRow(false, false)]
+    public async Task DashboardService_SaveDashboard_SavesTheDesignersTextUnlessTheKioskOwnsIt(bool storedEditable, bool incomingEditable)
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+        TextAreaWidget stored = new() { DashboardId = dashboard.Id, Content = "<p>Before</p>", EditableOnKiosk = storedEditable };
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(stored);
+            await seedCtx.SaveChangesAsync();
+        }
+
+        dashboard.Widgets = [new TextAreaWidget { Id = stored.Id, Content = "<p>From the designer</p>", EditableOnKiosk = incomingEditable }];
+        Result<bool> result = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        await using ApplicationDbContext ctx = new(options);
+        TextAreaWidget saved = await ctx.DashboardWidgets.OfType<TextAreaWidget>().SingleAsync();
+        Assert.AreEqual("<p>From the designer</p>", saved.Content);
+        Assert.AreEqual(incomingEditable, saved.EditableOnKiosk);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_SavesTheKioskAutoSaveSetting()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        dashboard.Widgets = [new TextAreaWidget { Id = Guid.Empty, EditableOnKiosk = true, KioskAutoSave = true }];
+        Result<bool> created = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(created.IsSuccess, created.Error);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            TextAreaWidget saved = await ctx.DashboardWidgets.OfType<TextAreaWidget>().SingleAsync();
+            Assert.IsTrue(saved.KioskAutoSave);
+            dashboard.Widgets = [new TextAreaWidget { Id = saved.Id, EditableOnKiosk = true, KioskAutoSave = false }];
+        }
+
+        Result<bool> updated = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(updated.IsSuccess, updated.Error);
+        await using ApplicationDbContext check = new(options);
+        Assert.IsFalse((await check.DashboardWidgets.OfType<TextAreaWidget>().SingleAsync()).KioskAutoSave);
+    }
+
+    [TestMethod]
     public async Task DashboardService_DeletedDashboard_CantBeLoadedOrSaved()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();

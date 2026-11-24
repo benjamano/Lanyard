@@ -5,13 +5,15 @@
 
 @if (_dashboard != null)
 {
-    <CascadingValue Value="@_kiosk" IsFixed="false">
-        <DashboardGrid Widgets="_dashboard.Widgets"
-                       CompanyId="_dashboard.CompanyId"
-                       RowHeight="_dashboard.RowHeight"
-                       FitToScreen="_dashboard.FitToScreen"
-                       PhoneLayout="false"
-                       PreviewMode="true" />
+    <CascadingValue Value="_screen" IsFixed="true">
+        <CascadingValue Value="@_kiosk" IsFixed="false">
+            <DashboardGrid Widgets="_dashboard.Widgets"
+                           CompanyId="_dashboard.CompanyId"
+                           RowHeight="_dashboard.RowHeight"
+                           FitToScreen="_dashboard.FitToScreen"
+                           PhoneLayout="false"
+                           PreviewMode="true" />
+        </CascadingValue>
     </CascadingValue>
 }
 
@@ -19,14 +21,20 @@
     [Parameter, EditorRequired]
     public ProjectionProgramStep Step { get; set; } = default!;
 
-    // The kiosk this is showing on, for widgets that act as the kiosk (a Checklist card's ticks).
+    // The kiosk showing this, for kiosk-editable Text widgets and Checklist card ticks.
     [Parameter]
     public Guid ClientId { get; set; }
 
     [Parameter]
     public string? ViewerToken { get; set; }
 
+    private KioskScreen? _screen;
     private KioskViewContext? _kiosk;
+
+    protected override void OnInitialized()
+    {
+        _screen = new KioskScreen(ClientId, ViewerToken);
+    }
 
     private Dashboard? _dashboard;
     private string? _loadedDashboardId;
