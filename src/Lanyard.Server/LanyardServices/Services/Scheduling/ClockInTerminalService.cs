@@ -146,7 +146,7 @@ public class ClockInTerminalService(
 
             if (terminal is null || !terminal.IsActive || terminal.Location is not { IsActive: true })
             {
-                return Result<TerminalSession>.Fail("This device has been unpaired. A manager can pair it again from Manage > Rota > Clock-In Terminals.");
+                return Result<TerminalSession>.Fail("This device has been unpaired. A manager can pair it again from Rota > Clock-In Terminals in the menu.");
             }
 
             if (!await CompanyFeatureQueries.IsEnabledForLocationAsync(ctx, terminal.LocationId, CompanyFeature.StaffScheduling))

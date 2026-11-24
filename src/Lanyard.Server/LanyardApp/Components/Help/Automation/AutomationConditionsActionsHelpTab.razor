@@ -10,7 +10,15 @@
             <li><strong>A kiosk is or isn't in a game</strong> right now.</li>
             <li><strong>A location is open or closed</strong>, using its opening hours from Companies &amp; Locations.
                 A location with no hours set counts as closed.</li>
+            <li><strong>A party is or isn't on</strong> at a location: choose <strong>a party is on</strong> or
+                <strong>no party is on</strong>, and optionally type a <strong>Room</strong>. A party is on from its start time
+                until its finish time on <a href="/manage/parties">Parties</a>. Cancelled parties, provisional bookings and
+                private hires don't count. Only offered when at least one of your locations has Parties switched on.</li>
         </ul>
+        <HelpNote>
+            For example, a <strong>Game Status Change</strong> rule with <strong>no party is on</strong> can play the normal
+            game lights, while a second rule with <strong>a party is on</strong> plays the party version.
+        </HelpNote>
     </HelpSection>
 
     <HelpSection Title="Actions">
@@ -18,7 +26,9 @@
         <ul>
             <li><strong>Music Control</strong>: change the music, for example play a playlist.</li>
             <li><strong>Start Projection Program</strong> and <strong>Stop Projection Program</strong>: on a chosen screen,
-                or the client's default.</li>
+                or the client's default. Screens are listed as Screen 1, Screen 2 and so on; the # button beside
+                <strong>Screen</strong> shows each number on the kiosk's screens for 8 seconds, so you can check which is
+                which.</li>
             <li><strong>Projection Program Control</strong>: Start, Stop, Pause, Resume, Skip to Next Step or Skip to
                 Previous Step on what's already running.</li>
             <li><strong>DMX Scene Control</strong>: Start Scene, Stop Scene or Stop All Scenes. <strong>Hold for (ms)</strong>

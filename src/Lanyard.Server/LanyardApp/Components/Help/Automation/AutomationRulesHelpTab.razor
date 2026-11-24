@@ -15,7 +15,9 @@
     <HelpSection Title="Making a rule">
         <ol>
             <li>Select <strong>New Rule</strong> and give it a <strong>Rule Name</strong>.</li>
-            <li>Choose the <strong>Trigger Client</strong>: the kiosk whose game it watches.</li>
+            <li>Choose the <strong>Trigger Client</strong>: the kiosk whose game it watches. For <strong>Scheduled</strong> and
+                <strong>Party time</strong> rules it's called <strong>Associated Client</strong>: it only labels the rule in the
+                log, and its location is where an alert goes if the rule fails.</li>
             <li>Choose the <strong>Trigger Type</strong> (see below).</li>
             <li>Optionally add conditions under <strong>Only if</strong>.</li>
             <li>Add one or more actions. At least one is required.</li>
@@ -72,6 +74,37 @@
             <li><strong>Score reaches</strong>: once per game, when any one player's score or a team's total reaches a value.</li>
             <li><strong>Game ends with a winner</strong>: when a team game ends with one team ahead. A draw or a game
                 without teams doesn't count. Make one rule per team to give each its own scene.</li>
+            <li><strong>Party time</strong>: when a booked party reaches a moment you pick (see below). Only shown when at least
+                one of your locations has Parties switched on.</li>
         </ul>
+    </HelpSection>
+
+    <HelpSection Title="Party time rules">
+        <FluentText>
+            A party time rule runs things for each party booked on <a href="/manage/parties">Parties</a>, such as the
+            party lights when the children arrive, or a "laser tag is next" screen before their game.
+        </FluentText>
+        <ol>
+            <li>Choose <strong>Party time</strong> as the <strong>Trigger Type</strong>.</li>
+            <li>Under <strong>Parties at</strong>, choose the location whose parties it's for.</li>
+            <li>Under <strong>When</strong>, choose <strong>Party starts</strong>, <strong>Eat time</strong>,
+                <strong>Laser tag time</strong> or <strong>Party ends</strong>.</li>
+            <li>In <strong>Minutes before</strong>, enter how early to run it, from 0 (at the time) to 120.</li>
+            <li>Optionally type a <strong>Room</strong>, or pick one of the rooms already used at that location, to run it only
+                for parties in that room. Upper and lower case and extra spaces don't matter.</li>
+        </ol>
+        <ul>
+            <li>It runs <strong>once for each party</strong>. Parties that reach the same moment together, such as two parties
+                starting at 2pm, run it once, so the lights don't start twice.</li>
+            <li>Cancelled parties, provisional bookings from Just Step and private hires don't run it. A party with no eat or
+                laser tag time doesn't run an Eat time or Laser tag time rule.</li>
+            <li>Moving or cancelling a party before its moment changes the rule straight away: it runs at the new time, or not
+                at all. Moving a party after its rule has run doesn't run it again.</li>
+            <li>If the server is restarted just after the moment, the rule still runs within 5 minutes, but never twice.</li>
+        </ul>
+        <HelpNote>
+            The execution log shows which party a run was for (its date, time and room, with an <strong>Open party</strong>
+            button) but never the child's name.
+        </HelpNote>
     </HelpSection>
 </HelpTab>

@@ -1,3 +1,4 @@
+using Lanyard.Tests.TestUtilities;
 using Lanyard.Application.Services.AudioClips;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
@@ -57,6 +58,7 @@ public class AudioClipPlaybackServiceTests
             norwich = new Location { CompanyId = company.Id, Name = "Norwich", IsActive = true };
             ctx.Locations.Add(norwich);
             await ctx.SaveChangesAsync();
+            await TestFeatures.SwitchOnEverywhereAsync(ctx);
 
             FileMetadata file = new() { Id = Guid.NewGuid(), CompanyId = company.Id, FileName = "closing.mp3", FilePath = "closing.mp3", IsActive = true };
             ctx.FileMetadata.Add(file);
@@ -314,7 +316,7 @@ public class AudioClipPlaybackServiceTests
     private static async Task SwitchOffAudioClipsAsync(Setup s)
     {
         await using ApplicationDbContext ctx = new(s.Options);
-        ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = s.Company.Id, Feature = CompanyFeature.AudioClips, IsEnabled = false, UpdateDate = Now });
+        await TestFeatures.SwitchOffForCompanyAsync(ctx, s.Company.Id, CompanyFeature.AudioClips);
         await ctx.SaveChangesAsync();
     }
 
@@ -333,6 +335,28 @@ public class AudioClipPlaybackServiceTests
 
         await using ApplicationDbContext ctx = new(s.Options);
         Assert.AreEqual(0, await ctx.AudioClipPlays.CountAsync());
+    }
+
+    [TestMethod]
+    public async Task Play_RefusesAKioskAtALocationWithAudioClipsOff_ButStillPlaysElsewhere()
+    {
+        Setup s = await SeedAsync();
+        Guid lobby = await AddKioskAsync(s, "Lobby", s.Ipswich);
+        Guid cafe = await AddKioskAsync(s, "Cafe", s.Norwich);
+
+        await using (ApplicationDbContext ctx = new(s.Options))
+        {
+            ctx.LocationFeatureSettings.RemoveRange(ctx.LocationFeatureSettings.Where(x => x.LocationId == s.Norwich.Id && x.Feature == CompanyFeature.AudioClips));
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<List<AudioClipKioskOutcome>> result = await s.Service.PlayAsync(Request(s, lobby, cafe));
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.AreEqual(AudioClipPlayStatus.Sent, result.Data!.Single(x => x.ClientId == lobby).Status);
+        AudioClipKioskOutcome refused = result.Data!.Single(x => x.ClientId == cafe);
+        Assert.AreEqual(AudioClipPlayStatus.Failed, refused.Status);
+        StringAssert.Contains(refused.Error, "switched on for this kiosk's location");
     }
 
     [TestMethod]

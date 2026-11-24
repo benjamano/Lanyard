@@ -1,3 +1,4 @@
+using Lanyard.Tests.TestUtilities;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Notifications;
 using Lanyard.Application.Services.Scheduling;
@@ -66,6 +67,9 @@ internal static class SchedulingTestHelpers
         Location location = new() { CompanyId = company.Id, Name = locationName, IsActive = true };
         ctx.Locations.Add(location);
         await ctx.SaveChangesAsync();
+
+        // Features are off until switched on; the tests here assume a company that has them all.
+        await TestFeatures.SwitchOnEverywhereAsync(ctx);
 
         return (company, location);
     }

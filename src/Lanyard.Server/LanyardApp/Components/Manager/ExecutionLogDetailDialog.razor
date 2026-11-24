@@ -4,6 +4,7 @@
 @using System.Text.Json
 
 @inject IClientService _clientService
+@inject Lanyard.Application.Services.Parties.IPartyBookingService _partyBookingService
 
 <FluentDialogBody>
     <TitleTemplate>
@@ -47,6 +48,19 @@
                 <FluentText><strong>Why it was skipped:</strong> @Content.SkipReason</FluentText>
             }
 
+            @if (Content.PartyBookingId is Guid partyId)
+            {
+                @* The log keeps only the party's id, so this is looked up now: a party since
+                   removed just says so. *@
+                <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8" Wrap="true">
+                    <FluentText><strong>Party:</strong> @(_partyLoaded ? _partySummary ?? "This party no longer exists." : "Loading...")</FluentText>
+                    @if (_partySummary is not null)
+                    {
+                        <FluentButton Size="ButtonSize.Small" Appearance="ButtonAppearance.Outline" OnClick="@(() => OpenPartyAsync(partyId))">Open party</FluentButton>
+                    }
+                </FluentStack>
+            }
+
             <FluentDivider />
 
             <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">Actions</FluentText>
@@ -85,6 +99,9 @@
 
     private IEnumerable<ClientConnectedDTO> _clients = [];
 
+    private bool _partyLoaded;
+    private string? _partySummary;
+
     protected override async Task OnInitializedAsync()
     {
         Result<IEnumerable<ClientConnectedDTO>> result = await _clientService.GetClientsAsync();
@@ -92,6 +109,33 @@
         {
             _clients = result.Data ?? [];
         }
+
+        if (Content.PartyBookingId is Guid partyId)
+        {
+            Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+            if (scope.IsSuccess && scope.Data is not null)
+            {
+                Result<PartyBooking> party = await _partyBookingService.GetBookingAsync(scope.Data, partyId);
+
+                if (party.IsSuccess && party.Data is PartyBooking booking)
+                {
+                    // When and where, not who: the same detail the log row itself is allowed to hold.
+                    string when = $"{RotaTime.LocalDate(booking.StartUtc):ddd d MMM} at {RotaTime.LocalTime(booking.StartUtc):HH:mm}";
+                    string room = string.IsNullOrWhiteSpace(booking.Room) ? string.Empty : $", {booking.Room}";
+                    string cancelled = booking.Status == Lanyard.Infrastructure.Enum.PartyBookingStatus.Cancelled ? " (since cancelled)" : string.Empty;
+                    _partySummary = $"{when}{room}{cancelled}";
+                }
+            }
+
+            _partyLoaded = true;
+        }
+    }
+
+    private async Task OpenPartyAsync(Guid partyId)
+    {
+        await Dialog.CancelAsync();
+        _navigationManager.NavigateTo($"/manage/parties/{partyId}");
     }
 
     private string ResolveTargetClient(AutomationRuleActionExecution ae)

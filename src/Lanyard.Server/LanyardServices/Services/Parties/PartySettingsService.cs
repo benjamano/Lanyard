@@ -4,17 +4,84 @@ using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Lanyard.Application.Services.Parties;
 
-public class PartySettingsService(IDbContextFactory<ApplicationDbContext> factory) : IPartySettingsService
+public class PartySettingsService(IDbContextFactory<ApplicationDbContext> factory, ILogger<PartySettingsService>? logger = null) : IPartySettingsService
 {
+    private readonly ILogger<PartySettingsService> _logger = logger ?? NullLogger<PartySettingsService>.Instance;
+
     private const string NoAccess = "You can only change party settings for your own location.";
 
     // A day is the longest anything here could sensibly be.
     private const int MaxMinutes = 24 * 60;
 
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+
+    public async Task<Result<bool>> GetShowNamesOnScreensAsync(LocationScope scope, int companyId)
+    {
+        try
+        {
+            if (!IsInCompany(scope, companyId))
+            {
+                return Result<bool>.Fail("You can only see your own company's settings.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            bool? show = await ctx.Companies
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(c => c.Id == companyId)
+                .Select(c => (bool?)c.ShowPartyNamesOnScreens)
+                .FirstOrDefaultAsync();
+
+            return show is bool value ? Result<bool>.Ok(value) : Result<bool>.Fail("Company not found.");
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to load the venue screen setting: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> SetShowNamesOnScreensAsync(LocationScope scope, int companyId, bool show, string actingUserId)
+    {
+        try
+        {
+            // Putting a child's name on a public screen is a company decision, so Admins only.
+            if (!scope.IsAdmin || !IsInCompany(scope, companyId))
+            {
+                return Result<bool>.Fail("Only an Admin can change what venue screens show.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Company? company = await ctx.Companies.FirstOrDefaultAsync(c => c.Id == companyId);
+
+            if (company is null)
+            {
+                return Result<bool>.Fail("Company not found.");
+            }
+
+            company.ShowPartyNamesOnScreens = show;
+            company.UpdateDate = DateTime.UtcNow;
+            await ctx.SaveChangesAsync();
+
+            _logger.LogInformation("User {UserId} set ShowPartyNamesOnScreens to {Show} for company {CompanyId}", actingUserId, show, companyId);
+
+            return Result<bool>.Ok(show);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to save the venue screen setting: {ex.Message}");
+        }
+    }
+
+    // A platform admin has no company of their own and may manage any.
+    private static bool IsInCompany(LocationScope scope, int companyId) =>
+        scope.CompanyId == companyId || (scope.IsAdmin && scope.CompanyId is null);
 
     public async Task<Result<PartyLocationSettings>> GetSettingsAsync(LocationScope scope, int locationId)
     {

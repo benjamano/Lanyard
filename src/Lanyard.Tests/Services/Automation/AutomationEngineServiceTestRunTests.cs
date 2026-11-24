@@ -97,7 +97,8 @@ public class AutomationEngineServiceTestRunTests
             new LaserGameStatusStore(),
             alerts,
             clock,
-            NullLogger<AutomationEngineService>.Instance);
+            NullLogger<AutomationEngineService>.Instance,
+            new NoPartiesSchedule());
 
         return new Harness(options, factoryMock.Object, engine, executor, anyType, alerts, clock);
     }
@@ -520,7 +521,14 @@ public class AutomationEngineServiceTestRunTests
         AutomationRule rule = await SeedRuleAsync(harness, kioskId, [TestAction()]);
         GateExecutor gate = new();
 
-        AutomationEngineService engine = new(harness.Factory, [gate], new LaserGameStatusStore(), new RecordingOperationsAlertWriter(), harness.Clock, NullLogger<AutomationEngineService>.Instance);
+        AutomationEngineService engine = new(
+            harness.Factory,
+            [gate],
+            new LaserGameStatusStore(),
+            new RecordingOperationsAlertWriter(),
+            harness.Clock,
+            NullLogger<AutomationEngineService>.Instance,
+            new NoPartiesSchedule());
 
         Task<Result<AutomationTestRunResult>> first = engine.TestRunRuleAsync(Request(rule.Id));
         await gate.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));

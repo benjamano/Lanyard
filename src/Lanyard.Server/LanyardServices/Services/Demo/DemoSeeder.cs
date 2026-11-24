@@ -101,8 +101,6 @@ public sealed class DemoSeeder(DbContextOptions<ApplicationDbContext> options, U
         company.BackgroundImageFileId = null;
         company.UpdateDate = Now;
 
-        await ctx.CompanyFeatureSettings.Where(x => x.CompanyId == companyId).ExecuteDeleteAsync(ct);
-
         List<int> locationIds = await ctx.Locations.Where(x => x.CompanyId == companyId).Select(x => x.Id).ToListAsync(ct);
 
         // Accounts visitors created in the demo. Only users who belong to nothing but the demo -
@@ -127,6 +125,18 @@ public sealed class DemoSeeder(DbContextOptions<ApplicationDbContext> options, U
         // Locations a visitor added. Everything that referenced them went with the wipe.
         await ctx.Locations.Where(x => x.CompanyId == companyId && x.Name != Riverside && x.Name != Harbourside).ExecuteDeleteAsync(ct);
         await ctx.Locations.Where(x => x.CompanyId == companyId).ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, true), ct);
+
+        // Every feature back on at both demo locations: features are off until switched on.
+        List<int> keptLocationIds = await ctx.Locations.Where(x => x.CompanyId == companyId).Select(x => x.Id).ToListAsync(ct);
+        await ctx.LocationFeatureSettings.Where(x => keptLocationIds.Contains(x.LocationId)).ExecuteDeleteAsync(ct);
+
+        foreach (int locationId in keptLocationIds)
+        {
+            foreach (CompanyFeature feature in System.Enum.GetValues<CompanyFeature>())
+            {
+                ctx.LocationFeatureSettings.Add(new LocationFeatureSetting { LocationId = locationId, Feature = feature, IsEnabled = true, UpdateDate = Now });
+            }
+        }
 
         await ctx.SaveChangesAsync(ct);
 

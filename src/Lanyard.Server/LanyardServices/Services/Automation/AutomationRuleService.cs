@@ -1,6 +1,11 @@
 #nullable enable
 
+<<<<<<< HEAD
 using Lanyard.Application.Services.Authentication;
+=======
+using Lanyard.Application.Services.Features;
+using Lanyard.Application.Services.Parties;
+>>>>>>> e8f281310115c42c9ea5a04d2aff9659169eb638
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Enum;
@@ -155,6 +160,10 @@ public class AutomationRuleService(
             existing.TriggerThreshold = rule.TriggerThreshold;
             existing.TriggerScoreScope = rule.TriggerScoreScope;
             existing.TriggerTeam = rule.TriggerTeam;
+            existing.PartyLocationId = rule.PartyLocationId;
+            existing.PartyMilestone = rule.PartyMilestone;
+            existing.PartyLeadMinutes = rule.PartyLeadMinutes;
+            existing.PartyRoom = rule.PartyRoom;
             existing.LastUpdateDate = DateTime.UtcNow;
 
             SyncActions(ctx, existing, rule.Actions);
@@ -327,6 +336,10 @@ public class AutomationRuleService(
                 TriggerThreshold = source.TriggerThreshold,
                 TriggerScoreScope = source.TriggerScoreScope,
                 TriggerTeam = source.TriggerTeam,
+                PartyLocationId = source.PartyLocationId,
+                PartyMilestone = source.PartyMilestone,
+                PartyLeadMinutes = source.PartyLeadMinutes,
+                PartyRoom = source.PartyRoom,
                 // Off until someone checks it, so a copy can't fire alongside its original.
                 IsEnabled = false,
                 IsActive = true,
@@ -537,11 +550,26 @@ public class AutomationRuleService(
     // reject it at the point of saving instead.
     private static async Task<string?> ValidateRuleAsync(ApplicationDbContext ctx, AutomationRule rule, int? ruleCompanyId)
     {
-        string? triggerError = ValidateTrigger(rule.TriggerType, rule.IdleThresholdMinutes, rule.ScheduledTimeOfDay, rule.ScheduledDaysOfWeek, rule.TriggerThreshold, rule.TriggerScoreScope);
+        NormalisePartyFields(rule);
+
+        string? triggerError = ValidateTrigger(rule.TriggerType, rule.IdleThresholdMinutes, rule.ScheduledTimeOfDay, rule.ScheduledDaysOfWeek, rule.TriggerThreshold, rule.TriggerScoreScope)
+            ?? (rule.TriggerType == AutomationTriggerType.PartyMilestone
+                ? PartyTriggerRules.Validate(rule.PartyLocationId, rule.PartyMilestone, rule.PartyLeadMinutes, rule.PartyRoom)
+                : null);
 
         if (triggerError != null)
         {
             return triggerError;
+        }
+
+        if (rule.TriggerType == AutomationTriggerType.PartyMilestone)
+        {
+            string? partyError = await ValidatePartyLocationAsync(ctx, rule.PartyLocationId!.Value, ruleCompanyId);
+
+            if (partyError != null)
+            {
+                return partyError;
+            }
         }
 
         string? conditionError = ValidateConditions(rule.Conditions);
@@ -610,7 +638,72 @@ public class AutomationRuleService(
             }
         }
 
+        List<int> partyConditionLocationIds = rule.Conditions
+            .Where(c => c.IsActive && c.ConditionType == AutomationConditionType.PartyInProgress)
+            .Select(c => AutomationConditionParameters.TryParse(c.ParametersJson, out PartyInProgressConditionParameters? p) ? p.LocationId : 0)
+            .Distinct()
+            .ToList();
+
+        if (partyConditionLocationIds.Count > 0)
+        {
+            // Same explicit company check as opening hours: locations aren't tenant-filtered.
+            int? companyId = ruleCompanyId ?? (ctx.TenantFilterDisabled ? null : ctx.TenantCompanyId);
+
+            int foundCount = await ctx.Locations
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(l => partyConditionLocationIds.Contains(l.Id) && l.IsActive && (companyId == null || l.CompanyId == companyId))
+                .CountAsync();
+
+            if (foundCount != partyConditionLocationIds.Count)
+            {
+                return "A party condition refers to a location that doesn't exist.";
+            }
+        }
+
         return await ValidateActionTargetsAsync(ctx, rule, ruleCompanyId);
+    }
+
+    // Party fields only mean something on a party-time rule; anything else keeps them null, so a
+    // rule switched from Party time to another trigger doesn't carry stale party settings around.
+    private static void NormalisePartyFields(AutomationRule rule)
+    {
+        if (rule.TriggerType != AutomationTriggerType.PartyMilestone)
+        {
+            rule.PartyLocationId = null;
+            rule.PartyMilestone = null;
+            rule.PartyLeadMinutes = null;
+            rule.PartyRoom = null;
+            return;
+        }
+
+        rule.PartyRoom = PartyRooms.Normalise(rule.PartyRoom);
+    }
+
+    // Locations aren't tenant-filtered rows, so the company check is explicit (a new rule takes the
+    // signed-in caller's company), and a company with Parties switched off can't add party rules.
+    private static async Task<string?> ValidatePartyLocationAsync(ApplicationDbContext ctx, int locationId, int? ruleCompanyId)
+    {
+        int? companyId = ruleCompanyId ?? (ctx.TenantFilterDisabled ? null : ctx.TenantCompanyId);
+
+        int? locationCompanyId = await ctx.Locations
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(l => l.Id == locationId && l.IsActive && (companyId == null || l.CompanyId == companyId))
+            .Select(l => (int?)l.CompanyId)
+            .FirstOrDefaultAsync();
+
+        if (locationCompanyId is not int owner)
+        {
+            return "A party time rule refers to a location that doesn't exist.";
+        }
+
+        if (!await CompanyFeatureQueries.IsEnabledForCompanyAsync(ctx, owner, CompanyFeature.Parties))
+        {
+            return "Parties is switched off for this company, so a party time rule can't be saved.";
+        }
+
+        return null;
     }
 
     // An action's kiosk, and the playlist, program, scene or clip it plays, come from

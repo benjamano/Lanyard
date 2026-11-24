@@ -1,0 +1,146 @@
+@page "/checklists"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@attribute [RequiresFeature(CompanyFeature.Checklists)]
+
+@using Lanyard.App.Components.Checklists
+@using Lanyard.Application.Services.Checklists
+@using Lanyard.Infrastructure.DTO.Checklists
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@inject IChecklistRunService _runService
+
+<PageTitle>Checklists</PageTitle>
+
+<div class="my-checklists">
+    <div class="my-checklists-header">
+        <div class="my-checklists-heading">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Today's checklists</FluentText>
+            @if (day is not null)
+            {
+                <FluentText Class="my-checklists-sub">@day.LocationName · @day.VenueDate.ToString("dddd d MMMM", RotaFormat.Uk)</FluentText>
+            }
+        </div>
+        <HelpButton AreaKey="@HelpRegistry.Checklists" />
+    </div>
+
+    <div class="my-checklists-live" role="status" aria-live="polite">@announcement</div>
+
+    @if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else if (day is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" HorizontalGap="8">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else if (day.Runs.Count == 0)
+    {
+        <FluentCard Height="auto">
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                <FluentText Weight="TextWeight.Semibold">No checklists today</FluentText>
+                <FluentText>There's nothing to tick off at @day.LocationName today.</FluentText>
+            </FluentStack>
+        </FluentCard>
+    }
+    else
+    {
+        @foreach (ChecklistRunView run in day.Runs)
+        {
+            <ChecklistRunCard @key="run.RunId" Run="@run" CurrentUserId="@userId" Interactive="true" CanUndoAnyone="@canUndoAnyone"
+                              OnTick="@TickAsync" OnUndo="@UndoAsync" />
+        }
+    }
+</div>
+
+@code {
+    private LocationScope? scope;
+    private string? userId;
+    private ChecklistDayView? day;
+    private string? loadError;
+    private string? announcement;
+    private bool canUndoAnyone;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+        Result<string> user = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null || !user.IsSuccess || string.IsNullOrEmpty(user.Data))
+        {
+            loadError = "Couldn't work out who you are - try signing in again.";
+            return;
+        }
+
+        scope = scopeResult.Data;
+        userId = user.Data;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (scope is null || userId is null)
+        {
+            return;
+        }
+
+        Result<ChecklistDayView> result = await _runService.GetMyTodayAsync(userId, scope);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            loadError = result.Error;
+            day = null;
+            return;
+        }
+
+        loadError = null;
+        day = result.Data;
+        canUndoAnyone = scope.IsAdmin || (scope.IsManager && scope.LocationId == day.LocationId);
+    }
+
+    private async Task TickAsync((ChecklistItemView Item, string? Note, decimal? Reading) tick)
+    {
+        if (scope is null || userId is null)
+        {
+            return;
+        }
+
+        Result<bool> result = await _runService.CompleteAsync(userId, scope, tick.Item.ItemId, tick.Note, tick.Reading);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't tick that task.");
+            announcement = result.Error;
+        }
+        else
+        {
+            announcement = $"{tick.Item.Title} ticked.";
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task UndoAsync(ChecklistTickView tick)
+    {
+        if (scope is null || userId is null)
+        {
+            return;
+        }
+
+        Result<bool> result = await _runService.UndoAsync(userId, scope, tick.CompletionId);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't take that tick back.");
+            announcement = result.Error;
+        }
+        else
+        {
+            announcement = "Tick taken back.";
+        }
+
+        await LoadAsync();
+    }
+}

@@ -1,6 +1,7 @@
 #nullable enable
 
 using Lanyard.Application.Services.OperationsAlerts;
+using Lanyard.Application.Services.Parties;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
@@ -21,7 +22,8 @@ public class AutomationEngineService(
     ILaserGameStatusStore laserGameStatusStore,
     IOperationsAlertWriter alertWriter,
     TimeProvider timeProvider,
-    ILogger<AutomationEngineService> logger) : IAutomationEngineService
+    ILogger<AutomationEngineService> logger,
+    IPartyScheduleProvider partySchedule) : IAutomationEngineService
 {
     private readonly ISystemDbContextFactory _contextFactory = contextFactory;
     private readonly IEnumerable<IActionExecutor> _actionExecutors = actionExecutors;
@@ -29,6 +31,7 @@ public class AutomationEngineService(
     private readonly IOperationsAlertWriter _alertWriter = alertWriter;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger<AutomationEngineService> _logger = logger;
+    private readonly IPartyScheduleProvider _partySchedule = partySchedule;
 
     private readonly Channel<GameStatusTransitionEvent> _transitionChannel =
         Channel.CreateUnbounded<GameStatusTransitionEvent>();
@@ -93,11 +96,31 @@ public class AutomationEngineService(
     // still catch a fire and how many times a failed attempt retries (~5 tries at 60s cadence).
     private static readonly TimeSpan ScheduleCatchUpWindow = TimeSpan.FromMinutes(5);
 
+    // Party-time rules fire once per (rule, party). The value is when the party's fire time was,
+    // so entries for long-gone parties can be dropped. Kept outside the rule cache, so a reload
+    // never forgets a firing.
+    private readonly ConcurrentDictionary<(Guid RuleId, Guid PartyId), DateTime> _partyFired = new();
+
+    // When each party-time rule last ran successfully. Every party already due at that instant
+    // was merged into that run, so after a restart this (reseeded from the log, which only keeps
+    // the first party's id) also covers the "+N other" parties.
+    private readonly ConcurrentDictionary<Guid, DateTime> _partyLastRunUtc = new();
+    private readonly ConcurrentDictionary<Guid, byte> _partySeeded = new();
+
+    // A condition skip is logged once per rule and party, not on every tick of the window.
+    private readonly ConcurrentDictionary<(Guid RuleId, Guid PartyId), byte> _partySkipLogged = new();
+
     // Rules being test-run right now, so a double click can't run the same actions twice at once.
     private readonly ConcurrentDictionary<Guid, byte> _testRunsInProgress = new();
 
     private volatile bool _isEnabled = false;
-    private volatile bool _ruleCacheDirty = true;
+    // Every save bumps _ruleCacheVersion; a reload records the version it started from. A save that
+    // lands while a reload is still reading the old rules leaves the two different, so the cache
+    // stays dirty and the next caller reloads again. A bool cleared at the end of the reload would
+    // swallow that save and hide the new rule until some other save came along.
+    private long _ruleCacheVersion = 1;
+    private long _loadedRuleCacheVersion;
+    private bool IsRuleCacheDirty => Interlocked.Read(ref _ruleCacheVersion) != Interlocked.Read(ref _loadedRuleCacheVersion);
     private List<AutomationRule> _ruleCache = [];
 
     // Kiosks named by ClientGameStatus conditions, loaded with the rule cache. Includes each one's
@@ -127,7 +150,7 @@ public class AutomationEngineService(
 
     public void InvalidateRuleCache()
     {
-        _ruleCacheDirty = true;
+        Interlocked.Increment(ref _ruleCacheVersion);
     }
 
     public void NotifyRuleEnabledChanged(Guid ruleId, bool isEnabled)
@@ -185,7 +208,7 @@ public class AutomationEngineService(
     {
         // A dirty cache hasn't been read yet (or just changed), so it can't say there are no
         // game-data rules; let the consumer reload it and decide.
-        if (!_hasGameDataRules && !_ruleCacheDirty)
+        if (!_hasGameDataRules && !IsRuleCacheDirty)
         {
             return;
         }
@@ -225,7 +248,10 @@ public class AutomationEngineService(
         await _ruleCacheLock.WaitAsync(ct);
         try
         {
-            if (!_ruleCacheDirty) return; // double-check inside lock
+            if (!IsRuleCacheDirty) return; // double-check inside lock
+
+            // Read before the query: anything saved from here on bumps the version past this.
+            long loadingVersion = Interlocked.Read(ref _ruleCacheVersion);
             await using ApplicationDbContext ctx = await _contextFactory.CreateDbContextAsync(ct);
             List<AutomationRule> rules = await ctx.AutomationRules
                 .Where(r => r.IsActive && r.IsEnabled)
@@ -243,7 +269,7 @@ public class AutomationEngineService(
             _conditionLocations = conditionLocations;
             _hasGameDataRules = rules.Any(r => IsGameDataTrigger(r.TriggerType));
             _ruleCache = rules;
-            _ruleCacheDirty = false;
+            Interlocked.Exchange(ref _loadedRuleCacheVersion, loadingVersion);
             _logger.LogInformation("AutomationEngine rule cache reloaded - {Count} rules", rules.Count);
         }
         finally
@@ -279,6 +305,7 @@ public class AutomationEngineService(
             .SelectMany(r => r.Conditions)
             .Where(c => c.ConditionType == AutomationConditionType.DuringOpeningHours)
             .Select(c => AutomationConditionParameters.TryParse(c.ParametersJson, out OpeningHoursConditionParameters? p) ? p.LocationId : 0)
+            .Concat(PartyConditionLocationIds(rules.SelectMany(r => r.Conditions)))
             .Where(id => id > 0)
             .Distinct()
             .ToList();
@@ -326,7 +353,7 @@ public class AutomationEngineService(
         }
 
         // Reload rule cache if dirty
-        if (_ruleCacheDirty)
+        if (IsRuleCacheDirty)
         {
             await ReloadRuleCacheAsync(ct);
         }
@@ -362,7 +389,7 @@ public class AutomationEngineService(
         foreach ((AutomationRule rule, string label) in matchingRules)
         {
             // A status edge happens once, so a skip consumes it - the rule waits for the next edge.
-            AutomationConditionCheck check = CheckConditions(rule, _timeProvider.GetUtcNow().UtcDateTime);
+            AutomationConditionCheck check = await CheckConditionsAsync(rule, _timeProvider.GetUtcNow().UtcDateTime, ct);
 
             if (!check.Passed)
             {
@@ -402,7 +429,7 @@ public class AutomationEngineService(
             return;
         }
 
-        if (_ruleCacheDirty)
+        if (IsRuleCacheDirty)
         {
             await ReloadRuleCacheAsync(ct);
         }
@@ -441,7 +468,7 @@ public class AutomationEngineService(
             _gameDataFiredForGame[rule.Id] = snapshot.GameNumber;
 
             string label = rule.TriggerType.ToString();
-            AutomationConditionCheck check = CheckConditions(rule, _timeProvider.GetUtcNow().UtcDateTime);
+            AutomationConditionCheck check = await CheckConditionsAsync(rule, _timeProvider.GetUtcNow().UtcDateTime, ct);
 
             if (!check.Passed)
             {
@@ -504,7 +531,7 @@ public class AutomationEngineService(
             return;
         }
 
-        if (_ruleCacheDirty)
+        if (IsRuleCacheDirty)
         {
             await ReloadRuleCacheAsync(ct);
         }
@@ -555,7 +582,7 @@ public class AutomationEngineService(
                 continue;
             }
 
-            AutomationConditionCheck check = CheckConditions(rule, nowUtc);
+            AutomationConditionCheck check = await CheckConditionsAsync(rule, nowUtc, ct);
 
             if (!check.Passed)
             {
@@ -616,7 +643,7 @@ public class AutomationEngineService(
             return;
         }
 
-        if (_ruleCacheDirty)
+        if (IsRuleCacheDirty)
         {
             await ReloadRuleCacheAsync(ct);
         }
@@ -651,7 +678,7 @@ public class AutomationEngineService(
                 continue;
             }
 
-            AutomationConditionCheck check = CheckConditions(rule, _timeProvider.GetUtcNow().UtcDateTime);
+            AutomationConditionCheck check = await CheckConditionsAsync(rule, _timeProvider.GetUtcNow().UtcDateTime, ct);
 
             if (!check.Passed)
             {
@@ -745,16 +772,228 @@ public class AutomationEngineService(
         }
     }
 
-    private AutomationConditionCheck CheckConditions(AutomationRule rule, DateTime nowUtc)
+    /// <summary>
+    /// Fires each PartyMilestone rule whose party moment (minus its lead minutes) has just come
+    /// round, once per party. Parties reaching it in the same tick fire the rule once.
+    /// </summary>
+    /// <remarks>
+    /// Called every minute by PartyTriggerHostedService. Nothing is scheduled ahead: party times are
+    /// read fresh from IPartyScheduleProvider (a minute's cache, cleared on every booking save), so
+    /// a party moved or cancelled before its moment simply fires at the new time or not at all. A
+    /// party moved after its rule fired doesn't fire it again.
+    /// </remarks>
+    public async Task ProcessPartyRulesAsync(DateTime nowUtc, CancellationToken ct)
     {
-        return CheckConditions(rule, nowUtc, _conditionClients, _conditionLocations);
+        await EnsureEnabledInitializedAsync(ct);
+
+        if (!_isEnabled)
+        {
+            return;
+        }
+
+        if (IsRuleCacheDirty)
+        {
+            await ReloadRuleCacheAsync(ct);
+        }
+
+        List<AutomationRule> partyRules = _ruleCache
+            .Where(r => r.TriggerType == AutomationTriggerType.PartyMilestone
+                && r.PartyLocationId is > 0
+                && r.PartyMilestone.HasValue
+                && r.PartyLeadMinutes.HasValue)
+            .ToList();
+
+        if (partyRules.Count == 0)
+        {
+            return;
+        }
+
+        PrunePartyState(nowUtc);
+
+        Dictionary<(int CompanyId, int LocationId), IReadOnlyList<PartySlot>?> partiesByLocation = [];
+
+        foreach (AutomationRule rule in partyRules)
+        {
+            (int, int) locationKey = (rule.CompanyId, rule.PartyLocationId!.Value);
+
+            if (!partiesByLocation.TryGetValue(locationKey, out IReadOnlyList<PartySlot>? parties))
+            {
+                Infrastructure.DTO.Result<IReadOnlyList<PartySlot>> loaded = await _partySchedule.GetDayAsync(rule.CompanyId, rule.PartyLocationId.Value, nowUtc, ct);
+
+                if (!loaded.IsSuccess)
+                {
+                    _logger.LogWarning("Couldn't load parties for location {LocationId}; party rules there wait for the next tick: {Error}", rule.PartyLocationId, loaded.Error);
+                }
+
+                parties = loaded.IsSuccess ? loaded.Data : null;
+                partiesByLocation[locationKey] = parties;
+            }
+
+            if (parties is null || parties.Count == 0)
+            {
+                continue;
+            }
+
+            await EnsurePartyRuleSeededAsync(rule.Id, nowUtc, ct);
+
+            PartyMilestone milestone = rule.PartyMilestone!.Value;
+            int lead = rule.PartyLeadMinutes!.Value;
+            DateTime? lastRun = _partyLastRunUtc.TryGetValue(rule.Id, out DateTime last) ? last : null;
+
+            // Earliest first, so the run is logged against the party whose moment came first.
+            List<(PartySlot Party, DateTime FireAtUtc)> due = parties
+                .Where(p => PartyRooms.Matches(rule.PartyRoom, p.Room))
+                .Select(p => (Party: p, Milestone: PartyTriggerRules.MilestoneUtc(p, milestone)))
+                .Where(x => x.Milestone is DateTime m && PartyTriggerRules.IsDue(m, lead, nowUtc, ScheduleCatchUpWindow))
+                .Select(x => (x.Party, FireAtUtc: x.Milestone!.Value.AddMinutes(-lead)))
+                .Where(x => !_partyFired.ContainsKey((rule.Id, x.Party.Id)) && !(lastRun is DateTime ran && x.FireAtUtc <= ran))
+                .OrderBy(x => x.FireAtUtc)
+                .ThenBy(x => x.Party.CreateDate)
+                .ToList();
+
+            if (due.Count == 0)
+            {
+                continue;
+            }
+
+            PartySlot first = due[0].Party;
+            string label = PartyTriggerRules.ExecutionLabel(milestone, lead, due.Count - 1);
+            AutomationConditionCheck check = await CheckConditionsAsync(rule, _timeProvider.GetUtcNow().UtcDateTime, ct);
+
+            if (!check.Passed)
+            {
+                // Not marked fired: a later tick inside the window can still run it.
+                if (_partySkipLogged.TryAdd((rule.Id, first.Id), 0))
+                {
+                    await WriteSkippedExecutionAsync(rule, rule.TriggerClientId, label, check, ct, first.Id);
+                }
+
+                continue;
+            }
+
+            _logger.LogInformation("Party rule {RuleId} due for party {PartyBookingId} and {OtherCount} other(s) - firing", rule.Id, first.Id, due.Count - 1);
+
+            bool succeeded = await ExecuteRuleAsync(rule, rule.TriggerClientId, label, ct, first.Id);
+
+            if (succeeded)
+            {
+                foreach ((PartySlot party, DateTime fireAtUtc) in due)
+                {
+                    _partyFired[(rule.Id, party.Id)] = fireAtUtc;
+                }
+
+                _partyLastRunUtc[rule.Id] = nowUtc;
+            }
+        }
+    }
+
+    // A day's grace past the latest possible catch-up, so nothing still due is ever forgotten.
+    private void PrunePartyState(DateTime nowUtc)
+    {
+        DateTime cutoff = nowUtc.AddDays(-1);
+
+        foreach (KeyValuePair<(Guid RuleId, Guid PartyId), DateTime> entry in _partyFired)
+        {
+            if (entry.Value < cutoff)
+            {
+                _partyFired.TryRemove(entry.Key, out _);
+                _partySkipLogged.TryRemove(entry.Key, out _);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reseeds the last successful run from the execution log the first time a party rule is
+    /// evaluated in this process, so a restart straight after a party rule fired doesn't fire it
+    /// again inside the catch-up window. Mirrors EnsureScheduledRuleSeededAsync.
+    /// </summary>
+    private async Task EnsurePartyRuleSeededAsync(Guid ruleId, DateTime nowUtc, CancellationToken ct)
+    {
+        if (_partySeeded.ContainsKey(ruleId))
+        {
+            return;
+        }
+
+        try
+        {
+            DateTime since = nowUtc.AddDays(-1);
+
+            await using ApplicationDbContext ctx = await _contextFactory.CreateDbContextAsync(ct);
+            List<(Guid PartyBookingId, DateTime ExecutedAt)> runs = (await ctx.AutomationRuleExecutions
+                .Where(e => e.AutomationRuleId == ruleId && e.OverallSuccess && e.PartyBookingId != null && e.ExecutedAt >= since)
+                .Select(e => new { PartyBookingId = e.PartyBookingId!.Value, e.ExecutedAt })
+                .AsNoTracking()
+                .TagWithCallSite()
+                .ToListAsync(ct))
+                .Select(e => (e.PartyBookingId, e.ExecutedAt))
+                .ToList();
+
+            foreach ((Guid partyId, DateTime executedAt) in runs)
+            {
+                _partyFired.TryAdd((ruleId, partyId), executedAt);
+            }
+
+            if (runs.Count > 0)
+            {
+                DateTime latest = runs.Max(r => r.ExecutedAt);
+                _partyLastRunUtc.AddOrUpdate(ruleId, latest, (_, current) => current > latest ? current : latest);
+            }
+
+            // Only after the query succeeded, so a DB blip is retried on the next tick.
+            _partySeeded.TryAdd(ruleId, 0);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Failed to reseed party runs for rule {RuleId}", ruleId);
+        }
+    }
+
+    private async Task<AutomationConditionCheck> CheckConditionsAsync(AutomationRule rule, DateTime nowUtc, CancellationToken ct)
+    {
+        return await CheckConditionsAsync(rule, nowUtc, _conditionClients, _conditionLocations, ct);
+    }
+
+    private async Task<AutomationConditionCheck> CheckConditionsAsync(
+        AutomationRule rule,
+        DateTime nowUtc,
+        Dictionary<Guid, AutomationClientInfo> clients,
+        Dictionary<int, AutomationLocationInfo> locations,
+        CancellationToken ct)
+    {
+        // Every rule saved before conditions existed takes this path, unchanged.
+        if (!rule.Conditions.Any(c => c.IsActive))
+        {
+            return AutomationConditionCheck.Pass;
+        }
+
+        // The evaluator is pure and synchronous, so today's parties for any party conditions are
+        // read first (from the provider's one-minute cache, so this is rarely a query). A failed
+        // read leaves the location out, which the evaluator treats as "couldn't be loaded".
+        Dictionary<int, IReadOnlyList<PartySlot>> parties = [];
+
+        foreach (int locationId in PartyConditionLocationIds(rule.Conditions))
+        {
+            Infrastructure.DTO.Result<IReadOnlyList<PartySlot>> loaded = await _partySchedule.GetDayAsync(rule.CompanyId, locationId, nowUtc, ct);
+
+            if (loaded.IsSuccess && loaded.Data is not null)
+            {
+                parties[locationId] = loaded.Data;
+            }
+            else
+            {
+                _logger.LogWarning("Couldn't load parties at location {LocationId} for rule {RuleId}'s condition: {Error}", locationId, rule.Id, loaded.Error);
+            }
+        }
+
+        return CheckConditions(rule, nowUtc, clients, locations, parties);
     }
 
     private AutomationConditionCheck CheckConditions(
         AutomationRule rule,
         DateTime nowUtc,
         Dictionary<Guid, AutomationClientInfo> clients,
-        Dictionary<int, AutomationLocationInfo> locations)
+        Dictionary<int, AutomationLocationInfo> locations,
+        Dictionary<int, IReadOnlyList<PartySlot>> parties)
     {
         // Every rule saved before conditions existed takes this path, unchanged.
         if (!rule.Conditions.Any(c => c.IsActive))
@@ -768,8 +1007,15 @@ public class AutomationEngineService(
             nowUtc,
             clientId => clients.GetValueOrDefault(clientId),
             IsClientInGame,
-            locationId => locations.GetValueOrDefault(locationId));
+            locationId => locations.GetValueOrDefault(locationId),
+            locationId => parties.GetValueOrDefault(locationId));
     }
+
+    private static IEnumerable<int> PartyConditionLocationIds(IEnumerable<AutomationRuleCondition> conditions) => conditions
+        .Where(c => c.IsActive && c.ConditionType == AutomationConditionType.PartyInProgress)
+        .Select(c => AutomationConditionParameters.TryParse(c.ParametersJson, out PartyInProgressConditionParameters? p) ? p.LocationId : 0)
+        .Where(id => id > 0)
+        .Distinct();
 
     // The status store, not _lastKnownStatus: the hub clears the store when a kiosk disconnects,
     // so a kiosk that drops mid-game doesn't stay "in game" forever.
@@ -790,6 +1036,7 @@ public class AutomationEngineService(
         string triggerEventLabel,
         AutomationConditionCheck check,
         CancellationToken ct,
+        Guid? partyBookingId = null,
         string? testRunByUserId = null)
     {
         string reason = check.Reason ?? "A condition wasn't met";
@@ -813,6 +1060,7 @@ public class AutomationEngineService(
             TriggerClientId = clientId,
             OverallSuccess = false,
             SkipReason = reason,
+            PartyBookingId = partyBookingId,
             IsTestRun = testRunByUserId != null,
             TestRunByUserId = testRunByUserId
         };
@@ -832,7 +1080,7 @@ public class AutomationEngineService(
     }
 
     /// <summary>Returns whether every action in the rule succeeded.</summary>
-    private async Task<bool> ExecuteRuleAsync(AutomationRule rule, Guid clientId, string triggerEventLabel, CancellationToken ct)
+    private async Task<bool> ExecuteRuleAsync(AutomationRule rule, Guid clientId, string triggerEventLabel, CancellationToken ct, Guid? partyBookingId = null)
     {
         List<AutomationRuleActionExecution> actionExecutions = await RunActionsAsync(rule, clientId, ct);
 
@@ -846,7 +1094,8 @@ public class AutomationEngineService(
             TriggerEvent = triggerEventLabel, // string snapshot per STATE.md decision
             TriggerClientId = clientId,
             OverallSuccess = actionExecutions.All(a => a.Success),
-            ActionExecutions = actionExecutions
+            ActionExecutions = actionExecutions,
+            PartyBookingId = partyBookingId
         };
 
         if (await WriteExecutionAsync(execution, ct))
@@ -1104,11 +1353,17 @@ public class AutomationEngineService(
                 (Dictionary<Guid, AutomationClientInfo> clients, Dictionary<int, AutomationLocationInfo> locations) =
                     await LoadConditionContextAsync(ctx, [rule], ct);
 
-                AutomationConditionCheck check = CheckConditions(rule, _timeProvider.GetUtcNow().UtcDateTime, clients, locations);
+                AutomationConditionCheck check = await CheckConditionsAsync(rule, _timeProvider.GetUtcNow().UtcDateTime, clients, locations, ct);
 
                 if (!check.Passed)
                 {
-                    Guid skippedId = await WriteSkippedExecutionAsync(rule, rule.TriggerClientId, label, check, ct, request.UserId);
+                    Guid skippedId = await WriteSkippedExecutionAsync(
+                        rule,
+                        rule.TriggerClientId,
+                        label,
+                        check,
+                        ct,
+                        testRunByUserId: request.UserId);
 
                     return Result<AutomationTestRunResult>.Ok(new AutomationTestRunResult(
                         skippedId, check.Reason ?? "A condition wasn't met", []));

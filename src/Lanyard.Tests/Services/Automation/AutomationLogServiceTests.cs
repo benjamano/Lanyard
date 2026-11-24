@@ -116,7 +116,7 @@ namespace Lanyard.Tests.Services.Automation
             Assert.IsTrue(result.IsSuccess);
             Assert.AreEqual(3, result.Data!.Count());
         }
-    
+
         [TestMethod]
         public async Task GetLatestExecutionForRule_IgnoresManualTests_ButTheLogShowsThem()
         {

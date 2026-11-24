@@ -27,6 +27,12 @@ namespace Lanyard.Infrastructure.Models
         // follows the calendar; a named season forces it on, which managers use to preview.
         public Lanyard.Infrastructure.Enum.SeasonalThemeSetting SeasonalThemeSetting { get; set; } = Lanyard.Infrastructure.Enum.SeasonalThemeSetting.Automatic;
 
+        // Whether venue projection screens may show the birthday child's first name (the
+        // party.welcome / party.child-name live text). Off until an Admin turns it on in Party
+        // settings: a child's name on a public screen is the company's call, made once for all
+        // its venues. Party times with no name show either way.
+        public bool ShowPartyNamesOnScreens { get; set; }
+
         public virtual List<Location> Locations { get; set; } = [];
     }
 
