@@ -147,7 +147,7 @@
                     </FluentCard>
 
                     <div class="mt-3">
-                        <CompanyFeatureManager CompanyId="@selectedCompany.Id" CompanyName="@selectedCompany.Name" />
+                        <CompanyFeatureManager CompanyId="@selectedCompany.Id" CompanyName="@selectedCompany.Name" LocationsVersion="@locationsVersion" />
                     </div>
                 }
             </FluentGridItem>
@@ -161,6 +161,9 @@
 
     private List<Company> companies = [];
     private List<Location> locationsForSelectedCompany = [];
+
+    // Bumped when a location is added or deactivated, so the feature grid reloads its columns.
+    private int locationsVersion;
     private Company? selectedCompany;
 
     // One form, two modes: with no company selected it creates, with one selected it edits that
@@ -353,8 +356,11 @@
         }
 
         newLocationName = string.Empty;
+        locationsVersion++;
         await LoadLocationsAsync();
         await OnLocationsChanged.InvokeAsync();
+
+        ToastService.ShowInfo($"{result.Data!.Name} added. Its features start switched off: turn them on under Features.");
     }
 
     private async Task OpenOpeningHoursAsync(Location location)
@@ -377,6 +383,7 @@
             return;
         }
 
+        locationsVersion++;
         await LoadLocationsAsync();
         await OnLocationsChanged.InvokeAsync();
     }

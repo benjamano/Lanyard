@@ -66,7 +66,7 @@
 </AuthorizeView>
 
 @code {
-    // Modules this user's company doesn't have - see NavMenu.razor.
+    // Modules this user's location doesn't have - see NavMenu.razor.
     private IReadOnlySet<CompanyFeature> _hiddenFeatures = new HashSet<CompanyFeature>();
 
     private bool Has(CompanyFeature feature) => !_hiddenFeatures.Contains(feature);

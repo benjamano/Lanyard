@@ -222,47 +222,12 @@ public class TimeEntryService(
     {
         try
         {
-            Result<TerminalSession> session = await _terminalService.GetActiveSessionAsync(terminalId);
+            Result<TerminalSession> session = await CheckPinAsync(terminalId, userId, pin);
 
             if (!session.IsSuccess || session.Data is null)
             {
                 return Result<ClockActionResult>.Fail(session.Error ?? "This device has been unpaired.");
             }
-
-            if (_tokenService.PinLockedUntil(userId) is DateTime lockedUntil)
-            {
-                return Result<ClockActionResult>.Fail(TooManyWrongPins(lockedUntil));
-            }
-
-            Result<ClockInPinStatus> status = await _pinService.GetStatusAsync(userId);
-
-            if (status.IsSuccess && status.Data is { HasPin: false })
-            {
-                return Result<ClockActionResult>.Fail("You haven't set a clock-in PIN yet. Scan the QR code with your phone instead, or ask a manager to set one.");
-            }
-
-            Result<bool> verified = await _pinService.VerifyPinAsync(userId, pin);
-
-            if (!verified.IsSuccess)
-            {
-                return Result<ClockActionResult>.Fail(verified.Error ?? "Couldn't check your PIN.");
-            }
-
-            if (!verified.Data)
-            {
-                DateTime? nowLockedUntil = _tokenService.RegisterPinFailure(userId);
-
-                if (nowLockedUntil is not null)
-                {
-                    _logger.LogWarning("PIN locked for {UserId} after repeated wrong PINs at terminal {TerminalId}", userId, terminalId);
-                }
-
-                return Result<ClockActionResult>.Fail(nowLockedUntil is DateTime until
-                    ? TooManyWrongPins(until)
-                    : "That PIN isn't right. Try again.");
-            }
-
-            _tokenService.ClearPinFailures(userId);
 
             return await ClockAsync(session.Data, userId, ClockMethod.Pin);
         }
@@ -270,6 +235,83 @@ public class TimeEntryService(
         {
             return Result<ClockActionResult>.Fail($"Couldn't clock you in or out: {ex.Message}");
         }
+    }
+
+    public async Task<Result<TerminalSession>> VerifyTerminalPinAsync(Guid terminalId, string userId, string pin)
+    {
+        try
+        {
+            Result<TerminalSession> session = await CheckPinAsync(terminalId, userId, pin);
+
+            if (!session.IsSuccess || session.Data is null)
+            {
+                return session;
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            bool member = await ctx.UserLocationMemberships
+                .AsNoTracking()
+                .TagWithCallSite()
+                .AnyAsync(x => x.UserId == userId && x.LocationId == session.Data.LocationId);
+
+            return member
+                ? session
+                : Result<TerminalSession>.Fail("You don't work at this location.");
+        }
+        catch (Exception ex)
+        {
+            return Result<TerminalSession>.Fail($"Couldn't check your PIN: {ex.Message}");
+        }
+    }
+
+    // The terminal is live, the person isn't locked out and the PIN is theirs. Shared by clocking in
+    // and by signing in to tick checklists, so both count towards the same escalating lockout.
+    private async Task<Result<TerminalSession>> CheckPinAsync(Guid terminalId, string userId, string pin)
+    {
+        Result<TerminalSession> session = await _terminalService.GetActiveSessionAsync(terminalId);
+
+        if (!session.IsSuccess || session.Data is null)
+        {
+            return Result<TerminalSession>.Fail(session.Error ?? "This device has been unpaired.");
+        }
+
+        if (_tokenService.PinLockedUntil(userId) is DateTime lockedUntil)
+        {
+            return Result<TerminalSession>.Fail(TooManyWrongPins(lockedUntil));
+        }
+
+        Result<ClockInPinStatus> status = await _pinService.GetStatusAsync(userId);
+
+        if (status.IsSuccess && status.Data is { HasPin: false })
+        {
+            return Result<TerminalSession>.Fail("You haven't set a clock-in PIN yet. Scan the QR code with your phone instead, or ask a manager to set one.");
+        }
+
+        Result<bool> verified = await _pinService.VerifyPinAsync(userId, pin);
+
+        if (!verified.IsSuccess)
+        {
+            return Result<TerminalSession>.Fail(verified.Error ?? "Couldn't check your PIN.");
+        }
+
+        if (!verified.Data)
+        {
+            DateTime? nowLockedUntil = _tokenService.RegisterPinFailure(userId);
+
+            if (nowLockedUntil is not null)
+            {
+                _logger.LogWarning("PIN locked for {UserId} after repeated wrong PINs at terminal {TerminalId}", userId, terminalId);
+            }
+
+            return Result<TerminalSession>.Fail(nowLockedUntil is DateTime until
+                ? TooManyWrongPins(until)
+                : "That PIN isn't right. Try again.");
+        }
+
+        _tokenService.ClearPinFailures(userId);
+
+        return session;
     }
 
     public async Task<Result<ClockActionResult>> ClockByQrAsync(string nonce, string userId, string? holdKey = null)

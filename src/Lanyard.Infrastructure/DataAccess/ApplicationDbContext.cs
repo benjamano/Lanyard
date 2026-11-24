@@ -117,7 +117,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<StaffDocumentType> StaffDocumentTypes { get; set; }
         public DbSet<StaffDocument> StaffDocuments { get; set; }
         public DbSet<CompanyOnboardingSettings> CompanyOnboardingSettings { get; set; }
-        public DbSet<CompanyFeatureSetting> CompanyFeatureSettings { get; set; }
+        public DbSet<LocationFeatureSetting> LocationFeatureSettings { get; set; }
         public DbSet<CompanyOnboardingStandingAttachment> CompanyOnboardingStandingAttachments { get; set; }
         public DbSet<StaffPosition> StaffPositions { get; set; }
         public DbSet<UserPosition> UserPositions { get; set; }
@@ -306,6 +306,8 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasValue<AutomationRuleStatusWidget>(WidgetType.AutomationRuleStatus)
                 .HasValue<KioskHealthWidget>(WidgetType.KioskHealth)
                 .HasValue<OperationsAlertsWidget>(WidgetType.OperationsAlerts)
+                .HasValue<ChecklistsTodayWidget>(WidgetType.ChecklistsToday)
+                .HasValue<ChecklistCardWidget>(WidgetType.Checklist)
                 .HasValue<HallOfFameWidget>(WidgetType.HallOfFame)
                 .HasValue<MyTrainingWidget>(WidgetType.MyTraining)
                 .HasValue<GreetingWidget>(WidgetType.Greeting)
@@ -532,16 +534,16 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasForeignKey(x => x.FileMetadataId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // At most one switch per feature per company. Cascade: a company's switches mean
+            // At most one switch per feature per location. Cascade: a location's switches mean
             // nothing without it.
-            modelBuilder.Entity<CompanyFeatureSetting>()
-                .HasIndex(x => new { x.CompanyId, x.Feature })
+            modelBuilder.Entity<LocationFeatureSetting>()
+                .HasIndex(x => new { x.LocationId, x.Feature })
                 .IsUnique();
 
-            modelBuilder.Entity<CompanyFeatureSetting>()
-                .HasOne(x => x.Company)
+            modelBuilder.Entity<LocationFeatureSetting>()
+                .HasOne(x => x.Location)
                 .WithMany()
-                .HasForeignKey(x => x.CompanyId)
+                .HasForeignKey(x => x.LocationId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             // Staff scheduling. Same (CompanyId, Name) uniqueness as StaffDocumentType.
@@ -724,7 +726,10 @@ namespace Lanyard.Infrastructure.DataAccess
                 entity.Property(x => x.Detail).HasMaxLength(ChecklistRules.MaxTaskDetailLength);
                 entity.Property(x => x.Unit).HasMaxLength(ChecklistRules.MaxUnitLength);
                 entity.HasOne(x => x.Task).WithMany().HasForeignKey(x => x.TaskId).OnDelete(DeleteBehavior.SetNull);
-                entity.HasMany(x => x.Completions).WithOne(x => x.RunItem).HasForeignKey(x => x.RunItemId).OnDelete(DeleteBehavior.Cascade);
+                // Restrict, not Cascade: today's untouched run is rebuilt when its checklist changes
+                // (ChecklistRunStore.EnsureRunsAsync), and a tick saved in the moment between "untouched"
+                // and the rebuild must make the rebuild fail rather than be deleted along with its item.
+                entity.HasMany(x => x.Completions).WithOne(x => x.RunItem).HasForeignKey(x => x.RunItemId).OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<ChecklistCompletion>(entity =>
@@ -741,6 +746,7 @@ namespace Lanyard.Infrastructure.DataAccess
                 entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(x => x.UndoneByUser).WithMany().HasForeignKey(x => x.UndoneByUserId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(x => x.ClockInTerminal).WithMany().HasForeignKey(x => x.ClockInTerminalId).OnDelete(DeleteBehavior.SetNull);
+                entity.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.SetNull);
             });
 
             // The latest run for a location is what the banner reads.

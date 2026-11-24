@@ -21,6 +21,7 @@
 @inject ITimeEntryService _timeEntryService
 @inject ITerminalEphemeralTokenService _tokenService
 @inject ITerminalEventBus _eventBus
+@inject Lanyard.Application.Services.Checklists.IChecklistRunService _checklistRunService
 @inject IHttpContextAccessor _httpContextAccessor
 @inject IDataProtectionProvider _dataProtectionProvider
 @inject PersistentComponentState _applicationState
@@ -44,7 +45,15 @@
 
             <main class="terminal-body">
                 <section class="terminal-roster" aria-labelledby="roster-heading">
-                    <h1 id="roster-heading" class="terminal-heading">Tap your name to clock in or out</h1>
+                    <div class="roster-heading-row">
+                        <h1 id="roster-heading" class="terminal-heading">Tap your name to clock in or out</h1>
+                        @if (checklistCount > 0)
+                        {
+                            <button type="button" class="terminal-button checklist-open" @onclick="OpenChecklists">
+                                Checklists (@checklistCount)
+                            </button>
+                        }
+                    </div>
 
                     @if (roster is null)
                     {
@@ -91,6 +100,16 @@
             {
                 <PinPad @ref="pinPad" PersonName="@selected.DisplayName" Busy="@isBusy"
                         OnSubmit="@SubmitPinAsync" OnCancel="@CloseSelection" OnActivity="@MarkActivity" />
+
+                @if (PinWarningSecondsLeft is int left)
+                {
+                    <IdleWarning Message="The PIN pad closes in" SecondsLeft="@left" OnKeepGoing="@MarkActivity" />
+                }
+            }
+
+            @if (showChecklists)
+            {
+                <TerminalChecklistPanel @ref="checklistPanel" TerminalId="@session.TerminalId" OnClose="@CloseChecklistsAsync" />
             }
 
             @if (banner is not null)
@@ -154,6 +173,9 @@
     private static readonly TimeSpan SuccessBannerTime = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan ErrorBannerTime = TimeSpan.FromSeconds(7);
     private static readonly TimeSpan PinIdleTimeout = TimeSpan.FromSeconds(30);
+
+    // The last stretch of PinIdleTimeout shows a warning with Keep going (WCAG 2.2.1).
+    private static readonly TimeSpan PinIdleWarning = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(60);
 
     [SupplyParameterFromQuery(Name = "reloaded")]
@@ -166,6 +188,9 @@
     private List<TerminalRosterEntry>? roster;
     private TerminalRosterEntry? selected;
     private PinPad? pinPad;
+    private TerminalChecklistPanel? checklistPanel;
+    private bool showChecklists;
+    private int checklistCount;
     private Banner? banner;
     private bool isBusy;
 
@@ -184,6 +209,15 @@
     // its cookie, which is only readable on a real page request.
     private System.Threading.Timer? _featureOffRetry;
     private bool _live;
+
+    private int? PinWarningSecondsLeft
+    {
+        get
+        {
+            TimeSpan left = PinIdleTimeout - (DateTime.UtcNow - lastActivityUtc);
+            return !isBusy && left <= PinIdleWarning && left > TimeSpan.Zero ? (int)Math.Ceiling(left.TotalSeconds) : null;
+        }
+    }
 
     private double QrProgressPercent
     {
@@ -311,6 +345,11 @@
             selected = null;
         }
 
+        if (showChecklists && checklistPanel is not null)
+        {
+            await checklistPanel.TickAsync(now);
+        }
+
         if (now - lastRefreshUtc >= RefreshInterval)
         {
             Result<TerminalSession> check = await _terminalService.GetActiveSessionAsync(session.TerminalId);
@@ -346,6 +385,26 @@
         {
             roster = result.Data ?? [];
         }
+
+        // The Checklists button only shows when there's something left to tick today (and the company
+        // has checklists switched on - otherwise this fails and the count stays at none).
+        Result<Lanyard.Infrastructure.DTO.Checklists.ChecklistDayView> checklists = await _checklistRunService.GetTerminalDayAsync(session.TerminalId, null);
+        checklistCount = checklists.IsSuccess && checklists.Data is not null
+            ? checklists.Data.Runs.Count(x => x.Status != Lanyard.Infrastructure.Enum.ChecklistRunStatus.Complete)
+            : 0;
+    }
+
+    private void OpenChecklists()
+    {
+        selected = null;
+        banner = null;
+        showChecklists = true;
+    }
+
+    private async Task CloseChecklistsAsync()
+    {
+        showChecklists = false;
+        await LoadRosterAsync();
     }
 
     private void IssueQrCode()

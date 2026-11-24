@@ -101,7 +101,12 @@ public static class NotificationTopics
         // Raised once per failing location until an import runs cleanly again, so a login that keeps
         // failing doesn't notify every five minutes. Worth an email: bookings stop syncing until fixed.
         new(NotificationTopic.PartyBookingImportFailed, NotificationTopicGroup.Operations,
-            "Booking import failed", "The automatic party booking import for one of your locations couldn't run.", DefaultPush: true, DefaultEmail: true, ManagerOnly: true)
+            "Booking import failed", "The automatic party booking import for one of your locations couldn't run.", DefaultPush: true, DefaultEmail: true, ManagerOnly: true),
+
+        // Once per checklist per day, when it goes past its due time with tasks left. Push only:
+        // it matters on the day, and the Checklists Today page has the history.
+        new(NotificationTopic.ChecklistMissed, NotificationTopicGroup.Operations,
+            "Checklist missed", "An opening, closing or other checklist at your location wasn't finished in time.", DefaultPush: true, DefaultEmail: false, ManagerOnly: true)
     ];
 
     public static NotificationTopicInfo Get(NotificationTopic topic) =>

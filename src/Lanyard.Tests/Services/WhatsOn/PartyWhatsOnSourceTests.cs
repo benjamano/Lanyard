@@ -1,3 +1,4 @@
+using Lanyard.Tests.TestUtilities;
 using Lanyard.Application.Services.Features;
 using Lanyard.Application.Services.Parties;
 using Lanyard.Application.Services.WhatsOn;
@@ -22,7 +23,7 @@ public class PartyWhatsOnSourceTests
     private static PartyWhatsOnSource GetSource(DbContextOptions<ApplicationDbContext> options, bool partiesEnabled = true)
     {
         Mock<ICompanyFeatureService> features = new();
-        features.Setup(x => x.IsEnabledForCompanyAsync(It.IsAny<int>(), CompanyFeature.Parties)).ReturnsAsync(partiesEnabled);
+        features.Setup(x => x.IsEnabledForLocationAsync(It.IsAny<int>(), CompanyFeature.Parties)).ReturnsAsync(partiesEnabled);
 
         return new PartyWhatsOnSource(new PartyBookingService(SchedulingTestHelpers.GetFactory(options)), features.Object);
     }
