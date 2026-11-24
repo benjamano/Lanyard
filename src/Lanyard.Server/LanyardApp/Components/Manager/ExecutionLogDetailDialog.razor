@@ -17,6 +17,13 @@
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
             <FluentText><strong>Rule:</strong> @Content.RuleName</FluentText>
             <FluentText><strong>Trigger Event:</strong> @Content.TriggerEvent</FluentText>
+            @if (Content.IsTestRun)
+            {
+                <FluentText>
+                    <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Brand">Test</FluentBadge>
+                    <span> Run by hand with Run now (test). It doesn't count as the rule's last run.</span>
+                </FluentText>
+            }
             <FluentText><strong>Executed At:</strong> @Content.ExecutedAt.ToLocalTime().ToString("g")</FluentText>
             <FluentText>
                 <strong>Overall:</strong>
@@ -60,26 +67,10 @@
 
             @foreach (AutomationRuleActionExecution ae in Content.ActionExecutions)
             {
-                <FluentCard Appearance="CardAppearance.Subtle">
-                    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" VerticalGap="16">
-                        @if (ae.Success)
-                        {
-                            <FluentIcon Icon="Icons.Regular.Size20.CheckmarkCircle" Color="Color.Success" />
-                        }
-                        else
-                        {
-                            <FluentIcon Icon="Icons.Regular.Size20.DismissCircle" Color="Color.Error" />
-                        }
-                        <FluentStack Orientation="Orientation.Vertical">
-                            <FluentText><strong>Type:</strong> @(ae.AutomationRuleAction?.ActionType ?? "Unknown")</FluentText>
-                            <FluentText><strong>Target:</strong> @ResolveTargetClient(ae)</FluentText>
-                            @if (!string.IsNullOrEmpty(ae.ErrorMessage))
-                            {
-                                <FluentText Color="Color.Error"><strong>Error:</strong> @ae.ErrorMessage</FluentText>
-                            }
-                        </FluentStack>
-                    </FluentStack>
-                </FluentCard>
+                <AutomationActionResultCard Success="@ae.Success"
+                                            Heading="@(ae.AutomationRuleAction?.ActionType ?? "Unknown action")"
+                                            Detail="@($"Target: {ResolveTargetClient(ae)}")"
+                                            Error="@ae.ErrorMessage" />
             }
 
             @if (Content.SkipReason != null)

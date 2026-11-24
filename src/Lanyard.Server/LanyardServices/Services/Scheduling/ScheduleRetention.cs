@@ -34,7 +34,7 @@ public static class ScheduleRetention
     public record ClaimFields(Guid Id, string UserId, ShiftClaimStatus Status, string? DecidedByUserId, DateTime? DecidedUtc, string? DecisionReason);
 
     // Checklist ticks are kept like time entries (who did the opening checks, when), anonymised.
-    public record ChecklistCompletionFields(Guid Id, string UserId, string? UndoneByUserId);
+    public record ChecklistCompletionFields(Guid Id, string? UserId, string? UndoneByUserId);
 
     // Who set up or last changed a checklist or one of its tasks.
     public record ChecklistAuditFields(Guid Id, bool IsTask, string? CreateByUserId, string? UpdateByUserId);

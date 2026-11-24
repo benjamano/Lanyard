@@ -74,6 +74,10 @@ public class DashboardWidget
     public int? PhoneOrder { get; set; }
 
     public bool IsActive { get; set; }
+
+    // "Show only when…": conditions (as automation rules use) that must all be true for the widget
+    // to show on a live dashboard. Null means always shown. See WidgetShowConditions.
+    public string? ShowConditionsJson { get; set; }
 }
 
 public class DigitalClockWidget : DashboardWidget
@@ -108,6 +112,15 @@ public class TextAreaWidget : DashboardWidget
     }
 
     public string? Content { get; set; }
+
+    // Lets the text be changed on a kiosk screen showing it (an Edit button appears there), for
+    // a notice board staff update in place. While it's on, the kiosk owns the text: the designer
+    // shows it read-only, and saving the dashboard doesn't overwrite what was typed on the kiosk.
+    public bool EditableOnKiosk { get; set; }
+
+    // With kiosk editing on: true puts the editor straight on the kiosk screen and saves shortly
+    // after typing stops; false shows an Edit button and saves when Save is pressed.
+    public bool KioskAutoSave { get; set; }
 }
 
 public class ClientZoneLaserGameStatusWidget : DashboardWidget
@@ -239,6 +252,45 @@ public class OperationsAlertsWidget : DashboardWidget
     public OperationsAlertSeverity? AlertMinimumSeverity { get; set; }
 
     public bool AlertOnlyUnacknowledged { get; set; }
+}
+
+// Today's checklists at the location the viewer is signed in to (or clocked in at), with how far
+// each has got. Read-only; shows a sign-in prompt on a signed-out kiosk dashboard.
+public class ChecklistsTodayWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public ChecklistsTodayWidget()
+    {
+        Type = WidgetType.ChecklistsToday;
+
+        GridW = 3;
+        GridH = 3;
+    }
+
+    // Leave out checklists that are already done, so the widget is a "still to do" board.
+    public bool ChecklistsHideComplete { get; set; }
+}
+
+// One chosen checklist, with its tasks, for a wall screen such as the laser kiosk's dashboard.
+// On a kiosk nobody is signed in: ticking only works there when ChecklistCardAllowKioskTicking is
+// on, and the tick records the kiosk, not a person. Signed-in viewers see it read-only.
+public class ChecklistCardWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public ChecklistCardWidget()
+    {
+        Type = WidgetType.Checklist;
+
+        GridW = 4;
+        GridH = 5;
+    }
+
+    public Guid? ChecklistCardChecklistId { get; set; }
+
+    public bool ChecklistCardAllowKioskTicking { get; set; }
+
+    // Once every task is ticked, the card's space goes empty.
+    public bool ChecklistCardHideWhenDone { get; set; }
 }
 
 public class AutomationRuleStatusWidget : DashboardWidget

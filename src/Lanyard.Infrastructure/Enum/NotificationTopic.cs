@@ -30,5 +30,8 @@ public enum NotificationTopic
     MissedClockIn = 20,
     TrainingOverdue = 21,
     StaffDocumentExpiring = 22,
-    PartyBookingImportFailed = 23
+    PartyBookingImportFailed = 23,
+
+    // A location checklist (Opening, Closing...) was missed. Raised as an operations alert.
+    ChecklistMissed = 24
 }

@@ -1,0 +1,7 @@
+@inherits WidgetSettingsBase<ChecklistsTodayWidget>
+
+<div class="widget-settings">
+    <FluentSwitch Value="@W.ChecklistsHideComplete"
+                  ValueChanged="@(v => SetAsync(() => W.ChecklistsHideComplete = v, v ? "Hid completed checklists" : "Showed completed checklists"))"
+                  Label="Hide checklists that are already done" />
+</div>

@@ -78,6 +78,9 @@ public class AudioClipPlaybackService(
                 .Select(x => new { x.Id, x.Name, x.LocationId, x.MostRecentConnectionId, x.ReportedClientVersion })
                 .ToListAsync(ct);
 
+            // Switches are per location: a kiosk at a location without audio clips is refused.
+            HashSet<int> clipLocationIds = await CompanyFeatureQueries.GetEnabledLocationIdsAsync(ctx, CompanyFeature.AudioClips, ct);
+
             DateTime utcNow = UtcNow;
             List<AudioClipKioskOutcome> outcomes = [];
             List<(AudioClipPlay Play, string ConnectionId, string ClientName)> toSend = [];
@@ -105,6 +108,11 @@ public class AudioClipPlaybackService(
                 {
                     play.Status = AudioClipPlayStatus.Failed;
                     play.Error = $"This clip only plays at {clip.Location?.Name ?? "its own location"}.";
+                }
+                else if (kiosk.LocationId is int kioskLocationId && !clipLocationIds.Contains(kioskLocationId))
+                {
+                    play.Status = AudioClipPlayStatus.Failed;
+                    play.Error = "Audio clips aren't switched on for this kiosk's location.";
                 }
                 else if (!IsRecentEnough(kiosk.ReportedClientVersion))
                 {
@@ -297,7 +305,7 @@ public class AudioClipPlaybackService(
                 return;
             }
 
-            if (!await CompanyFeatureQueries.IsEnabledForCompanyAsync(ctx, kiosk.CompanyId, CompanyFeature.AudioClips))
+            if (!await CompanyFeatureQueries.IsEnabledForLocationAsync(ctx, locationId, CompanyFeature.AudioClips))
             {
                 return;
             }

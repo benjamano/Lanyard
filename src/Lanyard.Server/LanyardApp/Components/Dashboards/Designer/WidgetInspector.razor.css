@@ -1,0 +1,92 @@
+.widget-inspector {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.inspector-heading {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.inspector-heading-icon {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--borderRadiusMedium);
+    background: var(--colorBrandBackground2);
+    color: var(--colorBrandForeground1);
+}
+
+.inspector-heading-icon ::deep svg {
+    fill: currentColor;
+}
+
+.inspector-heading-text {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.inspector-heading-name {
+    font-size: var(--fontSizeBase400);
+    font-weight: var(--fontWeightSemibold);
+}
+
+.inspector-heading-description,
+.inspector-hint {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}
+
+.inspector-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--colorNeutralStroke2);
+}
+
+.inspector-section-title {
+    margin: 0;
+    font-size: var(--fontSizeBase200);
+    font-weight: var(--fontWeightSemibold);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--colorNeutralForeground3);
+}
+
+.inspector-size {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.inspector-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding-top: 12px;
+    border-top: 1px solid var(--colorNeutralStroke2);
+}
+
+.inspector-stat {
+    display: flex;
+    gap: 16px;
+    color: var(--colorNeutralForeground2);
+}
+
+/* The inline settings panels (Designer/Settings) share this layout. Their own scoped CSS can't be
+   shared between components, so it lives here, reaching in with ::deep. */
+.widget-inspector ::deep .widget-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.widget-inspector ::deep .widget-settings-note {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}

@@ -129,6 +129,34 @@ public static class ChecklistRules
         return done == 0 ? ChecklistRunStatus.NotStarted : ChecklistRunStatus.InProgress;
     }
 
+    /// <summary>
+    /// Why someone can't tick a checklist's tasks, or null when they can. The same rule for the phone,
+    /// the terminal and the manager's board: the location's Managers and Admins always can; anyone else
+    /// must be on that day's rota there and, if the checklist is limited to a position, hold it.
+    /// </summary>
+    public static string? WhyCantTick(bool isManagerAtLocation, bool isOnRota, bool holdsPosition, Guid? positionId, string? positionName, string checklistName)
+    {
+        if (isManagerAtLocation)
+        {
+            return null;
+        }
+
+        if (!isOnRota)
+        {
+            return $"Only people on today's rota here can tick {checklistName}.";
+        }
+
+        if (positionId is not null && !holdsPosition)
+        {
+            return $"Only {positionName ?? "the chosen position"} can tick {checklistName}.";
+        }
+
+        return null;
+    }
+
+    /// <summary>A reading must fit the column: up to 9 digits, 2 after the point.</summary>
+    public static bool IsValidReading(decimal reading) => reading > -10_000_000m && reading < 10_000_000m && decimal.Round(reading, 2) == reading;
+
     /// <summary>What's wrong with a checklist's settings, or null when it can be saved.</summary>
     public static string? Validate(Checklist checklist)
     {

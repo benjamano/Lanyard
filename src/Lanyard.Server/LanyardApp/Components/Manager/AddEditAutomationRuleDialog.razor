@@ -1,5 +1,6 @@
 ﻿@using Lanyard.Shared.Kiosk
 @using Lanyard.App.Components.ProjectionPrograms
+@using Lanyard.App.Components.Conditions
 @using Lanyard.Application.Services
 @using Lanyard.Infrastructure.Models
 @using Lanyard.Infrastructure.Enum
@@ -235,163 +236,15 @@
         }
         else if (_currentStepIndex == 1)
         {
-            <div class="conditions-step">
-                <FluentText>
-                    Optional. The rule only runs if every condition is true at the moment it's triggered. Times and days are UK venue time.
-                </FluentText>
-
-                @if (_conditionRows.Count == 0)
-                {
-                    <div class="conditions-empty">No conditions, so the rule runs every time it's triggered.</div>
-                }
-
-                @for (int i = 0; i < _conditionRows.Count; i++)
-                {
-                    int index = i;
-                    ConditionRow row = _conditionRows[index];
-
-                    <div class="condition-row">
-                        <div class="condition-row-header">
-                            <div class="condition-type">
-                                <FluentSelect TOption="string"
-                                              TValue="string"
-                                              Label="Only if"
-                                              Width="100%"
-                                              Value="@row.ConditionType.ToString()"
-                                              ValueChanged="@((string? type) => row.ConditionType = Enum.TryParse(type, out AutomationConditionType parsed) ? parsed : AutomationConditionType.TimeWindow)">
-                                    <FluentOption Value="@AutomationConditionType.TimeWindow.ToString()">Time of day is between</FluentOption>
-                                    <FluentOption Value="@AutomationConditionType.DaysOfWeek.ToString()">Day of week is</FluentOption>
-                                    <FluentOption Value="@AutomationConditionType.ClientGameStatus.ToString()">A kiosk is or isn't in a game</FluentOption>
-                                    <FluentOption Value="@AutomationConditionType.DuringOpeningHours.ToString()">A location is open or closed</FluentOption>
-                                    @if (_partiesEnabled || row.ConditionType == AutomationConditionType.PartyInProgress)
-                                    {
-                                        <FluentOption Value="@AutomationConditionType.PartyInProgress.ToString()">A party is or isn't on</FluentOption>
-                                    }
-                                </FluentSelect>
-                            </div>
-                            <div class="condition-remove">
-                                <FluentButton IconStart="new Icons.Regular.Size20.Dismiss()"
-                                              Title="Remove condition"
-                                              OnClick="@(() => _conditionRows.RemoveAt(index))" />
-                            </div>
-                        </div>
-
-                        @if (row.ConditionType == AutomationConditionType.TimeWindow)
-                        {
-                            <div class="condition-fields">
-                                <AnyTimePicker TValue="TimeOnly" @bind-Value="row.Start" Label="From" />
-                                <AnyTimePicker TValue="TimeOnly" @bind-Value="row.End" Label="Until" />
-                            </div>
-                            @if (row.End < row.Start)
-                            {
-                                <div class="condition-hint">Runs past midnight, until @row.End.ToString("HH:mm") the next morning.</div>
-                            }
-                        }
-                        else if (row.ConditionType == AutomationConditionType.DaysOfWeek)
-                        {
-                            <div class="condition-days">
-                                @foreach (DayOfWeek day in _allDaysOfWeek)
-                                {
-                                    DayOfWeek capturedDay = day;
-                                    <FluentCheckbox Value="@row.Days.Contains(capturedDay)"
-                                                    ValueChanged="@((bool ticked) => OnConditionDayToggled(row, capturedDay, ticked))"
-                                                    Label="@(capturedDay.ToString()[..3])" />
-                                }
-                            </div>
-                        }
-                        else if (row.ConditionType == AutomationConditionType.DuringOpeningHours)
-                        {
-                            <div class="condition-fields">
-                                <FluentSelect TOption="Location"
-                                              TValue="string"
-                                              Label="Location"
-                                              Placeholder="Select location"
-                                              Width="100%"
-                                              Items="@_locations"
-                                              OptionText="@(l => l?.Name ?? string.Empty)"
-                                              OptionValue="@(l => l?.Id.ToString())"
-                                              @bind-Value="row.LocationIdString" />
-                                <FluentSelect TOption="string"
-                                              TValue="string"
-                                              Label="State"
-                                              Width="100%"
-                                              Value="@(row.Open ? "open" : "closed")"
-                                              ValueChanged="@((string? state) => row.Open = state != "closed")">
-                                    <FluentOption Value="@("open")">is open</FluentOption>
-                                    <FluentOption Value="@("closed")">is closed</FluentOption>
-                                </FluentSelect>
-                            </div>
-                            <div class="condition-hint">Uses the location's opening hours, set under Admin &gt; Companies &amp; Locations. A location with no hours set counts as closed.</div>
-                        }
-                        else if (row.ConditionType == AutomationConditionType.PartyInProgress)
-                        {
-                            <div class="condition-fields">
-                                <FluentSelect TOption="Location"
-                                              TValue="string"
-                                              Label="Location"
-                                              Placeholder="Select location"
-                                              Width="100%"
-                                              Items="@_locations"
-                                              OptionText="@(l => l?.Name ?? string.Empty)"
-                                              OptionValue="@(l => l?.Id.ToString())"
-                                              @bind-Value="row.LocationIdString" />
-                                <FluentSelect TOption="string"
-                                              TValue="string"
-                                              Label="State"
-                                              Width="100%"
-                                              Value="@(row.PartyInProgress ? "on" : "off")"
-                                              ValueChanged="@((string? state) => row.PartyInProgress = state != "off")">
-                                    <FluentOption Value="@("on")">a party is on</FluentOption>
-                                    <FluentOption Value="@("off")">no party is on</FluentOption>
-                                </FluentSelect>
-                            </div>
-                            <FluentTextInput Label="Room (optional)"
-                                             Placeholder="Any room"
-                                             Maxlength="100"
-                                             Appearance="TextInputAppearance.Outline"
-                                             Style="width: 100%;"
-                                             @bind-Value="row.Room" />
-                            <div class="condition-hint">A party is on from its start time until its finish time. Cancelled parties, provisional bookings and private hires don't count.</div>
-                        }
-                        else
-                        {
-                            <div class="condition-fields">
-                                <FluentSelect TOption="ClientConnectedDTO"
-                                              TValue="string"
-                                              Label="Kiosk"
-                                              Placeholder="Select kiosk"
-                                              Width="100%"
-                                              Items="@_clients"
-                                              OptionText="@(c => c?.Name ?? string.Empty)"
-                                              OptionValue="@(c => c?.Id.ToString())"
-                                              @bind-Value="row.ClientIdString" />
-                                <FluentSelect TOption="string"
-                                              TValue="string"
-                                              Label="State"
-                                              Width="100%"
-                                              Value="@(row.InGame ? "in" : "out")"
-                                              ValueChanged="@((string? state) => row.InGame = state == "in")">
-                                    <FluentOption Value="@("in")">is in a game</FluentOption>
-                                    <FluentOption Value="@("out")">isn't in a game</FluentOption>
-                                </FluentSelect>
-                            </div>
-                        }
-                    </div>
-                }
-
-                <div>
-                    <FluentButton Appearance="ButtonAppearance.Outline"
-                                  IconStart="new Icons.Regular.Size20.Add()"
-                                  OnClick="AddConditionRow">
-                        Add condition
-                    </FluentButton>
-                </div>
-
-                @if (ConditionsError is string conditionsError)
-                {
-                    <FluentText Color="Color.Error">@conditionsError</FluentText>
-                }
-            </div>
+            <ConditionListEditor Rows="@_conditionRows"
+                                 Clients="@_clients"
+                                 Locations="@_locations"
+                                 PartiesEnabled="@_partiesEnabled"
+                                 Label="Only if"
+                                 Intro="Optional. The rule only runs if every condition is true at the moment it's triggered. Times and days are UK venue time."
+                                 EmptyText="No conditions, so the rule runs every time it's triggered."
+                                 Error="@ConditionsError"
+                                 OnChanged="@StateHasChanged" />
         }
         else if (_currentStepIndex == 2)
         {
@@ -712,123 +565,13 @@
     private int _currentStepIndex = 0;
     private List<string> _steps = ["Rule Details", "Conditions", "Actions"];
 
-    private sealed class ConditionRow
-    {
-        public Guid? ExistingConditionId { get; set; }
-        public AutomationConditionType ConditionType { get; set; } = AutomationConditionType.TimeWindow;
-        public TimeOnly Start { get; set; } = new(18, 0);
-        public TimeOnly End { get; set; } = new(22, 0);
-        public HashSet<DayOfWeek> Days { get; set; } = [];
-        public string ClientIdString { get; set; } = string.Empty;
-        public bool InGame { get; set; }
-        public string LocationIdString { get; set; } = string.Empty;
-        public bool Open { get; set; } = true;
-        public bool PartyInProgress { get; set; } = true;
-        public string? Room { get; set; }
-    }
-
     private IEnumerable<Location> _locations = [];
 
     private List<ConditionRow> _conditionRows = [];
 
     // Same validation CreateRuleAsync/UpdateRuleAsync apply, so a condition the service would
     // reject can't be carried through to the actions step.
-    private string? ConditionsError => AutomationRuleService.ValidateConditions(BuildConditions());
-
-    private void AddConditionRow()
-    {
-        _conditionRows.Add(new ConditionRow());
-    }
-
-    private static void OnConditionDayToggled(ConditionRow row, DayOfWeek day, bool ticked)
-    {
-        if (ticked)
-        {
-            row.Days.Add(day);
-        }
-        else
-        {
-            row.Days.Remove(day);
-        }
-    }
-
-    private List<AutomationRuleCondition> BuildConditions()
-    {
-        List<AutomationRuleCondition> conditions = [];
-
-        for (int i = 0; i < _conditionRows.Count; i++)
-        {
-            ConditionRow row = _conditionRows[i];
-
-            string parametersJson = row.ConditionType switch
-            {
-                AutomationConditionType.TimeWindow => AutomationConditionParameters.Serialize(new TimeWindowConditionParameters(row.Start, row.End)),
-                AutomationConditionType.DaysOfWeek => AutomationConditionParameters.Serialize(new DaysOfWeekConditionParameters(AutomationScheduleDays.Serialize(row.Days))),
-                AutomationConditionType.PartyInProgress => AutomationConditionParameters.Serialize(new PartyInProgressConditionParameters(
-                    int.TryParse(row.LocationIdString, out int partyLocationId) ? partyLocationId : 0,
-                    string.IsNullOrWhiteSpace(row.Room) ? null : row.Room.Trim(),
-                    row.PartyInProgress)),
-                AutomationConditionType.DuringOpeningHours => AutomationConditionParameters.Serialize(new OpeningHoursConditionParameters(
-                    int.TryParse(row.LocationIdString, out int locationId) ? locationId : 0,
-                    row.Open)),
-                _ => AutomationConditionParameters.Serialize(new ClientGameStatusConditionParameters(
-                    Guid.TryParse(row.ClientIdString, out Guid clientId) ? clientId : Guid.Empty,
-                    row.InGame))
-            };
-
-            conditions.Add(new AutomationRuleCondition
-            {
-                Id = row.ExistingConditionId ?? Guid.NewGuid(),
-                ConditionType = row.ConditionType,
-                ParametersJson = parametersJson,
-                SortOrder = i,
-                IsActive = true
-            });
-        }
-
-        return conditions;
-    }
-
-    private static ConditionRow ToConditionRow(AutomationRuleCondition condition)
-    {
-        ConditionRow row = new()
-        {
-            ExistingConditionId = condition.Id,
-            ConditionType = condition.ConditionType
-        };
-
-        switch (condition.ConditionType)
-        {
-            case AutomationConditionType.TimeWindow when AutomationConditionParameters.TryParse(condition.ParametersJson, out TimeWindowConditionParameters? window):
-                row.Start = window.Start;
-                row.End = window.End;
-                break;
-
-            case AutomationConditionType.DaysOfWeek when AutomationConditionParameters.TryParse(condition.ParametersJson, out DaysOfWeekConditionParameters? days)
-                && !string.IsNullOrWhiteSpace(days.Days)
-                && AutomationScheduleDays.TryParse(days.Days, out List<DayOfWeek> parsedDays):
-                row.Days = [.. parsedDays];
-                break;
-
-            case AutomationConditionType.ClientGameStatus when AutomationConditionParameters.TryParse(condition.ParametersJson, out ClientGameStatusConditionParameters? kiosk):
-                row.ClientIdString = kiosk.ClientId == Guid.Empty ? string.Empty : kiosk.ClientId.ToString();
-                row.InGame = kiosk.InGame;
-                break;
-
-            case AutomationConditionType.PartyInProgress when AutomationConditionParameters.TryParse(condition.ParametersJson, out PartyInProgressConditionParameters? party):
-                row.LocationIdString = party.LocationId > 0 ? party.LocationId.ToString() : string.Empty;
-                row.Room = party.Room;
-                row.PartyInProgress = party.InProgress;
-                break;
-
-            case AutomationConditionType.DuringOpeningHours when AutomationConditionParameters.TryParse(condition.ParametersJson, out OpeningHoursConditionParameters? hours):
-                row.LocationIdString = hours.LocationId > 0 ? hours.LocationId.ToString() : string.Empty;
-                row.Open = hours.Open;
-                break;
-        }
-
-        return row;
-    }
+    private string? ConditionsError => AutomationRuleService.ValidateConditions(ConditionRows.ToConditions(_conditionRows));
 
     private string _ruleName = string.Empty;
     private string _triggerClientIdString = string.Empty;
@@ -959,7 +702,7 @@
         _partyLeadMinutes = saved.PartyLeadMinutes ?? 0;
         _partyRoom = saved.PartyRoom;
 
-        _conditionRows = [.. saved.Conditions.Where(c => c.IsActive).OrderBy(c => c.SortOrder).Select(ToConditionRow)];
+        _conditionRows = ConditionRows.From(saved.Conditions);
     }
 
     protected override async Task OnInitializedAsync()
@@ -1382,7 +1125,7 @@
 
         Result<AutomationRule> saveResult;
 
-        List<AutomationRuleCondition> newConditions = BuildConditions();
+        List<AutomationRuleCondition> newConditions = ConditionRows.ToConditions(_conditionRows);
 
         if (Content != null)
         {

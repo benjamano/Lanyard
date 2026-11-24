@@ -1,0 +1,8 @@
+@inherits WidgetSettingsBase<ProjectionStatusWidget>
+
+<div class="widget-settings">
+    <KioskPicker Value="@W.ClientId" ValueChanged="@(v => SetAsync(() => { W.ClientId = v; W.DisplayIndex = null; }, "Chose a kiosk"))" Label="Kiosk" />
+    <ScreenPicker ClientId="@W.ClientId" Value="@W.DisplayIndex"
+                  ValueChanged="@(v => SetAsync(() => W.DisplayIndex = v, "Chose a screen"))" />
+    <FluentSwitch Value="@W.ShowControls" ValueChanged="@(v => SetAsync(() => W.ShowControls = v, v ? "Showed the controls" : "Hid the controls"))" Label="Show pause, skip and stop controls" />
+</div>

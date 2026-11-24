@@ -5,6 +5,11 @@
     width: 100%;
 }
 
+/* No query container, so the phone rules below never apply (kiosks). */
+.dashboard-grid-container.no-phone-layout {
+    container-type: normal;
+}
+
 .dashboard-grid {
     display: grid;
     grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -29,24 +34,6 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-}
-
-.dashboard-grid-item-tools {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 2px;
-    padding-bottom: 4px;
-}
-
-.dashboard-grid-item-name {
-    flex: 1 1 auto;
-    min-width: 0;
-    font-size: var(--fontSizeBase200);
-    color: var(--colorNeutralForeground3);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 /* A dashboard can be a user's home screen, so this is the first thing they see on a phone.

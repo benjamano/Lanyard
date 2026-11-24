@@ -2,6 +2,7 @@
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Shared.Projection;
 using Microsoft.EntityFrameworkCore;
 
 namespace Lanyard.Application.Services;
@@ -13,6 +14,10 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
     // one - a kiosk renders dashboards signed out, and the Text Area widget used to save itself
     // from wherever it was shown.
     public const string NotAllowedToEditMessage = "Only Admins and Managers can change dashboards.";
+
+    // SaveDashboardAsync's failure when someone else saved the dashboard after this copy was
+    // loaded. The designer recognises it and offers to save over their changes.
+    public const string ChangedElsewhereMessage = "This dashboard was saved by someone else after you opened it.";
 
     // Organisation-wide rather than per-user, so it lives in the shared AppSettings key/value
     // table alongside "AutomationEngine.Enabled" instead of needing a column of its own. Writes go
@@ -79,6 +84,115 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
         }
     }
 
+    public async Task<Result<IEnumerable<DashboardCard>>> GetDashboardCardsAsync()
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            var dashboards = await ctx.Dashboards
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.Name)
+                .Select(x => new
+                {
+                    x.Id,
+                    x.Name,
+                    x.Description,
+                    x.LastUpdateDate,
+                    Widgets = x.Widgets
+                        .Where(w => w.IsActive)
+                        .Select(w => new DashboardCardWidget(w.Type, w.GridX, w.GridY, w.GridW, w.GridH))
+                        .ToList()
+                })
+                .ToListAsync();
+
+            // A dashboard reaches a kiosk TV as the Dashboard parameter of a projection step,
+            // stored as the dashboard's id in text.
+            var uses = await ctx.Set<ProjectionProgramParameterValue>()
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.Parameter!.Name == ProjectionParameterNames.Dashboard
+                    && x.Value != null
+                    && x.ProjectionProgramStep!.IsActive
+                    && x.ProjectionProgramStep.ProjectionProgram!.IsActive)
+                .Select(x => new { x.Value, ProgramName = x.ProjectionProgramStep!.ProjectionProgram!.Name })
+                .ToListAsync();
+
+            Dictionary<string, List<string>> programsByDashboard = uses
+                .GroupBy(x => x.Value!.Trim(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.Select(x => x.ProgramName).Distinct().OrderBy(n => n).ToList(), StringComparer.OrdinalIgnoreCase);
+
+            List<DashboardCard> cards = [.. dashboards.Select(d => new DashboardCard(
+                d.Id,
+                d.Name,
+                d.Description,
+                d.LastUpdateDate,
+                d.Widgets,
+                programsByDashboard.GetValueOrDefault(d.Id.ToString()) ?? []))];
+
+            return Result<IEnumerable<DashboardCard>>.Ok(cards);
+        }
+        catch (Exception ex)
+        {
+            return Result<IEnumerable<DashboardCard>>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<Guid>> DuplicateDashboardAsync(Guid dashboardId)
+    {
+        try
+        {
+            if (!await CanEditDashboardsAsync())
+            {
+                return Result<Guid>.Fail(NotAllowedToEditMessage);
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Dashboard? source = await ctx.Dashboards
+                .AsNoTracking()
+                .Include(x => x.Widgets.Where(w => w.IsActive))
+                .FirstOrDefaultAsync(x => x.Id == dashboardId && x.IsActive);
+
+            if (source is null)
+            {
+                return Result<Guid>.Fail("Dashboard not found.");
+            }
+
+            string name = $"{source.Name} (copy)";
+
+            Dashboard copy = new()
+            {
+                Id = Guid.NewGuid(),
+                Name = name.Length > 100 ? name[..100] : name,
+                Description = source.Description,
+                IsActive = true,
+                CreateDate = DateTime.UtcNow,
+                LastUpdateDate = DateTime.UtcNow,
+                FitToScreen = source.FitToScreen,
+                RowHeight = source.RowHeight
+            };
+
+            ctx.Dashboards.Add(copy);
+
+            foreach (DashboardWidget widget in source.Widgets)
+            {
+                widget.Id = Guid.Empty;
+                ctx.DashboardWidgets.Add(CreateWidgetCopy(widget, copy.Id));
+            }
+
+            await ctx.SaveChangesAsync();
+
+            return Result<Guid>.Ok(copy.Id);
+        }
+        catch (Exception ex)
+        {
+            return Result<Guid>.Fail(ex.Message);
+        }
+    }
+
     public async Task<Result<Dashboard>> GetDashboardAsync(Guid dashboardId)
     {
         try
@@ -88,7 +202,7 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
             Dashboard? dashboard = await ctx.Dashboards
                 .AsNoTracking()
                 .Include(x => x.Widgets.Where(w => w.IsActive))
-                .FirstOrDefaultAsync(x => x.Id == dashboardId);
+                .FirstOrDefaultAsync(x => x.Id == dashboardId && x.IsActive);
 
             if (dashboard is null)
             {
@@ -157,24 +271,25 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
         }
     }
 
-    public async Task<Result<bool>> CreateDashboardAsync(Dashboard dashboard)
+    public async Task<Result<Guid>> CreateDashboardAsync(Dashboard dashboard)
     {
         try
         {
             if (string.IsNullOrWhiteSpace(dashboard.Name))
             {
-                return Result<bool>.Fail("Dashboard name is required.");
+                return Result<Guid>.Fail("Dashboard name is required.");
             }
 
             if (!await CanEditDashboardsAsync())
             {
-                return Result<bool>.Fail(NotAllowedToEditMessage);
+                return Result<Guid>.Fail(NotAllowedToEditMessage);
             }
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             Dashboard newDashboard = new()
             {
+                Id = Guid.NewGuid(),
                 Name = dashboard.Name.Trim(),
                 Description = dashboard.Description?.Trim(),
                 IsActive = true,
@@ -185,17 +300,25 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
             };
 
             ctx.Dashboards.Add(newDashboard);
+
+            // A dashboard made from a template starts with its widgets.
+            foreach (DashboardWidget widget in dashboard.Widgets ?? [])
+            {
+                widget.Id = Guid.Empty;
+                ctx.DashboardWidgets.Add(CreateWidgetCopy(widget, newDashboard.Id));
+            }
+
             await ctx.SaveChangesAsync();
 
-            return Result<bool>.Ok(true);
+            return Result<Guid>.Ok(newDashboard.Id);
         }
         catch (Exception ex)
         {
-            return Result<bool>.Fail(ex.Message);
+            return Result<Guid>.Fail(ex.Message);
         }
     }
 
-    public async Task<Result<bool>> SaveDashboardAsync(Dashboard dashboard)
+    public async Task<Result<bool>> SaveDashboardAsync(Dashboard dashboard, bool overwrite = false)
     {
         try
         {
@@ -219,18 +342,30 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             Dashboard? existingDashboard = await ctx.Dashboards
-                .FirstOrDefaultAsync(x => x.Id == dashboard.Id);
+                .FirstOrDefaultAsync(x => x.Id == dashboard.Id && x.IsActive);
 
+            // A deleted dashboard can't be saved back to life from a tab that still has it open.
             if (existingDashboard is null)
             {
-                return Result<bool>.Fail("Dashboard not found.");
+                return Result<bool>.Fail("Dashboard not found. It may have been deleted.");
+            }
+
+            // LastUpdateDate is what the caller loaded. If the stored one has moved on, someone
+            // saved in between, and saving now would silently throw their work away.
+            if (!overwrite && existingDashboard.LastUpdateDate?.Ticks != dashboard.LastUpdateDate?.Ticks)
+            {
+                return Result<bool>.Fail(ChangedElsewhereMessage);
             }
 
             existingDashboard.Name = dashboard.Name.Trim();
             existingDashboard.Description = dashboard.Description?.Trim();
             existingDashboard.FitToScreen = dashboard.FitToScreen;
             existingDashboard.RowHeight = ClampRowHeight(dashboard.RowHeight);
-            existingDashboard.LastUpdateDate = DateTime.UtcNow;
+
+            // Whole microseconds, which is what Postgres stores, so the value the caller keeps
+            // below matches what it would read back on its next save.
+            DateTime now = DateTime.UtcNow;
+            existingDashboard.LastUpdateDate = new DateTime(now.Ticks - (now.Ticks % 10), DateTimeKind.Utc);
 
             List<DashboardWidget> incomingWidgets = dashboard.Widgets ?? [];
             List<DashboardWidget> existingWidgets = await ctx.DashboardWidgets
@@ -282,6 +417,9 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
 
             await ctx.SaveChangesAsync();
 
+            // The caller's copy is now the saved one, so its next save isn't mistaken for a clash.
+            dashboard.LastUpdateDate = existingDashboard.LastUpdateDate;
+
             return Result<bool>.Ok(true);
         }
         catch (DbUpdateConcurrencyException)
@@ -325,6 +463,7 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
             // layout: copying the grid fields here used to save whatever half-finished layout was
             // on screen in the editor, without the rest of the dashboard.
             existingWidget.Title = widget.Title?.Trim();
+            existingWidget.ShowConditionsJson = widget.ShowConditionsJson;
             existingWidget.ShowTitle = widget.ShowTitle;
 
             if (existingWidget.GetType() != widget.GetType())
@@ -335,7 +474,7 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
             switch (existingWidget)
             {
                 case TextAreaWidget existingTextArea when widget is TextAreaWidget incomingTextArea:
-                    existingTextArea.Content = incomingTextArea.Content;
+                    CopyTextArea(existingTextArea, incomingTextArea);
                     break;
 
                 case DigitalClockWidget existingClock when widget is DigitalClockWidget incomingClock:
@@ -376,6 +515,14 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
                 case OperationsAlertsWidget existingAlerts when widget is OperationsAlertsWidget incomingAlerts:
                     existingAlerts.AlertMinimumSeverity = incomingAlerts.AlertMinimumSeverity;
                     existingAlerts.AlertOnlyUnacknowledged = incomingAlerts.AlertOnlyUnacknowledged;
+                    break;
+                case ChecklistsTodayWidget existingChecklists when widget is ChecklistsTodayWidget incomingChecklists:
+                    existingChecklists.ChecklistsHideComplete = incomingChecklists.ChecklistsHideComplete;
+                    break;
+                case ChecklistCardWidget existingCard when widget is ChecklistCardWidget incomingCard:
+                    existingCard.ChecklistCardChecklistId = incomingCard.ChecklistCardChecklistId;
+                    existingCard.ChecklistCardAllowKioskTicking = incomingCard.ChecklistCardAllowKioskTicking;
+                    existingCard.ChecklistCardHideWhenDone = incomingCard.ChecklistCardHideWhenDone;
                     break;
                 case HallOfFameWidget existingHallOfFame when widget is HallOfFameWidget incomingHallOfFame:
                     existingHallOfFame.Period = incomingHallOfFame.Period;
@@ -715,7 +862,9 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
         {
             TextAreaWidget textAreaWidget => new TextAreaWidget
             {
-                Content = textAreaWidget.Content
+                Content = textAreaWidget.Content,
+                EditableOnKiosk = textAreaWidget.EditableOnKiosk,
+                KioskAutoSave = textAreaWidget.KioskAutoSave
             },
             DigitalClockWidget clockWidget => new DigitalClockWidget
             {
@@ -764,6 +913,16 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
             {
                 AlertMinimumSeverity = alertsWidget.AlertMinimumSeverity,
                 AlertOnlyUnacknowledged = alertsWidget.AlertOnlyUnacknowledged
+            },
+            ChecklistsTodayWidget checklistsWidget => new ChecklistsTodayWidget
+            {
+                ChecklistsHideComplete = checklistsWidget.ChecklistsHideComplete
+            },
+            ChecklistCardWidget cardWidget => new ChecklistCardWidget
+            {
+                ChecklistCardChecklistId = cardWidget.ChecklistCardChecklistId,
+                ChecklistCardAllowKioskTicking = cardWidget.ChecklistCardAllowKioskTicking,
+                ChecklistCardHideWhenDone = cardWidget.ChecklistCardHideWhenDone
             },
             HallOfFameWidget hallOfFameWidget => new HallOfFameWidget
             {
@@ -831,12 +990,14 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
         UpdateCommonMutableWidgetProperties(copy, widget);
         copy.DashboardId = dashboardId;
         copy.IsActive = true;
+        copy.ShowConditionsJson = widget.ShowConditionsJson;
 
         return copy;
     }
 
     private static void UpdateCommonMutableWidgetProperties(DashboardWidget target, DashboardWidget source)
     {
+        target.ShowConditionsJson = source.ShowConditionsJson;
         target.Title = source.Title?.Trim();
         target.ShowTitle = source.ShowTitle;
         target.GridX = source.GridX;
@@ -850,11 +1011,26 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
     private static int ClampRowHeight(int rowHeight) =>
         rowHeight <= 0 ? Dashboard.DefaultRowHeight : Math.Clamp(rowHeight, Dashboard.MinRowHeight, Dashboard.MaxRowHeight);
 
+    // Text a kiosk can edit belongs to the kiosk: once the stored widget is kiosk-editable (and
+    // stays so), whatever the editor sends is the text as it was when the editor loaded, so
+    // copying it would throw away anything typed on the kiosk since. Turning the setting on or
+    // off still saves the editor's text.
+    private static void CopyTextArea(TextAreaWidget target, TextAreaWidget source)
+    {
+        if (!(target.EditableOnKiosk && source.EditableOnKiosk))
+        {
+            target.Content = source.Content;
+        }
+
+        target.EditableOnKiosk = source.EditableOnKiosk;
+        target.KioskAutoSave = source.KioskAutoSave;
+    }
+
     private static void UpdateTypeSpecificWidgetProperties(DashboardWidget target, DashboardWidget source)
     {
         if (target is TextAreaWidget targetTextArea && source is TextAreaWidget sourceTextArea)
         {
-            targetTextArea.Content = sourceTextArea.Content;
+            CopyTextArea(targetTextArea, sourceTextArea);
             return;
         }
 
@@ -915,6 +1091,20 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
         {
             targetAlerts.AlertMinimumSeverity = sourceAlerts.AlertMinimumSeverity;
             targetAlerts.AlertOnlyUnacknowledged = sourceAlerts.AlertOnlyUnacknowledged;
+            return;
+        }
+
+        if (target is ChecklistsTodayWidget targetChecklists && source is ChecklistsTodayWidget sourceChecklists)
+        {
+            targetChecklists.ChecklistsHideComplete = sourceChecklists.ChecklistsHideComplete;
+            return;
+        }
+
+        if (target is ChecklistCardWidget targetCard && source is ChecklistCardWidget sourceCard)
+        {
+            targetCard.ChecklistCardChecklistId = sourceCard.ChecklistCardChecklistId;
+            targetCard.ChecklistCardAllowKioskTicking = sourceCard.ChecklistCardAllowKioskTicking;
+            targetCard.ChecklistCardHideWhenDone = sourceCard.ChecklistCardHideWhenDone;
             return;
         }
 

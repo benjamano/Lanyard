@@ -61,6 +61,13 @@
                                       aria-label="@($"{rule.Name} enabled")"
                                       ValueChanged="@((bool isEnabled) => OnRuleEnabledToggleChangedAsync(rule, isEnabled))" />
                         <FluentButton Appearance="ButtonAppearance.Transparent"
+                                      Title="@(rule.IsEnabled ? "Run now (test)" : "Switch the rule on to test it")"
+                                      aria-label="@($"Test {rule.Name} now")"
+                                      IconStart="@(new Icons.Regular.Size20.Play())"
+                                      Loading="@(_testingRuleId == rule.Id)"
+                                      Disabled="@(!rule.IsEnabled || _testingRuleId != null)"
+                                      OnClick="@(() => TestRuleAsync(rule))" />
+                        <FluentButton Appearance="ButtonAppearance.Transparent"
                                       Title="Edit rule" aria-label="@($"Edit {rule.Name}")"
                                       IconStart="@(new Icons.Regular.Size20.Edit())"
                                       OnClick="@(() => OpenEditRuleDialogAsync(rule))" />
@@ -92,40 +99,51 @@
         </FluentStack>
     </FluentStack>
 
-    <FluentDataGrid Items="@FilteredExecutions.AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr auto" Style="width: 100%;">
-        <EmptyContent>
-            No execution log entries found.
-        </EmptyContent>
-        <ChildContent>
-            <TemplateColumn Title="Rule Name">
-                <FluentButton Appearance="ButtonAppearance.Transparent"
-                              Title="Show what happened"
-                              aria-label="@($"Show what happened when {context.RuleName} ran")"
-                              OnClick="@(() => OpenExecutionDetailDialogAsync(context))">
-                    @context.RuleName
-                </FluentButton>
-            </TemplateColumn>
-            <PropertyColumn Title="Trigger Event" Property="@(e => e.TriggerEvent)" />
-            <TemplateColumn Title="Trigger Client">
-                @GetClientName(context.TriggerClientId)
-            </TemplateColumn>
-            <PropertyColumn Title="Executed At" Property="@(e => e.ExecutedAt)" />
-            <TemplateColumn Title="Result">
-                @if (context.SkipReason != null)
-                {
-                    <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative" title="@context.SkipReason">Skipped</FluentBadge>
-                }
-                else if (context.OverallSuccess)
-                {
-                    <FluentIcon Icon="Icons.Regular.Size20.CheckmarkCircle" Color="Color.Success" />
-                }
-                else
-                {
-                    <FluentIcon Icon="Icons.Regular.Size20.DismissCircle" Color="Color.Error" />
-                }
-            </TemplateColumn>
-        </ChildContent>
-    </FluentDataGrid>
+    @* A list rather than a grid, for the same reason as the rules above: five fixed columns didn't fit
+       on a phone. *@
+    @if (!FilteredExecutions.Any())
+    {
+        <div class="automation-rules-empty">No execution log entries found.</div>
+    }
+    else
+    {
+        <div class="automation-rules-list">
+            @foreach (AutomationRuleExecution execution in FilteredExecutions)
+            {
+                <div class="automation-rules-item" @key="execution.Id">
+                    <div class="automation-rules-info">
+                        <button type="button" class="automation-log-name"
+                                title="Show what happened"
+                                aria-label="@($"Show what happened when {execution.RuleName} ran")"
+                                @onclick="@(() => OpenExecutionDetailDialogAsync(execution))">
+                            @execution.RuleName
+                        </button>
+                        <div class="automation-rules-meta">
+                            @execution.TriggerEvent &middot; @GetClientName(execution.TriggerClientId) &middot; @RotaTime.ToVenueLocal(execution.ExecutedAt).ToString("d MMM yyyy HH:mm")
+                        </div>
+                    </div>
+                    <div class="automation-rules-controls">
+                        @if (execution.IsTestRun)
+                        {
+                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Brand" title="Run by hand with Run now (test)">Test</FluentBadge>
+                        }
+                        @if (execution.SkipReason != null)
+                        {
+                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative" title="@execution.SkipReason">Skipped</FluentBadge>
+                        }
+                        else if (execution.OverallSuccess)
+                        {
+                            <FluentIcon Value="@(new Icons.Regular.Size20.CheckmarkCircle())" Color="Color.Success" aria-label="Worked" title="Worked" />
+                        }
+                        else
+                        {
+                            <FluentIcon Value="@(new Icons.Regular.Size20.DismissCircle())" Color="Color.Error" aria-label="Failed" title="Failed" />
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
 </FluentCard>
 
 @code {
@@ -137,6 +155,7 @@
     private bool _engineEnabled;
     private bool _showFailuresOnly;
     private Guid? _duplicatingRuleId;
+    private Guid? _testingRuleId;
 
     private IEnumerable<AutomationRuleExecution> FilteredExecutions =>
         _showFailuresOnly
@@ -364,6 +383,69 @@
         finally
         {
             _duplicatingRuleId = null;
+        }
+    }
+
+    private async Task TestRuleAsync(AutomationRule rule)
+    {
+        if (_testingRuleId != null || !rule.IsEnabled)
+        {
+            return;
+        }
+
+        Result<List<AutomationActionDescription>> described = await _ruleService.DescribeActionsAsync(rule.Id);
+
+        if (!described.IsSuccess || described.Data is not List<AutomationActionDescription> descriptions)
+        {
+            _toastService.ShowError(described.Error ?? "Couldn't read the rule's actions.");
+            return;
+        }
+
+        DialogResult confirm = await _dialogService.ShowDialogAsync<ConfirmAutomationTestRunDialog>(options =>
+        {
+            options.Width = "560px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmAutomationTestRunDialog.Rule), rule);
+            options.Parameters.Add(nameof(ConfirmAutomationTestRunDialog.KioskName), GetClientName(rule.TriggerClientId));
+            options.Parameters.Add(nameof(ConfirmAutomationTestRunDialog.EngineEnabled), _engineEnabled);
+            options.Parameters.Add(nameof(ConfirmAutomationTestRunDialog.Actions), descriptions);
+        });
+
+        if (confirm.Cancelled || confirm.Value is not bool checkConditions)
+        {
+            return;
+        }
+
+        _testingRuleId = rule.Id;
+        StateHasChanged();
+
+        try
+        {
+            Result<AutomationTestRunResult> result = await _ruleService.TestRunRuleAsync(rule.Id, checkConditions);
+
+            await LoadExecutionsAsync();
+
+            if (!result.IsSuccess || result.Data is not AutomationTestRunResult run)
+            {
+                _toastService.ShowError(result.Error ?? "The test couldn't run.");
+                return;
+            }
+
+            _testingRuleId = null;
+            StateHasChanged();
+
+            await _dialogService.ShowDialogAsync<AutomationTestRunResultDialog>(options =>
+            {
+                options.Width = "560px";
+                options.Modal = true;
+                options.Parameters.Add(nameof(AutomationTestRunResultDialog.RuleName), rule.Name);
+                options.Parameters.Add(nameof(AutomationTestRunResultDialog.Result), run);
+                options.Parameters.Add(nameof(AutomationTestRunResultDialog.Descriptions), descriptions);
+            });
+        }
+        finally
+        {
+            _testingRuleId = null;
         }
     }
 

@@ -1,4 +1,4 @@
-@* Shown by RouteAuthorizationGate in place of a page whose module the user's company doesn't have. *@
+@* Shown by RouteAuthorizationGate in place of a page whose module the user's location doesn't have. *@
 
 <PageTitle>Not available</PageTitle>
 
@@ -7,10 +7,10 @@
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" HorizontalAlignment="HorizontalAlignment.Center">
             <FluentIcon Value="@(new Icons.Regular.Size48.LockClosed())" Color="Color.Disabled" />
             <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500" Align="TextAlign.Center">
-                @_info.Name isn't turned on for your company
+                @_info.Name isn't turned on for your location
             </FluentText>
             <FluentText Align="TextAlign.Center">
-                Your company's Lanyard plan doesn't include @_info.Name.ToLowerInvariant(). If you think it should,
+                Your company's Lanyard plan doesn't include @_info.Name.ToLowerInvariant() at this location. If you think it should,
                 ask your manager to contact Lanyard.
             </FluentText>
             <FluentAnchorButton Href="/" Appearance="ButtonAppearance.Primary">Go to Home</FluentAnchorButton>

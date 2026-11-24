@@ -348,6 +348,12 @@ if (args.login) {
 const videoDir = join(tmp, 'video');
 const context = await browser.newContext({ ...contextOpts, storageState, recordVideo: { dir: videoDir, size: { width, height } } });
 await context.addInitScript(overlayInit);
+// meta.cookies: set before the first page loads, e.g. a paired clock-in terminal's device cookie
+// ({ name, value } - the domain and path default to the base URL's host and "/").
+if (Array.isArray(meta.cookies) && meta.cookies.length > 0) {
+  const host = new URL(args.baseUrl).hostname;
+  await context.addCookies(meta.cookies.map((c) => ({ domain: host, path: '/', ...c })));
+}
 const page = await context.newPage();
 page.setDefaultTimeout(15000);
 const t0 = Date.now();

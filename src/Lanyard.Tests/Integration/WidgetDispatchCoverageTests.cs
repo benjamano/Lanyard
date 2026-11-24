@@ -145,21 +145,88 @@ public class WidgetDispatchCoverageTests
     }
 
     [TestMethod]
-    public void EveryConfigurableWidgetType_OpensASettingsDialog()
+    public void EveryInlineSettingsPanel_TakesTheWidgetAndAnOnChangedCallback()
     {
-        string configurator = ReadSource("src/Lanyard.Server/LanyardApp/Components/Dashboards/DashboardWidgetConfigurator.cs");
-        Dictionary<WidgetType, Type> mapped = MappedWidgetTypes();
         List<string> problems = [];
 
-        foreach (WidgetDescriptor descriptor in DashboardWidgetCatalog.All.Where(x => x.HasSettings))
+        // Greeting is the only widget with nothing to set.
+        foreach (WidgetType type in DashboardWidgetCatalog.All.Where(x => x.SettingsComponent is null).Select(x => x.Type))
         {
-            if (mapped.TryGetValue(descriptor.Type, out Type? clrType) && !Regex.IsMatch(configurator, $@"case {clrType.Name} \w+:"))
+            if (type != WidgetType.Greeting)
             {
-                problems.Add($"{descriptor.Type}: marked HasSettings in the catalog but has no case in DashboardWidgetConfigurator.ConfigureAsync");
+                problems.Add($"{type}: no SettingsComponent in DashboardWidgetCatalog, so it can't be configured in the designer");
+            }
+        }
+
+        foreach (WidgetDescriptor descriptor in DashboardWidgetCatalog.All.Where(x => x.SettingsComponent is not null))
+        {
+            Type settings = descriptor.SettingsComponent!;
+            PropertyInfo? widget = settings.GetProperty("Widget");
+            PropertyInfo? onChanged = settings.GetProperty("OnChanged");
+
+            if (widget?.GetCustomAttribute<ParameterAttribute>() is null || !widget.PropertyType.IsAssignableFrom(descriptor.Create().GetType()))
+            {
+                problems.Add($"{descriptor.Type}: {settings.Name} has no [Parameter] Widget that takes the widget");
+            }
+
+            if (onChanged?.GetCustomAttribute<ParameterAttribute>() is null || onChanged.PropertyType != typeof(EventCallback<string>))
+            {
+                problems.Add($"{descriptor.Type}: {settings.Name} has no [Parameter] EventCallback<string> OnChanged");
             }
         }
 
         Assert.IsEmpty(problems, string.Join('\n', problems));
+    }
+
+    // Duplicating a widget in the designer copies it by reflection; check every type comes back as
+    // a new widget of the same type with the same settings.
+    [TestMethod]
+    public void EveryWidgetType_CanBeDuplicatedWithItsSettings()
+    {
+        List<string> problems = [];
+
+        foreach (WidgetDescriptor descriptor in DashboardWidgetCatalog.All)
+        {
+            DashboardWidget original = descriptor.Create();
+            original.DashboardId = Guid.NewGuid();
+            original.Title = "Original";
+            original.ShowTitle = true;
+            original.GridX = 3;
+            original.GridW = 5;
+            original.PhoneOrder = 4;
+
+            DashboardWidget copy = Lanyard.App.Components.Dashboards.Designer.DashboardWidgetCloner.Clone(original);
+
+            if (copy.Id == original.Id || copy.GetType() != original.GetType() || copy.Type != original.Type)
+            {
+                problems.Add($"{descriptor.Type}: the copy isn't a new widget of the same type");
+            }
+
+            if (copy.DashboardId != Guid.Empty || copy.PhoneOrder is not null)
+            {
+                problems.Add($"{descriptor.Type}: the copy kept the original's dashboard or phone order");
+            }
+
+            if (copy.Title != "Original" || !copy.ShowTitle || copy.GridW != 5)
+            {
+                problems.Add($"{descriptor.Type}: the copy lost the original's settings");
+            }
+        }
+
+        Assert.IsEmpty(problems, string.Join('\n', problems));
+    }
+
+    // Buttons and controls only act on a live dashboard whose controls are on - never in the
+    // designer, nor in its Phone and TV previews.
+    [TestMethod]
+    public void RenderParameters_AllowTriggerOnlyWhenLiveAndControlsEnabled()
+    {
+        WidgetDescriptor button = DashboardWidgetCatalog.Get(WidgetType.Button)!;
+        DashboardWidget widget = button.Create();
+
+        Assert.IsTrue((bool)DashboardWidgetCatalog.RenderParameters(button, widget, live: true, companyId: 1)["AllowTrigger"]!);
+        Assert.IsFalse((bool)DashboardWidgetCatalog.RenderParameters(button, widget, live: false, companyId: 1)["AllowTrigger"]!);
+        Assert.IsFalse((bool)DashboardWidgetCatalog.RenderParameters(button, widget, live: true, companyId: 1, controlsEnabled: false)["AllowTrigger"]!);
     }
 
     private static string ReadSource(string relativePath)

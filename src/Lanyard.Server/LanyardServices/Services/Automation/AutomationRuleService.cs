@@ -1,5 +1,6 @@
 #nullable enable
 
+using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Features;
 using Lanyard.Application.Services.Parties;
 using Lanyard.Infrastructure.DataAccess;
@@ -11,12 +12,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Lanyard.Application.Services;
 
+// currentUser is optional so the many tests that only exercise saving can keep constructing the
+// service with a factory and an engine; DI always supplies it.
 public class AutomationRuleService(
     IDbContextFactory<ApplicationDbContext> factory,
-    IAutomationEngineService engineService) : IAutomationRuleService
+    IAutomationEngineService engineService,
+    ICurrentUserAccessor? currentUser = null) : IAutomationRuleService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly IAutomationEngineService _engineService = engineService;
+    private readonly ICurrentUserAccessor? _currentUser = currentUser;
 
     public async Task<Result<IEnumerable<AutomationRule>>> GetRulesAsync()
     {
@@ -383,6 +388,129 @@ public class AutomationRuleService(
         catch (Exception ex)
         {
             return Result<AutomationRule>.Fail($"Couldn't copy the rule: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<List<AutomationActionDescription>>> DescribeActionsAsync(Guid ruleId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            AutomationRule? rule = await ctx.AutomationRules
+                .Where(r => r.Id == ruleId && r.IsActive)
+                .Include(r => r.Actions.Where(a => a.IsActive))
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync();
+
+            if (rule == null)
+            {
+                return Result<List<AutomationActionDescription>>.Fail("Rule not found.");
+            }
+
+            List<AutomationActionTarget> targets = rule.Actions
+                .Select(a => AutomationActionTargets.TryRead(a.ActionType, a.ParametersJson, out AutomationActionTarget t) ? t : null)
+                .OfType<AutomationActionTarget>()
+                .ToList();
+
+            List<Guid> kioskIds = targets.Select(t => t.ClientId).Where(id => id != Guid.Empty).Distinct().ToList();
+            List<Guid> IdsOf(AutomationActionTargetKind kind) => targets.SelectMany(t => t.References).Where(r => r.Kind == kind).Select(r => r.Id).Distinct().ToList();
+            List<Guid> playlistIds = IdsOf(AutomationActionTargetKind.Playlist);
+            List<Guid> programIds = IdsOf(AutomationActionTargetKind.ProjectionProgram);
+            List<Guid> sceneIds = IdsOf(AutomationActionTargetKind.DmxScene);
+            List<Guid> clipIds = IdsOf(AutomationActionTargetKind.AudioClip);
+
+            // Tenant-filtered, so another company's kiosk or content shows as deleted, never by name.
+            Dictionary<Guid, string> kiosks = await ctx.Clients.Where(c => kioskIds.Contains(c.Id)).AsNoTracking().TagWithCallSite().ToDictionaryAsync(c => c.Id, c => c.Name);
+            Dictionary<(AutomationActionTargetKind, Guid), string> names = [];
+
+            foreach (var x in await ctx.Playlists.Where(x => playlistIds.Contains(x.Id)).Select(x => new { x.Id, x.Name }).AsNoTracking().TagWithCallSite().ToListAsync())
+            {
+                names[(AutomationActionTargetKind.Playlist, x.Id)] = x.Name;
+            }
+
+            foreach (var x in await ctx.ProjectionPrograms.Where(x => programIds.Contains(x.Id)).Select(x => new { x.Id, x.Name }).AsNoTracking().TagWithCallSite().ToListAsync())
+            {
+                names[(AutomationActionTargetKind.ProjectionProgram, x.Id)] = x.Name;
+            }
+
+            foreach (var x in await ctx.DmxScenes.Where(x => sceneIds.Contains(x.Id) && x.IsActive).Select(x => new { x.Id, x.Name }).AsNoTracking().TagWithCallSite().ToListAsync())
+            {
+                names[(AutomationActionTargetKind.DmxScene, x.Id)] = x.Name;
+            }
+
+            foreach (var x in await ctx.AudioClips.Where(x => clipIds.Contains(x.Id)).Select(x => new { x.Id, x.Name }).AsNoTracking().TagWithCallSite().ToListAsync())
+            {
+                names[(AutomationActionTargetKind.AudioClip, x.Id)] = x.Name;
+            }
+
+            List<AutomationActionDescription> descriptions = rule.Actions
+                .OrderBy(a => a.SortOrder)
+                .Select(a => new AutomationActionDescription(
+                    a.Id,
+                    a.ActionType,
+                    AutomationActionDescriptions.Describe(
+                        a.ActionType,
+                        a.ParametersJson,
+                        id => kiosks.GetValueOrDefault(id),
+                        (kind, id) => names.GetValueOrDefault((kind, id)))))
+                .ToList();
+
+            return Result<List<AutomationActionDescription>>.Ok(descriptions);
+        }
+        catch (Exception ex)
+        {
+            return Result<List<AutomationActionDescription>>.Fail($"Couldn't read the rule's actions: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<AutomationTestRunResult>> TestRunRuleAsync(Guid ruleId, bool checkConditions)
+    {
+        try
+        {
+            if (_currentUser == null)
+            {
+                return Result<AutomationTestRunResult>.Fail("Only a signed-in user can test a rule.");
+            }
+
+            Result<string> userId = await _currentUser.GetCurrentUserIdAsync();
+
+            if (!userId.IsSuccess || string.IsNullOrEmpty(userId.Data))
+            {
+                return Result<AutomationTestRunResult>.Fail("Only a signed-in user can test a rule.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            // Through the caller's tenant-filtered context, so the engine (which isn't filtered) is
+            // only ever handed the caller's own company.
+            int? companyId = await ctx.AutomationRules
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(r => r.Id == ruleId && r.IsActive)
+                .Select(r => (int?)r.CompanyId)
+                .FirstOrDefaultAsync();
+
+            if (companyId is not int company)
+            {
+                return Result<AutomationTestRunResult>.Fail("Rule not found.");
+            }
+
+            var user = await ctx.Users
+                .Where(u => u.Id == userId.Data)
+                .Select(u => new { Name = (u.FirstName + " " + u.LastName).Trim(), u.UserName })
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync();
+
+            string displayName = !string.IsNullOrWhiteSpace(user?.Name) ? user.Name : user?.UserName ?? "an Admin";
+
+            return await _engineService.TestRunRuleAsync(new AutomationTestRunRequest(ruleId, company, userId.Data, displayName, checkConditions));
+        }
+        catch (Exception ex)
+        {
+            return Result<AutomationTestRunResult>.Fail($"The test couldn't run: {ex.Message}");
         }
     }
 

@@ -1,0 +1,45 @@
+@using Lanyard.App.Components.Dashboards.Widgets
+@inherits WidgetSettingsBase<TextAreaWidget>
+
+@* The Text widget's content, edited here rather than on the canvas, where a press starts a drag.
+   The canvas shows the result as you type. With "Can be edited on the kiosk screen" on, the kiosk
+   owns the words, so they're shown here read-only. *@
+
+<div class="widget-settings">
+    <FluentSwitch Value="@W.EditableOnKiosk"
+                  ValueChanged="@(v => SetAsync(() => W.EditableOnKiosk = v, v ? "Let kiosks edit the text" : "Stopped kiosks editing the text"))"
+                  Label="Can be edited on the kiosk screen" />
+    @if (W.EditableOnKiosk)
+    {
+        <FluentSwitch Value="@W.KioskAutoSave"
+                      ValueChanged="@(v => SetAsync(() => W.KioskAutoSave = v, v ? "Turned on auto-save on the kiosk" : "Turned off auto-save on the kiosk"))"
+                      Label="Save automatically as people type" />
+    }
+    <div class="widget-settings-note">
+        @if (!W.EditableOnKiosk)
+        {
+            @("Only editable here. On home screens and kiosks it's read-only.")
+        }
+        else if (W.KioskAutoSave)
+        {
+            @("The kiosk shows the text ready to type into, and saves a moment after typing stops. There's no Save button. To change the words here instead, turn off kiosk editing.")
+        }
+        else
+        {
+            @("A kiosk showing this dashboard gets an Edit button on this text, and saves when Save is pressed. To change the words here instead, turn off kiosk editing.")
+        }
+    </div>
+
+    @if (W.EditableOnKiosk)
+    {
+        <div class="text-area-settings is-read-only">
+            <RenderTextAreaWidget Widget="W" PreviewMode="true" />
+        </div>
+    }
+    else
+    {
+        <div class="text-area-settings">
+            <RenderTextAreaWidget Widget="W" PreviewMode="false" ContentChanged="@(() => OnChanged.InvokeAsync("Edited text"))" />
+        </div>
+    }
+</div>
