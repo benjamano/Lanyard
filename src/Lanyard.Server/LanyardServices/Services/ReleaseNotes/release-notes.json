@@ -1011,22 +1011,7 @@
       "The Week view shows Monday to Sunday, side by side on a computer and one under another on a phone, with each day's parties and headcount. Click a day to open its timeline, or a party to open it.",
       "Totals at the top add up the parties, children and adults expected, hot and cold food, parties not paid in full with the balance due, and provisional holds.",
       "The Day view also lists everyone on the published rota that day, with their times and position.",
-      "New What's On Today dashboard widget (Admins and Managers): today's parties, children and staff on, and the parties still to come, with a link to the day's timeline. Right-click it to choose how many to list and, for Admins, which location.",
-      "New Duplicate rule button on Automation: it copies a rule with its trigger, conditions and actions as \"Copy of\" the rule's name, switched off, and opens it so you can change what's different before turning it on.",
-      "The Automation rule list now fits on a phone: each rule's name shows in full with its kiosk and trigger underneath, instead of being cut short with the switch and buttons off the side of the screen.",
-      "The Edit and Delete buttons on Automation, and the rule names in the Execution Log, now work with the keyboard and screen readers and show what they do when you hover over them.",
-      "Automation rules can now only drive your own company's kiosks, playlists, projection programs, lighting scenes and audio clips. This was already checked for lighting actions; music, projection and audio clip actions are now checked too, both when a rule is saved and every time it runs.",
-      "An automation rule saved while Lanyard was reloading its rules no longer goes unnoticed until the next save: it now starts working straight away.",
-      "New Identify displays button (the # button) for each kiosk on the Clients page, and at the top of a kiosk's Settings > Projection tab (Admins). For 8 seconds every screen on that kiosk shows a large number with its name, resolution and the program set up for it, so you can tell which Screen 1, 2 or 3 in Lanyard is which physical screen. Whatever is playing carries on underneath.",
-      "The Projection tab also lists each screen's details under the button, and marks a screen as Changed when Windows has renumbered the screens since the kiosk last reported them, for example after a screen was unplugged, so you can check its projection is still on the right screen.",
-      "Kiosks now tell Lanyard straight away when a screen is plugged in, unplugged or changes resolution, instead of only when they reconnect, and the kiosk self-test lists the screens it can see. Both need Lanyard Client 1.0.49.",
-      "Screens are now numbered Screen 1, Screen 2 and so on everywhere you pick or see one: the Screen pickers in Automation rules and the Projection Status and Button dashboard widgets, Add Projection, the Projection tab and the Screens window. Each Screen picker has the # Identify displays button beside it, as do Add Projection and the Screens window, so you can check which screen is which before choosing.",
-      "New Party time trigger for Automation rules: run lights, music or projection actions when a booked party starts, eats, plays laser tag or ends, at the time or up to 120 minutes before. Choose the location, and optionally one room.",
-      "A party time rule runs once for each party. Parties that reach the same moment together run it once, so two 2pm parties don't start the lights twice. Cancelled parties, provisional Just Step bookings and private hires don't run it.",
-      "Moving or cancelling a party, by hand or through the Just Step import, changes when its rules run straight away.",
-      "The Execution Log shows which party a party time run was for, with an Open party button, and never the child's name.",
-      "New \"A party is or isn't on\" condition for Automation rules: only run a rule while a booked party is on at a location (or in one room), or only while none is. For example, play the party version of the game lights during parties.",
-      "Training course sections can no longer contain scripts or other unsafe content. Only the formatting the course editor offers (headings, bold, italic, lists, links and images) is kept, including in sections saved before this change."
+      "New What's On Today dashboard widget (Admins and Managers): today's parties, children and staff on, and the parties still to come, with a link to the day's timeline. Right-click it to choose how many to list and, for Admins, which location."
     ]
   },
   {
@@ -1081,6 +1066,15 @@
       "A new location starts with every feature off. Use All on under its name to switch everything on at once.",
       "Every existing location keeps the features its company had, so nothing changes until you change it.",
       "Company-wide things, such as calendar feeds, onboarding emails and audio clips in automation rules, work when at least one location has the feature."
+    ]
+  },
+  {
+    "version": "1.4.34",
+    "releaseDate": "2026-11-24",
+    "summary": "Test automation rules on demand and see what each action will do first.",
+    "details": [
+      "Admins can run enabled automation rules on demand. A confirmation shows the real actions that will happen before the test runs, and the result shows which actions passed or failed.",
+      "Tests appear in the Execution Log with a Test badge and who ran them. They don't raise Operations Alerts or count as the rule's last run."
     ]
   }
 ]
