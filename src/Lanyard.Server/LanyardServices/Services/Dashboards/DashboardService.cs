@@ -325,6 +325,7 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
             // layout: copying the grid fields here used to save whatever half-finished layout was
             // on screen in the editor, without the rest of the dashboard.
             existingWidget.Title = widget.Title?.Trim();
+            existingWidget.ShowConditionsJson = widget.ShowConditionsJson;
             existingWidget.ShowTitle = widget.ShowTitle;
 
             if (existingWidget.GetType() != widget.GetType())
@@ -838,12 +839,14 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
         UpdateCommonMutableWidgetProperties(copy, widget);
         copy.DashboardId = dashboardId;
         copy.IsActive = true;
+        copy.ShowConditionsJson = widget.ShowConditionsJson;
 
         return copy;
     }
 
     private static void UpdateCommonMutableWidgetProperties(DashboardWidget target, DashboardWidget source)
     {
+        target.ShowConditionsJson = source.ShowConditionsJson;
         target.Title = source.Title?.Trim();
         target.ShowTitle = source.ShowTitle;
         target.GridX = source.GridX;
