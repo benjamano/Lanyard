@@ -1,7 +1,9 @@
 namespace Lanyard.Infrastructure.Enum;
 
-// A paid-for module an admin can switch on or off per company (Manage > Companies & Locations).
-// Stored as its int value in CompanyFeatureSetting.Feature, so never renumber an existing member.
+// A paid-for module a platform admin switches on per location (Manage > Companies & Locations).
+// Stored as its int value in LocationFeatureSetting.Feature, so never renumber an existing member.
+// A new member starts switched off at every location (no row means off). If existing venues should
+// keep getting what it covers, add a migration that switches it on for them.
 public enum CompanyFeature
 {
     // Courses, My Training, the training dashboard and the My Training widget.
@@ -32,5 +34,10 @@ public enum CompanyFeature
     // 9 is kept for Policies (open PR #284 still says 8, which AudioClips took).
 
     // The Operations alerts page and widget: kiosk, automation and staff problems in one list.
-    OperationsAlerts = 10
+    OperationsAlerts = 10,
+
+    // Opening, closing and other location checklists: the setup and today/history pages, ticking
+    // tasks on a phone or the clock-in terminal, missed-checklist alerts and the Checklists widget.
+    // Also needs StaffScheduling, whose rota decides who can tick.
+    Checklists = 11
 }

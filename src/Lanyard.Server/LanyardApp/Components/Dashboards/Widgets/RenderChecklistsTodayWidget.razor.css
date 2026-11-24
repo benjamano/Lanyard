@@ -1,0 +1,98 @@
+.cl-widget-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    height: 100%;
+    width: 100%;
+    min-width: 0;
+}
+
+.cl-widget-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+}
+
+.cl-widget-title {
+    font-weight: var(--fontWeightSemibold);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cl-widget-where {
+    flex: 0 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--colorNeutralForeground3);
+    font-size: 0.85rem;
+}
+
+.cl-widget-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex: 1 1 auto;
+    color: var(--colorNeutralForeground2);
+    text-align: center;
+}
+
+.cl-widget-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.cl-widget-run {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.cl-widget-run-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.cl-widget-run-name {
+    font-weight: 600;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cl-widget-run-progress {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: var(--colorNeutralForeground3);
+    font-variant-numeric: tabular-nums;
+}
+
+.cl-widget-run-progress progress {
+    flex: 1 1 auto;
+    height: 6px;
+    accent-color: var(--colorBrandBackground);
+}
+
+.cl-widget-more {
+    align-self: flex-start;
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+    color: var(--colorBrandForeground1);
+}

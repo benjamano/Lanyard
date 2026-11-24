@@ -1,30 +1,61 @@
 ---
 name: dashboard-widgets
-description: Checklist for adding a new dashboard widget type in LanyardApp — touches 8 separate places with no compiler enforcement tying them together, so missing one causes either a runtime EF error, a widget that saves fine but silently renders blank, or a widget whose whole dashboard save silently fails. Use whenever adding a new widget type to the dashboard system, or debugging a widget that isn't rendering/configuring/saving correctly despite the data looking right.
+description: Checklist for adding a new dashboard widget type in LanyardApp — the enum, model subclass, EF discriminator, a DashboardWidgetCatalog entry, the renderer, settings and DashboardService's copy switches. Missing one causes a runtime EF error, a widget that saves fine but silently renders blank, or a widget whose whole dashboard save fails. Also covers the layout engine (DashboardLayoutEngine), the phone/fit-to-screen layout options, and who may edit dashboards. Use whenever adding a new widget type, debugging a widget that isn't rendering/configuring/saving correctly, or changing how dashboards are laid out.
 ---
 
 # Adding a dashboard widget type
 
-Widget type dispatch in this repo is pure manual `switch`/enum matching — there is no registry, factory, or interface contract enforcing that every widget type is wired up everywhere it needs to be. Adding a new type means touching all of the following, and missing any one of them fails in a way that's easy to misdiagnose:
+Every widget renders through one table, `Components/Dashboards/DashboardWidgetCatalog.cs`. `DashboardGrid` and the editor (and later the designer's palette) read it, so there are no per-type switches in the grid any more. A new type still touches several files that nothing links at compile time:
 
-1. **`Lanyard.Infrastructure/Enum/WidgetType.cs`** — add the new enum value.
-2. **`Lanyard.Infrastructure/Models/DashboardModels.cs`** — add a subclass of `DashboardWidget` with a `[SetsRequiredMembers]` constructor that sets `Type` and a default grid size.
-3. **`ApplicationDbContext.cs`'s `HasDiscriminator(x => x.Type).HasValue<...>()` chain** (TPH mapping) — add the new subclass here, and generate/apply an EF migration. **Miss this and you get a runtime EF discriminator error**, not a compile error — the new subclass looks fine in isolation.
-4. **`EditDashboard.razor`** — add a `FluentMenuItem` that does `Dashboard.Widgets.Add(new XWidget())` so a user can actually create one.
-5. **`DashboardGrid.razor`** — two *separate* `switch` blocks that must both be updated:
-   - The render markup's switch (cast the widget, render `<RenderXWidget Widget="..." />`).
-   - The `ShowWidgetConfigDialog` switch (cast the widget, open `ConfigureXDialog`).
-   **Miss either one and the widget saves fine, appears in the dashboard's widget list, but renders blank (or won't open a config dialog) with no error anywhere** — this is the failure mode most likely to eat debugging time, since everything upstream (the enum, the model, the DB row) looks correct.
-6. **New `RenderXWidget.razor` component** — informal contract, not an enforced interface: `[Parameter] public required XWidget Widget`, and usually `[Parameter] public bool AllowTrigger`. Plus a matching `ConfigureXDialog.razor` if the widget has configurable settings.
-7. **`DashboardService.cs`** — three more places, easy to forget because nothing before this step complains:
-   - `CreateWidgetCopy`'s `switch` **expression** — a case that copies the new type's configurable properties into a fresh instance. Its `_ => throw new InvalidOperationException("Unsupported widget type.")` fallback means **a brand-new widget of an unhandled type fails the entire dashboard save** (caught by `SaveDashboardAsync`'s try/catch and surfaced only as a toast — nothing in the DB, nothing in the render pipeline, looks broken).
-   - `UpdateTypeSpecificWidgetProperties` — the equivalent copy for an *existing* widget's edits (same properties, different code path, no shared helper).
-   - `SaveWidgetAsync`'s `switch` **statement** — a separate single-widget save path; if the type has configurable properties, add a case here too or edits silently don't stick.
-   If the new widget type has no configurable properties at all (like `GreetingWidget`), it still needs a bare case in `CreateWidgetCopy` (`GreetingWidget => new GreetingWidget()`) — omitting it entirely hits the same `InvalidOperationException` fallback.
-8. **`Services/Features/CompanyFeatureCatalog.cs`'s `ForWidget`** — maps the widget to the paid module it belongs to, so `DashboardGrid` hides it for a company without that module. Leave it out (falls through to `null`) for widgets every company gets, or for a widget spanning several modules, which must then hide its own sections (see `RenderComplianceSummaryWidget`).
+1. **`Lanyard.Infrastructure/Enum/WidgetType.cs`**: add the enum value. Check open PRs first: two stacks have clashed on the same number before.
+2. **`Lanyard.Infrastructure/Models/DashboardModels.cs`**: add a `DashboardWidget` subclass with a `[SetsRequiredMembers]` constructor that sets `Type` and a default `GridW`/`GridH`.
+3. **`ApplicationDbContext`'s `HasDiscriminator(...).HasValue<...>()` chain**: add the subclass, then generate and apply an EF migration. If you miss this you get a runtime EF discriminator error, not a compile error.
+4. **`DashboardWidgetCatalog.All`**: add a `WidgetDescriptor` with name, one-line description, category, icon, a `Create` that returns the new subclass, and the renderer type. Set `HasSettings: false` if there's nothing to configure.
+5. **The renderer, `Components/Dashboards/Widgets/RenderXWidget.razor`**: it must have `[Parameter] public required XWidget Widget`. It may also declare any of these optional parameters. `DashboardWidgetCatalog.RenderParameters` only passes the ones a component declares, because `DynamicComponent` throws on unknown parameters.
+   - `AllowTrigger`: true on a live dashboard. Buttons and controls must only act when this is true.
+   - `PreviewMode`: true on a live dashboard.
+   - `CompanyId`: the dashboard's company. Kiosks render signed out.
+6. **Settings**: if `HasSettings`, add a `ConfigureXDialog.razor` and a `case XWidget` in `DashboardWidgetConfigurator.ConfigureAsync`. (The designer stack replaces these dialogs with inline inspector panels.)
+7. **`DashboardService.cs`**: three places, all easy to forget:
+   - `CreateWidgetCopy`'s switch expression needs a case that copies the type's settings. Its `_ => throw` fallback fails the **whole dashboard save** for an unhandled type, and that failure only shows as a toast. Types with no settings still need a bare case (`GreetingWidget => new GreetingWidget()`).
+   - `UpdateTypeSpecificWidgetProperties` does the same copy for an existing widget.
+   - `SaveWidgetAsync`'s switch statement.
+8. **`Services/Features/CompanyFeatureCatalog.ForWidget`**: map the widget to its paid module, so the grid hides it for a location that doesn't have it switched on (switches are per location; see `CompanyFeatureService`). Leave it out for widgets everyone gets.
 
-`src/Lanyard.Tests/Integration/WidgetDispatchCoverageTests.cs` now checks steps 1, 3, 4, 5 and 7 for every `WidgetType` (discriminator mapping, a save through `CreateWidgetCopy`, both `DashboardGrid` switches and the editor menu item), so a missed step fails the build's tests instead of failing silently. If a new type legitimately has no config dialog, add it to that test's `WidgetsWithoutConfigDialog`.
+`src/Lanyard.Tests/Integration/WidgetDispatchCoverageTests.cs` checks steps 1, 3, 4, 5, 6 and 7 for every `WidgetType`:
+- discriminator mapping
+- a save through `CreateWidgetCopy`
+- a catalog entry whose `Create()` builds the mapped subclass
+- a renderer with a matching `Widget` parameter
+- a configurator case when `HasSettings` is set
 
-If the widget can show anything sensitive, remember a dashboard can be shown on an anonymous kiosk, which runs as the unfiltered "system" tenant: gate on a signed-in role *and* have the service refuse system callers (see `ComplianceService`).
+A missed step fails the tests rather than failing silently.
 
-When debugging a widget that "saves but doesn't show up," check step 5 first (both switches in `DashboardGrid.razor`) before assuming the problem is in the data layer — the data almost always round-trips correctly since the EF discriminator (step 3) would have thrown loudly if that part were broken. When debugging a widget that "doesn't save at all" (dashboard save fails with a generic error toast, or a config-dialog edit doesn't persist), check step 7 — `DashboardService.cs`'s three widget-copy/update switches — before assuming the problem is in the dialog or the grid.
+If the widget can show anything sensitive, remember a dashboard can be shown on an anonymous kiosk, which runs as the unfiltered "system" tenant. Gate it on a signed-in role, *and* have the service refuse system callers (see `ComplianceService`).
+
+## Layout
+
+- **`DashboardLayoutEngine`** (`LanyardServices/Services/Dashboards/`) is pure and unit tested (`DashboardLayoutEngineTests`). It owns all placement rules on the 12-column grid:
+  - `Normalize`: legacy overlap repair, same behaviour as the old grid.
+  - `Move` / `Resize`: the moved widget wins and anything it overlaps is pushed down. No compaction unless `compact: true`.
+  - `Place`: a new widget, either at a position or in the first free spot.
+  - `Compact`
+
+  Don't put layout arithmetic in components; call the engine.
+- Every widget also has these layout fields, copied by `UpdateCommonMutableWidgetProperties`. A new layout field must go there too, and **not** into `SaveWidgetAsync`, which saves settings only (it used to write the grid fields and saved unfinished layouts):
+  - `ShowTitle` (shows `Title` as a header)
+  - `HideOnPhone`
+  - `PhoneOrder` (null means follow desktop order)
+- Dashboards have two layout options, saved by `SaveDashboardAsync`:
+  - `RowHeight`: 60–240px, default 120.
+  - `FitToScreen`: rows stretch to fill the screen, applied on kiosks only.
+- The grid collapses to one column using a **container** query (`@container (max-width: 768px)`), not a media query, so a narrow preview frame collapses the same way a phone does.
+
+## Who can edit
+
+Admins and Managers. `/manage/dashboards/{id}` is `[Authorize(Roles = "Admin,Manager")]`, and `DashboardService`'s write methods check the role themselves (`NotAllowedToEditMessage`), because dashboards also render on screens with nobody or anybody signed in.
+
+## Debugging
+
+- **A widget "saves but doesn't show up":** check its catalog entry and its renderer's `Widget` parameter type first.
+- **A widget "doesn't save at all"** (the dashboard save fails with a generic toast): check `DashboardService.cs`'s three copy/update switches.

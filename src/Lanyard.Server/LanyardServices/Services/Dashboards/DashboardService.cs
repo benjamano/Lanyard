@@ -1,12 +1,19 @@
-﻿using Lanyard.Infrastructure.DataAccess;
+﻿using Lanyard.Application.Services.Authentication;
+using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Lanyard.Application.Services;
 
-public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) : IDashboardService
+public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, ISecurityService securityService) : IDashboardService
 {
+    // Building and changing dashboards is for Admins and Managers. The editor's route already
+    // says so, but the check lives here too so nothing else that reaches the service can change
+    // one - a kiosk renders dashboards signed out, and the Text Area widget used to save itself
+    // from wherever it was shown.
+    public const string NotAllowedToEditMessage = "Only Admins and Managers can change dashboards.";
+
     // Organisation-wide rather than per-user, so it lives in the shared AppSettings key/value
     // table alongside "AutomationEngine.Enabled" instead of needing a column of its own. Writes go
     // through a read-then-upsert on this key, which keeps a single default without a second table.
@@ -15,6 +22,11 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
     private const string OrganisationDefaultDashboardSettingKey = "Dashboard.OrganisationDefaultDashboardId";
 
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly ISecurityService _securityService = securityService;
+
+    private async Task<bool> CanEditDashboardsAsync() =>
+        await _securityService.IsCurrentUserInRoleAsync("Admin")
+        || await _securityService.IsCurrentUserInRoleAsync("Manager");
 
     public async Task<Result<IEnumerable<Dashboard>>> GetDashboardsAsync()
     {
@@ -95,6 +107,11 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
     {
         try
         {
+            if (!await CanEditDashboardsAsync())
+            {
+                return Result<bool>.Fail(NotAllowedToEditMessage);
+            }
+
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             Dashboard? dashboard = await ctx.Dashboards
@@ -149,6 +166,11 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 return Result<bool>.Fail("Dashboard name is required.");
             }
 
+            if (!await CanEditDashboardsAsync())
+            {
+                return Result<bool>.Fail(NotAllowedToEditMessage);
+            }
+
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             Dashboard newDashboard = new()
@@ -157,7 +179,9 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 Description = dashboard.Description?.Trim(),
                 IsActive = true,
                 CreateDate = DateTime.UtcNow,
-                LastUpdateDate = DateTime.UtcNow
+                LastUpdateDate = DateTime.UtcNow,
+                FitToScreen = dashboard.FitToScreen,
+                RowHeight = ClampRowHeight(dashboard.RowHeight)
             };
 
             ctx.Dashboards.Add(newDashboard);
@@ -187,6 +211,11 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 return Result<bool>.Fail("Dashboard name is required.");
             }
 
+            if (!await CanEditDashboardsAsync())
+            {
+                return Result<bool>.Fail(NotAllowedToEditMessage);
+            }
+
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             Dashboard? existingDashboard = await ctx.Dashboards
@@ -199,6 +228,8 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
 
             existingDashboard.Name = dashboard.Name.Trim();
             existingDashboard.Description = dashboard.Description?.Trim();
+            existingDashboard.FitToScreen = dashboard.FitToScreen;
+            existingDashboard.RowHeight = ClampRowHeight(dashboard.RowHeight);
             existingDashboard.LastUpdateDate = DateTime.UtcNow;
 
             List<DashboardWidget> incomingWidgets = dashboard.Widgets ?? [];
@@ -274,6 +305,11 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 return Result<DashboardWidget>.Fail("Widget id is required.");
             }
 
+            if (!await CanEditDashboardsAsync())
+            {
+                return Result<DashboardWidget>.Fail(NotAllowedToEditMessage);
+            }
+
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             DashboardWidget? existingWidget = await ctx.DashboardWidgets
@@ -284,13 +320,13 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 return Result<DashboardWidget>.Fail("Widget not found.");
             }
 
-            // IsActive is deliberately not copied - this saves a widget's configuration, and only
-            // SaveDashboardAsync/DeleteDashboardAsync own the soft-delete flag.
+            // This saves a widget's configuration only. IsActive belongs to
+            // SaveDashboardAsync/DeleteDashboardAsync (the soft-delete flag), and so does the
+            // layout: copying the grid fields here used to save whatever half-finished layout was
+            // on screen in the editor, without the rest of the dashboard.
             existingWidget.Title = widget.Title?.Trim();
-            existingWidget.GridX = widget.GridX;
-            existingWidget.GridY = widget.GridY;
-            existingWidget.GridW = widget.GridW;
-            existingWidget.GridH = widget.GridH;
+            existingWidget.ShowConditionsJson = widget.ShowConditionsJson;
+            existingWidget.ShowTitle = widget.ShowTitle;
 
             if (existingWidget.GetType() != widget.GetType())
             {
@@ -341,6 +377,9 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 case OperationsAlertsWidget existingAlerts when widget is OperationsAlertsWidget incomingAlerts:
                     existingAlerts.AlertMinimumSeverity = incomingAlerts.AlertMinimumSeverity;
                     existingAlerts.AlertOnlyUnacknowledged = incomingAlerts.AlertOnlyUnacknowledged;
+                    break;
+                case ChecklistsTodayWidget existingChecklists when widget is ChecklistsTodayWidget incomingChecklists:
+                    existingChecklists.ChecklistsHideComplete = incomingChecklists.ChecklistsHideComplete;
                     break;
                 case HallOfFameWidget existingHallOfFame when widget is HallOfFameWidget incomingHallOfFame:
                     existingHallOfFame.Period = incomingHallOfFame.Period;
@@ -730,6 +769,10 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 AlertMinimumSeverity = alertsWidget.AlertMinimumSeverity,
                 AlertOnlyUnacknowledged = alertsWidget.AlertOnlyUnacknowledged
             },
+            ChecklistsTodayWidget checklistsWidget => new ChecklistsTodayWidget
+            {
+                ChecklistsHideComplete = checklistsWidget.ChecklistsHideComplete
+            },
             HallOfFameWidget hallOfFameWidget => new HallOfFameWidget
             {
                 Period = hallOfFameWidget.Period,
@@ -796,18 +839,26 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         UpdateCommonMutableWidgetProperties(copy, widget);
         copy.DashboardId = dashboardId;
         copy.IsActive = true;
+        copy.ShowConditionsJson = widget.ShowConditionsJson;
 
         return copy;
     }
 
     private static void UpdateCommonMutableWidgetProperties(DashboardWidget target, DashboardWidget source)
     {
+        target.ShowConditionsJson = source.ShowConditionsJson;
         target.Title = source.Title?.Trim();
+        target.ShowTitle = source.ShowTitle;
         target.GridX = source.GridX;
         target.GridY = source.GridY;
         target.GridW = source.GridW;
         target.GridH = source.GridH;
+        target.HideOnPhone = source.HideOnPhone;
+        target.PhoneOrder = source.PhoneOrder;
     }
+
+    private static int ClampRowHeight(int rowHeight) =>
+        rowHeight <= 0 ? Dashboard.DefaultRowHeight : Math.Clamp(rowHeight, Dashboard.MinRowHeight, Dashboard.MaxRowHeight);
 
     private static void UpdateTypeSpecificWidgetProperties(DashboardWidget target, DashboardWidget source)
     {
@@ -874,6 +925,12 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         {
             targetAlerts.AlertMinimumSeverity = sourceAlerts.AlertMinimumSeverity;
             targetAlerts.AlertOnlyUnacknowledged = sourceAlerts.AlertOnlyUnacknowledged;
+            return;
+        }
+
+        if (target is ChecklistsTodayWidget targetChecklists && source is ChecklistsTodayWidget sourceChecklists)
+        {
+            targetChecklists.ChecklistsHideComplete = sourceChecklists.ChecklistsHideComplete;
             return;
         }
 

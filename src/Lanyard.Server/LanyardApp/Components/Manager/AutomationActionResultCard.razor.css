@@ -1,0 +1,30 @@
+.automation-action-result {
+    display: flex;
+    width: 100%;
+    box-sizing: border-box;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--neutral-stroke-divider-rest, rgba(0, 0, 0, 0.08));
+    border-radius: 6px;
+}
+
+.automation-action-result-text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.automation-action-result-heading {
+    font-weight: 600;
+}
+
+.automation-action-result-detail {
+    color: var(--neutral-foreground-hint);
+    font-size: 0.85rem;
+    margin-top: 2px;
+}
+
+.automation-action-result-error {
+    color: var(--error, #c50f1f);
+    margin-top: 4px;
+}

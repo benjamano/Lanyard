@@ -80,6 +80,8 @@ public static class HelpRegistry
     public const string Dmx = "dmx";
     public const string Kiosks = "kiosks";
     public const string OperationsAlerts = "operations-alerts";
+    public const string ManageChecklists = "manage-checklists";
+    public const string Checklists = "checklists";
     public const string Insights = "insights";
     public const string WhatsOn = "whats-on";
     public const string Parties = "parties";
@@ -100,6 +102,17 @@ public static class HelpRegistry
             ],
             ["/training"],
             Feature: CompanyFeature.Training),
+
+        new(Checklists,
+            "Checklists",
+            "Ticking off today's opening, closing and other checklists on your phone.",
+            HelpAudience.Everyone,
+            () => new Icons.Regular.Size20.TaskListLtr(),
+            [
+                new("overview", "Ticking Tasks")
+            ],
+            ["/checklists"],
+            Feature: CompanyFeature.Checklists),
 
         new(MyShifts,
             "My Shifts",
@@ -353,6 +366,20 @@ public static class HelpRegistry
             ],
             ["/manage/users", "/manage/roles", "/manage/companies-locations"],
             Roles: "Admin,Manager"),
+
+        new(ManageChecklists,
+            "Checklists",
+            "Setting up a location's opening, closing and other checklists, and when they're due.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.TaskListLtr(),
+            [
+                new("overview", "Overview"),
+                new("setup", "Setting Up"),
+                new("today", "Today & History")
+            ],
+            ["/manage/checklists"],
+            Roles: "Admin,Manager",
+            Feature: CompanyFeature.Checklists),
 
         new(OperationsAlerts,
             "Operations Alerts",

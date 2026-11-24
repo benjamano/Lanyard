@@ -24,6 +24,18 @@ public class Dashboard : ICompanyOwned
     public DateTime CreateDate { get; set; }
     public DateTime? LastUpdateDate { get; set; }
 
+    // Stretches the rows so the whole layout fills the screen with no scrolling. Meant for a
+    // dashboard shown full-screen on a kiosk TV, where nobody is there to scroll it.
+    public bool FitToScreen { get; set; }
+
+    // Height of one grid row in pixels (the minimum when FitToScreen is on). The designer offers
+    // Compact / Comfortable / Spacious, but any value in range works.
+    public const int MinRowHeight = 60;
+    public const int MaxRowHeight = 240;
+    public const int DefaultRowHeight = 120;
+
+    public int RowHeight { get; set; } = DefaultRowHeight;
+
     public virtual List<DashboardWidget> Widgets { get; set; } = [];
 }
 
@@ -52,7 +64,20 @@ public class DashboardWidget
     public int GridW { get; set; }
     public int GridH { get; set; }
 
+    // Shows Title as a small header above the widget.
+    public bool ShowTitle { get; set; }
+
+    // On a phone the grid collapses to a single column. These let a dashboard choose what that
+    // column holds: HideOnPhone leaves a widget out there, and PhoneOrder sets its place in the
+    // stack (widgets without one follow, top-to-bottom then left-to-right, as on the desktop grid).
+    public bool HideOnPhone { get; set; }
+    public int? PhoneOrder { get; set; }
+
     public bool IsActive { get; set; }
+
+    // "Show only when…": conditions (as automation rules use) that must all be true for the widget
+    // to show on a live dashboard. Null means always shown. See WidgetShowConditions.
+    public string? ShowConditionsJson { get; set; }
 }
 
 public class DigitalClockWidget : DashboardWidget
@@ -218,6 +243,23 @@ public class OperationsAlertsWidget : DashboardWidget
     public OperationsAlertSeverity? AlertMinimumSeverity { get; set; }
 
     public bool AlertOnlyUnacknowledged { get; set; }
+}
+
+// Today's checklists at the location the viewer is signed in to (or clocked in at), with how far
+// each has got. Read-only; shows a sign-in prompt on a signed-out kiosk dashboard.
+public class ChecklistsTodayWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public ChecklistsTodayWidget()
+    {
+        Type = WidgetType.ChecklistsToday;
+
+        GridW = 3;
+        GridH = 3;
+    }
+
+    // Leave out checklists that are already done, so the widget is a "still to do" board.
+    public bool ChecklistsHideComplete { get; set; }
 }
 
 public class AutomationRuleStatusWidget : DashboardWidget

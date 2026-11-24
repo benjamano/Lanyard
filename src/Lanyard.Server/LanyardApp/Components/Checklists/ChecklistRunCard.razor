@@ -1,0 +1,171 @@
+@using Lanyard.Infrastructure.DTO.Checklists
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@* One checklist on one day. Interactive on the staff page (tick and untick), read-only on a manager's
+   past day. Each task is a real checkbox whose label is the task, so screen readers and keyboards
+   get a plain "checkbox, Unlock the fire exits, not checked". *@
+
+<section class="run-card" aria-labelledby="@HeadingId">
+    <div class="run-header">
+        <div class="run-heading">
+            <h2 id="@HeadingId" class="run-name">@Run.Name</h2>
+            <span class="run-due">@DueText</span>
+        </div>
+        <FluentBadge Appearance="BadgeAppearance.Tint" Color="@ChecklistDisplay.StatusColor(Run.Status)">@ChecklistDisplay.StatusLabel(Run.Status, IsToday)</FluentBadge>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Run.Description))
+    {
+        <p class="run-description">@Run.Description</p>
+    }
+
+    <div class="run-progress">
+        <progress max="@Math.Max(Run.Total, 1)" value="@Run.Done" aria-label="@($"{Run.Name}: {Run.Done} of {Run.Total} done")"></progress>
+        <span class="run-count">@Run.Done of @Run.Total done</span>
+    </div>
+
+    @if (Interactive && !Run.CanTick && Run.CantTickReason is string reason)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">@reason</FluentMessageBar>
+    }
+
+    <ul class="run-items" aria-label="@($"{Run.Name} tasks")">
+        @foreach (ChecklistItemView item in Run.Items)
+        {
+            ChecklistItemView current = item;
+            string inputId = $"item-{current.ItemId:N}";
+            string statusId = $"status-{current.ItemId:N}";
+            bool ticked = current.Tick is not null;
+            bool canUndo = ticked && Interactive && IsToday && (current.Tick!.UserId == CurrentUserId || CanUndoAnyone);
+            bool canTick = !ticked && Interactive && Run.CanTick && !busy.Contains(current.ItemId);
+
+            <li class="run-item @(ticked ? "is-ticked" : "")">
+                <div class="run-item-main">
+                    <input @key="@($"{inputId}-{ticked}-{revision}")" type="checkbox" id="@inputId" class="run-check" checked="@ticked"
+                           disabled="@(!(canTick || canUndo))" aria-describedby="@statusId"
+                           @onchange="@(e => OnToggleAsync(current, e.Value is true))" />
+                    <label for="@inputId" class="run-item-text">
+                        <span class="run-item-title">@current.Title</span>
+                        @if (!string.IsNullOrEmpty(current.Detail))
+                        {
+                            <span class="run-item-detail">@current.Detail</span>
+                        }
+                    </label>
+                </div>
+
+                <div id="@statusId" class="run-item-status">
+                    @if (current.Tick is ChecklistTickView tick)
+                    {
+                        <span>@TickText(current, tick)</span>
+                        @if (!string.IsNullOrEmpty(tick.Note))
+                        {
+                            <span class="run-item-note">"@tick.Note"</span>
+                        }
+                    }
+                    else
+                    {
+                        <span>Not done yet</span>
+                    }
+                </div>
+
+                @if (canTick && current.Response == ChecklistResponse.Number)
+                {
+                    <div class="run-item-input">
+                        <label for="@($"reading-{current.ItemId:N}")">Reading@(string.IsNullOrEmpty(current.Unit) ? "" : $" ({current.Unit})")</label>
+                        <input id="@($"reading-{current.ItemId:N}")" type="number" step="0.01" inputmode="decimal" class="run-input"
+                               value="@Readings.GetValueOrDefault(current.ItemId)"
+                               @onchange="@(e => Readings[current.ItemId] = e.Value?.ToString() ?? string.Empty)" />
+                    </div>
+                }
+                else if (canTick && current.Response == ChecklistResponse.TickWithNote)
+                {
+                    <div class="run-item-input">
+                        <label for="@($"note-{current.ItemId:N}")">Note (optional)</label>
+                        <input id="@($"note-{current.ItemId:N}")" type="text" maxlength="@ChecklistRules.MaxNoteLength" class="run-input"
+                               value="@Notes.GetValueOrDefault(current.ItemId)"
+                               @onchange="@(e => Notes[current.ItemId] = e.Value?.ToString() ?? string.Empty)" />
+                    </div>
+                }
+            </li>
+        }
+    </ul>
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public required ChecklistRunView Run { get; set; }
+
+    // The signed-in person, for "you can take back your own tick".
+    [Parameter]
+    public string? CurrentUserId { get; set; }
+
+    // Ticking and unticking switched on (staff page, manager on today).
+    [Parameter]
+    public bool Interactive { get; set; }
+
+    // Managers may take back anyone's tick.
+    [Parameter]
+    public bool CanUndoAnyone { get; set; }
+
+    [Parameter]
+    public bool IsToday { get; set; } = true;
+
+    [Parameter]
+    public EventCallback<(ChecklistItemView Item, string? Note, decimal? Reading)> OnTick { get; set; }
+
+    [Parameter]
+    public EventCallback<ChecklistTickView> OnUndo { get; set; }
+
+    private readonly Dictionary<Guid, string> Notes = [];
+    private readonly Dictionary<Guid, string> Readings = [];
+    private readonly HashSet<Guid> busy = [];
+
+    // Bumped after every toggle so each checkbox is rebuilt from the data: a refused tick must not
+    // leave the browser's own checkbox showing as ticked.
+    private int revision;
+
+    private string HeadingId => $"run-{Run.RunId:N}";
+
+    private string DueText => Run.DueUtc is DateTime due
+        ? $"Due {RotaTime.ToVenueLocal(due).ToString("HH:mm", RotaFormat.Uk)}"
+        : "No set time";
+
+    private async Task OnToggleAsync(ChecklistItemView item, bool isChecked)
+    {
+        busy.Add(item.ItemId);
+
+        try
+        {
+            if (isChecked && item.Tick is null)
+            {
+                decimal? reading = null;
+
+                if (item.Response == ChecklistResponse.Number
+                    && decimal.TryParse(Readings.GetValueOrDefault(item.ItemId), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out decimal parsed))
+                {
+                    reading = parsed;
+                }
+
+                await OnTick.InvokeAsync((item, Notes.GetValueOrDefault(item.ItemId), reading));
+            }
+            else if (!isChecked && item.Tick is ChecklistTickView tick)
+            {
+                await OnUndo.InvokeAsync(tick);
+            }
+        }
+        finally
+        {
+            busy.Remove(item.ItemId);
+            revision++;
+        }
+    }
+
+    private static string TickText(ChecklistItemView item, ChecklistTickView tick)
+    {
+        string when = RotaTime.ToVenueLocal(tick.CompletedUtc).ToString("HH:mm", RotaFormat.Uk);
+        string where = tick.Method == ChecklistCompletionMethod.Terminal ? " on the terminal" : string.Empty;
+        string reading = tick.Reading is decimal value ? $": {value.ToString("0.##", RotaFormat.Uk)}{(string.IsNullOrEmpty(item.Unit) ? "" : " " + item.Unit)}" : string.Empty;
+
+        return $"Ticked by {tick.Name} at {when}{where}{reading}";
+    }
+}

@@ -1941,5 +1941,47 @@ namespace Lanyard.Tests.Services.Clients
 
             CollectionAssert.AreEqual(new[] { 4 }, published, "DmxEnabled on the Clients page comes from these devices.");
         }
+
+        [TestMethod]
+        public async Task SetClientPartyRoomAsync_TidiesTheRoom_AndBlankClearsIt()
+        {
+            var options = GetInMemoryOptions();
+            (_, _, Guid clientId) = await SeedClientWithLocationsAsync(options);
+            ClientService service = GetService(options);
+
+            Assert.IsTrue((await service.SetClientPartyRoomAsync(clientId, "  Room   2 ")).IsSuccess);
+            await using (var ctx = new ApplicationDbContext(options))
+            {
+                Assert.AreEqual("Room 2", (await ctx.Clients.SingleAsync()).PartyRoom);
+            }
+
+            Assert.IsTrue((await service.SetClientPartyRoomAsync(clientId, "   ")).IsSuccess);
+            await using (var ctx = new ApplicationDbContext(options))
+            {
+                Assert.IsNull((await ctx.Clients.SingleAsync()).PartyRoom);
+            }
+
+            Assert.IsFalse((await service.SetClientPartyRoomAsync(clientId, new string('x', 101))).IsSuccess);
+        }
+
+        [TestMethod]
+        public async Task UpdateClientAsync_LeavesThePartyRoomAlone()
+        {
+            var options = GetInMemoryOptions();
+            (_, _, Guid clientId) = await SeedClientWithLocationsAsync(options);
+            ClientService service = GetService(options);
+
+            // A copy loaded before the room was set, as the hub holds on connect.
+            Client stale = (await service.GetClientFromIdAsync(clientId)).Data!;
+            await service.SetClientPartyRoomAsync(clientId, "Room 2");
+
+            stale.Name = "Renamed";
+            await service.UpdateClientAsync(stale);
+
+            await using var ctx = new ApplicationDbContext(options);
+            Client saved = await ctx.Clients.SingleAsync();
+            Assert.AreEqual("Renamed", saved.Name);
+            Assert.AreEqual("Room 2", saved.PartyRoom);
+        }
     }
 }

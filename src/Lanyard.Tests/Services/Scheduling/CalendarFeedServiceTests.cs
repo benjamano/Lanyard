@@ -1,3 +1,4 @@
+using Lanyard.Tests.TestUtilities;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
@@ -211,7 +212,7 @@ public class CalendarFeedServiceTests
 
         await using (ApplicationDbContext ctx = new(options))
         {
-            ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = company.Id, Feature = CompanyFeature.StaffScheduling, IsEnabled = false });
+            await TestFeatures.SwitchOffForCompanyAsync(ctx, company.Id, CompanyFeature.StaffScheduling);
             await ctx.SaveChangesAsync();
         }
 
@@ -357,7 +358,7 @@ public class CalendarFeedServiceTests
 
         await using (ApplicationDbContext ctx = new(options))
         {
-            ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = company.Id, Feature = CompanyFeature.StaffScheduling, IsEnabled = false });
+            await TestFeatures.SwitchOffForCompanyAsync(ctx, company.Id, CompanyFeature.StaffScheduling);
             await ctx.SaveChangesAsync();
         }
 
@@ -365,8 +366,7 @@ public class CalendarFeedServiceTests
 
         await using (ApplicationDbContext ctx = new(options))
         {
-            ctx.CompanyFeatureSettings.RemoveRange(ctx.CompanyFeatureSettings);
-            await ctx.SaveChangesAsync();
+            await TestFeatures.SwitchOnEverywhereAsync(ctx);
         }
 
         Assert.AreEqual(1, EventCount(await FeedBodyAsync(service, token)));

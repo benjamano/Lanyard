@@ -1,0 +1,243 @@
+@page "/manage/checklists"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.Checklists)]
+
+@using Lanyard.Application.Services.Checklists
+
+@inject IChecklistService _checklistService
+
+<PageTitle>Checklists</PageTitle>
+
+<div class="checklists-page">
+    <div class="checklists-header">
+        <div class="checklists-heading">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Checklists</FluentText>
+            <FluentText Class="checklists-intro">
+                Routines this location runs, such as Opening and Closing. Staff on shift tick the tasks off on their phone or the
+                clock-in terminal, and Lanyard records who did each one and when.
+            </FluentText>
+        </div>
+        <HelpButton AreaKey="@HelpRegistry.ManageChecklists" Topic="setup" />
+    </div>
+
+    <div class="checklists-toolbar">
+        @if (locationOptions.Count > 1)
+        {
+            <FluentSelect TOption="LocationOption" TValue="string" Items="@locationOptions" OptionText="@(x => x.Name)"
+                          OptionValue="@(x => x.Id.ToString())" Value="@locationId?.ToString()" ValueChanged="@OnLocationChanged"
+                          Label="Location" Width="260px" />
+        }
+        <FluentCheckbox Label="Show archived" Value="@showArchived" ValueChanged="@OnShowArchivedChanged" />
+        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Add())"
+                      Disabled="@(checklists is null)" OnClick="@NewChecklist">
+            New checklist
+        </FluentButton>
+    </div>
+
+    @if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else if (checklists is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" HorizontalGap="8">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else if (checklists.Count == 0)
+    {
+        <FluentCard Height="auto">
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                <FluentText Weight="TextWeight.Semibold">No checklists yet</FluentText>
+                <FluentText>
+                    Add one for each routine, for example "Opening" due 15 minutes after opening, or "Closing" due at closing time.
+                    Then add its tasks in the order they're done.
+                </FluentText>
+            </FluentStack>
+        </FluentCard>
+    }
+    else
+    {
+        <ul class="checklist-list" aria-label="Checklists">
+            @foreach (Checklist checklist in checklists)
+            {
+                <li class="checklist-item @(checklist.IsActive ? "" : "checklist-archived")">
+                    <div class="checklist-info">
+                        <div class="checklist-title">
+                            <a class="checklist-name" href="@($"/manage/checklists/{checklist.Id}")">@checklist.Name</a>
+                            @if (!checklist.IsActive)
+                            {
+                                <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Subtle">Archived</FluentBadge>
+                            }
+                        </div>
+                        <div class="checklist-meta">
+                            <span>@ChecklistRules.DaysLabel(checklist.Days)</span>
+                            <span aria-hidden="true">·</span>
+                            <span>@ChecklistRules.DueLabel(checklist)</span>
+                            <span aria-hidden="true">·</span>
+                            <span>@TaskCount(checklist)</span>
+                        </div>
+                        @if (checklist.StaffPosition is StaffPosition position)
+                        {
+                            <div class="checklist-meta">Only @position.Name, Managers and Admins can tick it</div>
+                        }
+                    </div>
+                    <div class="checklist-actions">
+                        @if (checklist.IsActive)
+                        {
+                            <FluentButton IconStart="@(new Icons.Regular.Size16.Edit())" Title="@($"Edit {checklist.Name}")"
+                                          aria-label="@($"Edit {checklist.Name}")" Disabled="@isBusy"
+                                          OnClick="@(() => _navigationManager.NavigateTo($"/manage/checklists/{checklist.Id}"))" />
+                            <FluentButton IconStart="@(new Icons.Regular.Size16.Archive())" Title="@($"Archive {checklist.Name}")"
+                                          aria-label="@($"Archive {checklist.Name}")" Disabled="@isBusy"
+                                          OnClick="@(() => SetArchivedAsync(checklist, true))" />
+                        }
+                        else
+                        {
+                            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size16.ArrowUndo())"
+                                          Disabled="@isBusy" OnClick="@(() => SetArchivedAsync(checklist, false))">Restore</FluentButton>
+                        }
+                    </div>
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    private record LocationOption(int Id, string Name);
+
+    [SupplyParameterFromQuery(Name = "location")]
+    public int? LocationQuery { get; set; }
+
+    private LocationScope? scope;
+    private List<LocationOption> locationOptions = [];
+    private int? locationId;
+    private bool showArchived;
+    private List<Checklist>? checklists;
+    private string? loadError;
+    private bool isBusy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            loadError = $"Couldn't work out which location you're signed in to: {scopeResult.Error}";
+            return;
+        }
+
+        scope = scopeResult.Data;
+
+        // Same rule as the rota: a Manager looks after the location they signed in under; an
+        // Admin may pick any active location.
+        if (scope.IsAdmin)
+        {
+            Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsAsync();
+
+            locationOptions = locationsResult.IsSuccess && locationsResult.Data is not null
+                ? locationsResult.Data.OrderBy(l => l.GetDisplayName()).Select(l => new LocationOption(l.Id, l.GetDisplayName())).ToList()
+                : [];
+        }
+        else if (scope.LocationId is int own)
+        {
+            locationOptions = [new LocationOption(own, scope.LocationDisplayName ?? "Your location")];
+        }
+
+        locationId = LocationQuery is int requested && locationOptions.Any(l => l.Id == requested)
+            ? requested
+            : scope.LocationId is int signedIn && locationOptions.Any(l => l.Id == signedIn)
+                ? signedIn
+                : locationOptions.FirstOrDefault()?.Id;
+
+        if (locationId is null)
+        {
+            loadError = "There are no active locations to set up checklists for yet.";
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (scope is null || locationId is not int location)
+        {
+            return;
+        }
+
+        Result<List<Checklist>> result = await _checklistService.GetChecklistsAsync(scope, location, showArchived);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            loadError = result.Error;
+            checklists = null;
+            return;
+        }
+
+        loadError = null;
+        checklists = result.Data;
+    }
+
+    private async Task OnLocationChanged(string? value)
+    {
+        if (int.TryParse(value, out int id) && id != locationId)
+        {
+            locationId = id;
+            checklists = null;
+            _navigationManager.NavigateTo($"/manage/checklists?location={id}", replace: true);
+            await LoadAsync();
+        }
+    }
+
+    private async Task OnShowArchivedChanged(bool value)
+    {
+        showArchived = value;
+        await LoadAsync();
+    }
+
+    private void NewChecklist()
+    {
+        if (locationId is int location)
+        {
+            _navigationManager.NavigateTo($"/manage/checklists/new?location={location}");
+        }
+    }
+
+    private async Task SetArchivedAsync(Checklist checklist, bool archived)
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            _toastService.ShowError("Couldn't confirm who you are - try reloading the page.");
+            return;
+        }
+
+        isBusy = true;
+        Result<bool> result = await _checklistService.SetArchivedAsync(scope, checklist.Id, archived, actingUser.Data);
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Couldn't change {checklist.Name}: {result.Error}");
+            return;
+        }
+
+        _toastService.ShowSuccess(archived
+            ? $"{checklist.Name} archived. Staff won't see it any more, and its history stays."
+            : $"{checklist.Name} restored.");
+
+        await LoadAsync();
+    }
+
+    private static string TaskCount(Checklist checklist) =>
+        checklist.Tasks.Count == 1 ? "1 task" : $"{checklist.Tasks.Count} tasks";
+}

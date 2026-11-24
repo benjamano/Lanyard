@@ -18,6 +18,7 @@ protection matters is **Benjamin Mercer, benmercer76@btinternet.com**.
 |---|---|---|
 | Staff account | Username, email, first/last name, date of birth, preferred language, hashed password | `UserProfile` |
 | Staff attendance | Clock-in/out times, shifts, rota assignments | ClockIn / Shift / Rota records |
+| Location checklists | Which opening, closing and other checklist tasks someone ticked, when, where (phone or clock-in terminal), and any note or reading they entered | Checklist completion records |
 | Device/network | Client device IP addresses, MAC/physical addresses of network interfaces | `Client`, network interface records |
 | Staff documents | Right-to-work checks, identity documents, DBS checks, certificates, with their expiry and reminder dates | `StaffDocument` rows and the uploaded files |
 | Training | Course assignments, progress, quiz attempts and certificates | Course assignment records |
@@ -40,6 +41,7 @@ birth** is collected for staff; if any data subjects are minors, additional safe
 |---|---|
 | Managing staff accounts and access control | Contract / legitimate interests |
 | Recording working time (clock-in, shifts, rota) | Legal obligation (employment records) / contract |
+| Recording who completed location checklists (opening, closing, safety checks) | Legitimate interests (running the venue safely) / contract |
 | Checking the right to work, identity, DBS and qualifications (staff documents) | Legal obligation (right-to-work checks) / contract; criminal-record data under the relevant Schedule 1 condition of the Data Protection Act 2018 |
 | Training, time off, chat and notifications | Contract / legitimate interests |
 | Operating and securing venue devices and the network | Legitimate interests |

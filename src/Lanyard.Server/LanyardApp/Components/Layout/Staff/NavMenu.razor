@@ -38,6 +38,30 @@
                 Home
             </FluentNavItem>
 
+            @if (Has(CompanyFeature.Training))
+            {
+                <FluentNavItem Href="/training" IconRest="@(new Icons.Regular.Size20.BookOpen())"
+                               IconActive="@(new Icons.Filled.Size20.BookOpen())">
+                    My Training
+                </FluentNavItem>
+            }
+
+            @if (Has(CompanyFeature.StaffScheduling))
+            {
+                <FluentNavItem Href="/rota" IconRest="@(new Icons.Regular.Size20.CalendarLtr())"
+                               IconActive="@(new Icons.Filled.Size20.CalendarLtr())" Match="NavLinkMatch.All">
+                    My Shifts
+                </FluentNavItem>
+            }
+
+            @if (Has(CompanyFeature.Checklists) && Has(CompanyFeature.StaffScheduling))
+            {
+                <FluentNavItem Href="/checklists" IconRest="@(new Icons.Regular.Size20.TaskListLtr())"
+                               IconActive="@(new Icons.Filled.Size20.TaskListLtr())" Match="NavLinkMatch.All">
+                    Checklists
+                </FluentNavItem>
+            }
+
             @if (Has(CompanyFeature.Chat))
             {
                 <FluentNavItem Href="/chat" IconRest="@(new Icons.Regular.Size20.Chat())"
@@ -192,6 +216,11 @@
                         <FluentNavItem Href="/manage/rota/staff">Staff</FluentNavItem>
                         <FluentNavItem Href="/manage/rota/positions">Positions</FluentNavItem>
                         <FluentNavItem Href="/manage/rota/templates">Shift Templates</FluentNavItem>
+                        @if (Has(CompanyFeature.Checklists))
+                        {
+                            <FluentNavItem Href="/manage/checklists/today">Checklists Today</FluentNavItem>
+                            <FluentNavItem Href="/manage/checklists" Match="NavLinkMatch.All">Checklists</FluentNavItem>
+                        }
                         <FluentNavItem Href="/manage/rota/holidays">Holidays</FluentNavItem>
                         <FluentNavItem Href="/manage/rota/time-off/types">Time Off Types</FluentNavItem>
                         <FluentNavItem Href="/manage/rota/terminals">Clock-In Terminals</FluentNavItem>
@@ -375,7 +404,7 @@
     private int _openAlerts;
     private Lanyard.Application.Services.OperationsAlerts.OperationsAlertViewer? _alertViewer;
 
-    // Modules this user's company doesn't have (CompanyFeatureService). Read once per circuit, like
+    // Modules this user's location doesn't have (CompanyFeatureService). Read once per circuit, like
     // the roles above, so a switch flipped mid-session shows here after a reload; the route gate
     // blocks the pages straight away regardless.
     private IReadOnlySet<CompanyFeature> _hiddenFeatures = new HashSet<CompanyFeature>();

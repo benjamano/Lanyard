@@ -1,0 +1,14 @@
+.automation-test-actions {
+    margin: 6px 0 0;
+    padding-left: 22px;
+}
+
+.automation-test-actions li {
+    margin-bottom: 4px;
+    overflow-wrap: anywhere;
+}
+
+.automation-test-hint {
+    font-size: 0.85rem;
+    color: var(--neutral-foreground-hint);
+}

@@ -117,7 +117,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<StaffDocumentType> StaffDocumentTypes { get; set; }
         public DbSet<StaffDocument> StaffDocuments { get; set; }
         public DbSet<CompanyOnboardingSettings> CompanyOnboardingSettings { get; set; }
-        public DbSet<CompanyFeatureSetting> CompanyFeatureSettings { get; set; }
+        public DbSet<LocationFeatureSetting> LocationFeatureSettings { get; set; }
         public DbSet<CompanyOnboardingStandingAttachment> CompanyOnboardingStandingAttachments { get; set; }
         public DbSet<StaffPosition> StaffPositions { get; set; }
         public DbSet<UserPosition> UserPositions { get; set; }
@@ -133,6 +133,11 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<TemplateSuggestionRun> TemplateSuggestionRuns { get; set; }
         public DbSet<RotaHoliday> RotaHolidays { get; set; }
         public DbSet<OperationsAlert> OperationsAlerts { get; set; }
+        public DbSet<Checklist> Checklists { get; set; }
+        public DbSet<ChecklistTask> ChecklistTasks { get; set; }
+        public DbSet<ChecklistRun> ChecklistRuns { get; set; }
+        public DbSet<ChecklistRunItem> ChecklistRunItems { get; set; }
+        public DbSet<ChecklistCompletion> ChecklistCompletions { get; set; }
         public DbSet<CompanySchedulingSettings> CompanySchedulingSettings { get; set; }
         public DbSet<Shift> Shifts { get; set; }
         public DbSet<ClockInTerminal> ClockInTerminals { get; set; }
@@ -301,6 +306,7 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasValue<AutomationRuleStatusWidget>(WidgetType.AutomationRuleStatus)
                 .HasValue<KioskHealthWidget>(WidgetType.KioskHealth)
                 .HasValue<OperationsAlertsWidget>(WidgetType.OperationsAlerts)
+                .HasValue<ChecklistsTodayWidget>(WidgetType.ChecklistsToday)
                 .HasValue<HallOfFameWidget>(WidgetType.HallOfFame)
                 .HasValue<MyTrainingWidget>(WidgetType.MyTraining)
                 .HasValue<GreetingWidget>(WidgetType.Greeting)
@@ -527,16 +533,16 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasForeignKey(x => x.FileMetadataId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // At most one switch per feature per company. Cascade: a company's switches mean
+            // At most one switch per feature per location. Cascade: a location's switches mean
             // nothing without it.
-            modelBuilder.Entity<CompanyFeatureSetting>()
-                .HasIndex(x => new { x.CompanyId, x.Feature })
+            modelBuilder.Entity<LocationFeatureSetting>()
+                .HasIndex(x => new { x.LocationId, x.Feature })
                 .IsUnique();
 
-            modelBuilder.Entity<CompanyFeatureSetting>()
-                .HasOne(x => x.Company)
+            modelBuilder.Entity<LocationFeatureSetting>()
+                .HasOne(x => x.Location)
                 .WithMany()
-                .HasForeignKey(x => x.CompanyId)
+                .HasForeignKey(x => x.LocationId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             // Staff scheduling. Same (CompanyId, Name) uniqueness as StaffDocumentType.
@@ -676,6 +682,70 @@ namespace Lanyard.Infrastructure.DataAccess
                 .WithMany()
                 .HasForeignKey(x => x.LocationId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Location checklists. A checklist and its tasks are configuration, archived rather than
+            // deleted. A run is one checklist on one venue day (made once, so the unique index makes
+            // two people opening it at the same moment share a run); its items are the tasks copied
+            // as they were, and its completions are the ticks, at most one live tick per item.
+            modelBuilder.Entity<Checklist>(entity =>
+            {
+                entity.HasIndex(x => new { x.LocationId, x.IsActive });
+                entity.Property(x => x.Name).HasMaxLength(ChecklistRules.MaxNameLength);
+                entity.Property(x => x.Description).HasMaxLength(ChecklistRules.MaxDescriptionLength);
+                entity.HasOne(x => x.Location).WithMany().HasForeignKey(x => x.LocationId).OnDelete(DeleteBehavior.Restrict);
+
+                // A position in use can only be archived, never deleted, so Restrict never blocks.
+                entity.HasOne(x => x.StaffPosition).WithMany().HasForeignKey(x => x.StaffPositionId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasMany(x => x.Tasks).WithOne(x => x.Checklist).HasForeignKey(x => x.ChecklistId).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<ChecklistTask>(entity =>
+            {
+                entity.HasIndex(x => new { x.ChecklistId, x.SortOrder });
+                entity.Property(x => x.Title).HasMaxLength(ChecklistRules.MaxTaskTitleLength);
+                entity.Property(x => x.Detail).HasMaxLength(ChecklistRules.MaxTaskDetailLength);
+                entity.Property(x => x.Unit).HasMaxLength(ChecklistRules.MaxUnitLength);
+            });
+
+            modelBuilder.Entity<ChecklistRun>(entity =>
+            {
+                entity.HasIndex(x => new { x.ChecklistId, x.VenueDate }).IsUnique();
+
+                // Today's board and the history read a location's runs by date.
+                entity.HasIndex(x => new { x.LocationId, x.VenueDate });
+                entity.Property(x => x.Name).HasMaxLength(ChecklistRules.MaxNameLength);
+                entity.HasOne(x => x.Location).WithMany().HasForeignKey(x => x.LocationId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.Checklist).WithMany().HasForeignKey(x => x.ChecklistId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasMany(x => x.Items).WithOne(x => x.Run).HasForeignKey(x => x.RunId).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<ChecklistRunItem>(entity =>
+            {
+                entity.Property(x => x.Title).HasMaxLength(ChecklistRules.MaxTaskTitleLength);
+                entity.Property(x => x.Detail).HasMaxLength(ChecklistRules.MaxTaskDetailLength);
+                entity.Property(x => x.Unit).HasMaxLength(ChecklistRules.MaxUnitLength);
+                entity.HasOne(x => x.Task).WithMany().HasForeignKey(x => x.TaskId).OnDelete(DeleteBehavior.SetNull);
+                // Restrict, not Cascade: today's untouched run is rebuilt when its checklist changes
+                // (ChecklistRunStore.EnsureRunsAsync), and a tick saved in the moment between "untouched"
+                // and the rebuild must make the rebuild fail rather than be deleted along with its item.
+                entity.HasMany(x => x.Completions).WithOne(x => x.RunItem).HasForeignKey(x => x.RunItemId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<ChecklistCompletion>(entity =>
+            {
+                // One live tick per task: two people ticking at once can't both win.
+                entity.HasIndex(x => x.RunItemId)
+                    .IsUnique()
+                    .HasFilter("\"IsActive\"");
+                entity.Property(x => x.Note).HasMaxLength(ChecklistRules.MaxNoteLength);
+                entity.Property(x => x.Reading).HasPrecision(9, 2);
+
+                // ScheduleRetention moves ticks to the deleted-user placeholder before an account
+                // goes, so Restrict never actually blocks a deletion.
+                entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.UndoneByUser).WithMany().HasForeignKey(x => x.UndoneByUserId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.ClockInTerminal).WithMany().HasForeignKey(x => x.ClockInTerminalId).OnDelete(DeleteBehavior.SetNull);
+            });
 
             // The latest run for a location is what the banner reads.
             modelBuilder.Entity<TemplateSuggestionRun>()
@@ -1433,6 +1503,9 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<UserPosition>().HasQueryFilter(x => TenantFilterDisabled || x.StaffPosition!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<StaffPositionRequiredCourse>().HasQueryFilter(x => TenantFilterDisabled || x.StaffPosition!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ShiftTemplateSlot>().HasQueryFilter(x => TenantFilterDisabled || x.ShiftTemplate!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ChecklistTask>().HasQueryFilter(x => TenantFilterDisabled || x.Checklist!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ChecklistRunItem>().HasQueryFilter(x => TenantFilterDisabled || x.Run!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ChecklistCompletion>().HasQueryFilter(x => TenantFilterDisabled || x.RunItem!.Run!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ShiftTemplateSlotRegular>().HasQueryFilter(x => TenantFilterDisabled || x.ShiftTemplateSlot!.ShiftTemplate!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ChatMember>().HasQueryFilter(x => TenantFilterDisabled || x.Conversation!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ChatMessage>().HasQueryFilter(x => TenantFilterDisabled || x.Conversation!.CompanyId == TenantCompanyId);
