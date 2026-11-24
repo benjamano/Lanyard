@@ -91,7 +91,7 @@ public class RotaAutoBuildService(
             List<PartyBooking> parties = [];
             List<PartyStaffingRule> partyRules = [];
 
-            if (await CompanyFeatureQueries.IsEnabledForCompanyAsync(ctx, location.CompanyId, CompanyFeature.Parties))
+            if (await CompanyFeatureQueries.IsEnabledForLocationAsync(ctx, location.Id, CompanyFeature.Parties))
             {
                 partyRules = (await PartyStaffingService.ForLocation(ctx, locationId).ToListAsync())
                     .Where(x => x.StaffPosition is { IsActive: true })

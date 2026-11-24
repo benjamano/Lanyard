@@ -1,5 +1,6 @@
-@* Per-company module switches (what the company pays for). Each switch saves as soon as it's
-   flipped - there's no separate Save, so what's shown is always what staff get. *@
+@* Module switches per location (what each venue pays for). Each switch saves as soon as it's
+   flipped - there's no separate Save, so what's shown is always what staff get. Desktop shows a
+   feature x location grid; on a phone each feature stacks its locations underneath it. *@
 
 @inject ICompanyFeatureService CompanyFeatureService
 
@@ -9,31 +10,63 @@
             <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
                 <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">Features for @CompanyName</FluentText>
                 <FluentText Class="cfm-hint">
-                    Staff at this company only see the features switched on here. Turning one off hides it
-                    from the menu, the home screen and dashboards, and blocks its pages. Nothing is deleted,
-                    so switching it back on brings everything back. Admins always see every feature.
+                    Each location only gets the features switched on for it here, and a new location starts
+                    with everything off. Turning a feature off hides it from that location's menu, home screen
+                    and dashboards, and blocks its pages. Nothing is deleted, so switching it back on brings
+                    everything back. Admins always see every feature.
                 </FluentText>
             </FluentStack>
 
-            @if (_features is null)
+            @if (_grid is null)
             {
                 <FluentProgressBar />
             }
+            else if (_grid.Locations.Count == 0)
+            {
+                <FluentText Class="cfm-hint">Add a location above to choose its features.</FluentText>
+            }
             else
             {
-                @foreach (CompanyFeatureState state in _features)
-                {
-                    <div class="cfm-row" @key="state.Info.Feature">
-                        <div class="cfm-text">
-                            <FluentText Weight="TextWeight.Semibold">@state.Info.Name</FluentText>
-                            <FluentText Class="cfm-hint">@state.Info.Description</FluentText>
-                        </div>
-                        <FluentSwitch Value="@state.IsEnabled"
-                                      ValueChanged="@(value => SetEnabledAsync(state, value))"
-                                      Disabled="@(_saving == state.Info.Feature)"
-                                      aria-label="@($"{state.Info.Name} for {CompanyName}")" />
+                <div class="cfm-grid" role="table" aria-label="@($"Features for {CompanyName}")"
+                     style="@($"--cfm-locations: {_grid.Locations.Count}")">
+                    <div class="cfm-row cfm-head" role="row">
+                        <div class="cfm-feature" role="columnheader">Feature</div>
+                        @foreach (FeatureLocation location in _grid.Locations)
+                        {
+                            <div class="cfm-cell cfm-location-head" role="columnheader" @key="location.LocationId">
+                                <FluentText Weight="TextWeight.Semibold">@location.Name</FluentText>
+                                @if (!AllOn(location))
+                                {
+                                    <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small"
+                                                  Disabled="@(_saving is not null || _savingAll is not null)"
+                                                  OnClick="@(() => SwitchAllOnAsync(location))">
+                                        All on
+                                    </FluentButton>
+                                }
+                            </div>
+                        }
                     </div>
-                }
+
+                    @foreach (CompanyFeatureInfo feature in _grid.Features)
+                    {
+                        <div class="cfm-row" role="row" @key="feature.Feature">
+                            <div class="cfm-feature" role="rowheader">
+                                <FluentText Weight="TextWeight.Semibold">@feature.Name</FluentText>
+                                <FluentText Class="cfm-hint">@feature.Description</FluentText>
+                            </div>
+                            @foreach (FeatureLocation location in _grid.Locations)
+                            {
+                                <div class="cfm-cell" role="cell" @key="location.LocationId">
+                                    <span class="cfm-cell-label">@location.Name</span>
+                                    <FluentSwitch Value="@_grid.IsEnabled(location.LocationId, feature.Feature)"
+                                                  ValueChanged="@(value => SetEnabledAsync(location, feature, value))"
+                                                  Disabled="@(_saving == (location.LocationId, feature.Feature) || _savingAll == location.LocationId)"
+                                                  aria-label="@($"{feature.Name} at {location.Name}")" />
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
             }
         </FluentStack>
     </FluentCard>
@@ -46,59 +79,109 @@
     [Parameter, EditorRequired]
     public string CompanyName { get; set; } = string.Empty;
 
-    private List<CompanyFeatureState>? _features;
-    private CompanyFeature? _saving;
-    private int _loadedCompanyId;
+    // Bumped by the page when a location is added or deactivated, so the columns reload.
+    [Parameter]
+    public int LocationsVersion { get; set; }
+
+    private CompanyFeatureGrid? _grid;
+    private (int LocationId, CompanyFeature Feature)? _saving;
+    private int? _savingAll;
+    private (int CompanyId, int Version)? _loadedFor;
 
     protected override async Task OnParametersSetAsync()
     {
-        if (_features is not null && _loadedCompanyId == CompanyId)
+        if (_grid is not null && _loadedFor == (CompanyId, LocationsVersion))
         {
             return;
         }
 
-        _features = null;
-        _loadedCompanyId = CompanyId;
+        _grid = null;
+        _loadedFor = (CompanyId, LocationsVersion);
 
-        Result<List<CompanyFeatureState>> result = await CompanyFeatureService.GetFeaturesAsync(CompanyId);
+        Result<CompanyFeatureGrid> result = await CompanyFeatureService.GetFeatureGridAsync(CompanyId);
 
         if (!result.IsSuccess)
         {
             _toastService.ShowError($"Failed to load features: {result.Error}");
-            _features = [];
+            _grid = new CompanyFeatureGrid([], [], []);
             return;
         }
 
-        _features = result.Data!;
+        _grid = result.Data!;
     }
 
-    private async Task SetEnabledAsync(CompanyFeatureState state, bool isEnabled)
+    private bool AllOn(FeatureLocation location) =>
+        _grid is not null && _grid.Features.All(x => _grid.IsEnabled(location.LocationId, x.Feature));
+
+    private async Task<Result<bool>> SaveAsync(FeatureLocation location, CompanyFeature feature, bool isEnabled)
     {
-        if (_features is null || state.IsEnabled == isEnabled)
-        {
-            return;
-        }
-
-        _saving = state.Info.Feature;
-
         Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
         Result<string> userId = await _securityService.GetCurrentUserIdAsync();
 
         Result<bool> result = scope.IsSuccess
-            ? await CompanyFeatureService.SetFeatureEnabledAsync(scope.Data!, CompanyId, state.Info.Feature, isEnabled, userId.Data)
+            ? await CompanyFeatureService.SetFeatureEnabledAsync(scope.Data!, location.LocationId, feature, isEnabled, userId.Data)
             : Result<bool>.Fail(scope.Error ?? "Couldn't work out who you are.");
+
+        if (result.IsSuccess)
+        {
+            if (isEnabled)
+            {
+                _grid!.Enabled.Add((location.LocationId, feature));
+            }
+            else
+            {
+                _grid!.Enabled.Remove((location.LocationId, feature));
+            }
+        }
+
+        return result;
+    }
+
+    private async Task SetEnabledAsync(FeatureLocation location, CompanyFeatureInfo feature, bool isEnabled)
+    {
+        if (_grid is null || _grid.IsEnabled(location.LocationId, feature.Feature) == isEnabled)
+        {
+            return;
+        }
+
+        _saving = (location.LocationId, feature.Feature);
+
+        Result<bool> result = await SaveAsync(location, feature.Feature, isEnabled);
 
         _saving = null;
 
         if (!result.IsSuccess)
         {
-            _toastService.ShowError($"Failed to update {state.Info.Name}: {result.Error}");
+            _toastService.ShowError($"Failed to update {feature.Name} at {location.Name}: {result.Error}");
             return;
         }
 
-        int index = _features.IndexOf(state);
-        _features[index] = state with { IsEnabled = isEnabled };
+        _toastService.ShowSuccess($"{feature.Name} turned {(isEnabled ? "on" : "off")} at {location.Name}.");
+    }
 
-        _toastService.ShowSuccess($"{state.Info.Name} turned {(isEnabled ? "on" : "off")} for {CompanyName}.");
+    private async Task SwitchAllOnAsync(FeatureLocation location)
+    {
+        if (_grid is null)
+        {
+            return;
+        }
+
+        _savingAll = location.LocationId;
+
+        foreach (CompanyFeatureInfo feature in _grid.Features.Where(x => !_grid.IsEnabled(location.LocationId, x.Feature)).ToList())
+        {
+            Result<bool> result = await SaveAsync(location, feature.Feature, true);
+
+            if (!result.IsSuccess)
+            {
+                _savingAll = null;
+                _toastService.ShowError($"Failed to turn on {feature.Name} at {location.Name}: {result.Error}");
+                return;
+            }
+        }
+
+        _savingAll = null;
+
+        _toastService.ShowSuccess($"Every feature is on at {location.Name}.");
     }
 }

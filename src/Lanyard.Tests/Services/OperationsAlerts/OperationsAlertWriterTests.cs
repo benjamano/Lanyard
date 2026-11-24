@@ -1,3 +1,4 @@
+using Lanyard.Tests.TestUtilities;
 using Lanyard.Application.Services.OperationsAlerts;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
@@ -183,7 +184,7 @@ public class OperationsAlertWriterTests
 
         await using (ApplicationDbContext ctx = new(h.Options))
         {
-            ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = h.Company.Id, Feature = CompanyFeature.OperationsAlerts, IsEnabled = false });
+            await TestFeatures.SwitchOffForCompanyAsync(ctx, h.Company.Id, CompanyFeature.OperationsAlerts);
             await ctx.SaveChangesAsync();
         }
 

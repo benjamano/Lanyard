@@ -1054,5 +1054,28 @@
       "The Automation rule list now fits on a phone: each rule's name shows in full with its kiosk and trigger underneath, instead of being cut short with the switch and buttons off the side of the screen.",
       "The Edit and Delete buttons on Automation, and the rule names in the Execution Log, now work with the keyboard and screen readers and show what they do when you hover over them."
     ]
+  },
+  {
+    "version": "1.4.32",
+    "releaseDate": "2026-11-22",
+    "summary": "Managers can now build and edit dashboards, and dashboards get groundwork for the new drag-and-drop designer.",
+    "details": [
+      "Managers can now create, edit and delete dashboards, not just Admins.",
+      "Fixed the Text Area widget being editable on home screens and kiosk displays. It now only shows its text there, and is edited in the dashboard editor.",
+      "Fixed editing a Text Area widget saving the dashboard's unfinished layout. Nothing is saved until you press Save.",
+      "The dashboard editor's arrange buttons now push other widgets out of the way instead of overlapping them, and each widget has a Settings button (no more right-clicking).",
+      "A widget that fails to load now shows a short message instead of breaking the whole dashboard."
+    ]
+  },
+  {
+    "version": "1.4.33",
+    "releaseDate": "2026-11-22",
+    "summary": "Features are now switched on per location instead of per company.",
+    "details": [
+      "Features for on Companies & Locations now has a switch for every feature at every location. Staff only see the features switched on for the location they signed in to.",
+      "A new location starts with every feature off. Use All on under its name to switch everything on at once.",
+      "Every existing location keeps the features its company had, so nothing changes until you change it.",
+      "Company-wide things, such as calendar feeds, onboarding emails and audio clips in automation rules, work when at least one location has the feature."
+    ]
   }
 ]

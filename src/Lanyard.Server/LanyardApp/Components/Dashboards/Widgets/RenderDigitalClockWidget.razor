@@ -1,0 +1,12 @@
+@using Lanyard.App.Components.Home
+
+@* The clock itself is shared with the standard home page; this only adapts the widget's settings
+   to it, so every widget type renders through the same "Widget" parameter shape. *@
+<DigitalClock ShowMilliseconds="Widget.ShowMilliSeconds"
+              Is24HourFormat="Widget.Is24HourFormat"
+              ShowDate="Widget.ShowDate" />
+
+@code {
+    [Parameter]
+    public required DigitalClockWidget Widget { get; set; }
+}

@@ -117,7 +117,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<StaffDocumentType> StaffDocumentTypes { get; set; }
         public DbSet<StaffDocument> StaffDocuments { get; set; }
         public DbSet<CompanyOnboardingSettings> CompanyOnboardingSettings { get; set; }
-        public DbSet<CompanyFeatureSetting> CompanyFeatureSettings { get; set; }
+        public DbSet<LocationFeatureSetting> LocationFeatureSettings { get; set; }
         public DbSet<CompanyOnboardingStandingAttachment> CompanyOnboardingStandingAttachments { get; set; }
         public DbSet<StaffPosition> StaffPositions { get; set; }
         public DbSet<UserPosition> UserPositions { get; set; }
@@ -532,16 +532,16 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasForeignKey(x => x.FileMetadataId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // At most one switch per feature per company. Cascade: a company's switches mean
+            // At most one switch per feature per location. Cascade: a location's switches mean
             // nothing without it.
-            modelBuilder.Entity<CompanyFeatureSetting>()
-                .HasIndex(x => new { x.CompanyId, x.Feature })
+            modelBuilder.Entity<LocationFeatureSetting>()
+                .HasIndex(x => new { x.LocationId, x.Feature })
                 .IsUnique();
 
-            modelBuilder.Entity<CompanyFeatureSetting>()
-                .HasOne(x => x.Company)
+            modelBuilder.Entity<LocationFeatureSetting>()
+                .HasOne(x => x.Location)
                 .WithMany()
-                .HasForeignKey(x => x.CompanyId)
+                .HasForeignKey(x => x.LocationId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             // Staff scheduling. Same (CompanyId, Name) uniqueness as StaffDocumentType.

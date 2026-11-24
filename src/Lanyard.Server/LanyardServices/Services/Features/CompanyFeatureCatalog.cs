@@ -4,7 +4,7 @@ namespace Lanyard.Application.Services.Features;
 
 public record CompanyFeatureInfo(CompanyFeature Feature, string Name, string Description);
 
-// Display text for each switch on the Companies & Locations page, and the name used in the
+// Display text for each feature row on the Companies & Locations page, and the name used in the
 // "not available" message a blocked page shows. Every CompanyFeature member must be listed here
 // (CompanyFeatureCatalogTests checks it), or it gets no switch and can't be turned off.
 public static class CompanyFeatureCatalog
