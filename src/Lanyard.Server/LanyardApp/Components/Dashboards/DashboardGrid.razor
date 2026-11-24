@@ -6,6 +6,9 @@
    query, so the designer's phone preview collapses the same way inside a narrow frame. *@
 
 @inject ICompanyFeatureService CompanyFeatures
+@inject IWidgetVisibilityService WidgetVisibilityService
+@inject ILaserGameStatusStore LaserGameStatusStore
+@implements IDisposable
 
 <div class="dashboard-grid-container @(PhoneLayout ? null : "no-phone-layout")">
     <div class="dashboard-grid @(Fit ? "fit-to-screen" : null)" style="@GridStyle">
@@ -61,10 +64,22 @@
     // never gets to render (and load its data) in the meantime.
     private IReadOnlySet<CompanyFeature> _hiddenFeatures = System.Enum.GetValues<CompanyFeature>().ToHashSet();
 
+    private static readonly TimeSpan VisibilityRecheck = TimeSpan.FromSeconds(30);
+
+    private WidgetVisibilityLookups _visibilityLookups = WidgetVisibilityLookups.Empty;
+    private DateTime _visibilityNowUtc = DateTime.UtcNow;
+    private PeriodicTimer? _visibilityTimer;
+    private CancellationTokenSource? _visibilityCancellation;
+    private bool _watchingGames;
+
     private bool Fit => FitToScreen && PreviewMode;
 
+    // Checklists resolves the viewer's working location from their open time entry; its service applies that location's feature switch.
     private IEnumerable<DashboardWidget> VisibleWidgets => PreviewMode
-        ? Widgets.Where(w => CompanyFeatureCatalog.ForWidget(w.Type) is not CompanyFeature feature || !_hiddenFeatures.Contains(feature))
+        ? Widgets.Where(w => WidgetVisibilityService.IsShown(w, CompanyId ?? -1, _visibilityLookups, _visibilityNowUtc)
+            && (w is ChecklistsTodayWidget
+            || CompanyFeatureCatalog.ForWidget(w.Type) is not CompanyFeature feature
+            || !_hiddenFeatures.Contains(feature)))
         : Widgets;
 
     private string GridStyle
@@ -85,9 +100,90 @@
         _hiddenFeatures = await CompanyFeatures.GetHiddenFeaturesForCurrentUserAsync();
     }
 
-    protected override void OnParametersSet()
+    private bool AnyConditions => Widgets.Any(w => !string.IsNullOrWhiteSpace(w.ShowConditionsJson));
+
+    private async Task RefreshVisibilityAsync()
+    {
+        _visibilityNowUtc = DateTime.UtcNow;
+
+        if (!PreviewMode || !AnyConditions)
+        {
+            return;
+        }
+
+        Result<WidgetVisibilityLookups> lookups = await WidgetVisibilityService.LoadAsync(Widgets);
+        _visibilityLookups = lookups.Data ?? WidgetVisibilityLookups.Empty;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        _visibilityCancellation = new CancellationTokenSource();
+        _visibilityTimer = new PeriodicTimer(VisibilityRecheck);
+        _ = RecheckLoopAsync(_visibilityTimer, _visibilityCancellation.Token);
+
+        LaserGameStatusStore.OnStatusUpdated += OnGameStatusUpdated;
+        _watchingGames = true;
+    }
+
+    private async Task RecheckLoopAsync(PeriodicTimer timer, CancellationToken token)
+    {
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                if (!PreviewMode || !AnyConditions)
+                {
+                    continue;
+                }
+
+                await InvokeAsync(async () =>
+                {
+                    await RefreshVisibilityAsync();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+        {
+            // The dashboard closed.
+        }
+    }
+
+    private void OnGameStatusUpdated(Lanyard.Shared.DTO.LaserGameStatusDTO status)
+    {
+        if (!PreviewMode || !Widgets.Any(w => WidgetShowConditions.Parse(w.ShowConditionsJson).Any(c => c.ConditionType == AutomationConditionType.ClientGameStatus)))
+        {
+            return;
+        }
+
+        _ = InvokeAsync(() =>
+        {
+            _visibilityNowUtc = DateTime.UtcNow;
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        if (_watchingGames)
+        {
+            LaserGameStatusStore.OnStatusUpdated -= OnGameStatusUpdated;
+        }
+
+        _visibilityCancellation?.Cancel();
+        _visibilityCancellation?.Dispose();
+        _visibilityTimer?.Dispose();
+    }
+
+    protected override async Task OnParametersSetAsync()
     {
         ApplyLayout(DashboardLayoutEngine.Normalize(Widgets.Select(ToRect)));
+        await RefreshVisibilityAsync();
     }
 
     // Desktop order (top-to-bottom, then left-to-right) is the render order, and each widget's

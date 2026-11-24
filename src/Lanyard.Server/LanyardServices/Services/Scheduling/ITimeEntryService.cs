@@ -17,6 +17,10 @@ public interface ITimeEntryService
     Task<Result<ClockActionResult>> ClockByPinAsync(Guid terminalId, string userId, string pin);
     Task<Result<ClockActionResult>> ClockByQrAsync(string nonce, string userId, string? holdKey = null);
 
+    // Checks a person's PIN on a terminal without clocking them in or out (for ticking checklists).
+    // Same lockout as clocking in, and they must work at the terminal's location.
+    Task<Result<TerminalSession>> VerifyTerminalPinAsync(Guid terminalId, string userId, string pin);
+
     Task<Result<ClockState>> GetClockStateAsync(string userId);
 
     // A location's clocked entries and published shifts for a date range, paired up per person,

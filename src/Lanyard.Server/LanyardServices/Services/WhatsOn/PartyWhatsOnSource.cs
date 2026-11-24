@@ -17,7 +17,7 @@ public class PartyWhatsOnSource(IPartyBookingService partyBookingService, ICompa
 
     public async Task<Result<List<WhatsOnItem>>> GetItemsAsync(LocationScope scope, int companyId, int locationId, DateOnly from, DateOnly to, bool includeCancelled)
     {
-        if (!await _featureService.IsEnabledForCompanyAsync(companyId, CompanyFeature.Parties))
+        if (!await _featureService.IsEnabledForLocationAsync(locationId, CompanyFeature.Parties))
         {
             return Result<List<WhatsOnItem>>.Ok([]);
         }

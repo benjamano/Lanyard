@@ -1,3 +1,4 @@
+using Lanyard.Tests.TestUtilities;
 using Lanyard.Infrastructure.Enum;
 using System;
 using System.Security.Claims;
@@ -666,6 +667,13 @@ namespace Lanyard.Tests.Services.Authentication
             DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
             UserManager<UserProfile> userManager = BuildUserManager(options);
 
+            // The new user's location has Training switched on.
+            await using (ApplicationDbContext ctx = new(options))
+            {
+                ctx.LocationFeatureSettings.Add(new LocationFeatureSetting { LocationId = 1, Feature = CompanyFeature.Training, IsEnabled = true });
+                await ctx.SaveChangesAsync();
+            }
+
             Mock<IEmailService> emailServiceMock = new();
             emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>()))
                 .ReturnsAsync(Result<bool>.Ok(true));
@@ -698,7 +706,7 @@ namespace Lanyard.Tests.Services.Authentication
 
             await using (ApplicationDbContext ctx = new(options))
             {
-                ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = 10, Feature = CompanyFeature.Training, IsEnabled = false });
+                await TestFeatures.SwitchOffForCompanyAsync(ctx, 10, CompanyFeature.Training);
                 await ctx.SaveChangesAsync();
             }
 
@@ -756,6 +764,13 @@ namespace Lanyard.Tests.Services.Authentication
         {
             DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
             UserManager<UserProfile> userManager = BuildUserManager(options);
+
+            // The new user's location has Training switched on.
+            await using (ApplicationDbContext ctx = new(options))
+            {
+                ctx.LocationFeatureSettings.Add(new LocationFeatureSetting { LocationId = 1, Feature = CompanyFeature.Training, IsEnabled = true });
+                await ctx.SaveChangesAsync();
+            }
 
             Mock<IEmailService> emailServiceMock = new();
             emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>()))

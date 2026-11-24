@@ -51,3 +51,25 @@
     text-align: center;
     font-weight: 600;
 }
+
+/* The log's rule name opens what happened. A real button for keyboards and screen readers, styled
+   as the row's heading. */
+.automation-log-name {
+    display: block;
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
+    text-align: left;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+}
+
+.automation-log-name:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2, currentColor);
+    outline-offset: 2px;
+}

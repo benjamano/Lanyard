@@ -35,4 +35,12 @@ public interface ITerminalEphemeralTokenService
     DateTime? PinLockedUntil(string userId);
     DateTime? RegisterPinFailure(string userId);
     void ClearPinFailures(string userId);
+
+    // Who is ticking checklists on a terminal, after their PIN: a random token kept only in the
+    // tablet's live page, tied to that terminal and that person. It lasts ChecklistGrantIdle after
+    // the last use (each use slides it on), so a tablet left on the checklist screen stops ticking
+    // in their name. Touch returns the person, or null once it has lapsed or on another terminal.
+    string IssueChecklistGrant(Guid terminalId, string userId);
+    string? TouchChecklistGrant(string? token, Guid terminalId);
+    void RevokeChecklistGrant(string? token);
 }

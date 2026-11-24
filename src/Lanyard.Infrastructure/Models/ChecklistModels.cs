@@ -137,6 +137,7 @@ namespace Lanyard.Infrastructure.Models
     // Someone ticking a task. At most one live (IsActive) tick per item; undoing a tick keeps the
     // row with who undid it, so the history shows both. UserId is a Restrict FK: when an account
     // goes, ScheduleRetention moves the tick to the deleted-user placeholder, like time entries.
+    // A tick made on a kiosk dashboard has no person: UserId is null and ClientId names the kiosk.
     public class ChecklistCompletion
     {
         public Guid Id { get; set; }
@@ -144,8 +145,11 @@ namespace Lanyard.Infrastructure.Models
         public required Guid RunItemId { get; set; }
         public ChecklistRunItem? RunItem { get; set; }
 
-        public required string UserId { get; set; }
+        public string? UserId { get; set; }
         public UserProfile? User { get; set; }
+
+        public Guid? ClientId { get; set; }
+        public Client? Client { get; set; }
 
         public DateTime CompletedUtc { get; set; }
 

@@ -1,3 +1,4 @@
+using Lanyard.Tests.TestUtilities;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
@@ -300,7 +301,30 @@ public class ShiftClaimTrainingTests
 
         await using (ApplicationDbContext ctx = new(w.Options))
         {
-            ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = w.Company.Id, Feature = CompanyFeature.Training, IsEnabled = false });
+            await TestFeatures.SwitchOffForCompanyAsync(ctx, w.Company.Id, CompanyFeature.Training);
+            await ctx.SaveChangesAsync();
+        }
+
+        Shift open = await ShiftAsync(w, null);
+
+        Assert.IsTrue((await w.Service.PickUpAsync(w.Amy.Id, open.Id, null)).IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task PickUp_NotEnforcedAtALocationWithTrainingOff_EvenWhenAnotherLocationHasIt()
+    {
+        World w = await SeedAsync();
+        Course arena = await CourseAsync(w, "Laser Arena Safety");
+        await RequireAsync(w, arena);
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            ctx.Locations.Add(new Location { CompanyId = w.Company.Id, Name = "Harbourside", IsActive = true });
+            await ctx.SaveChangesAsync();
+            await TestFeatures.SwitchOnEverywhereAsync(ctx);
+
+            // Training stays on at Harbourside, so the company still has it, but not at the shift's location.
+            ctx.LocationFeatureSettings.RemoveRange(ctx.LocationFeatureSettings.Where(x => x.LocationId == w.Location.Id && x.Feature == CompanyFeature.Training));
             await ctx.SaveChangesAsync();
         }
 

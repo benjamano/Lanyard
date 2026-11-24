@@ -53,6 +53,38 @@ public class ChecklistService(
         }
     }
 
+    public async Task<Result<List<Checklist>>> GetPickableChecklistsAsync(LocationScope scope)
+    {
+        try
+        {
+            if (!scope.IsAdmin && !(scope.IsManager && scope.LocationId is not null))
+            {
+                return Result<List<Checklist>>.Fail("Only Admins and Managers can choose checklists.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<Checklist> checklists = await ctx.Checklists
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Include(x => x.Location)
+                .Where(x => x.IsActive && (scope.IsAdmin
+                    ? (scope.CompanyId == null || x.CompanyId == scope.CompanyId)
+                    : x.LocationId == scope.LocationId))
+                .OrderBy(x => x.Location!.Name)
+                .ThenBy(x => x.SortOrder)
+                .ThenBy(x => x.Name)
+                .ToListAsync();
+
+            return Result<List<Checklist>>.Ok(checklists);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to list checklists to pick from");
+            return Result<List<Checklist>>.Fail($"Failed to load checklists: {ex.Message}");
+        }
+    }
+
     public async Task<Result<Checklist>> GetChecklistAsync(LocationScope scope, Guid checklistId)
     {
         try
