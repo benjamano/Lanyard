@@ -14,6 +14,10 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
     // from wherever it was shown.
     public const string NotAllowedToEditMessage = "Only Admins and Managers can change dashboards.";
 
+    // SaveDashboardAsync's failure when someone else saved the dashboard after this copy was
+    // loaded. The designer recognises it and offers to save over their changes.
+    public const string ChangedElsewhereMessage = "This dashboard was saved by someone else after you opened it.";
+
     // Organisation-wide rather than per-user, so it lives in the shared AppSettings key/value
     // table alongside "AutomationEngine.Enabled" instead of needing a column of its own. Writes go
     // through a read-then-upsert on this key, which keeps a single default without a second table.
@@ -195,7 +199,7 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
         }
     }
 
-    public async Task<Result<bool>> SaveDashboardAsync(Dashboard dashboard)
+    public async Task<Result<bool>> SaveDashboardAsync(Dashboard dashboard, bool overwrite = false)
     {
         try
         {
@@ -227,11 +231,22 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
                 return Result<bool>.Fail("Dashboard not found. It may have been deleted.");
             }
 
+            // LastUpdateDate is what the caller loaded. If the stored one has moved on, someone
+            // saved in between, and saving now would silently throw their work away.
+            if (!overwrite && existingDashboard.LastUpdateDate?.Ticks != dashboard.LastUpdateDate?.Ticks)
+            {
+                return Result<bool>.Fail(ChangedElsewhereMessage);
+            }
+
             existingDashboard.Name = dashboard.Name.Trim();
             existingDashboard.Description = dashboard.Description?.Trim();
             existingDashboard.FitToScreen = dashboard.FitToScreen;
             existingDashboard.RowHeight = ClampRowHeight(dashboard.RowHeight);
-            existingDashboard.LastUpdateDate = DateTime.UtcNow;
+
+            // Whole microseconds, which is what Postgres stores, so the value the caller keeps
+            // below matches what it would read back on its next save.
+            DateTime now = DateTime.UtcNow;
+            existingDashboard.LastUpdateDate = new DateTime(now.Ticks - (now.Ticks % 10), DateTimeKind.Utc);
 
             List<DashboardWidget> incomingWidgets = dashboard.Widgets ?? [];
             List<DashboardWidget> existingWidgets = await ctx.DashboardWidgets
@@ -282,6 +297,9 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
             }
 
             await ctx.SaveChangesAsync();
+
+            // The caller's copy is now the saved one, so its next save isn't mistaken for a clash.
+            dashboard.LastUpdateDate = existingDashboard.LastUpdateDate;
 
             return Result<bool>.Ok(true);
         }

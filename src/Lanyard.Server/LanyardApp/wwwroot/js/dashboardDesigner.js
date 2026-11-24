@@ -509,6 +509,59 @@ function handlePaletteKeyDown(state, event) {
     invoke(state, 'AddAsync', parseInt(item.dataset.paletteType, 10));
 }
 
+// The designer page's keyboard shortcuts, registered by the page itself (not the canvas) so they
+// also work in Preview and in the Phone and TV views, where there's no canvas. Calls the page's
+// ShortcutAsync("save" | "undo" | "redo").
+export function initShortcuts(dotNet) {
+    const state = { dotNet, disposed: false };
+    const onKeyDown = event => handleShortcut(state, event);
+
+    window.addEventListener('keydown', onKeyDown);
+
+    return {
+        dispose() {
+            state.disposed = true;
+            window.removeEventListener('keydown', onKeyDown);
+        }
+    };
+}
+
+// True while typing in a box: an <input>, a text area, the rich-text editor, or one of Fluent's
+// input components. Fluent's inputs are web components, so the key event's target is retargeted
+// to the component's host element - the path is checked, not just the target.
+function isTyping(event) {
+    return event.composedPath().some(node =>
+        node instanceof Element
+        && node.matches('input, textarea, [contenteditable="true"], .ql-editor, fluent-text-input, fluent-text-area, fluent-number-input, fluent-search'));
+}
+
+// Ctrl/Cmd+S saves from anywhere on the page. Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y undo and redo the
+// designer, except while typing in a box, where they stay the browser's own text undo.
+function handleShortcut(state, event) {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey) {
+        return;
+    }
+
+    const key = event.key.toLowerCase();
+
+    if (key === 's') {
+        event.preventDefault();
+        invoke(state, 'ShortcutAsync', 'save');
+        return;
+    }
+
+    if (key !== 'z' && key !== 'y') {
+        return;
+    }
+
+    if (isTyping(event)) {
+        return;
+    }
+
+    event.preventDefault();
+    invoke(state, 'ShortcutAsync', key === 'y' || event.shiftKey ? 'redo' : 'undo');
+}
+
 const HANDLED_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Delete', 'Backspace', 'Escape']);
 
 function handleKeyDown(state, event) {

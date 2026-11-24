@@ -36,8 +36,29 @@
 }
 
 .designer-title-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-size: var(--fontSizeBase200);
     color: var(--colorNeutralForeground3);
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.designer-unsaved-dot {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--colorPaletteMarigoldBorderActive, #eaa300);
+}
+
+.designer-history-buttons {
+    display: flex;
+    gap: 2px;
+    padding-right: 6px;
+    margin-right: 2px;
+    border-right: 1px solid var(--colorNeutralStroke2);
 }
 
 .designer-toolbar-actions {
@@ -175,6 +196,21 @@
     .designer-toolbar-actions {
         flex: 1 1 100%;
         justify-content: flex-end;
+        gap: 4px;
+    }
+
+    /* Short buttons so undo, redo, add, preview and save all fit on one row. */
+    .designer-toolbar-actions ::deep .designer-hide-phone {
+        display: none;
+    }
+
+    .designer-toolbar-actions ::deep fluent-button {
+        min-width: 0;
+        padding-inline: 10px;
+    }
+
+    .designer-history-buttons {
+        margin-right: auto;
     }
 
     .designer-body {

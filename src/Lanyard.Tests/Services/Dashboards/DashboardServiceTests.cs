@@ -2083,6 +2083,47 @@ public class DashboardServiceTests
     }
 
     [TestMethod]
+    public async Task DashboardService_SaveDashboard_RefusesToSaveOverSomeoneElsesSave()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard stored = await SeedDashboardAsync(options);
+
+        Dashboard mine = new() { Id = stored.Id, Name = "Mine", IsActive = true, LastUpdateDate = stored.LastUpdateDate };
+        Dashboard theirs = new() { Id = stored.Id, Name = "Theirs", IsActive = true, LastUpdateDate = stored.LastUpdateDate };
+
+        Result<bool> theirSave = await service.SaveDashboardAsync(theirs);
+        Result<bool> mySave = await service.SaveDashboardAsync(mine);
+
+        Assert.IsTrue(theirSave.IsSuccess, theirSave.Error);
+        Assert.IsFalse(mySave.IsSuccess);
+        Assert.AreEqual(DashboardService.ChangedElsewhereMessage, mySave.Error);
+
+        Result<bool> overwrite = await service.SaveDashboardAsync(mine, overwrite: true);
+        Assert.IsTrue(overwrite.IsSuccess, overwrite.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        Assert.AreEqual("Mine", (await ctx.Dashboards.SingleAsync()).Name);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_CanSaveTheSameCopyAgain()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        dashboard.Name = "First";
+        Result<bool> first = await service.SaveDashboardAsync(dashboard);
+        dashboard.Name = "Second";
+        Result<bool> second = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(first.IsSuccess, first.Error);
+        Assert.IsTrue(second.IsSuccess, second.Error);
+        Assert.IsNotNull(dashboard.LastUpdateDate);
+    }
+
+    [TestMethod]
     public async Task DashboardService_DeletedDashboard_CantBeLoadedOrSaved()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
