@@ -307,6 +307,7 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasValue<KioskHealthWidget>(WidgetType.KioskHealth)
                 .HasValue<OperationsAlertsWidget>(WidgetType.OperationsAlerts)
                 .HasValue<ChecklistsTodayWidget>(WidgetType.ChecklistsToday)
+                .HasValue<ChecklistCardWidget>(WidgetType.Checklist)
                 .HasValue<HallOfFameWidget>(WidgetType.HallOfFame)
                 .HasValue<MyTrainingWidget>(WidgetType.MyTraining)
                 .HasValue<GreetingWidget>(WidgetType.Greeting)
@@ -745,6 +746,7 @@ namespace Lanyard.Infrastructure.DataAccess
                 entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(x => x.UndoneByUser).WithMany().HasForeignKey(x => x.UndoneByUserId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(x => x.ClockInTerminal).WithMany().HasForeignKey(x => x.ClockInTerminalId).OnDelete(DeleteBehavior.SetNull);
+                entity.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.SetNull);
             });
 
             // The latest run for a location is what the banner reads.

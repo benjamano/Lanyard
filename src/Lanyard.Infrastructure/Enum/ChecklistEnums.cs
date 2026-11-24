@@ -48,7 +48,11 @@ public enum ChecklistCompletionMethod
     Terminal = 2,
 
     // A manager ticked it from the Checklists today page.
-    Manager = 3
+    Manager = 3,
+
+    // Ticked on a kiosk's dashboard (a Checklist card that allows it). Nobody signs in, so the tick
+    // records the kiosk rather than a person.
+    Kiosk = 4
 }
 
 // Worked out from a run's ticks and due time, never stored.

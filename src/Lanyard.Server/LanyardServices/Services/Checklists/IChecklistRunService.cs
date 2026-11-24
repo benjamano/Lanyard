@@ -49,4 +49,23 @@ public interface IChecklistRunService
     Task<Result<bool>> UndoOnTerminalAsync(Guid terminalId, string? grantToken, Guid completionId);
 
     void EndTerminalTicking(string? grantToken);
+
+    // The Checklist card on a dashboard. Kiosk dashboards run signed out, so each call names the
+    // dashboard's company (for reading) or the kiosk and its viewer token (for ticking).
+
+    // Today's run of one checklist of that company, or Ok(null) when it doesn't run today. Read-only:
+    // CanTick is false.
+    Task<Result<ChecklistRunView?>> GetCardAsync(Guid checklistId, int companyId);
+
+    // A tick made on a kiosk, recorded as the kiosk (no person), through the Checklist card widgetId on
+    // its screen. Needs the kiosk's viewer token; the card must allow kiosk ticking, be on the dashboard
+    // the kiosk is showing now and be shown (its "Show only when…" conditions hold).
+    Task<Result<bool>> CompleteOnKioskAsync(Guid clientId, string? viewerToken, Guid widgetId, Guid runItemId, string? note, decimal? reading);
+
+    // Whether this kiosk may tick through this card right now (the same checks), so the card can show
+    // read-only rather than fail on the first tick.
+    Task<Result<bool>> CanTickOnKioskAsync(Guid clientId, string? viewerToken, Guid widgetId);
+
+    // Takes back a kiosk tick made today (not a person's), through the same card.
+    Task<Result<bool>> UndoOnKioskAsync(Guid clientId, string? viewerToken, Guid widgetId, Guid completionId);
 }
