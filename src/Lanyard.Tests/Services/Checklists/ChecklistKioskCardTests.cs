@@ -259,7 +259,9 @@ public class ChecklistKioskCardTests
 
         await using (ApplicationDbContext ctx = new(w.Options))
         {
-            ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = w.Company.Id, Feature = CompanyFeature.Checklists, IsEnabled = false });
+            LocationFeatureSetting checklists = await ctx.LocationFeatureSettings
+                .SingleAsync(x => x.LocationId == w.Ipswich.Id && x.Feature == CompanyFeature.Checklists);
+            checklists.IsEnabled = false;
             await ctx.SaveChangesAsync();
         }
 

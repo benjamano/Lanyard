@@ -8,6 +8,7 @@ using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Tests.Services.OperationsAlerts;
 using Lanyard.Tests.Services.Scheduling;
+using Lanyard.Tests.TestUtilities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -49,6 +50,7 @@ public class ChecklistTerminalTests
             wisbech = new Location { CompanyId = company.Id, Name = "Wisbech", IsActive = true };
             ctx.Locations.Add(wisbech);
             await ctx.SaveChangesAsync();
+            await TestFeatures.SwitchOnEverywhereAsync(ctx);
         }
 
         UserProfile amy = await SchedulingTestHelpers.SeedUserAsync(options, ipswich, "Amy");

@@ -5406,7 +5406,7 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<bool>("ChecklistsHideComplete")
                         .HasColumnType("boolean");
 
-                    b.HasDiscriminator().HasValue(21);
+                    b.HasDiscriminator().HasValue(22);
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientZoneLaserGameStatusWidget", b =>

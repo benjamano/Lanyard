@@ -1,4 +1,4 @@
-<HelpTab>
+﻿<HelpTab>
     <FluentText>
         A projection program is a sequence of screens shown on a kiosk's projector or display, such as a welcome
         message, a video, the scoreboard or a dashboard. Build them on
@@ -13,8 +13,9 @@
                 The built-in steps are <strong>Show Text</strong>, <strong>Play a Video</strong>, <strong>Dashboard</strong>,
                 <strong>Live Capture</strong> (a camera or capture device) and <strong>Delay</strong>, which keeps the
                 previous screen up.</li>
-            <li>Fill in each step's settings, such as the text, the video file (pick one from the File Manager or
-                upload it), or the dashboard.</li>
+            <li>Fill in each step's settings, such as the text, the video file, or the dashboard. For a video,
+                select <strong>Browse</strong>: only videos are shown, and you can open a folder, search, use
+                <strong>Recent</strong>, or upload a new one.</li>
             <li>Right-click a step for more options, such as deleting it, then save.</li>
         </ol>
     </HelpSection>
@@ -26,6 +27,31 @@
             keeps it up to date while it's showing. Set <strong>Fallback text</strong> for when there's no data yet or
             the kiosk is offline.
         </FluentText>
+    </HelpSection>
+
+    <HelpSection Title="Party details on screens">
+        <FluentText>
+            With Parties switched on, a text step can also show the party that's on now:
+        </FluentText>
+        <ul>
+            <li><strong>Party welcome</strong>: "Happy 7th birthday, Ava!" (or "Happy birthday, Ava!" with no age).</li>
+            <li><strong>Birthday child's first name</strong>: just "Ava", for artwork with its own wording.</li>
+            <li><strong>Party: what's next</strong>: the party's next laser tag or food time, such as "Laser tag at 14:30".</li>
+        </ul>
+        <FluentText>Which party a screen shows:</FluentText>
+        <ul>
+            <li>A party shows from 15 minutes before it starts until it ends.</li>
+            <li>If the kiosk has a <strong>Party room</strong> (in the kiosk's Settings, General tab), it shows the party in
+                that room. Otherwise, or when nothing is on in that room, it shows a party at the kiosk's location.</li>
+            <li>When several parties are on, it shows the one that started most recently; before any has started, the next to
+                start.</li>
+            <li>Cancelled parties, provisional Just Step bookings and private hires are never shown.</li>
+        </ul>
+        <HelpNote>
+            Names only appear when an Admin turns on <strong>Show the birthday child's first name on screens</strong> in
+            <a href="/manage/parties/settings">Party settings</a>. Until then the welcome and name show their fallback text.
+            Only the first name is ever shown, it's never saved on the kiosk, and an offline kiosk shows the fallback.
+        </HelpNote>
     </HelpSection>
 
     <HelpSection Title="Starting a program on a kiosk">

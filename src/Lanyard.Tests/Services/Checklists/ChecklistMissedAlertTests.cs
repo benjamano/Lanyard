@@ -6,6 +6,7 @@ using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Tests.Services.OperationsAlerts;
 using Lanyard.Tests.Services.Scheduling;
+using Lanyard.Tests.TestUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -53,6 +54,7 @@ public class ChecklistMissedAlertTests
             wisbech = new Location { CompanyId = company.Id, Name = "Wisbech", IsActive = true };
             ctx.Locations.Add(wisbech);
             await ctx.SaveChangesAsync();
+            await TestFeatures.SwitchOnEverywhereAsync(ctx);
         }
 
         Checklist opening = new()
@@ -201,7 +203,9 @@ public class ChecklistMissedAlertTests
 
         await using (ApplicationDbContext ctx = new(off.Options))
         {
-            ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = off.Company.Id, Feature = CompanyFeature.Checklists, IsEnabled = false });
+            LocationFeatureSetting checklists = await ctx.LocationFeatureSettings
+                .SingleAsync(x => x.LocationId == off.Ipswich.Id && x.Feature == CompanyFeature.Checklists);
+            checklists.IsEnabled = false;
             await ctx.SaveChangesAsync();
         }
 

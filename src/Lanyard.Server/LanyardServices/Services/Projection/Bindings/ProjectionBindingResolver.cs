@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Lanyard.Application.Services.Parties;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.Extensions.Logging;
@@ -15,8 +16,9 @@ public class ProjectionBindingResolver(
     private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
 
     // Several displays at one venue showing the same source would otherwise each query for it on
-    // every step and every refresh.
-    private readonly ConcurrentDictionary<(string Key, int CompanyId, int? LocationId), (DateTimeOffset ExpiresAt, string? Value)> _cache = new();
+    // every step and every refresh. The party room is part of the key: two rooms at one venue show
+    // different parties, and one room's child's name must never be served to another's screen.
+    private readonly ConcurrentDictionary<(string Key, int CompanyId, int? LocationId, string? PartyRoom), (DateTimeOffset ExpiresAt, string? Value)> _cache = new();
 
     /// <summary>How long one resolved value is reused. Settable for tests.</summary>
     public TimeSpan CacheDuration { get; init; } = TimeSpan.FromSeconds(10);
@@ -58,14 +60,14 @@ public class ProjectionBindingResolver(
         return values;
     }
 
-    public async Task<Result<string?>> PreviewAsync(string bindingKey, int companyId, int? locationId, CancellationToken cancellationToken = default)
+    public async Task<Result<string?>> PreviewAsync(string bindingKey, int companyId, int? locationId, CancellationToken cancellationToken = default, string? partyRoom = null)
     {
         if (!_sources.ContainsKey(bindingKey))
         {
             return Result<string?>.Fail("That data source isn't available.");
         }
 
-        ProjectionBindingContext context = new(companyId, locationId, Guid.Empty, _time.GetUtcNow().UtcDateTime);
+        ProjectionBindingContext context = new(companyId, locationId, Guid.Empty, _time.GetUtcNow().UtcDateTime, partyRoom);
 
         string? resolved = await ResolveKeyAsync(bindingKey, context, cancellationToken);
         string text = ProjectionBindingText.Normalise(resolved);
@@ -81,7 +83,7 @@ public class ProjectionBindingResolver(
             return null;
         }
 
-        (string, int, int?) cacheKey = (key, context.CompanyId, context.LocationId);
+        (string, int, int?, string?) cacheKey = (key, context.CompanyId, context.LocationId, PartyRooms.Normalise(context.PartyRoom)?.ToUpperInvariant());
         DateTimeOffset now = _time.GetUtcNow();
 
         if (_cache.TryGetValue(cacheKey, out (DateTimeOffset ExpiresAt, string? Value) cached) && cached.ExpiresAt > now)

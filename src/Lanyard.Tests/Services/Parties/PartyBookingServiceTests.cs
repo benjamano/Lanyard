@@ -448,4 +448,45 @@ public class PartyBookingServiceTests
         Assert.IsFalse(result.IsSuccess);
         StringAssert.Contains(result.Error, "child");
     }
+
+    private sealed class RecordingSchedule : IPartyScheduleProvider
+    {
+        public List<int> Invalidated { get; } = [];
+
+        public Task<Result<IReadOnlyList<PartySlot>>> GetDayAsync(int companyId, int locationId, DateTime nowUtc, CancellationToken cancellationToken) =>
+            Task.FromResult(Result<IReadOnlyList<PartySlot>>.Ok([]));
+
+        public void Invalidate(int locationId) => Invalidated.Add(locationId);
+    }
+
+    [TestMethod]
+    public async Task EveryBookingWrite_ClearsThePartyScheduleCache_AtBothEndsOfAMove()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        Location other;
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            other = new Location { CompanyId = company.Id, Name = "Wisbech", IsActive = true };
+            ctx.Locations.Add(other);
+            await ctx.SaveChangesAsync();
+        }
+
+        RecordingSchedule schedule = new();
+        PartyBookingService service = new(SchedulingTestHelpers.GetFactory(options), schedule);
+
+        PartyBooking booking = (await service.SaveBookingAsync(SchedulingTestHelpers.AdminScope, NewBooking(location), ActingUser)).Data!;
+        CollectionAssert.AreEqual(new[] { location.Id }, schedule.Invalidated, "Creating a party.");
+
+        schedule.Invalidated.Clear();
+        await service.SetCancelledAsync(SchedulingTestHelpers.AdminScope, booking.Id, true, ActingUser);
+        CollectionAssert.AreEqual(new[] { location.Id }, schedule.Invalidated, "Cancelling a party.");
+
+        schedule.Invalidated.Clear();
+        booking.LocationId = other.Id;
+        Result<PartyBooking> moved = await service.SaveBookingAsync(SchedulingTestHelpers.AdminScope, booking, ActingUser);
+        Assert.IsTrue(moved.IsSuccess, moved.Error);
+        CollectionAssert.AreEquivalent(new[] { other.Id, location.Id }, schedule.Invalidated, "Moving a party clears both venues.");
+    }
 }

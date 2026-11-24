@@ -117,7 +117,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<StaffDocumentType> StaffDocumentTypes { get; set; }
         public DbSet<StaffDocument> StaffDocuments { get; set; }
         public DbSet<CompanyOnboardingSettings> CompanyOnboardingSettings { get; set; }
-        public DbSet<CompanyFeatureSetting> CompanyFeatureSettings { get; set; }
+        public DbSet<LocationFeatureSetting> LocationFeatureSettings { get; set; }
         public DbSet<CompanyOnboardingStandingAttachment> CompanyOnboardingStandingAttachments { get; set; }
         public DbSet<StaffPosition> StaffPositions { get; set; }
         public DbSet<UserPosition> UserPositions { get; set; }
@@ -317,7 +317,8 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasValue<WhoIsOnTodayWidget>(WidgetType.WhoIsOnToday)
                 .HasValue<PendingTimeOffWidget>(WidgetType.PendingTimeOff)
                 .HasValue<ComplianceSummaryWidget>(WidgetType.ComplianceSummary)
-                .HasValue<DemandStaffingWidget>(WidgetType.DemandStaffing);
+                .HasValue<DemandStaffingWidget>(WidgetType.DemandStaffing)
+                .HasValue<WhatsOnTodayWidget>(WidgetType.WhatsOnToday);
 
             // Sibling widget types share a ClientId property in the TPH table; pin the
             // column names so EF's automatic uniquification cannot rename existing columns.
@@ -392,6 +393,14 @@ namespace Lanyard.Infrastructure.DataAccess
                 .Property(x => x.RangeDays)
                 .HasColumnName("DemandStaffingWidget_RangeDays");
 
+            modelBuilder.Entity<WhatsOnTodayWidget>()
+                .Property(x => x.LocationId)
+                .HasColumnName("WhatsOnTodayWidget_LocationId");
+
+            modelBuilder.Entity<WhatsOnTodayWidget>()
+                .Property(x => x.MaxItems)
+                .HasColumnName("WhatsOnTodayWidget_MaxItems");
+
             // A song may be backed by an uploaded file. When that file row is hard-deleted,
             // null the link rather than cascade-deleting the song (it is soft-deleted instead).
             modelBuilder.Entity<Song>()
@@ -463,6 +472,15 @@ namespace Lanyard.Infrastructure.DataAccess
                 .IsUnique()
                 .HasFilter("\"LocationId\" IS NOT NULL");
 
+            // Files browses one folder at a time, and the bin and the purge sweep look for
+            // inactive rows. Names aren't unique in the database (older rows already have
+            // duplicates); FileNameRules keeps new names unique per folder instead.
+            modelBuilder.Entity<FileMetadata>()
+                .HasIndex(x => new { x.CompanyId, x.FolderId, x.IsActive });
+
+            modelBuilder.Entity<Folder>()
+                .HasIndex(x => new { x.CompanyId, x.ParentFolderId, x.IsActive });
+
             // FileMetadata is shared across unrelated features (folders, logos, video devices,
             // staff documents, onboarding attachments). The default convention-based FK behavior
             // for a required reference is Cascade, which would let deleting a file from the
@@ -516,16 +534,16 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasForeignKey(x => x.FileMetadataId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // At most one switch per feature per company. Cascade: a company's switches mean
+            // At most one switch per feature per location. Cascade: a location's switches mean
             // nothing without it.
-            modelBuilder.Entity<CompanyFeatureSetting>()
-                .HasIndex(x => new { x.CompanyId, x.Feature })
+            modelBuilder.Entity<LocationFeatureSetting>()
+                .HasIndex(x => new { x.LocationId, x.Feature })
                 .IsUnique();
 
-            modelBuilder.Entity<CompanyFeatureSetting>()
-                .HasOne(x => x.Company)
+            modelBuilder.Entity<LocationFeatureSetting>()
+                .HasOne(x => x.Location)
                 .WithMany()
-                .HasForeignKey(x => x.CompanyId)
+                .HasForeignKey(x => x.LocationId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             // Staff scheduling. Same (CompanyId, Name) uniqueness as StaffDocumentType.
@@ -1271,6 +1289,22 @@ namespace Lanyard.Infrastructure.DataAccess
 
             modelBuilder.Entity<AutomationRuleExecution>()
                 .HasIndex(x => new { x.AutomationRuleId, x.ExecutedAt });
+
+            // A party-time rule's run keeps the party's id only (never the child's name). SetNull, so
+            // removing a booking never takes the automation history with it. The index serves the
+            // engine's "has this rule already fired for this party" reseed after a restart.
+            modelBuilder.Entity<AutomationRuleExecution>()
+                .HasOne<PartyBooking>()
+                .WithMany()
+                .HasForeignKey(x => x.PartyBookingId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<AutomationRuleExecution>()
+                .HasIndex(x => new { x.AutomationRuleId, x.PartyBookingId });
+
+            modelBuilder.Entity<AutomationRule>()
+                .Property(x => x.PartyRoom)
+                .HasMaxLength(100);
 
             // SongAnalysisHostedService sweeps for NotAnalyzed songs every five minutes.
             modelBuilder.Entity<Song>()

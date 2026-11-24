@@ -168,6 +168,9 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
             entry.Property(x => x.LocationId).IsModified = false;
             entry.Property(x => x.MusicScheduleOverrideUntilUtc).IsModified = false;
 
+            // And the party room, owned by SetClientPartyRoomAsync.
+            entry.Property(x => x.PartyRoom).IsModified = false;
+
             // And the equaliser, owned by SetClientEqualiserAsync: the Music page changes it live
             // while a settings dialog may be holding an older copy of the client.
             entry.Property(x => x.EqBassDb).IsModified = false;
@@ -815,6 +818,41 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error setting the location of client {ClientId}", clientId);
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<bool>> SetClientPartyRoomAsync(Guid clientId, string? partyRoom)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Client? client = await ctx.Clients.FirstOrDefaultAsync(x => x.Id == clientId);
+
+            if (client == null)
+            {
+                return Result<bool>.Fail("Client not found.");
+            }
+
+            string? room = Lanyard.Application.Services.Parties.PartyRooms.Normalise(partyRoom);
+
+            if (partyRoom is not null && partyRoom.Trim().Length > Lanyard.Application.Services.Parties.PartyRooms.MaxLength)
+            {
+                return Result<bool>.Fail("The party room can be at most 100 characters.");
+            }
+
+            client.PartyRoom = room;
+
+            await ctx.SaveChangesAsync();
+
+            _logger.LogInformation("Set party room of client {ClientId} to {PartyRoom}", clientId, room);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting the party room of client {ClientId}", clientId);
             return Result<bool>.Fail(ex.Message);
         }
     }

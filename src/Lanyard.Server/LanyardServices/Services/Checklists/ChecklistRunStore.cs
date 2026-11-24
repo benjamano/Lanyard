@@ -21,9 +21,9 @@ internal static class ChecklistRunStore
     // Whoever is looking at or ticking a checklist, and what decides whether they may.
     internal sealed record Viewer(string UserId, bool IsManagerAtLocation, bool IsOnRota, IReadOnlySet<Guid> Positions);
 
-    public static async Task<bool> FeaturesOnAsync(ApplicationDbContext ctx, int companyId, CancellationToken cancellationToken = default) =>
-        await CompanyFeatureQueries.IsEnabledForCompanyAsync(ctx, companyId, CompanyFeature.Checklists, cancellationToken)
-        && await CompanyFeatureQueries.IsEnabledForCompanyAsync(ctx, companyId, CompanyFeature.StaffScheduling, cancellationToken);
+    public static async Task<bool> FeaturesOnAsync(ApplicationDbContext ctx, int locationId, CancellationToken cancellationToken = default) =>
+        await CompanyFeatureQueries.IsEnabledForLocationAsync(ctx, locationId, CompanyFeature.Checklists, cancellationToken)
+        && await CompanyFeatureQueries.IsEnabledForLocationAsync(ctx, locationId, CompanyFeature.StaffScheduling, cancellationToken);
 
     /// <summary>
     /// Makes the runs a location needs on a venue day: one per active checklist that applies that day,

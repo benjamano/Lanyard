@@ -6,7 +6,11 @@
 @if (_dashboard != null)
 {
     <CascadingValue Value="@_kiosk" IsFixed="false">
-        <DashboardGrid Widgets="_dashboard.Widgets" CompanyId="_dashboard.CompanyId" PreviewMode="true" />
+        <DashboardGrid Widgets="_dashboard.Widgets"
+                       CompanyId="_dashboard.CompanyId"
+                       RowHeight="_dashboard.RowHeight"
+                       FitToScreen="_dashboard.FitToScreen"
+                       PreviewMode="true" />
     </CascadingValue>
 }
 

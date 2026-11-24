@@ -24,6 +24,18 @@ public class Dashboard : ICompanyOwned
     public DateTime CreateDate { get; set; }
     public DateTime? LastUpdateDate { get; set; }
 
+    // Stretches the rows so the whole layout fills the screen with no scrolling. Meant for a
+    // dashboard shown full-screen on a kiosk TV, where nobody is there to scroll it.
+    public bool FitToScreen { get; set; }
+
+    // Height of one grid row in pixels (the minimum when FitToScreen is on). The designer offers
+    // Compact / Comfortable / Spacious, but any value in range works.
+    public const int MinRowHeight = 60;
+    public const int MaxRowHeight = 240;
+    public const int DefaultRowHeight = 120;
+
+    public int RowHeight { get; set; } = DefaultRowHeight;
+
     public virtual List<DashboardWidget> Widgets { get; set; } = [];
 }
 
@@ -51,6 +63,15 @@ public class DashboardWidget
     public int GridY { get; set; }
     public int GridW { get; set; }
     public int GridH { get; set; }
+
+    // Shows Title as a small header above the widget.
+    public bool ShowTitle { get; set; }
+
+    // On a phone the grid collapses to a single column. These let a dashboard choose what that
+    // column holds: HideOnPhone leaves a widget out there, and PhoneOrder sets its place in the
+    // stack (widgets without one follow, top-to-bottom then left-to-right, as on the desktop grid).
+    public bool HideOnPhone { get; set; }
+    public int? PhoneOrder { get; set; }
 
     public bool IsActive { get; set; }
 
@@ -499,5 +520,27 @@ public class DemandStaffingWidget : DashboardWidget
     }
 
     public int RangeDays { get; set; }
+    public int? LocationId { get; set; }
+}
+
+// Today at one location from What's On: the day's totals and the parties still to come, for the
+// viewing Admin/Manager only - never a signed-out kiosk (parties carry children's names).
+// LocationId only applies to an Admin (null = the location they signed in to); a Manager sees their own.
+public class WhatsOnTodayWidget : DashboardWidget
+{
+    public const int MaxSupportedItems = 20;
+
+    [SetsRequiredMembers]
+    public WhatsOnTodayWidget()
+    {
+        Type = WidgetType.WhatsOnToday;
+
+        GridW = 4;
+        GridH = 4;
+
+        MaxItems = 6;
+    }
+
+    public int MaxItems { get; set; }
     public int? LocationId { get; set; }
 }

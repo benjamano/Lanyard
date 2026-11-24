@@ -1,3 +1,4 @@
+using Lanyard.Tests.TestUtilities;
 using Lanyard.Application.Services.OperationsAlerts;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
@@ -245,7 +246,7 @@ public class MissedClockInAlertTests
 
         await using (ApplicationDbContext ctx = new(h.Options))
         {
-            ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = h.Company.Id, Feature = CompanyFeature.StaffScheduling, IsEnabled = false });
+            await TestFeatures.SwitchOffForCompanyAsync(ctx, h.Company.Id, CompanyFeature.StaffScheduling);
             await ctx.SaveChangesAsync();
         }
 

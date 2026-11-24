@@ -1,21 +1,88 @@
-.cfm-row {
+.cfm-grid {
     width: 100%;
-    box-sizing: border-box;
-    display: flex;
+    overflow-x: auto;
+}
+
+/* Feature text, then one fixed-width switch column per location. */
+.cfm-row {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) repeat(var(--cfm-locations, 1), minmax(96px, 120px));
     align-items: center;
-    justify-content: space-between;
-    gap: 16px;
+    gap: 12px;
     padding: 10px 0;
     border-top: 1px solid var(--colorNeutralStroke2);
 }
 
-.cfm-text {
+.cfm-head {
+    border-top: none;
+    padding-top: 0;
+    align-items: start;
+    color: var(--colorNeutralForeground2);
+}
+
+.cfm-feature {
     display: flex;
     flex-direction: column;
     gap: 2px;
     min-width: 0;
 }
 
+.cfm-cell {
+    display: flex;
+    justify-content: center;
+}
+
+.cfm-location-head {
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 2px;
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+
+/* Only shown on a phone, where the location headers are hidden. */
+.cfm-cell-label {
+    display: none;
+}
+
 .cfm ::deep .cfm-hint {
     color: var(--colorNeutralForeground3);
+}
+
+@media (max-width: 700px) {
+    .cfm-head .cfm-feature {
+        display: none;
+    }
+
+    /* Location headers become a strip of "All on" buttons above the list. */
+    .cfm-head {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding-bottom: 4px;
+    }
+
+    .cfm-location-head {
+        flex-direction: row;
+        gap: 4px;
+    }
+
+    .cfm-row:not(.cfm-head) {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+    }
+
+    .cfm-cell {
+        justify-content: space-between;
+        align-items: center;
+        padding-left: 12px;
+    }
+
+    .cfm-cell-label {
+        display: inline;
+        overflow-wrap: anywhere;
+    }
 }

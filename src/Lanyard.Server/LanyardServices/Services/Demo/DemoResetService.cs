@@ -1,9 +1,11 @@
+using Lanyard.Application.Services.Features;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -71,6 +73,9 @@ public sealed class DemoResetService(
             }
 
             demoDirectory.Invalidate();
+
+            // The reset rewrote the demo locations' feature switches behind the feature service's back.
+            CompanyFeatureService.Evict(scope.ServiceProvider.GetService<IMemoryCache>(), companyId);
 
             logger.LogInformation("Demo company {CompanyId} reset", companyId);
 
