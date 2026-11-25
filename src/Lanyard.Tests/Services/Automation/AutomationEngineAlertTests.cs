@@ -61,7 +61,7 @@ public class AutomationEngineAlertTests
 
         RecordingOperationsAlertWriter alerts = new();
         AutomationEngineService engine = new(new SystemDbContextFactory(options), [new RecordingActionExecutor(behaviour)],
-            new LaserGameStatusStore(), alerts, TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+            new LaserGameStatusStore(), alerts, TimeProvider.System, NullLogger<AutomationEngineService>.Instance, new Lanyard.Tests.Services.Automation.NoPartiesSchedule());
 
         return new Setup(options, engine, alerts, rule, clientId);
     }

@@ -60,4 +60,12 @@ public static class ClientHubMethods
     /// connect and whenever staff change the kiosk's equaliser. Kiosks before 1.0.48 ignore it.
     /// </summary>
     public const string ReceiveEqualiserSettings = "ReceiveEqualiserSettings";
+
+    /// <summary>
+    /// Server to kiosk, client result: takes a <c>DisplayIdentifyRequestDTO</c>, shows a numbered
+    /// overlay on every screen for a few seconds, and returns a <c>DisplayIdentifyResultDTO</c>
+    /// listing the screens. Kiosks before 1.0.49 have no handler, which reaches the server as a
+    /// HubException.
+    /// </summary>
+    public const string IdentifyDisplays = "IdentifyDisplays";
 }

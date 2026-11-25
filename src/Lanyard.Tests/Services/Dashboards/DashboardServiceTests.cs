@@ -1,4 +1,5 @@
 ﻿using Lanyard.Application.Services;
+using Lanyard.Application.Services.Authentication;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Enum;
@@ -20,13 +21,19 @@ public class DashboardServiceTests
             .Options;
     }
 
-    private static DashboardService GetService(DbContextOptions<ApplicationDbContext> options)
+    private static DashboardService GetService(DbContextOptions<ApplicationDbContext> options, params string[] roles)
     {
         Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options));
 
-        return new DashboardService(factoryMock.Object);
+        // Most tests act as an Admin; pass roles to act as someone else.
+        string[] actingRoles = roles.Length == 0 ? ["Admin"] : roles;
+        Mock<ISecurityService> security = new();
+        security.Setup(x => x.IsCurrentUserInRoleAsync(It.IsAny<string>()))
+            .ReturnsAsync((string role) => actingRoles.Contains(role));
+
+        return new DashboardService(factoryMock.Object, security.Object);
     }
 
     private static async Task<Dashboard> SeedDashboardAsync(DbContextOptions<ApplicationDbContext> options, string name = "Test Dashboard")
@@ -995,10 +1002,11 @@ public class DashboardServiceTests
         Assert.IsTrue(getResult.Success, getResult.Error);
         Assert.AreEqual(dashboard.Id, getResult.Data);
 
+        // The dashboard itself is gone, though: it no longer loads (so a kiosk or an old designer
+        // tab can't keep showing or saving it).
         Result<Dashboard> dashboardResult = await service.GetDashboardAsync(dashboard.Id);
 
-        Assert.IsTrue(dashboardResult.Success, dashboardResult.Error);
-        Assert.IsFalse(dashboardResult.Data!.IsActive);
+        Assert.IsFalse(dashboardResult.Success);
     }
 
     [TestMethod]
@@ -1792,6 +1800,72 @@ public class DashboardServiceTests
     }
 
     [TestMethod]
+    public async Task DashboardService_SaveDashboard_PersistsAndUpdatesWhatsOnTodayWidget()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        // Id = Guid.Empty forces CreateWidgetCopy, whose default arm fails the whole save.
+        WhatsOnTodayWidget whatsOn = new() { Id = Guid.Empty, MaxItems = 4, LocationId = 2, IsActive = true };
+        dashboard.Widgets = [whatsOn];
+        Assert.IsTrue((await service.SaveDashboardAsync(dashboard)).Success);
+
+        await using (ApplicationDbContext read = new(options))
+        {
+            WhatsOnTodayWidget created = await read.DashboardWidgets.OfType<WhatsOnTodayWidget>().SingleAsync();
+            Assert.AreEqual(WidgetType.WhatsOnToday, created.Type);
+            Assert.AreEqual(4, created.MaxItems);
+            Assert.AreEqual(2, created.LocationId);
+            whatsOn.Id = created.Id;
+        }
+
+        whatsOn.MaxItems = 10;
+        whatsOn.LocationId = null;
+        Result<bool> result = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        WhatsOnTodayWidget saved = await ctx.DashboardWidgets.OfType<WhatsOnTodayWidget>().SingleAsync();
+        Assert.AreEqual(10, saved.MaxItems);
+        Assert.IsNull(saved.LocationId);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveWidget_UpdatesWhatsOnTodaySettings()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        WhatsOnTodayWidget whatsOn = new() { Id = Guid.NewGuid(), DashboardId = dashboard.Id, IsActive = true };
+
+        await using (ApplicationDbContext seed = new(options))
+        {
+            seed.DashboardWidgets.Add(whatsOn);
+            await seed.SaveChangesAsync();
+        }
+
+        Assert.IsTrue((await service.SaveWidgetAsync(new WhatsOnTodayWidget { Id = whatsOn.Id, DashboardId = dashboard.Id, MaxItems = 3, LocationId = 7, IsActive = true })).Success);
+
+        await using ApplicationDbContext ctx = new(options);
+        WhatsOnTodayWidget saved = await ctx.DashboardWidgets.OfType<WhatsOnTodayWidget>().SingleAsync();
+        Assert.AreEqual(3, saved.MaxItems);
+        Assert.AreEqual(7, saved.LocationId);
+    }
+
+    [TestMethod]
+    public void WhatsOnTodayWidget_DefaultsToSixEntriesAtTheSignedInLocation()
+    {
+        WhatsOnTodayWidget widget = new();
+
+        Assert.AreEqual(WidgetType.WhatsOnToday, widget.Type);
+        Assert.AreEqual(6, widget.MaxItems);
+        Assert.IsNull(widget.LocationId);
+    }
+
+    [TestMethod]
     public void DemandStaffingWidget_DefaultsToFourWeeksAtTheSignedInLocation()
     {
         DemandStaffingWidget widget = new();
@@ -1874,5 +1948,390 @@ public class DashboardServiceTests
         Assert.AreEqual(10, saved.MaxItems);
         Assert.AreEqual(14, saved.ExpiryWindowDays);
         Assert.IsNull(saved.LocationId);
+    }
+
+    [TestMethod]
+    [DataRow("Admin")]
+    [DataRow("Manager")]
+    public async Task DashboardService_SaveDashboard_AllowsAdminsAndManagers(string role)
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options, role);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+        dashboard.Name = "Renamed";
+
+        Result<bool> result = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_WritesAreRefusedForStaff()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options, "Staff");
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        DigitalClockWidget widget = new() { DashboardId = dashboard.Id };
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(widget);
+            await seedCtx.SaveChangesAsync();
+        }
+
+        dashboard.Name = "Hijacked";
+
+        Result<bool> save = await service.SaveDashboardAsync(dashboard);
+        Result<Guid> create = await service.CreateDashboardAsync(new Dashboard { Name = "New" });
+        Result<bool> delete = await service.DeleteDashboardAsync(dashboard.Id);
+        Result<DashboardWidget> saveWidget = await service.SaveWidgetAsync(new DigitalClockWidget { Id = widget.Id, DashboardId = dashboard.Id, Is24HourFormat = true });
+
+        Assert.IsFalse(save.IsSuccess);
+        Assert.IsFalse(create.IsSuccess);
+        Assert.IsFalse(delete.IsSuccess);
+        Assert.IsFalse(saveWidget.IsSuccess);
+        Assert.AreEqual(DashboardService.NotAllowedToEditMessage, save.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        Dashboard stored = await ctx.Dashboards.SingleAsync(x => x.Id == dashboard.Id);
+        Assert.AreEqual("Test Dashboard", stored.Name);
+        Assert.IsTrue(stored.IsActive);
+        Assert.AreEqual(1, await ctx.Dashboards.CountAsync());
+        Assert.IsFalse((await ctx.DashboardWidgets.OfType<DigitalClockWidget>().SingleAsync()).Is24HourFormat);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveWidget_DoesNotWriteLayout()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        TextAreaWidget widget = new() { DashboardId = dashboard.Id, GridX = 0, GridY = 0, GridW = 2, GridH = 2 };
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(widget);
+            await seedCtx.SaveChangesAsync();
+        }
+
+        Result<DashboardWidget> result = await service.SaveWidgetAsync(new TextAreaWidget
+        {
+            Id = widget.Id,
+            DashboardId = dashboard.Id,
+            Content = "<p>Hello</p>",
+            GridX = 6,
+            GridY = 3,
+            GridW = 4,
+            GridH = 1
+        });
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        TextAreaWidget stored = await ctx.DashboardWidgets.OfType<TextAreaWidget>().SingleAsync();
+        Assert.AreEqual("<p>Hello</p>", stored.Content);
+        Assert.AreEqual(0, stored.GridX);
+        Assert.AreEqual(0, stored.GridY);
+        Assert.AreEqual(2, stored.GridW);
+        Assert.AreEqual(2, stored.GridH);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_PersistsLayoutOptions()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        DigitalClockWidget existing = new() { DashboardId = dashboard.Id };
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(existing);
+            await seedCtx.SaveChangesAsync();
+        }
+
+        dashboard.FitToScreen = true;
+        dashboard.RowHeight = 999;
+        dashboard.Widgets =
+        [
+            new DigitalClockWidget { Id = existing.Id, Title = " Clock ", ShowTitle = true, HideOnPhone = true, PhoneOrder = 2 },
+            new GreetingWidget { Id = Guid.Empty, ShowTitle = true, Title = "Hi", PhoneOrder = 0 }
+        ];
+
+        Result<bool> result = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        Dashboard stored = await ctx.Dashboards.SingleAsync();
+        Assert.IsTrue(stored.FitToScreen);
+        Assert.AreEqual(Dashboard.MaxRowHeight, stored.RowHeight);
+
+        DigitalClockWidget clock = await ctx.DashboardWidgets.OfType<DigitalClockWidget>().SingleAsync();
+        Assert.AreEqual("Clock", clock.Title);
+        Assert.IsTrue(clock.ShowTitle);
+        Assert.IsTrue(clock.HideOnPhone);
+        Assert.AreEqual(2, clock.PhoneOrder);
+
+        GreetingWidget greeting = await ctx.DashboardWidgets.OfType<GreetingWidget>().SingleAsync();
+        Assert.IsTrue(greeting.ShowTitle);
+        Assert.AreEqual(0, greeting.PhoneOrder);
+        Assert.IsFalse(greeting.HideOnPhone);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_RefusesToSaveOverSomeoneElsesSave()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard stored = await SeedDashboardAsync(options);
+
+        Dashboard mine = new() { Id = stored.Id, Name = "Mine", IsActive = true, LastUpdateDate = stored.LastUpdateDate };
+        Dashboard theirs = new() { Id = stored.Id, Name = "Theirs", IsActive = true, LastUpdateDate = stored.LastUpdateDate };
+
+        Result<bool> theirSave = await service.SaveDashboardAsync(theirs);
+        Result<bool> mySave = await service.SaveDashboardAsync(mine);
+
+        Assert.IsTrue(theirSave.IsSuccess, theirSave.Error);
+        Assert.IsFalse(mySave.IsSuccess);
+        Assert.AreEqual(DashboardService.ChangedElsewhereMessage, mySave.Error);
+
+        Result<bool> overwrite = await service.SaveDashboardAsync(mine, overwrite: true);
+        Assert.IsTrue(overwrite.IsSuccess, overwrite.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        Assert.AreEqual("Mine", (await ctx.Dashboards.SingleAsync()).Name);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_CanSaveTheSameCopyAgain()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        dashboard.Name = "First";
+        Result<bool> first = await service.SaveDashboardAsync(dashboard);
+        dashboard.Name = "Second";
+        Result<bool> second = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(first.IsSuccess, first.Error);
+        Assert.IsTrue(second.IsSuccess, second.Error);
+        Assert.IsNotNull(dashboard.LastUpdateDate);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_DuplicateDashboard_CopiesEveryWidgetAndSetting()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options, "Manager");
+        Dashboard source = await SeedDashboardAsync(options, "Front desk");
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            Dashboard stored = await seedCtx.Dashboards.SingleAsync();
+            stored.FitToScreen = true;
+            stored.RowHeight = 90;
+            seedCtx.DashboardWidgets.Add(new DigitalClockWidget { DashboardId = source.Id, Is24HourFormat = true, GridX = 3, Title = "Time", ShowTitle = true, PhoneOrder = 1 });
+            seedCtx.DashboardWidgets.Add(new HallOfFameWidget { DashboardId = source.Id, Period = HallOfFamePeriod.ThisWeek, HideOnPhone = true });
+            seedCtx.DashboardWidgets.Add(new GreetingWidget { DashboardId = source.Id, IsActive = false });
+            await seedCtx.SaveChangesAsync();
+        }
+
+        Result<Guid> result = await service.DuplicateDashboardAsync(source.Id);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        Dashboard copy = await ctx.Dashboards.Include(x => x.Widgets).SingleAsync(x => x.Id == result.Data);
+        Assert.AreEqual("Front desk (copy)", copy.Name);
+        Assert.IsTrue(copy.FitToScreen);
+        Assert.AreEqual(90, copy.RowHeight);
+        Assert.HasCount(2, copy.Widgets);
+
+        DigitalClockWidget clock = copy.Widgets.OfType<DigitalClockWidget>().Single();
+        Assert.IsTrue(clock.Is24HourFormat);
+        Assert.AreEqual(3, clock.GridX);
+        Assert.AreEqual("Time", clock.Title);
+        Assert.AreEqual(1, clock.PhoneOrder);
+        Assert.AreEqual(HallOfFamePeriod.ThisWeek, copy.Widgets.OfType<HallOfFameWidget>().Single().Period);
+        Assert.IsTrue(copy.Widgets.OfType<HallOfFameWidget>().Single().HideOnPhone);
+
+        // The original is untouched.
+        Assert.AreEqual(2, await ctx.DashboardWidgets.CountAsync(x => x.DashboardId == source.Id && x.IsActive));
+    }
+
+    [TestMethod]
+    public async Task DashboardService_DuplicateDashboard_IsRefusedForStaff()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options, "Staff");
+        Dashboard source = await SeedDashboardAsync(options);
+
+        Result<Guid> result = await service.DuplicateDashboardAsync(source.Id);
+
+        Assert.IsFalse(result.IsSuccess);
+        await using ApplicationDbContext ctx = new(options);
+        Assert.AreEqual(1, await ctx.Dashboards.CountAsync());
+    }
+
+    [TestMethod]
+    public async Task DashboardService_CreateDashboard_StartsWithTheGivenWidgets()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+
+        Result<Guid> result = await service.CreateDashboardAsync(new Dashboard
+        {
+            Name = "From a template",
+            RowHeight = 160,
+            Widgets = [new GreetingWidget { GridW = 8 }, new MyShiftsWidget { GridY = 1, DaysAhead = 7 }]
+        });
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        Dashboard created = await ctx.Dashboards.Include(x => x.Widgets).SingleAsync();
+        Assert.AreEqual(result.Data, created.Id);
+        Assert.AreEqual(160, created.RowHeight);
+        Assert.HasCount(2, created.Widgets);
+        Assert.AreEqual(7, created.Widgets.OfType<MyShiftsWidget>().Single().DaysAhead);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_GetDashboardCards_ListsLayoutsAndTheProgramsShowingThem()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options, "Scoreboard TV");
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(new ClientZoneLaserScoreboardWidget { DashboardId = dashboard.Id, GridX = 0, GridY = 0, GridW = 8, GridH = 4 });
+            seedCtx.DashboardWidgets.Add(new DigitalClockWidget { DashboardId = dashboard.Id, IsActive = false });
+
+            ProjectionProgramStepTemplateParameter parameter = new() { Id = Guid.NewGuid(), TemplateId = Guid.NewGuid(), Name = Lanyard.Shared.Projection.ProjectionParameterNames.Dashboard, DataType = "string", IsActive = true };
+            ProjectionProgram program = new() { Id = Guid.NewGuid(), Name = "Arena TV", IsActive = true };
+            ProjectionProgram retired = new() { Id = Guid.NewGuid(), Name = "Old TV", IsActive = false };
+            ProjectionProgramStep step = new() { Id = Guid.NewGuid(), ProjectionProgramId = program.Id, TemplateId = parameter.TemplateId, IsActive = true };
+            ProjectionProgramStep retiredStep = new() { Id = Guid.NewGuid(), ProjectionProgramId = retired.Id, TemplateId = parameter.TemplateId, IsActive = true };
+
+            seedCtx.Add(parameter);
+            seedCtx.AddRange(program, retired);
+            seedCtx.AddRange(step, retiredStep);
+            seedCtx.Add(new ProjectionProgramParameterValue { Id = Guid.NewGuid(), ProjectionProgramStepId = step.Id, ParameterId = parameter.Id, Value = dashboard.Id.ToString() });
+            seedCtx.Add(new ProjectionProgramParameterValue { Id = Guid.NewGuid(), ProjectionProgramStepId = retiredStep.Id, ParameterId = parameter.Id, Value = dashboard.Id.ToString() });
+            await seedCtx.SaveChangesAsync();
+        }
+
+        Result<IEnumerable<DashboardCard>> result = await service.GetDashboardCardsAsync();
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        DashboardCard card = result.Data!.Single();
+        Assert.AreEqual("Scoreboard TV", card.Name);
+        Assert.AreEqual(new DashboardCardWidget(WidgetType.ClientZoneLaserScoreboard, 0, 0, 8, 4), card.Widgets.Single());
+        CollectionAssert.AreEqual(new[] { "Arena TV" }, card.ProjectionPrograms.ToArray());
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_KeepsTextTypedOnTheKiosk()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+        TextAreaWidget stored = new() { DashboardId = dashboard.Id, Content = "<p>Typed on the kiosk</p>", EditableOnKiosk = true };
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(stored);
+            await seedCtx.SaveChangesAsync();
+        }
+
+        // The designer's copy was loaded before the kiosk edit, so it has the old words.
+        dashboard.Widgets = [new TextAreaWidget { Id = stored.Id, Content = "<p>Stale</p>", EditableOnKiosk = true, GridX = 4 }];
+        Result<bool> result = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        await using ApplicationDbContext ctx = new(options);
+        TextAreaWidget saved = await ctx.DashboardWidgets.OfType<TextAreaWidget>().SingleAsync();
+        Assert.AreEqual("<p>Typed on the kiosk</p>", saved.Content);
+        Assert.AreEqual(4, saved.GridX);
+    }
+
+    [TestMethod]
+    [DataRow(false, true)]
+    [DataRow(true, false)]
+    [DataRow(false, false)]
+    public async Task DashboardService_SaveDashboard_SavesTheDesignersTextUnlessTheKioskOwnsIt(bool storedEditable, bool incomingEditable)
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+        TextAreaWidget stored = new() { DashboardId = dashboard.Id, Content = "<p>Before</p>", EditableOnKiosk = storedEditable };
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(stored);
+            await seedCtx.SaveChangesAsync();
+        }
+
+        dashboard.Widgets = [new TextAreaWidget { Id = stored.Id, Content = "<p>From the designer</p>", EditableOnKiosk = incomingEditable }];
+        Result<bool> result = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        await using ApplicationDbContext ctx = new(options);
+        TextAreaWidget saved = await ctx.DashboardWidgets.OfType<TextAreaWidget>().SingleAsync();
+        Assert.AreEqual("<p>From the designer</p>", saved.Content);
+        Assert.AreEqual(incomingEditable, saved.EditableOnKiosk);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_SavesTheKioskAutoSaveSetting()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        dashboard.Widgets = [new TextAreaWidget { Id = Guid.Empty, EditableOnKiosk = true, KioskAutoSave = true }];
+        Result<bool> created = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(created.IsSuccess, created.Error);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            TextAreaWidget saved = await ctx.DashboardWidgets.OfType<TextAreaWidget>().SingleAsync();
+            Assert.IsTrue(saved.KioskAutoSave);
+            dashboard.Widgets = [new TextAreaWidget { Id = saved.Id, EditableOnKiosk = true, KioskAutoSave = false }];
+        }
+
+        Result<bool> updated = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(updated.IsSuccess, updated.Error);
+        await using ApplicationDbContext check = new(options);
+        Assert.IsFalse((await check.DashboardWidgets.OfType<TextAreaWidget>().SingleAsync()).KioskAutoSave);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_DeletedDashboard_CantBeLoadedOrSaved()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        Assert.IsTrue((await service.DeleteDashboardAsync(dashboard.Id)).IsSuccess);
+
+        Result<Dashboard> load = await service.GetDashboardAsync(dashboard.Id);
+        dashboard.Name = "Back from the dead";
+        dashboard.Widgets = [new GreetingWidget()];
+        Result<bool> save = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsFalse(load.IsSuccess);
+        Assert.IsFalse(save.IsSuccess);
+        await using ApplicationDbContext ctx = new(options);
+        Assert.IsFalse((await ctx.Dashboards.SingleAsync()).IsActive);
+        Assert.AreEqual(0, await ctx.DashboardWidgets.CountAsync(x => x.IsActive));
     }
 }

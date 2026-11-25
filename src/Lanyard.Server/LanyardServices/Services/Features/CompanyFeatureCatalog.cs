@@ -4,7 +4,7 @@ namespace Lanyard.Application.Services.Features;
 
 public record CompanyFeatureInfo(CompanyFeature Feature, string Name, string Description);
 
-// Display text for each switch on the Companies & Locations page, and the name used in the
+// Display text for each feature row on the Companies & Locations page, and the name used in the
 // "not available" message a blocked page shows. Every CompanyFeature member must be listed here
 // (CompanyFeatureCatalogTests checks it), or it gets no switch and can't be turned off.
 public static class CompanyFeatureCatalog
@@ -28,7 +28,9 @@ public static class CompanyFeatureCatalog
         new(CompanyFeature.AudioClips, "Audio clips",
             "Short recordings played over the kiosk music, clip schedules and the Play Audio Clip automation action."),
         new(CompanyFeature.OperationsAlerts, "Operations alerts",
-            "One list of kiosk, automation and staff problems for Admins and Managers, with the Operations alerts widget.")
+            "One list of kiosk, automation and staff problems for Admins and Managers, with the Operations alerts widget."),
+        new(CompanyFeature.Checklists, "Checklists",
+            "Opening, closing and other checklists staff tick off on their phone or the clock-in terminal, with today's and past results for managers. Needs shift management.")
     ];
 
     // The module a dashboard widget belongs to, or null for widgets every company gets.
@@ -40,7 +42,9 @@ public static class CompanyFeatureCatalog
         WidgetType.MyShifts or WidgetType.WhoIsOnToday or WidgetType.PendingTimeOff => CompanyFeature.StaffScheduling,
         WidgetType.Announcements => CompanyFeature.Announcements,
         WidgetType.DemandStaffing => CompanyFeature.Insights,
+        WidgetType.WhatsOnToday => CompanyFeature.Parties,
         WidgetType.OperationsAlerts => CompanyFeature.OperationsAlerts,
+        WidgetType.ChecklistsToday or WidgetType.Checklist => CompanyFeature.Checklists,
         _ => null
     };
 

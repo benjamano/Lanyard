@@ -1,0 +1,713 @@
+// dashboardDesigner.js
+//
+// Pointer handling for the dashboard designer (Components/Dashboards/Designer). It only tracks the
+// pointer and turns it into grid cells; every layout decision is made in C# by
+// DashboardLayoutEngine, which DesignerCanvas calls through the .NET callbacks below:
+//
+//   PreviewMoveAsync(id, x, y)        the dragged widget is over a new cell
+//   PreviewResizeAsync(id, w, h)      a resize handle crossed a cell boundary
+//   PreviewPlaceAsync(type, x, y, w, h) a palette item is over a new cell (x = -1: off the canvas)
+//   CommitAsync()                     the pointer was released - keep the previewed layout
+//   CancelAsync()                     Escape, or dropped off the canvas - put everything back
+//   SelectAsync(id | null)            a click (no drag) on a widget, or on empty canvas
+//   AddAsync(type)                    a click (no drag) on a palette item
+//   KeyAsync(key, shift, ctrl)        a shortcut while the canvas has focus
+//
+// Pointer events rather than HTML5 drag-and-drop, so the same code works with a mouse, a finger and
+// a pen. Previews are only sent when the cell under the pointer changes (a few times a second at
+// most), and the dragged widget follows the pointer with a CSS transform in the meantime, so a
+// drag never waits on the server to look smooth.
+//
+// Nothing here adds children to elements Blazor renders: the palette chip lives on document.body,
+// which Blazor doesn't manage, so it can never upset Blazor's DOM diffing.
+
+const DRAG_THRESHOLD = 5;
+
+export function scrollToWidget(elementId) {
+    document.getElementById(elementId)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+export function init(canvas, palette, dotNet, options) {
+    const state = {
+        canvas,
+        palette,
+        dotNet,
+        columns: options.columns ?? 12,
+        rowHeight: options.rowHeight ?? 120,
+        gap: options.gap ?? 8,
+        drag: null,
+        disposed: false
+    };
+
+    const onPointerDown = event => handlePointerDown(state, event);
+    const onPointerMove = event => handlePointerMove(state, event);
+    const onPointerUp = event => handlePointerUp(state, event);
+    const onPointerCancel = () => cancelDrag(state);
+    const onKeyDown = event => handleKeyDown(state, event);
+    const onPaletteKeyDown = event => handlePaletteKeyDown(state, event);
+    const onWindowKeyDown = event => {
+        if (event.key === 'Escape' && state.drag) {
+            event.preventDefault();
+            cancelDrag(state);
+        }
+    };
+
+    canvas.addEventListener('pointerdown', onPointerDown);
+    palette?.addEventListener('pointerdown', onPointerDown);
+    palette?.addEventListener('keydown', onPaletteKeyDown);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerCancel);
+    canvas.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onWindowKeyDown);
+
+    return {
+        setRowHeight(rowHeight) {
+            state.rowHeight = rowHeight;
+        },
+        setPalette(element) {
+            state.palette?.removeEventListener('pointerdown', onPointerDown);
+            state.palette?.removeEventListener('keydown', onPaletteKeyDown);
+            state.palette = element;
+            element?.addEventListener('pointerdown', onPointerDown);
+            element?.addEventListener('keydown', onPaletteKeyDown);
+        },
+        focus() {
+            canvas.focus({ preventScroll: true });
+        },
+        dispose() {
+            state.disposed = true;
+            removeChip(state);
+            canvas.removeEventListener('pointerdown', onPointerDown);
+            state.palette?.removeEventListener('pointerdown', onPointerDown);
+            state.palette?.removeEventListener('keydown', onPaletteKeyDown);
+            window.removeEventListener('pointermove', onPointerMove);
+            window.removeEventListener('pointerup', onPointerUp);
+            window.removeEventListener('pointercancel', onPointerCancel);
+            canvas.removeEventListener('keydown', onKeyDown);
+            window.removeEventListener('keydown', onWindowKeyDown);
+        }
+    };
+}
+
+// The grid's geometry right now. Column width follows the canvas's width; rows are a fixed height
+// in the designer (DesignerCanvas sets grid-auto-rows to exactly rowHeight), so a y position maps
+// to a row with simple arithmetic.
+function metrics(state) {
+    const grid = state.canvas.querySelector('[data-designer-grid]');
+    const rect = (grid ?? state.canvas).getBoundingClientRect();
+    const columnWidth = (rect.width - state.gap * (state.columns - 1)) / state.columns;
+
+    return {
+        rect,
+        columnWidth,
+        columnStep: columnWidth + state.gap,
+        rowStep: state.rowHeight + state.gap
+    };
+}
+
+function cellAt(state, clientX, clientY, w) {
+    const m = metrics(state);
+    const x = Math.round((clientX - m.rect.left) / m.columnStep);
+    const y = Math.round((clientY - m.rect.top) / m.rowStep);
+
+    return {
+        x: Math.max(0, Math.min(state.columns - (w ?? 1), x)),
+        y: Math.max(0, y)
+    };
+}
+
+function isOverCanvas(state, clientX, clientY) {
+    const rect = state.canvas.getBoundingClientRect();
+
+    return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+}
+
+function handlePointerDown(state, event) {
+    if (event.button !== 0 || state.drag) {
+        return;
+    }
+
+    const target = event.target;
+
+    // Anything interactive in the inspector-like chrome on a widget (its own buttons) keeps its
+    // normal behaviour.
+    if (target.closest('[data-designer-ignore]')) {
+        return;
+    }
+
+    const resizeHandle = target.closest('[data-resize-handle]');
+    const item = target.closest('[data-widget-id]');
+    const paletteItem = target.closest('[data-palette-type]');
+
+    if (resizeHandle && item) {
+        event.preventDefault();
+        state.drag = {
+            kind: 'resize',
+            id: item.dataset.widgetId,
+            edge: resizeHandle.dataset.resizeHandle,
+            startX: event.clientX,
+            startY: event.clientY,
+            x: parseInt(item.dataset.x, 10),
+            y: parseInt(item.dataset.y, 10),
+            w: parseInt(item.dataset.w, 10),
+            h: parseInt(item.dataset.h, 10),
+            lastW: parseInt(item.dataset.w, 10),
+            lastH: parseInt(item.dataset.h, 10),
+            started: false,
+            pointerId: event.pointerId
+        };
+        capture(state, event);
+        return;
+    }
+
+    // With a finger, an unselected widget isn't grabbed: the touch scrolls the canvas (its CSS
+    // allows panning), and a tap selects it. Once selected, it can be dragged.
+    if (item && event.pointerType !== 'mouse' && !item.classList.contains('is-selected')) {
+        state.drag = { kind: 'tap', id: item.dataset.widgetId, startX: event.clientX, startY: event.clientY, started: false, pointerId: event.pointerId };
+        return;
+    }
+
+    if (item) {
+        const rect = item.getBoundingClientRect();
+        state.drag = {
+            kind: 'move',
+            id: item.dataset.widgetId,
+            element: item,
+            startX: event.clientX,
+            startY: event.clientY,
+            offsetX: event.clientX - rect.left,
+            offsetY: event.clientY - rect.top,
+            w: parseInt(item.dataset.w, 10),
+            lastX: parseInt(item.dataset.x, 10),
+            lastY: parseInt(item.dataset.y, 10),
+            started: false,
+            pointerId: event.pointerId
+        };
+
+        // Touch scrolls the page unless we claim the gesture; the canvas's own CSS
+        // (touch-action: none on widgets) does that, this just stops text selection on mouse.
+        if (event.pointerType === 'mouse') {
+            event.preventDefault();
+        }
+
+        state.canvas.focus({ preventScroll: true });
+        capture(state, event);
+        return;
+    }
+
+    if (paletteItem) {
+        state.drag = {
+            kind: 'place',
+            type: parseInt(paletteItem.dataset.paletteType, 10),
+            label: paletteItem.dataset.paletteLabel ?? '',
+            w: parseInt(paletteItem.dataset.w, 10) || 2,
+            h: parseInt(paletteItem.dataset.h, 10) || 1,
+            startX: event.clientX,
+            startY: event.clientY,
+            lastX: null,
+            lastY: null,
+            started: false,
+            pointerId: event.pointerId
+        };
+
+        if (event.pointerType === 'mouse') {
+            event.preventDefault();
+        }
+
+        capture(state, event);
+        return;
+    }
+
+    // A plain press on the empty canvas clears the selection (on release, so it isn't a drag).
+    if (state.canvas.contains(target)) {
+        state.drag = { kind: 'background', startX: event.clientX, startY: event.clientY, started: false, pointerId: event.pointerId };
+        state.canvas.focus({ preventScroll: true });
+    }
+}
+
+function capture(state, event) {
+    try {
+        event.target.setPointerCapture?.(event.pointerId);
+    } catch {
+        // Some elements (SVG icons inside Fluent buttons) refuse capture; window listeners still work.
+    }
+}
+
+function movedPastThreshold(drag, event) {
+    return Math.abs(event.clientX - drag.startX) > DRAG_THRESHOLD || Math.abs(event.clientY - drag.startY) > DRAG_THRESHOLD;
+}
+
+function handlePointerMove(state, event) {
+    const drag = state.drag;
+
+    if (!drag || event.pointerId !== drag.pointerId) {
+        return;
+    }
+
+    if (!drag.started) {
+        if (!movedPastThreshold(drag, event)) {
+            return;
+        }
+
+        // A tap that turned into a swipe (the browser is scrolling), or a press on the empty
+        // canvas that moved: not ours.
+        if (drag.kind === 'tap' || drag.kind === 'background') {
+            state.drag = null;
+            return;
+        }
+
+        drag.started = true;
+        drag.startScroll = scroller(state).scrollTop;
+        startVisuals(state, drag);
+    }
+
+    event.preventDefault();
+    state.pointer = { clientX: event.clientX, clientY: event.clientY };
+    updateDrag(state, event);
+}
+
+// How far the canvas has scrolled since the drag started, which moves the grid under a pointer
+// that hasn't moved.
+function scrolledBy(state, drag) {
+    return scroller(state).scrollTop - (drag.startScroll ?? 0);
+}
+
+function updateDrag(state, event) {
+    const drag = state.drag;
+
+    if (!drag || !drag.started) {
+        return;
+    }
+
+    if (drag.kind === 'move') {
+        drag.element.style.transform = `translate(${event.clientX - drag.startX}px, ${event.clientY - drag.startY + scrolledBy(state, drag)}px)`;
+
+        const cell = cellAt(state, event.clientX - drag.offsetX, event.clientY - drag.offsetY, drag.w);
+
+        if (cell.x !== drag.lastX || cell.y !== drag.lastY) {
+            drag.lastX = cell.x;
+            drag.lastY = cell.y;
+            invoke(state, 'PreviewMoveAsync', drag.id, cell.x, cell.y);
+        }
+
+        return;
+    }
+
+    if (drag.kind === 'resize') {
+        const m = metrics(state);
+        let w = drag.w;
+        let h = drag.h;
+
+        if (drag.edge.includes('e')) {
+            w = Math.max(1, Math.min(state.columns - drag.x, drag.w + Math.round((event.clientX - drag.startX) / m.columnStep)));
+        }
+
+        if (drag.edge.includes('s')) {
+            h = Math.max(1, drag.h + Math.round((event.clientY - drag.startY + scrolledBy(state, drag)) / m.rowStep));
+        }
+
+        if (w !== drag.lastW || h !== drag.lastH) {
+            drag.lastW = w;
+            drag.lastH = h;
+            invoke(state, 'PreviewResizeAsync', drag.id, w, h);
+        }
+
+        return;
+    }
+
+    if (drag.kind === 'place') {
+        moveChip(state, event);
+
+        if (!isOverCanvas(state, event.clientX, event.clientY)) {
+            if (drag.lastX !== -1) {
+                drag.lastX = -1;
+                drag.lastY = -1;
+                invoke(state, 'PreviewPlaceAsync', drag.type, -1, -1, drag.w, drag.h);
+            }
+
+            return;
+        }
+
+        // Centre the new widget's top-left cell on the pointer, roughly where it will land.
+        const m = metrics(state);
+        const cell = cellAt(state, event.clientX - (m.columnStep * drag.w) / 2 + m.columnStep / 2, event.clientY - m.rowStep / 2, drag.w);
+
+        if (cell.x !== drag.lastX || cell.y !== drag.lastY) {
+            drag.lastX = cell.x;
+            drag.lastY = cell.y;
+            invoke(state, 'PreviewPlaceAsync', drag.type, cell.x, cell.y, drag.w, drag.h);
+        }
+    }
+}
+
+function handlePointerUp(state, event) {
+    const drag = state.drag;
+
+    if (!drag || event.pointerId !== drag.pointerId) {
+        return;
+    }
+
+    state.drag = null;
+    stopVisuals(state, drag);
+
+    if (!drag.started) {
+        // A click, not a drag.
+        if (drag.kind === 'move' || drag.kind === 'resize' || drag.kind === 'tap') {
+            invoke(state, 'SelectAsync', drag.id);
+        } else if (drag.kind === 'place') {
+            invoke(state, 'AddAsync', drag.type);
+        } else if (drag.kind === 'background') {
+            invoke(state, 'SelectAsync', null);
+        }
+
+        return;
+    }
+
+    if (drag.kind === 'place' && (drag.lastX === null || drag.lastX === -1)) {
+        invoke(state, 'CancelAsync');
+        return;
+    }
+
+    invoke(state, 'CommitAsync');
+}
+
+function cancelDrag(state) {
+    const drag = state.drag;
+
+    if (!drag) {
+        return;
+    }
+
+    state.drag = null;
+    stopVisuals(state, drag);
+
+    if (drag.started) {
+        invoke(state, 'CancelAsync');
+    }
+}
+
+function startVisuals(state, drag) {
+    startAutoScroll(state);
+    document.body.classList.add('dashboard-designer-dragging');
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = drag.kind === 'resize' ? 'nwse-resize' : 'grabbing';
+
+    if (drag.kind === 'move') {
+        drag.element.classList.add('is-dragging');
+    }
+
+    if (drag.kind === 'resize') {
+        document.body.classList.add('dashboard-designer-resizing');
+    }
+
+    if (drag.kind === 'place') {
+        const chip = document.createElement('div');
+        chip.className = 'dashboard-designer-chip';
+        chip.textContent = drag.label;
+        // Styled here rather than in a stylesheet: it lives on <body>, outside every component's
+        // scoped CSS, and only exists while a drag is in progress.
+        chip.style.cssText = [
+            'position: fixed', 'left: 0', 'top: 0', 'z-index: 10000', 'pointer-events: none',
+            'padding: 6px 12px', 'border-radius: 999px', 'white-space: nowrap',
+            'font: 600 13px/1.4 var(--fontFamilyBase, sans-serif)',
+            'background: var(--colorBrandBackground, #0f6cbd)', 'color: var(--colorNeutralForegroundOnBrand, #fff)',
+            'box-shadow: var(--shadow16, 0 6px 16px rgba(0,0,0,.25))'
+        ].join(';');
+        document.body.appendChild(chip);
+        state.chip = chip;
+    }
+}
+
+function stopVisuals(state, drag) {
+    stopAutoScroll(state);
+    document.body.classList.remove('dashboard-designer-dragging', 'dashboard-designer-resizing');
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+
+    if (drag.kind === 'move' && drag.element) {
+        drag.element.classList.remove('is-dragging');
+        drag.element.style.transform = '';
+    }
+
+    removeChip(state);
+}
+
+function moveChip(state, event) {
+    if (state.chip) {
+        state.chip.style.transform = `translate(${event.clientX + 12}px, ${event.clientY + 12}px)`;
+    }
+}
+
+function removeChip(state) {
+    state.chip?.remove();
+    state.chip = null;
+}
+
+function scroller(state) {
+    return state.canvas.closest('[data-designer-scroll]') ?? document.scrollingElement;
+}
+
+// While a drag is on, scroll the canvas when the pointer sits near its top or bottom edge - every
+// frame, so holding still at the edge keeps scrolling - and re-work the cell under the pointer,
+// since the grid has moved beneath it. Lets a widget be dragged further than the visible area.
+function startAutoScroll(state) {
+    const tick = () => {
+        const drag = state.drag;
+
+        if (!drag || !drag.started || state.disposed) {
+            state.raf = null;
+            return;
+        }
+
+        const pointer = state.pointer;
+
+        if (pointer) {
+            const box = scroller(state);
+            const rect = box === document.scrollingElement
+                ? { top: 0, bottom: window.innerHeight }
+                : box.getBoundingClientRect();
+            const edge = 48;
+            const before = box.scrollTop;
+
+            if (pointer.clientY > rect.bottom - edge) {
+                box.scrollTop += 12;
+            } else if (pointer.clientY < rect.top + edge) {
+                box.scrollTop -= 12;
+            }
+
+            if (box.scrollTop !== before) {
+                updateDrag(state, pointer);
+            }
+        }
+
+        state.raf = requestAnimationFrame(tick);
+    };
+
+    state.raf = requestAnimationFrame(tick);
+}
+
+function stopAutoScroll(state) {
+    if (state.raf) {
+        cancelAnimationFrame(state.raf);
+        state.raf = null;
+    }
+
+    state.pointer = null;
+}
+
+// Enter or Space on a focused palette item adds it (keyboard users can't drag). Handled here so
+// Space doesn't also scroll the list.
+function handlePaletteKeyDown(state, event) {
+    const item = event.target.closest?.('[data-palette-type]');
+
+    if (!item || (event.key !== 'Enter' && event.key !== ' ')) {
+        return;
+    }
+
+    event.preventDefault();
+    invoke(state, 'AddAsync', parseInt(item.dataset.paletteType, 10));
+}
+
+// The designer page's keyboard shortcuts, registered by the page itself (not the canvas) so they
+// also work in Preview and in the Phone and TV views, where there's no canvas. Calls the page's
+// ShortcutAsync("save" | "undo" | "redo").
+export function initShortcuts(dotNet) {
+    const state = { dotNet, disposed: false };
+    const onKeyDown = event => handleShortcut(state, event);
+
+    window.addEventListener('keydown', onKeyDown);
+
+    return {
+        dispose() {
+            state.disposed = true;
+            window.removeEventListener('keydown', onKeyDown);
+        }
+    };
+}
+
+// True while typing in a box: an <input>, a text area, the rich-text editor, or one of Fluent's
+// input components. Fluent's inputs are web components, so the key event's target is retargeted
+// to the component's host element - the path is checked, not just the target.
+function isTyping(event) {
+    return event.composedPath().some(node =>
+        node instanceof Element
+        && node.matches('input, textarea, [contenteditable="true"], .ql-editor, fluent-text-input, fluent-text-area, fluent-number-input, fluent-search'));
+}
+
+// Ctrl/Cmd+S saves from anywhere on the page. Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y undo and redo the
+// designer, except while typing in a box, where they stay the browser's own text undo.
+function handleShortcut(state, event) {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey) {
+        return;
+    }
+
+    const key = event.key.toLowerCase();
+
+    if (key === 's') {
+        event.preventDefault();
+        invoke(state, 'ShortcutAsync', 'save');
+        return;
+    }
+
+    if (key !== 'z' && key !== 'y') {
+        return;
+    }
+
+    if (isTyping(event)) {
+        return;
+    }
+
+    event.preventDefault();
+    invoke(state, 'ShortcutAsync', key === 'y' || event.shiftKey ? 'redo' : 'undo');
+}
+
+const HANDLED_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Delete', 'Backspace', 'Escape']);
+
+function handleKeyDown(state, event) {
+    // Leave typing inside a widget (or any input) alone.
+    if (event.target !== state.canvas && event.target.closest('input, textarea, [contenteditable="true"]')) {
+        return;
+    }
+
+    const ctrl = event.ctrlKey || event.metaKey;
+    const key = event.key;
+
+    if (HANDLED_KEYS.has(key) || (ctrl && (key === 'd' || key === 'D'))) {
+        event.preventDefault();
+        invoke(state, 'KeyAsync', key, event.shiftKey, ctrl);
+    }
+}
+
+function invoke(state, method, ...args) {
+    if (state.disposed) {
+        return;
+    }
+
+    state.dotNet.invokeMethodAsync(method, ...args).catch(() => {
+        // The circuit went away mid-drag; nothing to undo on this side.
+    });
+}
+
+// ---- Phone order list ----------------------------------------------------------------------
+//
+// Drag-to-reorder for the phone layout list (Designer/PhoneLayoutEditor). Rows carry
+// data-reorder-id; a press on a row's [data-reorder-handle] starts a drag, the row follows the
+// pointer, and on release .NET's ReorderAsync(id, newIndex) is called. Pointer events, so it
+// works with a finger as well as a mouse.
+export function initReorderList(list, dotNet) {
+    let drag = null;
+
+    const rows = () => [...list.querySelectorAll('[data-reorder-id]')];
+
+    const onDown = event => {
+        const handle = event.target.closest('[data-reorder-handle]');
+        const row = handle?.closest('[data-reorder-id]');
+
+        if (!row || event.button !== 0) {
+            return;
+        }
+
+        event.preventDefault();
+        // Where the other rows sit before anything moves; the drop index is worked out against these.
+        const others = rows().filter(r => r !== row);
+        drag = {
+            row,
+            id: row.dataset.reorderId,
+            startY: event.clientY,
+            pointerId: event.pointerId,
+            index: rows().indexOf(row),
+            middles: others.map(r => { const b = r.getBoundingClientRect(); return b.top + b.height / 2; }),
+            startMiddle: (() => { const b = row.getBoundingClientRect(); return b.top + b.height / 2; })(),
+            height: row.getBoundingClientRect().height + 6
+        };
+        row.classList.add('is-dragging');
+        try { handle.setPointerCapture(event.pointerId); } catch { }
+    };
+
+    const onMove = event => {
+        if (!drag || event.pointerId !== drag.pointerId) {
+            return;
+        }
+
+        event.preventDefault();
+        const dy = event.clientY - drag.startY;
+        drag.row.style.transform = `translateY(${dy}px)`;
+
+        // The new index is how many of the other rows' (original) middles the dragged row's middle has passed.
+        const middle = drag.startMiddle + dy;
+        const index = drag.middles.filter(m => middle > m).length;
+        drag.target = index;
+
+        // Slide the rows in between out of the way, so the gap shows where it will land.
+        rows().filter(r => r !== drag.row).forEach((other, i) => {
+            let shift = 0;
+
+            if (drag.index <= i && i < index) {
+                shift = -drag.height;
+            } else if (index <= i && i < drag.index) {
+                shift = drag.height;
+            }
+
+            other.style.transform = shift ? `translateY(${shift}px)` : '';
+        });
+    };
+
+    const finish = commit => {
+        if (!drag) {
+            return;
+        }
+
+        const { row, id, target, index } = drag;
+        drag = null;
+        rows().forEach(r => { r.style.transform = ''; r.classList.remove('is-dragging'); });
+
+        if (commit && target !== undefined && target !== index) {
+            dotNet.invokeMethodAsync('ReorderAsync', id, target).catch(() => { });
+        }
+    };
+
+    const onUp = event => { if (drag && event.pointerId === drag.pointerId) { finish(true); } };
+    const onCancel = () => finish(false);
+    const onKey = event => { if (event.key === 'Escape') { finish(false); } };
+
+    list.addEventListener('pointerdown', onDown);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
+    window.addEventListener('keydown', onKey);
+
+    return {
+        dispose() {
+            list.removeEventListener('pointerdown', onDown);
+            window.removeEventListener('pointermove', onMove);
+            window.removeEventListener('pointerup', onUp);
+            window.removeEventListener('pointercancel', onCancel);
+            window.removeEventListener('keydown', onKey);
+        }
+    };
+}
+
+// ---- Scaled device frames --------------------------------------------------------------------
+//
+// Shows a fixed-size screen (a 1920x1080 TV) scaled down to fit its container, so the preview
+// lays out exactly as the real screen would, just smaller. Sets --frame-scale on the frame
+// whenever the container resizes.
+export function fitFrame(container, frame, width, height) {
+    const apply = () => {
+        const available = container.clientWidth;
+        const scale = Math.min(1, available / width);
+        frame.style.setProperty('--frame-scale', scale.toString());
+        container.style.height = `${Math.ceil(height * scale)}px`;
+    };
+
+    const observer = new ResizeObserver(apply);
+    observer.observe(container);
+    apply();
+
+    return {
+        dispose() {
+            observer.disconnect();
+        }
+    };
+}

@@ -33,12 +33,23 @@ public static class ScheduleRetention
 
     public record ClaimFields(Guid Id, string UserId, ShiftClaimStatus Status, string? DecidedByUserId, DateTime? DecidedUtc, string? DecisionReason);
 
+    // Checklist ticks are kept like time entries (who did the opening checks, when), anonymised.
+    public record ChecklistCompletionFields(Guid Id, string? UserId, string? UndoneByUserId);
+
+    // Who set up or last changed a checklist or one of its tasks.
+    public record ChecklistAuditFields(Guid Id, bool IsTask, string? CreateByUserId, string? UpdateByUserId);
+
     public record Snapshot(List<ShiftFields> Shifts, List<TimeEntryFields> TimeEntries, List<TerminalFields> Terminals, List<ClaimFields> Claims)
     {
         // Chat history is detached in the same step (ChatRetention), so one snapshot undoes both.
         public ChatRetention.Snapshot Chat { get; init; } = ChatRetention.Snapshot.Empty;
 
-        public int Count => Shifts.Count + TimeEntries.Count + Terminals.Count + Claims.Count + Chat.Count;
+        public List<ChecklistCompletionFields> ChecklistCompletions { get; init; } = [];
+
+        public List<ChecklistAuditFields> ChecklistAudit { get; init; } = [];
+
+        public int Count => Shifts.Count + TimeEntries.Count + Terminals.Count + Claims.Count + Chat.Count
+            + ChecklistCompletions.Count + ChecklistAudit.Count;
     }
 
     private const string Placeholder = ApplicationDbContext.SystemDeletedUserPlaceholderId;
@@ -87,14 +98,69 @@ public static class ScheduleRetention
 
         ChatRetention.Snapshot chat = await ChatRetention.DetachUserAsync(ctx, userId, nowUtc, gdprErasure);
 
+        // Every company's ticks, not just the caller's: a tick left pointing at the account would
+        // block its deletion through the Restrict FK.
+        List<ChecklistCompletion> completions = await ctx.ChecklistCompletions
+            .IgnoreQueryFilters()
+            .Where(x => x.UserId == userId || x.UndoneByUserId == userId)
+            .ToListAsync();
+
+        List<Checklist> checklists = await ctx.Checklists
+            .IgnoreQueryFilters()
+            .Where(x => x.CreateByUserId == userId || x.UpdateByUserId == userId)
+            .ToListAsync();
+
+        List<ChecklistTask> checklistTasks = await ctx.ChecklistTasks
+            .IgnoreQueryFilters()
+            .Where(x => x.CreateByUserId == userId || x.UpdateByUserId == userId)
+            .ToListAsync();
+
         Snapshot snapshot = new(
             shifts.Select(x => new ShiftFields(x.Id, x.UserId, x.IsActive, x.RemovalPending, x.CreateByUserId, x.UpdateByUserId, x.PublishedByUserId)).ToList(),
             entries.Select(x => new TimeEntryFields(x.Id, x.UserId, x.ClockOutUtc, x.ClockOutMethod, x.NeedsReview, x.ReviewReason, x.CreateByUserId, x.UpdateByUserId, x.ApprovedByUserId)).ToList(),
             terminals.Select(x => new TerminalFields(x.Id, x.CreatedByUserId, x.RevokedByUserId)).ToList(),
             claims.Select(x => new ClaimFields(x.Id, x.UserId, x.Status, x.DecidedByUserId, x.DecidedUtc, x.DecisionReason)).ToList())
         {
-            Chat = chat
+            Chat = chat,
+            ChecklistCompletions = completions.Select(x => new ChecklistCompletionFields(x.Id, x.UserId, x.UndoneByUserId)).ToList(),
+            ChecklistAudit =
+            [
+                .. checklists.Select(x => new ChecklistAuditFields(x.Id, false, x.CreateByUserId, x.UpdateByUserId)),
+                .. checklistTasks.Select(x => new ChecklistAuditFields(x.Id, true, x.CreateByUserId, x.UpdateByUserId))
+            ]
         };
+
+        // An erasure also empties the notes typed when ticking (readings stay: a fridge temperature
+        // says nothing about the person).
+        foreach (ChecklistCompletion completion in completions)
+        {
+            if (completion.UserId == userId)
+            {
+                completion.UserId = Placeholder;
+
+                if (gdprErasure)
+                {
+                    completion.Note = null;
+                }
+            }
+
+            if (completion.UndoneByUserId == userId)
+            {
+                completion.UndoneByUserId = null;
+            }
+        }
+
+        foreach (Checklist checklist in checklists)
+        {
+            checklist.CreateByUserId = checklist.CreateByUserId == userId ? null : checklist.CreateByUserId;
+            checklist.UpdateByUserId = checklist.UpdateByUserId == userId ? null : checklist.UpdateByUserId;
+        }
+
+        foreach (ChecklistTask task in checklistTasks)
+        {
+            task.CreateByUserId = task.CreateByUserId == userId ? null : task.CreateByUserId;
+            task.UpdateByUserId = task.UpdateByUserId == userId ? null : task.UpdateByUserId;
+        }
 
         // Pick-ups, call-offs and swaps are kept as rota history like the shifts, anonymised. Any
         // still waiting are withdrawn: the person can no longer work or give up a shift.
@@ -281,6 +347,47 @@ public static class ScheduleRetention
             {
                 terminal.CreatedByUserId = original.CreatedByUserId;
                 terminal.RevokedByUserId = original.RevokedByUserId;
+            }
+        }
+
+        List<Guid> completionIds = snapshot.ChecklistCompletions.Select(x => x.Id).ToList();
+        Dictionary<Guid, ChecklistCompletion> completions = await ctx.ChecklistCompletions
+            .IgnoreQueryFilters()
+            .Where(x => completionIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id);
+
+        foreach (ChecklistCompletionFields original in snapshot.ChecklistCompletions)
+        {
+            if (completions.TryGetValue(original.Id, out ChecklistCompletion? completion))
+            {
+                completion.UserId = original.UserId;
+                completion.UndoneByUserId = original.UndoneByUserId;
+            }
+        }
+
+        List<Guid> checklistIds = snapshot.ChecklistAudit.Where(x => !x.IsTask).Select(x => x.Id).ToList();
+        Dictionary<Guid, Checklist> checklists = await ctx.Checklists
+            .IgnoreQueryFilters()
+            .Where(x => checklistIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id);
+
+        List<Guid> taskIds = snapshot.ChecklistAudit.Where(x => x.IsTask).Select(x => x.Id).ToList();
+        Dictionary<Guid, ChecklistTask> checklistTasks = await ctx.ChecklistTasks
+            .IgnoreQueryFilters()
+            .Where(x => taskIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id);
+
+        foreach (ChecklistAuditFields original in snapshot.ChecklistAudit)
+        {
+            if (!original.IsTask && checklists.TryGetValue(original.Id, out Checklist? checklist))
+            {
+                checklist.CreateByUserId = original.CreateByUserId;
+                checklist.UpdateByUserId = original.UpdateByUserId;
+            }
+            else if (original.IsTask && checklistTasks.TryGetValue(original.Id, out ChecklistTask? task))
+            {
+                task.CreateByUserId = original.CreateByUserId;
+                task.UpdateByUserId = original.UpdateByUserId;
             }
         }
     }

@@ -1,4 +1,4 @@
-namespace Lanyard.Application.Services;
+﻿namespace Lanyard.Application.Services;
 
 // What FileService accepts, checked on the server for every upload (File Manager, staff
 // documents, onboarding attachments, audio clips): the uploaders' Accept and size settings are
@@ -8,6 +8,12 @@ public static class FileUploadPolicy
 {
     // Matches FileUploader's default; uploaders that want less still set their own lower limit.
     public const long MaxBytes = 100L * 1024 * 1024;
+
+    // Projection videos are long and high quality; everything else stays at MaxBytes.
+    public const long MaxVideoBytes = 500L * 1024 * 1024;
+
+    public static long MaxBytesFor(string fileName) =>
+        ContentTypeFor(fileName).StartsWith("video/", StringComparison.Ordinal) ? MaxVideoBytes : MaxBytes;
 
     private static readonly Dictionary<string, string> ContentTypes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -64,9 +70,13 @@ public static class FileUploadPolicy
             return "The file is empty.";
         }
 
-        if (length > MaxBytes)
+        long max = MaxBytesFor(fileName);
+
+        if (length > max)
         {
-            return $"Files can be up to {MaxBytes / (1024 * 1024)} MB.";
+            return max == MaxVideoBytes
+                ? $"Videos can be up to {MaxVideoBytes / (1024 * 1024)} MB."
+                : $"Files can be up to {MaxBytes / (1024 * 1024)} MB.";
         }
 
         if (!ContentTypes.ContainsKey(Path.GetExtension(fileName)))

@@ -1,0 +1,65 @@
+.dashboard-thumbnail {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-rows: repeat(var(--thumb-rows, 3), minmax(0, 1fr));
+    gap: 3px;
+    aspect-ratio: 16 / 9;
+    padding: 6px;
+    box-sizing: border-box;
+    border-radius: var(--borderRadiusMedium);
+    background: var(--colorNeutralBackground3);
+    overflow: hidden;
+}
+
+.dashboard-thumbnail-empty {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}
+
+.dashboard-thumbnail-block {
+    display: grid;
+    place-items: center;
+    min-width: 0;
+    min-height: 0;
+    border-radius: 3px;
+    background: var(--colorBrandBackground2);
+    color: var(--colorBrandForeground1);
+    overflow: hidden;
+}
+
+.dashboard-thumbnail-block ::deep svg {
+    fill: currentColor;
+    opacity: 0.8;
+}
+
+/* A tint per widget group, so the shape of a layout reads at a glance. Palette tokens, so both
+   themes get a matching pair. */
+.dashboard-thumbnail-block.category-venueandgames {
+    background: var(--colorPaletteRedBackground2, #f6d1d5);
+    color: var(--colorPaletteRedForeground2, #b10e1c);
+}
+
+.dashboard-thumbnail-block.category-music {
+    background: var(--colorPaletteBerryBackground2, #f2ccf7);
+    color: var(--colorPaletteBerryForeground2, #af33a1);
+}
+
+.dashboard-thumbnail-block.category-kiosksandprojection {
+    background: var(--colorPaletteMarigoldBackground2, #fde8b5);
+    color: var(--colorPaletteMarigoldForeground2, #8f5b06);
+}
+
+.dashboard-thumbnail-block.category-staff {
+    background: var(--colorPaletteTealBackground2, #c3e7e8);
+    color: var(--colorPaletteTealForeground2, #006666);
+}
+
+.dashboard-thumbnail-block.category-management {
+    background: var(--colorPaletteBlueBackground2, #d4e7f7);
+    color: var(--colorPaletteBlueForeground2, #0e5ea8);
+}

@@ -1,0 +1,75 @@
+/* The rules list. Plain divs, so these scoped rules apply (they would no-op on a Fluent* root).
+   The name gets its own line and wraps rather than truncating; the switch and buttons stay
+   together at the top right, and drop under the name on a narrow phone. */
+.automation-rules-list {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    margin-top: 8px;
+}
+
+.automation-rules-item {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 4px 12px;
+    flex-wrap: wrap;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--neutral-stroke-divider-rest, rgba(0, 0, 0, 0.08));
+}
+
+.automation-rules-item:last-child {
+    border-bottom: none;
+}
+
+/* min-width: 0 lets the text side shrink instead of pushing the controls off screen. */
+.automation-rules-info {
+    min-width: 0;
+    flex: 1 1 240px;
+}
+
+.automation-rules-name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.automation-rules-meta {
+    color: var(--neutral-foreground-hint);
+    font-size: 0.85rem;
+    margin-top: 2px;
+}
+
+.automation-rules-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.automation-rules-empty {
+    padding: 16px 0;
+    text-align: center;
+    font-weight: 600;
+}
+
+/* The log's rule name opens what happened. A real button for keyboards and screen readers, styled
+   as the row's heading. */
+.automation-log-name {
+    display: block;
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
+    text-align: left;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+}
+
+.automation-log-name:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2, currentColor);
+    outline-offset: 2px;
+}

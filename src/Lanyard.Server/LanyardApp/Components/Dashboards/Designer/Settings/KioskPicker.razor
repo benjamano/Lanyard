@@ -1,0 +1,92 @@
+@* Picks the kiosk (client) a widget shows. Shared by every widget that follows one kiosk, so they
+   all list kiosks the same way. Offline kiosks are listed too, so a widget can be set up before
+   its kiosk is switched on. *@
+
+@inject IClientService ClientService
+
+@if (_clients is null)
+{
+    <FluentSkeleton Height="56px" Width="100%" />
+}
+else if (_clients.Count == 0)
+{
+    <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+        @(LaserGameKiosksOnly ? "No laser game kiosks are set up yet." : "No kiosks are set up yet.")
+    </FluentMessageBar>
+}
+else
+{
+    <FluentSelect TOption="Client"
+                  TValue="string"
+                  Items="@_clients"
+                  OptionText="@(c => c?.Name ?? string.Empty)"
+                  OptionValue="@(c => c?.Id.ToString())"
+                  Label="@Label"
+                  Placeholder="@(NoneText ?? "Choose a kiosk")"
+                  Value="@(Value?.ToString() ?? string.Empty)"
+                  ValueChanged="OnChangedAsync"
+                  Width="100%" />
+}
+
+@code {
+    [Parameter]
+    public Guid? Value { get; set; }
+
+    [Parameter]
+    public EventCallback<Guid?> ValueChanged { get; set; }
+
+    [Parameter]
+    public string Label { get; set; } = "Kiosk";
+
+    // What no choice means, when that's allowed ("All kiosks"). Null means a kiosk must be chosen.
+    [Parameter]
+    public string? NoneText { get; set; }
+
+    // Only kiosks running a Begeara 2 laser game scoreboard, which is what the game widgets read.
+    [Parameter]
+    public bool LaserGameKiosksOnly { get; set; }
+
+    private List<Client>? _clients;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<IEnumerable<ClientConnectedWithCapabilitiesDTO>> result = await ClientService.GetClientsWithCapabilitiesAsync();
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError($"Couldn't load the kiosks: {result.Error}");
+            _clients = [];
+            return;
+        }
+
+        List<Client> clients = [.. result.Data
+            .Where(x => !LaserGameKiosksOnly || x.ZoneScoreboardVersion == ZoneScoreboardVersion.Begeara2)
+            .Cast<Client>()
+            .OrderBy(x => x.Name)];
+
+        // A widget still pointing at a kiosk that's gone (or no longer qualifies) would otherwise
+        // show an empty picker, looking unset while it isn't. Show it, so it can be changed.
+        if (Value is Guid saved && clients.All(c => c.Id != saved))
+        {
+            clients.Insert(0, new Client { Id = saved, Name = "Kiosk no longer available" });
+        }
+
+        // "None" first when it's a real choice, so it can be picked again after choosing a kiosk.
+        if (NoneText is not null && clients.Count > 0)
+        {
+            clients.Insert(0, new Client { Id = Guid.Empty, Name = NoneText });
+        }
+
+        _clients = clients;
+    }
+
+    private async Task OnChangedAsync(string? value)
+    {
+        Guid? clientId = Guid.TryParse(value, out Guid parsed) && parsed != Guid.Empty ? parsed : null;
+
+        if (clientId != Value)
+        {
+            await ValueChanged.InvokeAsync(clientId);
+        }
+    }
+}

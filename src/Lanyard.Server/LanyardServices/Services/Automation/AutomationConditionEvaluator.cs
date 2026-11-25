@@ -1,5 +1,6 @@
 #nullable enable
 
+using Lanyard.Application.Services.Parties;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 
@@ -42,14 +43,16 @@ public static class AutomationConditionEvaluator
         DateTime nowUtc,
         Func<Guid, AutomationClientInfo?> clientOf,
         Func<Guid, bool> isInGame,
-        Func<int, AutomationLocationInfo?>? locationOf = null)
+        Func<int, AutomationLocationInfo?>? locationOf = null,
+        Func<int, IReadOnlyList<PartySlot>?>? partiesAt = null)
     {
         DateTime venueLocal = RotaTime.ToVenueLocal(nowUtc);
         Func<int, AutomationLocationInfo?> findLocation = locationOf ?? (_ => null);
+        Func<int, IReadOnlyList<PartySlot>?> findParties = partiesAt ?? (_ => null);
 
         foreach (AutomationRuleCondition condition in conditions.Where(c => c.IsActive).OrderBy(c => c.SortOrder))
         {
-            AutomationConditionCheck check = EvaluateOne(condition, ruleCompanyId, venueLocal, clientOf, isInGame, findLocation);
+            AutomationConditionCheck check = EvaluateOne(condition, ruleCompanyId, nowUtc, venueLocal, clientOf, isInGame, findLocation, findParties);
 
             if (!check.Passed)
             {
@@ -80,13 +83,19 @@ public static class AutomationConditionEvaluator
         return false;
     }
 
+    /// <summary>From a party's start (inclusive) to its end (exclusive), in the room if one is given.</summary>
+    public static bool IsPartyInProgress(IEnumerable<PartySlot> parties, string? room, DateTime nowUtc) =>
+        parties.Any(p => p.StartUtc <= nowUtc && nowUtc < p.EndUtc && PartyRooms.Matches(room, p.Room));
+
     private static AutomationConditionCheck EvaluateOne(
         AutomationRuleCondition condition,
         int ruleCompanyId,
+        DateTime nowUtc,
         DateTime venueLocal,
         Func<Guid, AutomationClientInfo?> clientOf,
         Func<Guid, bool> isInGame,
-        Func<int, AutomationLocationInfo?> locationOf)
+        Func<int, AutomationLocationInfo?> locationOf,
+        Func<int, IReadOnlyList<PartySlot>?> partiesAt)
     {
         switch (condition.ConditionType)
         {
@@ -188,6 +197,44 @@ public static class AutomationConditionEvaluator
                 return AutomationConditionCheck.NotMet(location.Hours.Any(h => h.IsActive)
                     ? $"{location.Name} is closed (it was {venueLocal:HH:mm} on {venueLocal.DayOfWeek})"
                     : $"{location.Name} has no opening hours set");
+            }
+
+            case AutomationConditionType.PartyInProgress:
+            {
+                if (!AutomationConditionParameters.TryParse(condition.ParametersJson, out PartyInProgressConditionParameters? wanted)
+                    || wanted.LocationId <= 0)
+                {
+                    return AutomationConditionCheck.Misconfigured("The party condition is not valid");
+                }
+
+                AutomationLocationInfo? location = locationOf(wanted.LocationId);
+
+                if (location == null)
+                {
+                    return AutomationConditionCheck.Misconfigured("The location in the party condition no longer exists");
+                }
+
+                if (location.CompanyId != ruleCompanyId)
+                {
+                    return AutomationConditionCheck.Misconfigured("The location in the party condition belongs to another company");
+                }
+
+                // Couldn't be read this time (a database blip): fail closed, but it isn't the rule's fault.
+                if (partiesAt(wanted.LocationId) is not IReadOnlyList<PartySlot> parties)
+                {
+                    return AutomationConditionCheck.NotMet($"Party times at {location.Name} couldn't be loaded");
+                }
+
+                bool inProgress = IsPartyInProgress(parties, wanted.Room, nowUtc);
+
+                if (inProgress == wanted.InProgress)
+                {
+                    return AutomationConditionCheck.Pass;
+                }
+
+                string where = string.IsNullOrWhiteSpace(wanted.Room) ? location.Name : $"{wanted.Room.Trim()} at {location.Name}";
+
+                return AutomationConditionCheck.NotMet(inProgress ? $"A party is on in {where}" : $"No party is on in {where}");
             }
 
             default:

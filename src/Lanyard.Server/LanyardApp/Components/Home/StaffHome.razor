@@ -19,7 +19,7 @@
     <div class="mx-3">
         @if (_homeScreenWidgets.Count > 0)
         {
-            <DashboardGrid Widgets="_homeScreenWidgets" CompanyId="_homeScreenDashboard?.CompanyId" PreviewMode="true" />
+            <DashboardGrid Widgets="_homeScreenWidgets" CompanyId="_homeScreenDashboard?.CompanyId" RowHeight="_homeScreenDashboard!.RowHeight" PreviewMode="true" />
         }
         else
         {
@@ -168,9 +168,8 @@ else
 
         Result<Dashboard> dashboardResult = await _dashboardService.GetDashboardAsync(dashboardId);
 
-        // GetHomeScreenDashboardAsync has already rejected an inactive dashboard, but
-        // GetDashboardAsync deliberately does not filter the dashboard row on IsActive (unlike
-        // GetDashboardsAsync), so the check is repeated here rather than assumed.
+        // GetHomeScreenDashboardAsync has already rejected an inactive dashboard, and
+        // GetDashboardAsync doesn't return one either; the IsActive check is kept as a guard.
         if (!dashboardResult.IsSuccess || dashboardResult.Data is not { IsActive: true } dashboard)
         {
             _logger.LogWarning("Home screen dashboard {DashboardId} is no longer available: {Error}", dashboardId, dashboardResult.Error);

@@ -10,13 +10,19 @@
             location's Managers once, and clears itself the next time the rule runs without errors.</li>
         <li><strong>Skipped</strong> means the rule was triggered but a condition wasn't met, so no actions ran.
             Open the entry for <strong>Why it was skipped</strong>.</li>
+        <li><strong>Test</strong> means someone ran the rule by hand with <strong>Run now (test)</strong>. The
+            Trigger Event says who, such as <strong>Manual test by Sam Taylor</strong>. A failed test isn't raised on
+            Operations Alerts, and a test never counts as the rule's last run.</li>
+        <li>A <strong>Party time</strong> run's trigger event reads like <strong>Party: laser tag (10 min before)</strong>, with
+            <strong>+1 other party</strong> when parties reached that moment together. Open the entry to see the party's date,
+            time and room, and <strong>Open party</strong> to go to it.</li>
     </ul>
     <HelpNote>
         Rule not doing anything? Check the engine switch and the rule's own Enabled switch are on, that the
         trigger client is the kiosk running the game, and look for Skipped entries in the log.
     </HelpNote>
     <FluentText>
-        The <strong>Automation Rule Status</strong> dashboard widget shows a rule's state and last run, and lets
-        Admins turn it on or off from a dashboard.
+        The <strong>Automation Rule Status</strong> dashboard widget shows a rule's state and last run (tests
+        aren't included), and lets Admins turn it on or off from a dashboard.
     </FluentText>
 </HelpTab>

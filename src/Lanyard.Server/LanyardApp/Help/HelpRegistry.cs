@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.FluentUI.AspNetCore.Components;
@@ -80,7 +80,10 @@ public static class HelpRegistry
     public const string Dmx = "dmx";
     public const string Kiosks = "kiosks";
     public const string OperationsAlerts = "operations-alerts";
+    public const string ManageChecklists = "manage-checklists";
+    public const string Checklists = "checklists";
     public const string Insights = "insights";
+    public const string WhatsOn = "whats-on";
     public const string Parties = "parties";
     public const string BookingImport = "booking-import";
     public const string Feedback = "feedback";
@@ -99,6 +102,17 @@ public static class HelpRegistry
             ],
             ["/training"],
             Feature: CompanyFeature.Training),
+
+        new(Checklists,
+            "Checklists",
+            "Ticking off today's opening, closing and other checklists on your phone.",
+            HelpAudience.Everyone,
+            () => new Icons.Regular.Size20.TaskListLtr(),
+            [
+                new("overview", "Ticking Tasks")
+            ],
+            ["/checklists"],
+            Feature: CompanyFeature.Checklists),
 
         new(MyShifts,
             "My Shifts",
@@ -165,6 +179,7 @@ public static class HelpRegistry
             [
                 new("overview", "Overview"),
                 new("editing", "Editing a Dashboard"),
+                new("devices", "Phones & TVs"),
                 new("widgets", "Widgets")
             ],
             ["/manage/dashboards"]),
@@ -195,15 +210,17 @@ public static class HelpRegistry
             Feature: CompanyFeature.Announcements),
 
         new(Files,
-            "File Manager",
-            "Folders, uploading, and moving, renaming and deleting your company's files.",
-            HelpAudience.Managers,
+            "Files",
+            "Finding, previewing and downloading files, uploading and organising them, sharing folders with staff, and the Recycle bin.",
+            HelpAudience.Everyone,
             () => new Icons.Regular.Size20.Folder(),
             [
-                new("overview", "File Manager")
+                new("overview", "Finding files"),
+                new("organising", "Uploading and organising"),
+                new("sharing", "Sharing with staff"),
+                new("bin", "Recycle bin")
             ],
-            ["/files"],
-            Roles: "Admin,CanManageFiles"),
+            ["/files"]),
 
         new(Music,
             "Music & Audio Clips",
@@ -272,16 +289,31 @@ public static class HelpRegistry
 
         new(Insights,
             "Insights",
-            "Comparing games played with staff hours, and the hours where staffing didn't match demand.",
+            "Comparing games and party bookings with staff hours, and the hours where staffing didn't match demand.",
             HelpAudience.Managers,
             () => new Icons.Regular.Size20.DataArea(),
             [
                 new("overview", "Figures"),
-                new("week", "Typical Week & Flags")
+                new("week", "Typical Week & Flags"),
+                new("parties", "Parties")
             ],
             ["/manage/insights"],
             Roles: "Admin,Manager",
             Feature: CompanyFeature.Insights),
+
+        new(WhatsOn,
+            "What's On",
+            "A day timeline and a week view of the parties booked at a location, with totals and who's on the rota.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.CalendarAgenda(),
+            [
+                new("day", "Day View"),
+                new("week", "Week View"),
+                new("staff", "Totals & Staff")
+            ],
+            ["/manage/whats-on"],
+            Roles: "Admin,Manager",
+            Feature: CompanyFeature.Parties),
 
         new(Parties,
             "Parties",
@@ -335,6 +367,20 @@ public static class HelpRegistry
             ],
             ["/manage/users", "/manage/roles", "/manage/companies-locations"],
             Roles: "Admin,Manager"),
+
+        new(ManageChecklists,
+            "Checklists",
+            "Setting up a location's opening, closing and other checklists, and when they're due.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.TaskListLtr(),
+            [
+                new("overview", "Overview"),
+                new("setup", "Setting Up"),
+                new("today", "Today & History")
+            ],
+            ["/manage/checklists"],
+            Roles: "Admin,Manager",
+            Feature: CompanyFeature.Checklists),
 
         new(OperationsAlerts,
             "Operations Alerts",

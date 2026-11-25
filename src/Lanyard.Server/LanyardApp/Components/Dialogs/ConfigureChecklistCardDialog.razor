@@ -1,0 +1,102 @@
+@using Lanyard.Application.Services.Checklists
+
+@inject IChecklistService _checklistService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+            <FluentIcon Value="@(new Icons.Regular.Size24.TaskListLtr())" />
+            <FluentText Weight="TextWeight.Semibold" Color="Color.Default" Size="@TextSize.Size700">
+                Configure Checklist card
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+            @if (_error is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">@_error</FluentMessageBar>
+            }
+            else if (_options.Count == 0)
+            {
+                <FluentText>
+                    There are no checklists yet. Set one up under Rota &gt; Checklists first.
+                </FluentText>
+            }
+            else
+            {
+                <FluentSelect TOption="ChecklistOption" TValue="string" Items="@_options" OptionText="@(x => x.Label)" OptionValue="@(x => x.Value)"
+                              Value="@Widget.ChecklistCardChecklistId?.ToString()" ValueChanged="@OnChecklistChanged"
+                              Placeholder="Choose a checklist" Label="Checklist" Width="100%" />
+            }
+
+            <FluentCheckbox @bind-Value="Widget.ChecklistCardAllowKioskTicking" Label="Allow ticking on a kiosk" />
+            <FluentText Size="TextSize.Size200">
+                Nobody signs in on a kiosk, so anyone at the screen can tick, and the tick is recorded as the kiosk rather than
+                a person. Leave this off to show the checklist without letting it be ticked there.
+            </FluentText>
+
+            <FluentCheckbox @bind-Value="Widget.ChecklistCardHideWhenDone" Label="Hide the card once every task is ticked" />
+            <FluentText Size="TextSize.Size200">
+                To show it only at certain times, such as after 18:00, use the eye button on the widget (Show only when…).
+            </FluentText>
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@SaveAsync">Save</FluentButton>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public required ChecklistCardWidget Widget { get; set; }
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private record ChecklistOption(string Value, string Label);
+
+    private List<ChecklistOption> _options = [];
+    private string? _error;
+
+    // Snapshot so Cancel can revert the live-edited widget.
+    private (Guid?, bool, bool) _original;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _original = (Widget.ChecklistCardChecklistId, Widget.ChecklistCardAllowKioskTicking, Widget.ChecklistCardHideWhenDone);
+
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (!scope.IsSuccess || scope.Data is null)
+        {
+            _error = "Couldn't work out which checklists you can choose.";
+            return;
+        }
+
+        Result<List<Checklist>> checklists = await _checklistService.GetPickableChecklistsAsync(scope.Data);
+
+        if (!checklists.IsSuccess || checklists.Data is null)
+        {
+            _error = checklists.Error;
+            return;
+        }
+
+        _options = [.. checklists.Data.Select(x => new ChecklistOption(x.Id.ToString(), $"{x.Name} ({x.Location?.Name ?? "location"})"))];
+    }
+
+    private void OnChecklistChanged(string? value) =>
+        Widget.ChecklistCardChecklistId = Guid.TryParse(value, out Guid id) ? id : null;
+
+    private async Task SaveAsync()
+    {
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task CancelAsync()
+    {
+        (Widget.ChecklistCardChecklistId, Widget.ChecklistCardAllowKioskTicking, Widget.ChecklistCardHideWhenDone) = _original;
+        await Dialog.CancelAsync();
+    }
+}

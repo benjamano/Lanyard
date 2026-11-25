@@ -1,0 +1,7 @@
+@inherits WidgetSettingsBase<DigitalClockWidget>
+
+<div class="widget-settings">
+    <FluentSwitch Value="@W.ShowDate" ValueChanged="@(v => SetAsync(() => W.ShowDate = v, v ? "Showed the date" : "Hid the date"))" Label="Show the date" />
+    <FluentSwitch Value="@W.Is24HourFormat" ValueChanged="@(v => SetAsync(() => W.Is24HourFormat = v, v ? "Switched to a 24-hour clock" : "Switched to a 12-hour clock"))" Label="24-hour clock" />
+    <FluentSwitch Value="@W.ShowMilliSeconds" ValueChanged="@(v => SetAsync(() => W.ShowMilliSeconds = v, v ? "Showed milliseconds" : "Hid milliseconds"))" Label="Show milliseconds" />
+</div>
