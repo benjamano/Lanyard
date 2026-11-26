@@ -72,7 +72,7 @@
         </div>
     }
     <div class="clients-grid-wrapper" @ref="_gridWrapper">
-        <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="minmax(0, 0.6fr) minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(125px, 1.1fr) minmax(112px, 1.1fr) 272px" Class="clients-grid">
+        <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="minmax(0, 0.6fr) minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(125px, 1.1fr) minmax(112px, 1.1fr) 312px" Class="clients-grid">
             <ChildContent>
                 <PropertyColumn Property="x => x.Id" Title="Client ID" Class="clients-col-id"/>
                 <TemplateColumn Title="Name" Sortable="true" SortBy="@_sortByName">
