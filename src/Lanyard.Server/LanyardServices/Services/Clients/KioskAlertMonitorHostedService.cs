@@ -232,7 +232,7 @@ public partial class KioskAlertMonitorHostedService(
             return true;
         }
 
-        return OpeningHoursRules.IsOpen(location.OpeningHours, RotaTime.ToVenueLocal(now));
+        return OpeningHoursRules.IsOpen(location.OpeningHours, [], RotaTime.ToVenueLocal(now)) /* holidays wired in PR 2/4 */;
     }
 
     private async Task<int> QueueAsync(ApplicationDbContext ctx, Client client, Alert alert, CancellationToken cancellationToken)

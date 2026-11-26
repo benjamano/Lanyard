@@ -433,7 +433,7 @@ public static class InsightsRules
             bool hasActivity = t.Games > 0 || t.Clocked > 0 || t.Rota > 0;
 
             // With no opening hours set, any hour something happened in is taken as open.
-            bool isOpen = hasOpeningHours ? OpeningHoursRules.IsOpen(activeHours, local) : hasActivity;
+            bool isOpen = hasOpeningHours ? OpeningHoursRules.IsOpen(activeHours, [], local) /* holidays wired in PR 4/4 */ : hasActivity;
             string? daypart = activeDayparts.Count > 0 ? MusicDaypartRules.Resolve(activeDayparts, local)?.Daypart.Name : null;
 
             slots.Add(new InsightsSlot(key.Date, key.Hour, isOpen, daypart, t.Games, t.Players, t.Clocked, t.Rota,

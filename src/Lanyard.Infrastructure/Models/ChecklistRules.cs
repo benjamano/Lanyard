@@ -43,7 +43,8 @@ public static class ChecklistRules
     /// <summary>
     /// Whether the checklist runs on a venue day: an active checklist, on one of its days, not on a
     /// day the location is closed (a Closed rota holiday), and - when OnlyWhenOpen - on a day with
-    /// opening hours. A location with no opening hours at all counts as open every day.
+    /// opening hours (a bank holiday's are those of the day it's staffed like). A location with no
+    /// opening hours at all counts as open every day.
     /// </summary>
     public static bool AppliesOn(Checklist checklist, DateOnly day, IEnumerable<LocationOpeningHours> hours, RotaHolidayDay? holiday = null)
     {
@@ -59,53 +60,44 @@ public static class ChecklistRules
 
         List<LocationOpeningHours> valid = Valid(hours);
 
-        return valid.Count == 0 || valid.Any(x => x.DayOfWeek == day.DayOfWeek);
+        return valid.Count == 0 || OpeningHoursRules.Resolve(valid, holiday ?? Ordinary(day)).Windows.Count > 0;
     }
 
     /// <summary>
     /// When the day's run is due, in UTC, or null when it has no due time - including an
     /// opening/closing rule on a day with no opening hours. "Before closing" uses the day's last
-    /// closing time, which for a window running past midnight is the next morning.
+    /// closing time, which for a window running past midnight is the next morning. On a bank
+    /// holiday the hours are those of the day it's staffed like.
     /// </summary>
-    public static DateTime? DueUtc(Checklist checklist, DateOnly day, IEnumerable<LocationOpeningHours> hours)
+    public static DateTime? DueUtc(Checklist checklist, DateOnly day, IEnumerable<LocationOpeningHours> hours, RotaHolidayDay? holiday = null)
     {
-        switch (checklist.DueRule)
+        if (checklist.DueRule == ChecklistDueRule.FixedTime)
         {
-            case ChecklistDueRule.FixedTime:
-                return checklist.DueTime is TimeOnly time ? RotaTime.ToUtc(day, time) : null;
-
-            case ChecklistDueRule.AfterOpening:
-            {
-                List<LocationOpeningHours> today = Valid(hours).Where(x => x.DayOfWeek == day.DayOfWeek).ToList();
-
-                if (today.Count == 0)
-                {
-                    return null;
-                }
-
-                return RotaTime.ToUtc(day, today.Min(x => x.OpensAt)).AddMinutes(checklist.DueOffsetMinutes);
-            }
-
-            case ChecklistDueRule.BeforeClosing:
-            {
-                List<LocationOpeningHours> today = Valid(hours).Where(x => x.DayOfWeek == day.DayOfWeek).ToList();
-
-                if (today.Count == 0)
-                {
-                    return null;
-                }
-
-                DateTime lastClose = today
-                    .Select(x => RotaTime.ToUtc(x.ClosesAt <= x.OpensAt ? day.AddDays(1) : day, x.ClosesAt))
-                    .Max();
-
-                return lastClose.AddMinutes(-checklist.DueOffsetMinutes);
-            }
-
-            default:
-                return null;
+            return checklist.DueTime is TimeOnly time ? RotaTime.ToUtc(day, time) : null;
         }
+
+        if (checklist.DueRule is not (ChecklistDueRule.AfterOpening or ChecklistDueRule.BeforeClosing))
+        {
+            return null;
+        }
+
+        // The day's resolved windows: a bank holiday's come from the day it's staffed like.
+        IReadOnlyList<OpeningWindow> windows = OpeningHoursRules.Resolve(Valid(hours), holiday ?? Ordinary(day)).Windows;
+
+        if (windows.Count == 0)
+        {
+            return null;
+        }
+
+        return checklist.DueRule == ChecklistDueRule.AfterOpening
+            ? ToUtc(windows.Min(x => x.OpensLocal)).AddMinutes(checklist.DueOffsetMinutes)
+            : ToUtc(windows.Max(x => x.ClosesLocal)).AddMinutes(-checklist.DueOffsetMinutes);
     }
+
+    private static DateTime ToUtc(DateTime venueLocal) =>
+        RotaTime.ToUtc(DateOnly.FromDateTime(venueLocal), TimeOnly.FromDateTime(venueLocal));
+
+    private static RotaHolidayDay Ordinary(DateOnly day) => new(day, null, null, null);
 
     /// <summary>
     /// A day's run from its ticks: complete once every task is ticked, missed once it's past due

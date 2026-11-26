@@ -38,6 +38,36 @@ public class ChecklistRulesTests
         new RotaHoliday { CompanyId = 1, LocationId = 1, Name = "Refit", Kind = RotaHolidayKind.Closed, StartDate = day, EndDate = day },
         null, null);
 
+    // Monday 6 Apr 2026 (BST), a bank holiday staffed like a Saturday.
+    private static readonly DateOnly BankMonday = new(2026, 4, 6);
+
+    private static RotaHolidayDay BankHoliday(DateOnly day, DayOfWeek like) => new(day, null,
+        new RotaHoliday { CompanyId = 1, LocationId = 1, Name = "Easter Monday", Kind = RotaHolidayKind.BankHoliday, StartDate = day, EndDate = day, StaffLike = like },
+        null);
+
+    [TestMethod]
+    public void AppliesOn_BankHoliday_RunsOnTheHoursOfTheDayItsStaffedLike()
+    {
+        List<LocationOpeningHours> saturdayOnly = [Hours(DayOfWeek.Saturday, 10, 18)];
+
+        Assert.IsFalse(ChecklistRules.AppliesOn(Checklist(), BankMonday, saturdayOnly), "an ordinary Monday has no hours");
+        Assert.IsTrue(ChecklistRules.AppliesOn(Checklist(), BankMonday, saturdayOnly, BankHoliday(BankMonday, DayOfWeek.Saturday)));
+    }
+
+    [TestMethod]
+    public void DueUtc_BankHoliday_UsesTheStaffedLikeDaysHours()
+    {
+        List<LocationOpeningHours> hours = [Hours(DayOfWeek.Monday, 15, 19), Hours(DayOfWeek.Saturday, 10, 18)];
+        RotaHolidayDay bank = BankHoliday(BankMonday, DayOfWeek.Saturday);
+
+        Assert.AreEqual(new DateTime(2026, 4, 6, 9, 15, 0, DateTimeKind.Utc),
+            ChecklistRules.DueUtc(Checklist(ChecklistDueRule.AfterOpening, 15), BankMonday, hours, bank), "10:15 BST");
+        Assert.AreEqual(new DateTime(2026, 4, 6, 16, 30, 0, DateTimeKind.Utc),
+            ChecklistRules.DueUtc(Checklist(ChecklistDueRule.BeforeClosing, 30), BankMonday, hours, bank), "17:30 BST");
+        Assert.AreEqual(new DateTime(2026, 4, 6, 14, 15, 0, DateTimeKind.Utc),
+            ChecklistRules.DueUtc(Checklist(ChecklistDueRule.AfterOpening, 15), BankMonday, hours), "an ordinary Monday: 15:15 BST");
+    }
+
     [TestMethod]
     public void AppliesOn_OnlyOnTheChosenDays()
     {

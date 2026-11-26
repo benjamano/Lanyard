@@ -77,7 +77,7 @@ internal static class ChecklistRunStore
             }
 
             List<ChecklistTask> tasks = [.. checklist.Tasks.OrderBy(x => x.SortOrder).ThenBy(x => x.CreateDate)];
-            DateTime? due = ChecklistRules.DueUtc(checklist, day, hours);
+            DateTime? due = ChecklistRules.DueUtc(checklist, day, hours, holiday);
             ChecklistRun? run = existing.FirstOrDefault(x => x.ChecklistId == checklist.Id);
 
             if (run is null)

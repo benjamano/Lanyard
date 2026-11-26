@@ -1,3 +1,4 @@
+using Lanyard.Application.Services;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
@@ -8,6 +9,7 @@ using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Moq;
 
 namespace Lanyard.Tests.Services.Scheduling;
 
@@ -21,8 +23,8 @@ public class RotaHolidayServiceTests
         public override DateTimeOffset GetUtcNow() => now;
     }
 
-    private static RotaHolidayService GetService(DbContextOptions<ApplicationDbContext> options) =>
-        new(SchedulingTestHelpers.GetFactory(options), NullLogger<RotaHolidayService>.Instance);
+    private static RotaHolidayService GetService(DbContextOptions<ApplicationDbContext> options, IAutomationEngineService? engine = null) =>
+        new(SchedulingTestHelpers.GetFactory(options), NullLogger<RotaHolidayService>.Instance, engine);
 
     private static RotaHoliday New(int locationId, RotaHolidayKind kind, DateOnly start, DateOnly? end = null, string name = "Half term") => new()
     {
@@ -123,6 +125,33 @@ public class RotaHolidayServiceTests
 
         await using ApplicationDbContext ctx = new(options);
         Assert.AreEqual(1, await ctx.RotaHolidays.CountAsync(), "kept, just switched off");
+    }
+
+    [TestMethod]
+    public async Task SaveRemoveAndAddBankHolidays_ClearTheAutomationCache()
+    {
+        // Automation conditions read holidays from the engine's rule cache.
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (_, Location ipswich) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        LocationScope scope = SchedulingTestHelpers.ManagerScopeFor(ipswich);
+        Mock<IAutomationEngineService> engine = new();
+        RotaHolidayService service = GetService(options, engine.Object);
+
+        RotaHoliday saved = (await service.SaveHolidayAsync(scope, New(ipswich.Id, RotaHolidayKind.Closed, new DateOnly(2026, 12, 25)), ManagerId)).Data!;
+        engine.Verify(x => x.InvalidateRuleCache(), Times.Once);
+
+        await service.RemoveHolidayAsync(scope, saved.Id, ManagerId);
+        engine.Verify(x => x.InvalidateRuleCache(), Times.Exactly(2));
+
+        await service.AddBankHolidaysAsync(scope, ipswich.Id, new DateOnly(2026, 12, 1), new DateOnly(2026, 12, 31), ManagerId);
+        engine.Verify(x => x.InvalidateRuleCache(), Times.Exactly(3));
+
+        await service.AddBankHolidaysAsync(scope, ipswich.Id, new DateOnly(2026, 12, 1), new DateOnly(2026, 12, 31), ManagerId);
+        engine.Verify(x => x.InvalidateRuleCache(), Times.Exactly(3), "nothing new to add");
+
+        Result<RotaHoliday> invalid = await service.SaveHolidayAsync(scope, New(ipswich.Id, RotaHolidayKind.Closed, new DateOnly(2026, 12, 25), name: " "), ManagerId);
+        Assert.IsFalse(invalid.IsSuccess);
+        engine.Verify(x => x.InvalidateRuleCache(), Times.Exactly(3), "a refused save changes nothing");
     }
 
     [TestMethod]

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Lanyard.Application.Services;
 using Lanyard.Application.Services.Features;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Tenancy;
@@ -38,7 +39,8 @@ public class CompanyFeatureServiceTests
         ClaimsPrincipal? user = null,
         Result<LocationScope>? scope = null,
         IMemoryCache? cache = null,
-        ITenantContext? tenant = null)
+        ITenantContext? tenant = null,
+        IAutomationEngineService? engine = null)
     {
         Mock<ICurrentLocationContext> locationContext = new();
         locationContext.Setup(x => x.GetScopeAsync())
@@ -51,7 +53,8 @@ public class CompanyFeatureServiceTests
             cache ?? new MemoryCache(new MemoryCacheOptions()),
             TimeProvider.System,
             NullLogger<CompanyFeatureService>.Instance,
-            tenant);
+            tenant,
+            engine);
     }
 
     // A company with two locations and no switches at all, unlike SeedCompanyAsync, which
@@ -138,6 +141,22 @@ public class CompanyFeatureServiceTests
         Assert.AreEqual(ipswich.Id, row.LocationId);
         Assert.IsFalse(row.IsEnabled);
         Assert.AreEqual("admin", row.UpdatedByUserId);
+    }
+
+    [TestMethod]
+    public async Task SetFeatureEnabledAsync_StaffScheduling_ClearsTheAutomationCache_OtherFeaturesDont()
+    {
+        // Automation conditions read rota holidays only where Staff Scheduling is on.
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (_, Location ipswich, _) = await SeedBareCompanyAsync(options);
+        Mock<IAutomationEngineService> engine = new();
+        CompanyFeatureService service = GetService(options, engine: engine.Object);
+
+        await SwitchAsync(service, ipswich, CompanyFeature.Training, true);
+        engine.Verify(x => x.InvalidateRuleCache(), Times.Never);
+
+        await SwitchAsync(service, ipswich, CompanyFeature.StaffScheduling, true);
+        engine.Verify(x => x.InvalidateRuleCache(), Times.Once);
     }
 
     [TestMethod]

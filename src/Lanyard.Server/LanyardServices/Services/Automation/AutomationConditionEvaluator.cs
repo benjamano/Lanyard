@@ -182,7 +182,7 @@ public static class AutomationConditionEvaluator
 
                 // No hours set reads as closed rather than misconfigured: it's a normal state for a
                 // new location, and "outside opening hours" rules should still run.
-                bool isOpen = OpeningHoursRules.IsOpen(location.Hours, venueLocal);
+                bool isOpen = OpeningHoursRules.IsOpen(location.Hours, [], venueLocal) /* holidays wired in PR 2/4 */;
 
                 if (isOpen == wanted.Open)
                 {

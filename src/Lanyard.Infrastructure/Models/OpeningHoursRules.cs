@@ -1,40 +1,59 @@
 namespace Lanyard.Infrastructure.Models;
 
 /// <summary>
-/// Whether a location is open at a venue-local moment, from its LocationOpeningHours rows. Shared by
-/// the automation engine, the opening hours service's validation and the editor dialog.
+/// Whether a location is open at a venue-local moment, from its LocationOpeningHours rows and its
+/// rota holidays (a Closed day shuts it, a bank holiday keeps the hours of the day it's staffed
+/// like). Every opening-hours decision goes through <see cref="Resolve"/> or <see cref="IsOpen"/>:
+/// automation, kiosk alerts, audio clips, screens, checklists and Insights.
 /// </summary>
 public static class OpeningHoursRules
 {
     /// <summary>
-    /// Open inside any active window: OpensAt inclusive, ClosesAt exclusive. A ClosesAt at or before
-    /// OpensAt closes after midnight, so late-night windows are checked against yesterday's rows too:
-    /// at 01:00 on Sunday a venue is still open on Saturday's 18:00-02:00.
+    /// Whether the location is open at a venue-local moment, once its rota holidays are taken into
+    /// account: open inside any of yesterday's or today's resolved windows (see <see cref="Resolve"/>).
+    /// OpensAt is inclusive, ClosesAt exclusive. A window belongs to the day it opens on, so at 01:00
+    /// on Sunday a venue is still open on Saturday's 18:00-02:00 even when Sunday is marked Closed,
+    /// and shut when Saturday was. Pass no holidays where the location has none (or the feature is off).
     /// </summary>
-    public static bool IsOpen(IEnumerable<LocationOpeningHours> hours, DateTime venueLocal)
+    public static bool IsOpen(IEnumerable<LocationOpeningHours> hours, IEnumerable<RotaHoliday> holidays, DateTime venueLocal)
     {
-        TimeOnly now = TimeOnly.FromDateTime(venueLocal);
-        DayOfWeek today = venueLocal.DayOfWeek;
-        DayOfWeek yesterday = (DayOfWeek)(((int)today + 6) % 7);
+        List<LocationOpeningHours> rows = hours as List<LocationOpeningHours> ?? [.. hours];
+        List<RotaHoliday> days = holidays as List<RotaHoliday> ?? [.. holidays];
+        DateOnly today = DateOnly.FromDateTime(venueLocal);
 
-        foreach (LocationOpeningHours day in hours.Where(h => h.IsActive && IsValid(h.OpensAt, h.ClosesAt)))
+        return Resolve(rows, days, today.AddDays(-1)).IsOpenAt(venueLocal) || Resolve(rows, days, today).IsOpenAt(venueLocal);
+    }
+
+    /// <summary>
+    /// A date's opening windows once holidays are applied. A Closed day has none. A bank holiday uses
+    /// the windows of the day it's staffed like (Sunday unless the manager picked another). Any other
+    /// day uses its own weekday's rows. Each window is placed on the date, closing the next morning
+    /// when ClosesAt is at or before OpensAt.
+    /// </summary>
+    public static OpeningDay Resolve(IEnumerable<LocationOpeningHours> hours, IEnumerable<RotaHoliday> holidays, DateOnly date) =>
+        Resolve(hours, RotaHolidayRules.For(holidays, date));
+
+    /// <summary>The same, for a day whose holidays are already worked out (RotaHolidayRules.For).</summary>
+    public static OpeningDay Resolve(IEnumerable<LocationOpeningHours> hours, RotaHolidayDay holiday)
+    {
+        DateOnly date = holiday.Day;
+
+        if (holiday.IsClosed)
         {
-            bool runsPastMidnight = day.ClosesAt <= day.OpensAt;
-
-            if (day.DayOfWeek == today)
-            {
-                if (runsPastMidnight ? now >= day.OpensAt : now >= day.OpensAt && now < day.ClosesAt)
-                {
-                    return true;
-                }
-            }
-            else if (day.DayOfWeek == yesterday && runsPastMidnight && now < day.ClosesAt)
-            {
-                return true;
-            }
+            return new OpeningDay(date, [], holiday);
         }
 
-        return false;
+        DayOfWeek like = holiday.StaffedLike;
+
+        List<OpeningWindow> windows = hours
+            .Where(h => h.IsActive && h.DayOfWeek == like && IsValid(h.OpensAt, h.ClosesAt))
+            .OrderBy(h => h.OpensAt)
+            .Select(h => new OpeningWindow(
+                date.ToDateTime(h.OpensAt),
+                (h.ClosesAt <= h.OpensAt ? date.AddDays(1) : date).ToDateTime(h.ClosesAt)))
+            .ToList();
+
+        return new OpeningDay(date, windows, holiday);
     }
 
     /// <summary>Equal open and close times are ambiguous (open all day, or never), so they're refused.</summary>
@@ -84,4 +103,21 @@ public static class OpeningHoursRules
 
         return null;
     }
+}
+
+/// <summary>One opening window placed on a real date, in venue-local time. ClosesLocal is exclusive.</summary>
+public sealed record OpeningWindow(DateTime OpensLocal, DateTime ClosesLocal)
+{
+    public bool Contains(DateTime venueLocal) => venueLocal >= OpensLocal && venueLocal < ClosesLocal;
+}
+
+/// <summary>
+/// A location's opening hours for one date, with its holidays applied (OpeningHoursRules.Resolve).
+/// No windows means shut that day: a Closed holiday, or no hours on the weekday it follows.
+/// </summary>
+public sealed record OpeningDay(DateOnly Date, IReadOnlyList<OpeningWindow> Windows, RotaHolidayDay Holiday)
+{
+    public bool IsClosedForHoliday => Holiday.IsClosed;
+
+    public bool IsOpenAt(DateTime venueLocal) => Windows.Any(w => w.Contains(venueLocal));
 }

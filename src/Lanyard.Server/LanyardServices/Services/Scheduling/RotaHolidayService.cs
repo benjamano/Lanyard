@@ -10,10 +10,15 @@ namespace Lanyard.Application.Services.Scheduling;
 
 public class RotaHolidayService(
     IDbContextFactory<ApplicationDbContext> factory,
-    ILogger<RotaHolidayService> logger) : IRotaHolidayService
+    ILogger<RotaHolidayService> logger,
+    IAutomationEngineService? engineService = null) : IRotaHolidayService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly ILogger<RotaHolidayService> _logger = logger;
+
+    // Automation conditions read holidays from the engine's rule cache (a Closed day shuts the
+    // location), so every change here clears it - as saving opening hours does.
+    private readonly IAutomationEngineService? _engineService = engineService;
 
     // Active holidays at a location touching from..to - what Auto-build and the rota read.
     internal static Task<List<RotaHoliday>> ForRangeAsync(ApplicationDbContext ctx, int locationId, DateOnly from, DateOnly to) =>
@@ -117,6 +122,7 @@ public class RotaHolidayService(
             target.StaffLike = holiday.Kind == RotaHolidayKind.BankHoliday ? holiday.StaffLike : null;
 
             await ctx.SaveChangesAsync();
+            _engineService?.InvalidateRuleCache();
 
             _logger.LogInformation("Rota holiday {HolidayId} ({Kind}) saved for {LocationId} by {ActingUserId}", target.Id, target.Kind, target.LocationId, actingUserId);
 
@@ -147,6 +153,7 @@ public class RotaHolidayService(
             holiday.UpdateByUserId = actingUserId;
 
             await ctx.SaveChangesAsync();
+            _engineService?.InvalidateRuleCache();
 
             _logger.LogInformation("Rota holiday {HolidayId} removed by {ActingUserId}", holidayId, actingUserId);
 
@@ -213,6 +220,11 @@ public class RotaHolidayService(
             }
 
             await ctx.SaveChangesAsync();
+
+            if (missing.Count > 0)
+            {
+                _engineService?.InvalidateRuleCache();
+            }
 
             _logger.LogInformation("Added {Count} bank holidays from {From} to {To} at {LocationId} by {ActingUserId}", missing.Count, from, to, locationId, actingUserId);
 

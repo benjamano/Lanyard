@@ -18,8 +18,12 @@ public class CompanyFeatureService(
     IMemoryCache cache,
     TimeProvider timeProvider,
     ILogger<CompanyFeatureService> logger,
-    ITenantContext? tenant = null) : ICompanyFeatureService
+    ITenantContext? tenant = null,
+    IAutomationEngineService? engineService = null) : ICompanyFeatureService
 {
+    // Automation conditions read rota holidays only where Staff Scheduling is on, and the engine
+    // caches them with its rules, so switching that feature clears the cache.
+    private readonly IAutomationEngineService? _engineService = engineService;
     private readonly ITenantContext? _tenant = tenant;
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly ICurrentLocationContext _locationContext = locationContext;
@@ -142,6 +146,11 @@ public class CompanyFeatureService(
             await ctx.SaveChangesAsync();
 
             _cache.Remove(CacheKey(companyId.Value));
+
+            if (feature == CompanyFeature.StaffScheduling)
+            {
+                _engineService?.InvalidateRuleCache();
+            }
 
             _logger.LogInformation("{UserId} turned {Feature} {State} for location {LocationId} (company {CompanyId})",
                 updatedByUserId, feature, isEnabled ? "on" : "off", locationId, companyId.Value);
