@@ -634,4 +634,23 @@ public class ChecklistRunServiceTests
         Assert.IsNull(after.MinReading);
         Assert.AreEqual(8m, after.MaxReading);
     }
+
+    [TestMethod]
+    public async Task NoteLength_IsOnlyCheckedWhenTheNoteIsKept()
+    {
+        World w = await SeedAsync();
+        ChecklistRunView run = await TodayAsync(w, w.Amy, w.AmyScope);
+        string tooLong = new('x', ChecklistRules.MaxNoteLength + 1);
+
+        // In range: the note is dropped, so its length doesn't matter.
+        Result<bool> inRange = await GetService(w).CompleteAsync(w.Amy.Id, w.AmyScope, Item(run, "Fridge"), tooLong, 4m);
+        Assert.IsTrue(inRange.IsSuccess, inRange.Error);
+
+        // Out of range: the note is kept, so it must fit.
+        World other = await SeedAsync();
+        ChecklistRunView otherRun = await TodayAsync(other, other.Amy, other.AmyScope);
+        Result<bool> outOfRange = await GetService(other).CompleteAsync(other.Amy.Id, other.AmyScope, Item(otherRun, "Fridge"), tooLong, 9m);
+        Assert.IsFalse(outOfRange.IsSuccess);
+        StringAssert.Contains(outOfRange.Error, "at most");
+    }
 }

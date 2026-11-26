@@ -64,7 +64,7 @@
                                 @if (outOfRange)
                                 {
                                     <FluentIcon Value="@(new Icons.Filled.Size16.Warning())" Color="Color.Custom" CustomColor="currentColor" aria-hidden="true" />
-                                    <span>@ChecklistDisplay.ReadingStatusLabel(status) (acceptable: @RangeText(current)). Tell a manager.</span>
+                                    <span>@ChecklistDisplay.ReadingStatusLabel(status) (acceptable: @RangeText(current)).@(TellAManager ? " Tell a manager." : "")</span>
                                 }
                                 else
                                 {
@@ -195,6 +195,9 @@
             revision++;
         }
     }
+
+    // Staff ticking today are told to tell a manager; a manager's board and past days just show the verdict.
+    private bool TellAManager => Interactive && IsToday && !CanUndoAnyone;
 
     private decimal? TypedReading(Guid itemId) =>
         decimal.TryParse(Readings.GetValueOrDefault(itemId), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out decimal parsed)

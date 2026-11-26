@@ -217,9 +217,11 @@ public class ChecklistRunService(
 
         _logger.LogInformation("Checklist task {RunItemId} ticked by {UserId} ({Method})", item.Id, userId, method);
 
-        if (completion.Reading is decimal saved)
+        if (completion.Reading is decimal saved
+            && await ReadingAlertAsync(ctx, item, completion, saved) is { IsSuccess: false } alert)
         {
-            await ReadingAlertAsync(ctx, item, completion, saved);
+            // The tick is the evidence and stands; the alert is a follow-on.
+            _logger.LogWarning("Checklist task {RunItemId} ticked, but its reading alert failed: {Error}", item.Id, alert.Error);
         }
 
         return Result<bool>.Ok(true);
@@ -227,16 +229,16 @@ public class ChecklistRunService(
 
     // After a reading is saved: one outside the range raises (or refreshes) the task's alert for the
     // day; one inside it clears that alert, as the re-check that put things right. Taking a tick back
-    // never clears it - a bad reading was still taken. The tick is the evidence, so a failure here is
-    // logged and the tick stands. Company and location come from the run, never the tenant: the
-    // terminal and kiosk tick signed out.
-    private async Task ReadingAlertAsync(ApplicationDbContext ctx, ChecklistRunItem item, ChecklistCompletion completion, decimal reading)
+    // never clears it - a bad reading was still taken. Fails rather than throws, so the caller keeps
+    // the tick. Company and location come from the run, never the tenant: the terminal and kiosk tick
+    // signed out.
+    private async Task<Result<bool>> ReadingAlertAsync(ApplicationDbContext ctx, ChecklistRunItem item, ChecklistCompletion completion, decimal reading)
     {
         ChecklistReadingStatus status = ChecklistRules.Check(reading, item.MinReading, item.MaxReading);
 
         if (status == ChecklistReadingStatus.NoRange)
         {
-            return;
+            return Result<bool>.Ok(false);
         }
 
         ChecklistRun run = item.Run!;
@@ -252,17 +254,12 @@ public class ChecklistRunService(
             {
                 Result<bool> cleared = await _alertWriter.ResolveAsync(run.CompanyId, key, $"Re-checked at {when}: {value} ({who}).");
 
-                if (!cleared.IsSuccess)
-                {
-                    _logger.LogWarning("Couldn't clear the reading alert for checklist task {RunItemId}: {Error}", item.Id, cleared.Error);
-                }
-
-                return;
+                return cleared.IsSuccess ? cleared : Result<bool>.Fail($"Couldn't clear the reading alert: {cleared.Error}");
             }
 
             if (item.ReadingAlert == ChecklistReadingAlert.None)
             {
-                return;
+                return Result<bool>.Ok(false);
             }
 
             string range = ChecklistRules.RangeText(item.MinReading, item.MaxReading, item.Unit)!;
@@ -281,17 +278,18 @@ public class ChecklistRunService(
 
             if (!raised.IsSuccess)
             {
-                _logger.LogWarning("Couldn't raise the reading alert for checklist task {RunItemId}: {Error}", item.Id, raised.Error);
+                return Result<bool>.Fail($"Couldn't raise the reading alert: {raised.Error}");
             }
-            else
-            {
-                _logger.LogInformation("Checklist task {RunItemId} reading {Reading} out of range ({Status}): alert {Outcome}",
-                    item.Id, reading, status, raised.Data);
-            }
+
+            _logger.LogInformation("Checklist task {RunItemId} reading {Reading} out of range ({Status}): alert {Outcome}",
+                item.Id, reading, status, raised.Data);
+
+            return Result<bool>.Ok(raised.Data == OperationsAlertRaiseOutcome.Created);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to raise or clear the reading alert for checklist task {RunItemId}", item.Id);
+            return Result<bool>.Fail($"Failed to raise or clear the reading alert: {ex.Message}");
         }
     }
 
@@ -318,11 +316,7 @@ public class ChecklistRunService(
         decimal? minReading = null, decimal? maxReading = null)
     {
         string? trimmed = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
-
-        if (trimmed?.Length > ChecklistRules.MaxNoteLength && response != ChecklistResponse.Tick)
-        {
-            return Result<(string?, decimal?)>.Fail($"The note can be at most {ChecklistRules.MaxNoteLength} characters.");
-        }
+        string tooLong = $"The note can be at most {ChecklistRules.MaxNoteLength} characters.";
 
         switch (response)
         {
@@ -337,12 +331,20 @@ public class ChecklistRunService(
                     return Result<(string?, decimal?)>.Fail("That reading isn't a number Lanyard can store. Use at most two decimal places.");
                 }
 
-                bool outOfRange = ChecklistRules.IsOutOfRange(ChecklistRules.Check(value, minReading, maxReading));
+                // The note is only kept, so only checked, for a reading outside the range.
+                if (!ChecklistRules.IsOutOfRange(ChecklistRules.Check(value, minReading, maxReading)))
+                {
+                    return Result<(string?, decimal?)>.Ok((null, value));
+                }
 
-                return Result<(string?, decimal?)>.Ok((outOfRange ? trimmed : null, value));
+                return trimmed?.Length > ChecklistRules.MaxNoteLength
+                    ? Result<(string?, decimal?)>.Fail(tooLong)
+                    : Result<(string?, decimal?)>.Ok((trimmed, value));
 
             case ChecklistResponse.TickWithNote:
-                return Result<(string?, decimal?)>.Ok((trimmed, null));
+                return trimmed?.Length > ChecklistRules.MaxNoteLength
+                    ? Result<(string?, decimal?)>.Fail(tooLong)
+                    : Result<(string?, decimal?)>.Ok((trimmed, null));
 
             default:
                 return Result<(string?, decimal?)>.Ok((null, null));
