@@ -1,4 +1,4 @@
-using Lanyard.Client.Identify;
+﻿using Lanyard.Client.Identify;
 using Lanyard.Client.AudioDevices;
 using Lanyard.Client.Controllers;
 using Lanyard.Client.Diagnostics;
@@ -17,6 +17,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Resources;
+using Lanyard.Shared.LaserGame.Pipeline;
 
 public static class ClientServiceBootstrapper
 {
@@ -64,7 +65,8 @@ public static class ClientServiceBootstrapper
         services.AddHttpClient();
 
         services.AddSingleton<IPacketSniffer, PacketSniffer>();
-        services.AddSingleton<IActionFunctions, Actions>();
+        services.AddSingleton<ILaserGameActions, LaserGameActions>();
+        services.AddSingleton<ILaserPacketPipeline, LaserPacketPipeline>();
         services.AddSingleton<IGameStateService, GameStateService>();
         services.AddSingleton<ILaserGameStatePublisher, LaserGameStatePublisher>();
         services.AddSingleton<IProjectionProgramsService, ProjectionProgramsService>();

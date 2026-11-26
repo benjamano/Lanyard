@@ -2,11 +2,11 @@
 using Lanyard.Shared.Enum;
 using Microsoft.Extensions.Logging;
 
-namespace Lanyard.Client.PacketSniffing;
+namespace Lanyard.Shared.LaserGame.Pipeline;
 
-public class Actions(ILogger<Actions> logger, IGameStateService _gameStateService) : IActionFunctions
+public class LaserGameActions(ILogger<LaserGameActions> logger, IGameStateService _gameStateService) : ILaserGameActions
 {
-    private readonly ILogger<Actions> _logger = logger;
+    private readonly ILogger<LaserGameActions> _logger = logger;
 
     private readonly IGameStateService _gameStateService = _gameStateService;
 

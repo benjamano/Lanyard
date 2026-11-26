@@ -1,5 +1,6 @@
 ﻿using Lanyard.Infrastructure.DTO.ZoneScoreboard;
 using Lanyard.Shared.LaserGame;
+using Lanyard.Shared.LaserGame.Pipeline;
 using Microsoft.Extensions.Logging;
 using PacketDotNet;
 using SharpPcap;
@@ -8,7 +9,7 @@ using System.Net.NetworkInformation;
 
 namespace Lanyard.Client.PacketSniffing;
 
-public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actions) : IPacketSniffer
+public class PacketSniffer(ILogger<PacketSniffer> logger, ILaserPacketPipeline pipeline) : IPacketSniffer
 {
     // Parsed once when settings arrive, so each packet is matched without building strings.
     // Replaced whole rather than mutated, because the capture thread reads them.
@@ -16,7 +17,7 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
     private volatile IPAddress? _destinationIp = IPAddress.Parse("192.168.0.255");
 
     private readonly ILogger<PacketSniffer> _logger = logger;
-    private readonly IActionFunctions _actions = actions;
+    private readonly ILaserPacketPipeline _pipeline = pipeline;
 
     // The server resends ReceiveZoneScoreboardSettings on every OnConnectedAsync, so this
     // runs again on every reconnect. Without tracking the active device, OnPacketArrival
@@ -237,14 +238,12 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
                 return;
             }
 
-            string[] decodedData = LaserPacketDecoder.Decode(rawBytes);
-
             if (_logger.IsEnabled(LogLevel.Trace))
             {
-                _logger.LogTrace("Game packet from {Source} to {Destination}: {Payload}", ipPacket.SourceAddress, ipPacket.DestinationAddress, string.Join(',', decodedData));
+                _logger.LogTrace("Game packet from {Source} to {Destination}, {Length} bytes", ipPacket.SourceAddress, ipPacket.DestinationAddress, rawBytes.Length);
             }
 
-            HandlePacket(decodedData);
+            _pipeline.Process(rawBytes);
         }
         catch (Exception ex)
         {
@@ -270,39 +269,5 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
         }
 
         return false;
-    }
-
-    public void HandlePacket(string[] decodedData)
-    {
-        if (decodedData.Length == 0 || !int.TryParse(decodedData[0], out int packetType))
-        {
-            _logger.LogDebug("Invalid number for packet type recieved: {value}", decodedData.FirstOrDefault());
-            return;
-        }
-
-        if (decodedData.Length < LaserPacketDecoder.MinimumFieldCount(packetType))
-        {
-            _logger.LogDebug("Dropped a type {PacketType} packet with only {FieldCount} fields.", packetType, decodedData.Length);
-            return;
-        }
-
-        switch (packetType)
-        {
-            case LaserPacketDecoder.TimingPacket:
-                _actions.HandleTimingPacket(decodedData);
-                break;
-            case LaserPacketDecoder.TeamScorePacket:
-                // DON'T CARE ABOUT THIS AS THE TEAM SCORE CAN ALREADY BE WORKED OUT WITH PLAYER SCORES
-                break;
-            case LaserPacketDecoder.PlayerScorePacket:
-                _actions.HandlePlayerScorePacket(decodedData);
-                break;
-            case LaserPacketDecoder.GameStatusPacket:
-                _actions.HandleGameStatusPacket(decodedData);
-                break;
-            case LaserPacketDecoder.ShotConfirmedPacket:
-                _actions.HandleShotConfirmedPacket(decodedData);
-                break;
-        }
     }
 }

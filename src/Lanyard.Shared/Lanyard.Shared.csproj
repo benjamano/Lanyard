@@ -8,4 +8,9 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute> 
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The laser game pipeline (LaserGame/Pipeline) logs through ILogger, so the kiosk and the tests share one copy. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.1" />
+  </ItemGroup>
 </Project>

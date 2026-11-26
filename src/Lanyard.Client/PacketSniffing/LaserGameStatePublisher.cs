@@ -3,6 +3,7 @@ using Lanyard.Shared.DTO;
 using Lanyard.Shared.Enum;
 using Lanyard.Shared.LaserGame;
 using Microsoft.Extensions.Logging;
+using Lanyard.Shared.LaserGame.Pipeline;
 
 namespace Lanyard.Client.PacketSniffing;
 

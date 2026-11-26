@@ -1,7 +1,7 @@
 ﻿using Lanyard.Shared.DTO;
 using Lanyard.Shared.Enum;
 
-namespace Lanyard.Client.PacketSniffing;
+namespace Lanyard.Shared.LaserGame.Pipeline;
 
 // Packets change this state on the capture thread while the status publisher snapshots it from its
 // own loop, so every read and write takes _lock. Events are raised after the lock is released:
@@ -24,6 +24,35 @@ public class GameStateService : IGameStateService
     private TimeSpan _timeRemaining = TimeSpan.Zero;
 
     private List<PlayerScoreDTO> _currentPlayerScores = [];
+
+    private LaserPacketSource _source = LaserPacketSource.Live;
+
+    public LaserPacketSource Source
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _source;
+            }
+        }
+    }
+
+    public void Reset(LaserPacketSource source)
+    {
+        lock (_lock)
+        {
+            _source = source;
+            _gameStatus = GameStatus.NotStarted;
+            _timeRemaining = TimeSpan.Zero;
+            _gameLength = TimeSpan.Zero;
+            _currentPlayerScores = [];
+        }
+
+        // Deliberately no GameEnded: nothing finished, the game was abandoned. Listeners that
+        // record a finished game must not see a reset as one.
+        GameStateChanged?.Invoke();
+    }
 
     public void HandleGameStarted()
     {

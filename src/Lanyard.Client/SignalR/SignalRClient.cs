@@ -19,6 +19,7 @@ using DirectShowLib;
 using Lanyard.Infrastructure.DTO.VideoDevices;
 using Lanyard.Client.Identify;
 using Microsoft.Win32;
+using Lanyard.Shared.LaserGame.Pipeline;
 
 public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxController, IMusicPlayer musicPlayer, IGameStateService gameStateService) : ISignalRClient
 {
