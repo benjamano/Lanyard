@@ -49,8 +49,9 @@ public class GameStateService : IGameStateService
             _currentPlayerScores = [];
         }
 
-        // Deliberately no GameEnded: nothing finished, the game was abandoned. Listeners that
-        // record a finished game must not see a reset as one.
+        // Deliberately no GameEnded: nothing finished, the game was abandoned. The publish this
+        // raises carries IsReplay for the new source, and LaserPacketPipeline.SwitchSource never
+        // resets a live game in progress, so the server can't read a reset as a game ending.
         GameStateChanged?.Invoke();
     }
 
@@ -158,7 +159,8 @@ public class GameStateService : IGameStateService
                 TotalTimeSeconds = (int)Math.Max(0, _gameLength.TotalSeconds),
                 PlayerCount = playerScores.Count,
                 PlayerScores = playerScores,
-                LastUpdateUtc = DateTime.UtcNow
+                LastUpdateUtc = DateTime.UtcNow,
+                IsReplay = _source == LaserPacketSource.Replay
             };
         }
     }

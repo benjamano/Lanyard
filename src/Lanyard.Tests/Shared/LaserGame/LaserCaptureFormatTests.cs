@@ -231,4 +231,90 @@ public class LaserCaptureFormatTests
 
         Assert.AreEqual(3, ex.LineNumber);
     }
+
+    [TestMethod]
+    public async Task Writer_RecoversFromAFailedWrite_SoTheFooterStillGoesOut()
+    {
+        using MemoryStream inner = new();
+        FailingStream stream = new(inner);
+        await using LaserCaptureWriter writer = new(stream, leaveOpen: true);
+
+        await writer.WriteHeaderAsync(SampleHeader(), CancellationToken.None);
+
+        stream.FailNextWrite = true;
+        await Assert.ThrowsExactlyAsync<IOException>(() => writer.WritePacketAsync(new LaserCapturePacket(0, null, null, Start), CancellationToken.None));
+
+        await writer.WritePacketAsync(new LaserCapturePacket(5, null, null, End), CancellationToken.None);
+        await writer.WriteFooterAsync(new LaserCaptureFooter { Packets = 1 }, CancellationToken.None);
+
+        LaserCapture capture = await ReadAsync(Encoding.UTF8.GetString(inner.ToArray()));
+
+        Assert.HasCount(1, capture.Packets);
+        CollectionAssert.AreEqual(End, capture.Packets[0].Payload);
+        Assert.IsNotNull(capture.Footer);
+    }
+
+    [TestMethod]
+    public async Task Writer_FlushesTheHeaderStraightAway()
+    {
+        using MemoryStream inner = new();
+        await using BufferedStream buffered = new(inner, 64 * 1024);
+        await using LaserCaptureWriter writer = new(buffered, leaveOpen: true);
+
+        await writer.WriteHeaderAsync(SampleHeader(), CancellationToken.None);
+
+        Assert.IsGreaterThan(0L, inner.Length, "A crash right after starting must still leave a readable header.");
+    }
+
+    [TestMethod]
+    public async Task Reader_AcceptsAByteOrderMark()
+    {
+        byte[] bytes = [0xEF, 0xBB, 0xBF, .. Encoding.UTF8.GetBytes(HeaderLine + "\n")];
+
+        LaserCapture capture = await LaserCaptureReader.ReadAsync(new MemoryStream(bytes), CancellationToken.None);
+
+        Assert.AreEqual(LaserCaptureFormat.FormatName, capture.Header.Format);
+    }
+
+    [TestMethod]
+    public async Task Reader_RejectsAGameCountTooBigForAnInt()
+    {
+        await AssertRejectedAsync(HeaderLine + "\n" + """{"end":true,"games":3000000000}""" + "\n");
+    }
+
+    [TestMethod]
+    public async Task Reader_RejectsAFileTooBigToBeARecording()
+    {
+        byte[] huge = new byte[LaserCaptureReader.MaxFileBytes + 1];
+
+        await Assert.ThrowsExactlyAsync<LaserCaptureFormatException>(() => LaserCaptureReader.ReadAsync(new MemoryStream(huge), CancellationToken.None));
+    }
+
+    private sealed class FailingStream(Stream inner) : Stream
+    {
+        public bool FailNextWrite { get; set; }
+
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => inner.Length;
+        public override long Position { get => inner.Position; set => throw new NotSupportedException(); }
+
+        public override void Flush() => inner.Flush();
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => inner.Write(buffer, offset, count);
+
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (FailNextWrite)
+            {
+                FailNextWrite = false;
+                throw new IOException("Disk full");
+            }
+
+            return inner.WriteAsync(buffer, cancellationToken);
+        }
+    }
 }

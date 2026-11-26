@@ -25,8 +25,9 @@ public interface IGameStateService
 
     /// <summary>
     /// Drops the current game, scores and countdown without raising GameEnded, and sets where
-    /// the next packets come from. Used when switching between live packets and a replay, so
-    /// neither inherits the other's half-finished game.
+    /// the next packets come from, so neither live play nor a replay inherits the other's
+    /// half-finished game. Call it through <see cref="ILaserPacketPipeline.SwitchSource"/>,
+    /// which serialises it with packets and refuses to drop a live game in progress.
     /// </summary>
     void Reset(LaserPacketSource source);
 

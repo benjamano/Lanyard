@@ -5,7 +5,9 @@ namespace Lanyard.Shared.LaserGame.Capture;
 
 /// <summary>
 /// Writes a <see cref="LaserCaptureFormat"/> file: the header, then packets as they come, then the
-/// footer. Each line goes to the stream whole, so a crash never leaves half a line before a good one.
+/// footer. Each line goes to the stream in one write, so a crash never leaves half a line before
+/// a good one. The header is flushed straight away; call <see cref="FlushAsync"/> regularly
+/// (the recorder does it every second) so a crash loses at most the last moments of play.
 /// Not thread-safe: one writer task owns it.
 /// </summary>
 public sealed class LaserCaptureWriter : IAsyncDisposable
@@ -50,6 +52,10 @@ public sealed class LaserCaptureWriter : IAsyncDisposable
 
         JsonSerializer.Serialize(_json, stamped, JsonOptions);
         await WriteLineAsync(cancellationToken);
+
+        // Without the header on disk a crashed recording can't be read at all, so don't leave it
+        // sitting in a buffer. Packets are flushed by the caller on its own schedule.
+        await _stream.FlushAsync(cancellationToken);
 
         _headerWritten = true;
     }
@@ -129,11 +135,18 @@ public sealed class LaserCaptureWriter : IAsyncDisposable
         // The line and its newline go out as one write, so a crash can only cut off the last line.
         _buffer.Write(NewLine);
 
-        await _stream.WriteAsync(_buffer.WrittenMemory, cancellationToken);
-        BytesWritten += _buffer.WrittenCount;
-
-        _buffer.ResetWrittenCount();
-        _json.Reset(_buffer);
+        try
+        {
+            await _stream.WriteAsync(_buffer.WrittenMemory, cancellationToken);
+            BytesWritten += _buffer.WrittenCount;
+        }
+        finally
+        {
+            // Even when the write fails (stopping, a full disk), so the next line - typically the
+            // footer, with a fresh token - starts clean instead of the JSON writer refusing it.
+            _buffer.ResetWrittenCount();
+            _json.Reset(_buffer);
+        }
     }
 
     public async ValueTask DisposeAsync()

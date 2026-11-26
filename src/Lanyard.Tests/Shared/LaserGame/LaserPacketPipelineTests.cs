@@ -36,7 +36,7 @@ public class LaserPacketPipelineTests
         _hits.Clear();
 
         _state = new GameStateService();
-        _pipeline = new LaserPacketPipeline(new LaserGameActions(NullLogger<LaserGameActions>.Instance, _state), NullLogger<LaserPacketPipeline>.Instance);
+        _pipeline = new LaserPacketPipeline(new LaserGameActions(NullLogger<LaserGameActions>.Instance, _state), _state, NullLogger<LaserPacketPipeline>.Instance);
 
         _state.GameStarted += () => _started++;
         _state.GameEnded += () => _ended++;
@@ -49,20 +49,20 @@ public class LaserPacketPipelineTests
     [TestMethod]
     public void AWholeGame_StartsScoresAndEnds()
     {
-        _pipeline.Process(GameStart);
+        _pipeline.Process(LaserPacketSource.Live, GameStart);
         Assert.AreEqual(GameStatus.InGame, _state.GetGameStatus());
 
-        _pipeline.Process(Timing);
+        _pipeline.Process(LaserPacketSource.Live, Timing);
         Assert.AreEqual(TimeSpan.FromSeconds(600), _state.GetTimeRemaining());
 
-        _pipeline.Process(PlayerScore);
+        _pipeline.Process(LaserPacketSource.Live, PlayerScore);
         PlayerScoreDTO? score = _state.GetPlayersScore(1);
         Assert.IsNotNull(score);
         Assert.AreEqual(30, score.Score);
         Assert.AreEqual(10, score.Accuracy);
         Assert.AreEqual(Team.Red, score.Team);
 
-        _pipeline.Process(GameEnd);
+        _pipeline.Process(LaserPacketSource.Live, GameEnd);
 
         Assert.AreEqual(GameStatus.NotStarted, _state.GetGameStatus());
         Assert.AreEqual(1, _started);
@@ -73,10 +73,10 @@ public class LaserPacketPipelineTests
     [TestMethod]
     public void ARepeatedStatusPacket_DoesNotStartTheGameTwice()
     {
-        _pipeline.Process(GameStart);
-        _pipeline.Process(GameStart);
-        _pipeline.Process(GameEnd);
-        _pipeline.Process(GameEnd);
+        _pipeline.Process(LaserPacketSource.Live, GameStart);
+        _pipeline.Process(LaserPacketSource.Live, GameStart);
+        _pipeline.Process(LaserPacketSource.Live, GameEnd);
+        _pipeline.Process(LaserPacketSource.Live, GameEnd);
 
         Assert.AreEqual(1, _started);
         Assert.AreEqual(1, _ended);
@@ -85,7 +85,7 @@ public class LaserPacketPipelineTests
     [TestMethod]
     public void ShotConfirmed_RaisesPlayerHit()
     {
-        _pipeline.Process(ShotConfirmed);
+        _pipeline.Process(LaserPacketSource.Live, ShotConfirmed);
 
         Assert.HasCount(1, _hits);
         Assert.AreEqual(11, _hits[0].ShotGunId);
@@ -95,11 +95,11 @@ public class LaserPacketPipelineTests
     [TestMethod]
     public void ShortGarbledAndTeamScorePackets_ChangeNothing()
     {
-        _pipeline.Process(Ascii("3,1,0"));          // a score packet with too few fields
-        _pipeline.Process(Ascii("x,1,2,3"));        // not a packet type
-        _pipeline.Process(Ascii("2,0,120,1"));      // team score, worked out from player scores instead
-        _pipeline.Process(ReadOnlySpan<byte>.Empty);
-        _pipeline.Dispatch([]);
+        _pipeline.Process(LaserPacketSource.Live, Ascii("3,1,0"));          // a score packet with too few fields
+        _pipeline.Process(LaserPacketSource.Live, Ascii("x,1,2,3"));        // not a packet type
+        _pipeline.Process(LaserPacketSource.Live, Ascii("2,0,120,1"));      // team score, worked out from player scores instead
+        _pipeline.Process(LaserPacketSource.Live, ReadOnlySpan<byte>.Empty);
+        _pipeline.Dispatch(LaserPacketSource.Live, []);
 
         Assert.AreEqual(0, _changed);
         Assert.IsEmpty(_state.GetAllPlayerScores());
@@ -108,7 +108,7 @@ public class LaserPacketPipelineTests
     [TestMethod]
     public void Dispatch_TakesDecodedFields_LikeProcess()
     {
-        _pipeline.Dispatch(["4", "@015", "0"]);
+        _pipeline.Dispatch(LaserPacketSource.Live, ["4", "@015", "0"]);
 
         Assert.AreEqual(GameStatus.InGame, _state.GetGameStatus());
     }
@@ -117,7 +117,7 @@ public class LaserPacketPipelineTests
     public void PacketsFromManyThreads_AreAllApplied()
     {
         // Every packet takes the pipeline's lock, so concurrent callers can't corrupt the score list.
-        Parallel.For(1, 201, gun => _pipeline.Process(Ascii($"3,{gun},0,{gun * 10},1,30,3,50,0")));
+        Parallel.For(1, 201, gun => _pipeline.Process(LaserPacketSource.Live, Ascii($"3,{gun},0,{gun * 10},1,30,3,50,0")));
 
         List<PlayerScoreDTO> scores = _state.GetAllPlayerScores();
 
@@ -128,9 +128,9 @@ public class LaserPacketPipelineTests
     [TestMethod]
     public void Reset_DropsTheGameWithoutEndingIt()
     {
-        _pipeline.Process(GameStart);
-        _pipeline.Process(Timing);
-        _pipeline.Process(PlayerScore);
+        _pipeline.Process(LaserPacketSource.Live, GameStart);
+        _pipeline.Process(LaserPacketSource.Live, Timing);
+        _pipeline.Process(LaserPacketSource.Live, PlayerScore);
         int changedBefore = _changed;
 
         _state.Reset(LaserPacketSource.Replay);
@@ -156,7 +156,7 @@ public class LaserPacketPipelineTests
 
         foreach (byte[] packet in game)
         {
-            _pipeline.Process(packet);
+            _pipeline.Process(LaserPacketSource.Live, packet);
         }
 
         LaserGameStatusDTO live = _state.GetCurrentStatus();
@@ -180,7 +180,7 @@ public class LaserPacketPipelineTests
 
         foreach (LaserCapturePacket packet in capture.Packets)
         {
-            _pipeline.Process(packet.Payload);
+            _pipeline.Process(LaserPacketSource.Live, packet.Payload);
         }
 
         LaserGameStatusDTO replayed = _state.GetCurrentStatus();
@@ -190,5 +190,116 @@ public class LaserPacketPipelineTests
         Assert.AreEqual(live.PlayerScores.Single().Score, replayed.PlayerScores.Single().Score);
         Assert.AreEqual(1, _started);
         Assert.AreEqual(1, _ended);
+    }
+
+    [TestMethod]
+    public void SwitchSource_ToReplay_IsRefusedDuringALiveGame()
+    {
+        _pipeline.Process(LaserPacketSource.Live, GameStart);
+
+        Assert.IsFalse(_pipeline.SwitchSource(LaserPacketSource.Replay));
+        Assert.AreEqual(LaserPacketSource.Live, _state.Source);
+        Assert.AreEqual(GameStatus.InGame, _state.GetGameStatus(), "A refused switch must leave the real game alone.");
+    }
+
+    [TestMethod]
+    public void SwitchSource_ToReplay_WorksWhenIdle_AndMarksTheStatusAsAReplay()
+    {
+        _pipeline.Process(LaserPacketSource.Live, PlayerScore);
+
+        Assert.IsTrue(_pipeline.SwitchSource(LaserPacketSource.Replay));
+
+        LaserGameStatusDTO status = _state.GetCurrentStatus();
+        Assert.IsTrue(status.IsReplay);
+        Assert.AreEqual(0, status.PlayerCount, "The last live game's scores are dropped.");
+    }
+
+    [TestMethod]
+    public void SwitchSource_BackToLive_IsAllowedMidReplayGame()
+    {
+        _pipeline.SwitchSource(LaserPacketSource.Replay);
+        _pipeline.Process(LaserPacketSource.Replay, GameStart);
+
+        Assert.IsTrue(_pipeline.SwitchSource(LaserPacketSource.Live));
+        Assert.AreEqual(GameStatus.NotStarted, _state.GetGameStatus());
+        Assert.IsFalse(_state.GetCurrentStatus().IsReplay);
+        Assert.AreEqual(0, _ended, "Abandoning a replayed game isn't a game ending.");
+    }
+
+    [TestMethod]
+    public void ReplayPackets_AreDropped_WhileFollowingLive()
+    {
+        _pipeline.Process(LaserPacketSource.Replay, GameStart);
+
+        Assert.AreEqual(GameStatus.NotStarted, _state.GetGameStatus());
+        Assert.AreEqual(0, _started);
+    }
+
+    [TestMethod]
+    public void IdleLivePackets_AreIgnoredAndCounted_DuringAReplay()
+    {
+        _pipeline.SwitchSource(LaserPacketSource.Replay);
+        _pipeline.Process(LaserPacketSource.Replay, GameStart);
+        _pipeline.Process(LaserPacketSource.Replay, PlayerScore);
+
+        _pipeline.Process(LaserPacketSource.Live, Ascii("3,7,2,500,1,30,3,90,0"));
+        _pipeline.Process(LaserPacketSource.Live, GameEnd);
+
+        Assert.AreEqual(2, _pipeline.IgnoredLivePackets);
+        Assert.AreEqual(GameStatus.InGame, _state.GetGameStatus(), "A live game end mustn't end the replayed game.");
+        Assert.IsNull(_state.GetPlayersScore(7), "Live scores mustn't leak into the replay.");
+        Assert.AreEqual(LaserPacketSource.Replay, _state.Source);
+    }
+
+    [TestMethod]
+    public void ALiveGameStart_TakesOverFromAReplay()
+    {
+        int tookOver = 0;
+        _pipeline.LiveGameTookOver += () => tookOver++;
+
+        _pipeline.SwitchSource(LaserPacketSource.Replay);
+        _pipeline.Process(LaserPacketSource.Replay, GameStart);
+        _pipeline.Process(LaserPacketSource.Replay, PlayerScore);
+        _started = 0;
+
+        _pipeline.Process(LaserPacketSource.Live, GameStart);
+
+        Assert.AreEqual(1, tookOver);
+        Assert.AreEqual(LaserPacketSource.Live, _state.Source);
+        Assert.AreEqual(GameStatus.InGame, _state.GetGameStatus());
+        Assert.AreEqual(1, _started, "The live game starts from scratch.");
+        Assert.IsEmpty(_state.GetAllPlayerScores(), "The replay's scores are gone.");
+        Assert.IsFalse(_state.GetCurrentStatus().IsReplay);
+        Assert.AreEqual(0, _ended);
+
+        // A replay packet still in flight after the takeover is dropped.
+        _pipeline.Process(LaserPacketSource.Replay, GameEnd);
+        Assert.AreEqual(GameStatus.InGame, _state.GetGameStatus());
+    }
+
+    [TestMethod]
+    public void ALiveCountdown_AlsoTakesOverFromAReplay()
+    {
+        _pipeline.SwitchSource(LaserPacketSource.Replay);
+
+        _pipeline.Process(LaserPacketSource.Live, Timing);
+
+        Assert.AreEqual(LaserPacketSource.Live, _state.Source);
+        Assert.AreEqual(TimeSpan.FromSeconds(600), _state.GetTimeRemaining());
+    }
+
+    [TestMethod]
+    public void StartsAGame_MatchesWhatTheActionsTreatAsAStart()
+    {
+        Assert.IsTrue(LaserPacketPipeline.StartsAGame(["4", "@015", "0"]));     // InGame
+        Assert.IsTrue(LaserPacketPipeline.StartsAGame(["4", "@016", "0"]));     // GetReady
+        Assert.IsTrue(LaserPacketPipeline.StartsAGame(["1", "7573", "\"@004\"", "600", "1"]));
+
+        Assert.IsFalse(LaserPacketPipeline.StartsAGame(["4", "@014", "0"]));    // NotStarted
+        Assert.IsFalse(LaserPacketPipeline.StartsAGame(["1", "7573", "\"@004\"", "0", "1"]));
+        Assert.IsFalse(LaserPacketPipeline.StartsAGame(["4", "@01615@01700@0012@0003"])); // a settings packet
+        Assert.IsFalse(LaserPacketPipeline.StartsAGame(["3", "1", "0", "30", "1", "30", "3", "10", "0"]));
+        Assert.IsFalse(LaserPacketPipeline.StartsAGame(["1", "7573"]));
+        Assert.IsFalse(LaserPacketPipeline.StartsAGame([]));
     }
 }

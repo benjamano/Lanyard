@@ -13,18 +13,17 @@ namespace Lanyard.Shared.LaserGame.Capture;
 public static class LaserCaptureReader
 {
     /// <summary>Recordings are small (about 1 MB for a 15-minute game), so anything far bigger isn't one.</summary>
-    public const long MaxFileBytes = 64L * 1024 * 1024;
+    public const long MaxFileBytes = 32L * 1024 * 1024;
 
+    /// <remarks>
+    /// Throws rather than returning a Result: this is a parser in Lanyard.Shared, which can't see
+    /// Result&lt;T&gt;. Server services that call it turn the exception into Result.Fail.
+    /// </remarks>
     public static async Task<LaserCapture> ReadAsync(Stream stream, CancellationToken cancellationToken)
     {
-        string text;
+        byte[] bytes = await ReadCappedAsync(stream, cancellationToken);
 
-        using (StreamReader reader = new(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true))
-        {
-            text = await ReadCappedAsync(reader, cancellationToken);
-        }
-
-        return Parse(text);
+        return Parse(new UTF8Encoding(false).GetString(bytes).TrimStart('\uFEFF'));
     }
 
     public static LaserCapture Parse(string text)
@@ -146,7 +145,9 @@ public static class LaserCaptureReader
         Packets = ReadOptionalInt64(root, "packets", lineNumber),
         Dropped = ReadOptionalInt64(root, "dropped", lineNumber),
         DurationMs = ReadOptionalInt64(root, "durationMs", lineNumber),
-        Games = (int)ReadOptionalInt64(root, "games", lineNumber),
+        Games = ReadOptionalInt64(root, "games", lineNumber) is var games and <= int.MaxValue
+            ? (int)games
+            : throw new LaserCaptureFormatException($"Line {lineNumber}'s \"games\" is too big.", lineNumber),
     };
 
     private static LaserCapturePacket ReadPacket(JsonElement root, int lineNumber)
@@ -196,22 +197,27 @@ public static class LaserCaptureReader
             : throw new LaserCaptureFormatException($"Line {lineNumber}'s \"{name}\" isn't a whole number.", lineNumber);
     }
 
-    private static async Task<string> ReadCappedAsync(StreamReader reader, CancellationToken cancellationToken)
+    private static async Task<byte[]> ReadCappedAsync(Stream stream, CancellationToken cancellationToken)
     {
-        StringBuilder text = new();
-        char[] buffer = new char[16 * 1024];
+        if (stream.CanSeek && stream.Length - stream.Position > MaxFileBytes)
+        {
+            throw new LaserCaptureFormatException("The file is too big to be a laser game recording.");
+        }
+
+        using MemoryStream copy = new();
+        byte[] buffer = new byte[16 * 1024];
         int read;
 
-        while ((read = await reader.ReadAsync(buffer.AsMemory(), cancellationToken)) > 0)
+        while ((read = await stream.ReadAsync(buffer.AsMemory(), cancellationToken)) > 0)
         {
-            text.Append(buffer, 0, read);
-
-            if (text.Length > MaxFileBytes)
+            if (copy.Length + read > MaxFileBytes)
             {
                 throw new LaserCaptureFormatException("The file is too big to be a laser game recording.");
             }
+
+            copy.Write(buffer, 0, read);
         }
 
-        return text.ToString();
+        return copy.ToArray();
     }
 }

@@ -35,4 +35,10 @@ public class LaserGameStatusDTO
     public List<PlayerScoreDTO> PlayerScores { get; set; } = [];
 
     public DateTime LastUpdateUtc { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// True when a recording is being replayed rather than a real game played. The server must
+    /// never record a replayed game. Older servers ignore the field; older kiosks never set it.
+    /// </summary>
+    public bool IsReplay { get; set; }
 }

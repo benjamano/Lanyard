@@ -240,10 +240,10 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, ILaserPacketPipeline p
 
             if (_logger.IsEnabled(LogLevel.Trace))
             {
-                _logger.LogTrace("Game packet from {Source} to {Destination}, {Length} bytes", ipPacket.SourceAddress, ipPacket.DestinationAddress, rawBytes.Length);
+                _logger.LogTrace("Game packet from {Source} to {Destination}: {Payload}", ipPacket.SourceAddress, ipPacket.DestinationAddress, System.Text.Encoding.Latin1.GetString(rawBytes));
             }
 
-            _pipeline.Process(rawBytes);
+            _pipeline.Process(LaserPacketSource.Live, rawBytes);
         }
         catch (Exception ex)
         {
