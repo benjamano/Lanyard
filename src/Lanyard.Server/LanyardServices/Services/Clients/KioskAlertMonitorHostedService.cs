@@ -111,6 +111,12 @@ public partial class KioskAlertMonitorHostedService(
             .Where(x => ctx.Companies.Any(c => c.Id == x.Client!.CompanyId && c.IsActive && !c.IsDemo))
             .ToListAsync(cancellationToken);
 
+        // Rota holidays at the kiosks' locations, so a Closed day sends no offline or attention
+        // alerts. Yesterday too: a late window from a closed day doesn't run on into today.
+        DateOnly today = RotaTime.Today(now);
+        List<int> locationIds = [.. snapshots.Select(x => x.Client!.LocationId).OfType<int>().Distinct()];
+        Dictionary<int, List<RotaHoliday>> holidays = await RotaHolidayQueries.ForLocationsAsync(ctx, locationIds, today.AddDays(-1), today, cancellationToken);
+
         int queued = 0;
 
         foreach (ClientHealthSnapshot snapshot in snapshots)
@@ -122,7 +128,7 @@ public partial class KioskAlertMonitorHostedService(
 
             KioskHealthView health = KioskHealthEvaluator.Evaluate(snapshot, isConnected, client.LastDisconnectDate, now, _options, newestCompanyVersion: null);
 
-            List<Alert> alerts = Decide(snapshot, health, now, inStartupGrace);
+            List<Alert> alerts = Decide(snapshot, health, now, inStartupGrace, holidays.For(client.LocationId));
 
             // Save whenever the alert state moved (a problem first seen, a recovery), not only when
             // something is sent. For an alert this is the claim: once saved, a second sweep sees
@@ -159,11 +165,11 @@ public partial class KioskAlertMonitorHostedService(
     private sealed record AttentionClearedAlert() : Alert(NotificationTopic.KioskNeedsAttention);
 
     /// <summary>Updates the snapshot's alert state for this sweep and says what to send.</summary>
-    private List<Alert> Decide(ClientHealthSnapshot snapshot, KioskHealthView health, DateTime now, bool inStartupGrace)
+    private List<Alert> Decide(ClientHealthSnapshot snapshot, KioskHealthView health, DateTime now, bool inStartupGrace, IReadOnlyList<RotaHoliday> holidays)
     {
         List<Alert> alerts = [];
         Client client = snapshot.Client!;
-        bool isOpen = IsOpen(client.Location, now);
+        bool isOpen = IsOpen(client.Location, holidays, now);
 
         (bool isDown, DateTime downSince, bool cleanly) = health.Status switch
         {
@@ -224,15 +230,23 @@ public partial class KioskAlertMonitorHostedService(
     }
 
     // A kiosk with no location, or a location without opening hours set up, is treated as always
-    // open: there's nothing to say when nobody would care.
-    private static bool IsOpen(Location? location, DateTime now)
+    // open - except on a day marked Closed under Rota > Holidays: there's nothing to say when
+    // nobody would care.
+    private static bool IsOpen(Location? location, IReadOnlyList<RotaHoliday> holidays, DateTime now)
     {
-        if (location == null || location.OpeningHours.Count == 0)
+        if (location == null)
         {
             return true;
         }
 
-        return OpeningHoursRules.IsOpen(location.OpeningHours, [], RotaTime.ToVenueLocal(now)) /* holidays wired in PR 2/4 */;
+        DateTime venueLocal = RotaTime.ToVenueLocal(now);
+
+        if (location.OpeningHours.Count == 0)
+        {
+            return !RotaHolidayRules.For(holidays, DateOnly.FromDateTime(venueLocal)).IsClosed;
+        }
+
+        return OpeningHoursRules.IsOpen(location.OpeningHours, holidays, venueLocal);
     }
 
     private async Task<int> QueueAsync(ApplicationDbContext ctx, Client client, Alert alert, CancellationToken cancellationToken)

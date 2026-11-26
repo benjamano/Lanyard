@@ -209,6 +209,54 @@ public class KioskAlertMonitorTests
         Assert.HasCount(1, harness.JobsFor(manager.Id));
     }
 
+    private static async Task MarkClosedAsync(Harness harness, DateOnly day)
+    {
+        await using ApplicationDbContext ctx = new(harness.Options);
+        ctx.RotaHolidays.Add(new RotaHoliday
+        {
+            Id = Guid.NewGuid(),
+            CompanyId = harness.Company.Id,
+            LocationId = harness.Location.Id,
+            Name = "Refit",
+            Kind = RotaHolidayKind.Closed,
+            StartDate = day,
+            EndDate = day
+        });
+        await ctx.SaveChangesAsync();
+    }
+
+    [TestMethod]
+    public async Task Offline_NoAlertOnAClosedDay_ThenAlertsWhenItReopens()
+    {
+        Harness harness = await BuildAsync();
+        UserProfile manager = await SeedPersonAsync(harness, "Mia", "Manager");
+        await SetOpeningHoursAsync(harness, new TimeOnly(10, 0), new TimeOnly(22, 0));
+        await MarkClosedAsync(harness, DateOnly.FromDateTime(Now));
+        await SeedKioskAsync(harness, Now - Silent);
+
+        await harness.SweepAsync();
+        Assert.IsEmpty(harness.Dispatcher.Jobs, "14:00 inside the usual hours, but the day is marked closed");
+
+        // 10:30 the next day, open again.
+        harness.Clock.Advance(TimeSpan.FromHours(20.5));
+        await harness.SweepAsync();
+
+        Assert.HasCount(1, harness.JobsFor(manager.Id));
+    }
+
+    [TestMethod]
+    public async Task Offline_NoHoursSet_StillNoAlertOnAClosedDay()
+    {
+        Harness harness = await BuildAsync();
+        await SeedPersonAsync(harness, "Mia", "Manager");
+        await MarkClosedAsync(harness, DateOnly.FromDateTime(Now));
+        await SeedKioskAsync(harness, Now - Silent);
+
+        await harness.SweepAsync();
+
+        Assert.IsEmpty(harness.Dispatcher.Jobs);
+    }
+
     [TestMethod]
     public async Task BackOnline_FollowsAnOfflineAlertWithHowLongItWasDown()
     {

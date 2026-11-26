@@ -283,6 +283,52 @@ public class AutomationConditionEvaluatorTests
         StringAssert.Contains(afterClosing.Reason, "Ipswich is closed");
     }
 
+    private static AutomationLocationInfo WithHoliday(AutomationLocationInfo location, RotaHolidayKind kind, DayOfWeek? like = null) =>
+        location with
+        {
+            Holidays =
+            [
+                new RotaHoliday
+                {
+                    CompanyId = RuleCompanyId,
+                    LocationId = LocationId,
+                    Name = "Summer refit",
+                    Kind = kind,
+                    StartDate = DateOnly.FromDateTime(SummerAfternoonUtc),
+                    EndDate = DateOnly.FromDateTime(SummerAfternoonUtc),
+                    StaffLike = like
+                }
+            ]
+        };
+
+    [TestMethod]
+    public void OpeningHours_ClosedHolidayIsClosed_AndSaysWhy()
+    {
+        AutomationLocationInfo closed = WithHoliday(Ipswich(), RotaHolidayKind.Closed);
+
+        AutomationConditionCheck during = Evaluate(SummerAfternoonUtc, [DuringOpeningHours(open: true)], location: closed);
+        Assert.IsFalse(during.Passed);
+        Assert.IsFalse(during.IsMisconfigured);
+        Assert.AreEqual("Ipswich is closed today for Summer refit (Rota › Holidays)", during.Reason);
+
+        Assert.IsTrue(Evaluate(SummerAfternoonUtc, [DuringOpeningHours(open: false)], location: closed).Passed, "an 'is closed' rule runs");
+    }
+
+    [TestMethod]
+    public void OpeningHours_BankHolidayUsesTheStaffedLikeDaysHours()
+    {
+        // Only Wednesdays have hours; a Wednesday bank holiday staffed like a Sunday is shut,
+        // staffed like a Wednesday it keeps its hours.
+        Assert.IsFalse(Evaluate(SummerAfternoonUtc, [DuringOpeningHours(open: true)], location: WithHoliday(Ipswich(), RotaHolidayKind.BankHoliday)).Passed);
+        Assert.IsTrue(Evaluate(SummerAfternoonUtc, [DuringOpeningHours(open: true)], location: WithHoliday(Ipswich(), RotaHolidayKind.BankHoliday, DayOfWeek.Wednesday)).Passed);
+    }
+
+    [TestMethod]
+    public void OpeningHours_SchoolHolidayChangesNothing()
+    {
+        Assert.IsTrue(Evaluate(SummerAfternoonUtc, [DuringOpeningHours(open: true)], location: WithHoliday(Ipswich(), RotaHolidayKind.SchoolHoliday)).Passed);
+    }
+
     [TestMethod]
     public void OpeningHours_OutsideHoursPassesWhenClosed()
     {

@@ -126,6 +126,40 @@ public class WidgetVisibilityTests
     }
 
     [TestMethod]
+    public async Task LoadAsync_CarriesTodaysClosedHoliday_SoAnOpenWidgetIsHidden()
+    {
+        DbContextOptions<ApplicationDbContext> options = Lanyard.Tests.Services.Scheduling.SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await Lanyard.Tests.Services.Scheduling.SchedulingTestHelpers.SeedCompanyAsync(options);
+        DateOnly today = RotaTime.Today(DateTime.UtcNow);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            foreach (DayOfWeek day in Enum.GetValues<DayOfWeek>())
+            {
+                ctx.LocationOpeningHours.Add(new LocationOpeningHours { LocationId = location.Id, DayOfWeek = day, OpensAt = new TimeOnly(0, 0), ClosesAt = new TimeOnly(23, 59), IsActive = true });
+            }
+
+            ctx.RotaHolidays.Add(new RotaHoliday
+            {
+                Id = Guid.NewGuid(), CompanyId = company.Id, LocationId = location.Id, Name = "Refit",
+                Kind = RotaHolidayKind.Closed, StartDate = today, EndDate = today
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        WidgetVisibilityService service = new(Lanyard.Tests.Services.Scheduling.SchedulingTestHelpers.GetFactory(options), new LaserGameStatusStore(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<WidgetVisibilityService>.Instance);
+        DashboardWidget whileOpen = Widget(Condition(AutomationConditionType.DuringOpeningHours, new OpeningHoursConditionParameters(location.Id, true)));
+
+        WidgetVisibilityLookups lookups = (await service.LoadAsync([whileOpen])).Data!;
+
+        Assert.AreEqual("Refit", lookups.Locations[location.Id].HolidayList.Single().Name);
+        Assert.IsFalse(AutomationConditionEvaluator.Evaluate(
+            WidgetShowConditions.Parse(whileOpen.ShowConditionsJson), company.Id, RotaTime.ToUtc(today, new TimeOnly(12, 0)),
+            _ => null, _ => false, id => lookups.Locations.GetValueOrDefault(id)).Passed);
+    }
+
+    [TestMethod]
     public async Task DashboardSave_KeepsConditions_OnNewAndExistingWidgets()
     {
         DbContextOptions<ApplicationDbContext> options = new DbContextOptionsBuilder<ApplicationDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;

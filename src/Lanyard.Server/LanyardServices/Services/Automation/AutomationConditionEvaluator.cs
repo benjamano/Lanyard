@@ -9,8 +9,14 @@ namespace Lanyard.Application.Services;
 /// <summary>The engine's cached view of a kiosk, for checking conditions that name one.</summary>
 public sealed record AutomationClientInfo(int CompanyId, string Name);
 
-/// <summary>The engine's cached view of a location and its active opening hours.</summary>
-public sealed record AutomationLocationInfo(int CompanyId, string Name, IReadOnlyList<LocationOpeningHours> Hours);
+/// <summary>
+/// The engine's cached view of a location: its active opening hours, and its rota holidays (only
+/// where Staff Scheduling is on; RotaHolidayQueries) so a Closed day reads as closed.
+/// </summary>
+public sealed record AutomationLocationInfo(int CompanyId, string Name, IReadOnlyList<LocationOpeningHours> Hours, IReadOnlyList<RotaHoliday>? Holidays = null)
+{
+    public IReadOnlyList<RotaHoliday> HolidayList => Holidays ?? [];
+}
 
 /// <param name="IsMisconfigured">
 /// True when the condition can never pass as saved (bad JSON, a deleted kiosk, a kiosk in another
@@ -182,7 +188,7 @@ public static class AutomationConditionEvaluator
 
                 // No hours set reads as closed rather than misconfigured: it's a normal state for a
                 // new location, and "outside opening hours" rules should still run.
-                bool isOpen = OpeningHoursRules.IsOpen(location.Hours, [], venueLocal) /* holidays wired in PR 2/4 */;
+                bool isOpen = OpeningHoursRules.IsOpen(location.Hours, location.HolidayList, venueLocal);
 
                 if (isOpen == wanted.Open)
                 {
@@ -192,6 +198,11 @@ public static class AutomationConditionEvaluator
                 if (isOpen)
                 {
                     return AutomationConditionCheck.NotMet($"{location.Name} is open");
+                }
+
+                if (RotaHolidayRules.For(location.HolidayList, DateOnly.FromDateTime(venueLocal)).Closed is RotaHoliday closed)
+                {
+                    return AutomationConditionCheck.NotMet($"{location.Name} is closed today for {closed.Name} (Rota › Holidays)");
                 }
 
                 return AutomationConditionCheck.NotMet(location.Hours.Any(h => h.IsActive)
