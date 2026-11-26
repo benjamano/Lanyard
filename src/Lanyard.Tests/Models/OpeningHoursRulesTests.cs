@@ -155,8 +155,19 @@ public class OpeningHoursRulesTests
         Assert.IsTrue(OpeningHoursRules.IsOpen(hours, holidays, At(Monday, 11)), "Sunday's hours");
         Assert.IsFalse(OpeningHoursRules.IsOpen(hours, holidays, At(Monday, 18)), "not Monday's");
 
-        List<RotaHoliday> likeSaturday = [Holiday(RotaHolidayKind.BankHoliday, Monday, DayOfWeek.Saturday)];
-        Assert.IsFalse(OpeningHoursRules.IsOpen(hours, likeSaturday, At(Monday, 11)), "Saturday has no hours here");
+    }
+
+    [TestMethod]
+    public void IsOpen_BankHolidayLikeADayWithNoHours_KeepsItsOwnWeekdaysHours()
+    {
+        // Shut on Sundays: a bank holiday Monday staffed like a Sunday (the default) still opens
+        // at Monday's hours rather than shutting the venue.
+        List<LocationOpeningHours> hours = [Day(DayOfWeek.Monday, 15, 19), Day(DayOfWeek.Saturday, 10, 17)];
+        List<RotaHoliday> holidays = [Holiday(RotaHolidayKind.BankHoliday, Monday)];
+
+        Assert.IsTrue(OpeningHoursRules.IsOpen(hours, holidays, At(Monday, 16)));
+        Assert.IsFalse(OpeningHoursRules.IsOpen(hours, holidays, At(Monday, 11)));
+        Assert.AreEqual(1, OpeningHoursRules.Resolve(hours, holidays, Monday).Windows.Count);
     }
 
     [TestMethod]

@@ -26,8 +26,8 @@ public static class OpeningHoursRules
 
     /// <summary>
     /// A date's opening windows once holidays are applied. A Closed day has none. A bank holiday uses
-    /// the windows of the day it's staffed like (Sunday unless the manager picked another). Any other
-    /// day uses its own weekday's rows. Each window is placed on the date, closing the next morning
+    /// the windows of the day it's staffed like (Sunday unless the manager picked another), or its own
+    /// weekday's when that day has no hours. Any other day uses its own weekday's rows. Each window is placed on the date, closing the next morning
     /// when ClosesAt is at or before OpensAt.
     /// </summary>
     public static OpeningDay Resolve(IEnumerable<LocationOpeningHours> hours, IEnumerable<RotaHoliday> holidays, DateOnly date) =>
@@ -43,10 +43,20 @@ public static class OpeningHoursRules
             return new OpeningDay(date, [], holiday);
         }
 
+        List<LocationOpeningHours> valid = [.. hours.Where(h => h.IsActive && IsValid(h.OpensAt, h.ClosesAt))];
+
+        // A bank holiday staffed like a day the venue never opens (Sunday by default, at a venue
+        // shut on Sundays) keeps its own weekday's hours rather than shutting the venue: closing
+        // for the day is what a Closed holiday is for.
         DayOfWeek like = holiday.StaffedLike;
 
-        List<OpeningWindow> windows = hours
-            .Where(h => h.IsActive && h.DayOfWeek == like && IsValid(h.OpensAt, h.ClosesAt))
+        if (holiday.BankHoliday is not null && !valid.Any(h => h.DayOfWeek == like))
+        {
+            like = date.DayOfWeek;
+        }
+
+        List<OpeningWindow> windows = valid
+            .Where(h => h.DayOfWeek == like)
             .OrderBy(h => h.OpensAt)
             .Select(h => new OpeningWindow(
                 date.ToDateTime(h.OpensAt),
