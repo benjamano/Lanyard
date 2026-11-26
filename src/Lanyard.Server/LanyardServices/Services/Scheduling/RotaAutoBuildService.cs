@@ -113,6 +113,7 @@ public class RotaAutoBuildService(
             // counts towards its party's staff if the party is on, so it isn't doubled up.
             List<Shift> stale = unmatched
                 .Where(x => x.PartyBookingId is not null && x.StartUtc > nowUtc && x.StartUtc >= windowStartUtc && x.StartUtc < windowEndUtc)
+                .OrderBy(x => x.StartUtc) // the same order as RotaAutoBuildRules.CheckPartyStaffing, so both name the same shift
                 .ToList();
 
             Dictionary<string, string> names = stale.Any(x => x.UserId is not null)

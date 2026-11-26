@@ -1159,11 +1159,11 @@
     "releaseDate": "2026-11-26",
     "summary": "Managers are told when a party change leaves the built rota with the wrong party staff.",
     "details": [
-      "When a party or private hire is booked, moved, changed or cancelled after the rota for its day was built (in the next 14 days), a Party staffing out of date alert appears on Operations alerts and the location's Managers get a push.",
+      "When a party or private hire is booked, moved, changed or cancelled after the rota for its day was built (today or the next 14 days), a Party staffing out of date alert appears on Operations alerts and the company's Admins and the location's Managers get a push.",
       "Rerun Auto-build for that day, on the alert or on the party, opens the rota with Auto-build ready for just that day. The alert clears itself once the day matches the bookings again.",
       "A published shift for a cancelled or moved party is never changed for you: the alert names it so you can change it on the rota and publish.",
       "Bookings brought in, moved or cancelled by the Just Step booking import are checked the same way, once per import, so a season of new bookings is a single push rather than one per day.",
-      "Changing Party staffing on Party Settings checks the next 14 days the same way. Turn the push off under Notifications if you'd rather only see the alert.",
+      "Changing Party staffing on Party Settings checks today and the next 14 days the same way. Turn the push off under Notifications if you'd rather only see the alert.",
       "The Just Step Online booking import now only brings bookings in at locations that have Parties switched on, and the Booking Import page is hidden while Parties is off.",
       "A failed booking import now shows as Booking import failed on the Alerts page, with an Open Booking Import link."
     ]

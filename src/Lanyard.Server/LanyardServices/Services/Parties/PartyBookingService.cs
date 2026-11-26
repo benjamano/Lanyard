@@ -136,6 +136,10 @@ public class PartyBookingService(
             int? previousLocationId = null;
             DateTime? previousStartUtc = null;
 
+            // Only a change party staffing depends on is worth a check: a check after (say) a notes
+            // edit would bring back an alert a manager had resolved by hand, with another push.
+            bool staffingChanged = true;
+
             if (booking.Id == Guid.Empty)
             {
                 // A fresh row rather than the caller's object, so a failed save leaves their form
@@ -170,11 +174,16 @@ public class PartyBookingService(
 
                 previousLocationId = existing.LocationId;
                 previousStartUtc = existing.StartUtc;
+                (DateTime oldEnd, string? oldType, PrivateHireKind? oldHire) = (existing.EndUtc, existing.PartyType, existing.HireKind);
                 existing.LocationId = booking.LocationId;
                 existing.CompanyId = location.CompanyId;
                 existing.UpdateDate = now;
                 existing.UpdateByUserId = actingUserId;
                 CopyEditableFields(booking, existing);
+
+                staffingChanged = existing.LocationId != previousLocationId || existing.StartUtc != previousStartUtc
+                    || existing.EndUtc != oldEnd || existing.HireKind != oldHire
+                    || !string.Equals(PartyStaffingRule.Normalise(existing.PartyType), PartyStaffingRule.Normalise(oldType), StringComparison.OrdinalIgnoreCase);
 
                 saved = existing;
             }
@@ -188,7 +197,10 @@ public class PartyBookingService(
                 _partySchedule?.Invalidate(moved);
             }
 
-            await CheckStaffingAsync(saved.LocationId, saved.StartUtc, previousLocationId, previousStartUtc, actingUserId);
+            if (staffingChanged)
+            {
+                await CheckStaffingAsync(saved.LocationId, saved.StartUtc, previousLocationId, previousStartUtc, actingUserId);
+            }
 
             return Result<PartyBooking>.Ok(saved);
         }
@@ -239,7 +251,8 @@ public class PartyBookingService(
     }
 
     public Task<Result<PartyBooking>> SetCancelledAsync(LocationScope scope, Guid bookingId, bool cancelled, string actingUserId) =>
-        UpdateAsync(scope, bookingId, actingUserId, "update the party", x => x.Status = cancelled ? PartyBookingStatus.Cancelled : PartyBookingStatus.Booked);
+        UpdateAsync(scope, bookingId, actingUserId, "update the party", x => x.Status = cancelled ? PartyBookingStatus.Cancelled : PartyBookingStatus.Booked,
+            affectsStaffing: true);
 
     public Task<Result<PartyBooking>> SetDepositPaidAsync(LocationScope scope, Guid bookingId, bool paid, string actingUserId) =>
         UpdateAsync(scope, bookingId, actingUserId, "record the deposit", x =>
@@ -332,7 +345,9 @@ public class PartyBookingService(
         }
     }
 
-    private async Task<Result<PartyBooking>> UpdateAsync(LocationScope scope, Guid bookingId, string actingUserId, string action, Action<PartyBooking> change)
+    // affectsStaffing: cancelling and reinstating change the party staffing a day needs; payments don't.
+    private async Task<Result<PartyBooking>> UpdateAsync(LocationScope scope, Guid bookingId, string actingUserId, string action, Action<PartyBooking> change,
+        bool affectsStaffing = false)
     {
         try
         {
@@ -358,9 +373,10 @@ public class PartyBookingService(
 
             _partySchedule?.Invalidate(booking.LocationId);
 
-            // Payments don't change staffing, but cancelling and reinstating do; the check is cheap
-            // and finds nothing to do for the rest.
-            await CheckStaffingAsync(booking.LocationId, booking.StartUtc, null, null, actingUserId);
+            if (affectsStaffing)
+            {
+                await CheckStaffingAsync(booking.LocationId, booking.StartUtc, null, null, actingUserId);
+            }
 
             return Result<PartyBooking>.Ok(booking);
         }

@@ -437,4 +437,59 @@ public class PartyStaffingWatchTests
         Assert.AreEqual(1, open.Count(x => x.CompanyId == other.Id), "another company's alert is left alone");
         Assert.IsTrue(h.StaffingNotices.All(x => x.UserId == h.Manager.Id));
     }
+
+    [TestMethod]
+    public async Task PaymentsAndNoteEdits_DontBringBackAnAlertResolvedByHand()
+    {
+        Harness h = await SeedAsync();
+        await BuildDayAsync(h);
+        PartyBooking party = await BookAsync(h, NewParty(h));
+        int notices = h.StaffingNotices.Count;
+
+        await using (ApplicationDbContext ctx = new(h.Options))
+        {
+            OperationsAlert alert = await ctx.OperationsAlerts.IgnoreQueryFilters().SingleAsync();
+            alert.Status = OperationsAlertStatus.Resolved;
+            alert.Resolution = OperationsAlertResolution.Manual;
+            await ctx.SaveChangesAsync();
+        }
+
+        Assert.IsTrue((await h.Bookings.SetDepositPaidAsync(h.Scope, party.Id, true, ActingUser)).IsSuccess);
+        party.Notes = "Bringing their own cake";
+        await BookAsync(h, party);
+
+        Assert.AreEqual(0, (await h.OpenAlertsAsync()).Count, "nothing staffing depends on changed");
+        Assert.AreEqual(notices, h.StaffingNotices.Count);
+    }
+
+    [TestMethod]
+    public async Task MovedWithAPublishedShift_NewDayAloneGivesTheSameAnswer()
+    {
+        Harness h = await SeedAsync();
+        DateOnly nextSaturday = Saturday.AddDays(7);
+        await BuildDayAsync(h);
+        await BuildDayAsync(h, nextSaturday);
+        PartyBooking party = await BookAsync(h, NewParty(h));
+        await h.AutoBuild.ApplyAsync(h.Scope, h.Ipswich.Id, Saturday, Saturday, ActingUser);
+
+        await using (ApplicationDbContext ctx = new(h.Options))
+        {
+            Shift partyShift = await ctx.Shifts.SingleAsync(x => x.PartyBookingId == party.Id);
+            partyShift.MarkPublished(Now, ActingUser);
+            await ctx.SaveChangesAsync();
+        }
+
+        party.StartUtc = RotaTime.ToUtc(nextSaturday, new TimeOnly(10, 0));
+        party.EndUtc = RotaTime.ToUtc(nextSaturday, new TimeOnly(12, 0));
+        await BookAsync(h, party);
+
+        // The published shift on the old day stands in for the party's Host, so only the old day is
+        // flagged (change the shift's date) - and asking about the new day on its own agrees.
+        string oldDay = PartyStaffingAlerts.DedupKey(h.Ipswich.Id, Saturday);
+        CollectionAssert.AreEqual(new[] { oldDay }, (await h.OpenAlertsAsync()).Select(x => x.DedupKey).ToArray());
+
+        await h.Watch.CheckDaysAsync(h.Ipswich.Id, [nextSaturday]);
+
+        CollectionAssert.AreEqual(new[] { oldDay }, (await h.OpenAlertsAsync()).Select(x => x.DedupKey).ToArray());
+    }
 }

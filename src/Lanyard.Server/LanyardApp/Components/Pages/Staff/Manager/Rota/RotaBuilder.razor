@@ -238,18 +238,28 @@
         }
 
         monthView = string.Equals(ViewQuery, "month", StringComparison.OrdinalIgnoreCase);
-        anchor = DateOnly.TryParseExact(DateQuery, "yyyy-MM-dd", out DateOnly parsed) ? parsed : today;
-
-        if (string.Equals(AutoBuildQuery, "day", StringComparison.OrdinalIgnoreCase) && DateQuery is not null && anchor >= today)
-        {
-            pendingAutoBuildDay = anchor;
-        }
+        bool dateGiven = DateOnly.TryParseExact(DateQuery, "yyyy-MM-dd", out DateOnly parsed);
+        anchor = dateGiven ? parsed : today;
 
         locationId = LocationQuery is int requested && locationOptions.Any(l => l.Id == requested)
             ? requested
             : scope.LocationId is int own && locationOptions.Any(l => l.Id == own)
                 ? own
                 : locationOptions.FirstOrDefault()?.Id;
+
+        // Only for the day and location the link names: a Manager signed in somewhere else lands on
+        // their own location's rota, and must not be offered an Auto-build for it.
+        if (string.Equals(AutoBuildQuery, "day", StringComparison.OrdinalIgnoreCase) && dateGiven && anchor >= today)
+        {
+            if (LocationQuery is int wanted && wanted != locationId)
+            {
+                _toastService.ShowWarning("That alert is for another location. Sign in there to rerun Auto-build for it.");
+            }
+            else
+            {
+                pendingAutoBuildDay = anchor;
+            }
+        }
 
         if (locationId is null)
         {

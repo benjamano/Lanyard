@@ -131,15 +131,29 @@ public sealed class PartyStaffingWatch(
                 return Result<PartyStaffingCheckOutcome>.Ok(outcome);
             }
 
-            DateOnly from = watched[0];
-            DateOnly to = watched[^1];
-
+            // Always the whole horizon, whichever days were asked about, so the answer for a day never
+            // depends on what else was checked with it: a published shift left on the day a party moved
+            // from still stands in for its staff on the new day.
             List<ShiftTemplate> templates = await RotaDemandLoader.LoadTemplatesAsync(ctx, locationId, cancellationToken);
-            RotaDemand demand = await RotaDemandLoader.LoadAsync(ctx, locationId, templates, from, to, cancellationToken);
+            RotaDemand demand = await RotaDemandLoader.LoadAsync(ctx, locationId, templates, today, last, cancellationToken);
 
             Dictionary<DateOnly, PartyStaffingDayCheck> checks = RotaAutoBuildRules
-                .CheckPartyStaffing(demand.PartyDemand, demand.Parties, demand.Existing, from, to, nowUtc)
+                .CheckPartyStaffing(demand.PartyDemand, demand.Parties, demand.Existing, today, last, nowUtc)
                 .ToDictionary(x => x.Day);
+
+            if (mayRaise)
+            {
+                // A party's staff can sit on another day than the party itself (a shift that starts the
+                // evening before an after-midnight party), so that day is looked at too.
+                HashSet<DateOnly> requested = [.. watched];
+                HashSet<Guid> changedParties = [.. demand.Parties.Where(p => requested.Contains(RotaTime.LocalDate(p.StartUtc))).Select(p => p.Id)];
+
+                watched = [.. watched.Concat(checks.Values
+                        .Where(c => c.Missing.Any(x => changedParties.Contains(x.PartyBookingId)) || c.Stale.Any(x => changedParties.Contains(x.PartyBookingId)))
+                        .Select(c => c.Day))
+                    .Distinct()
+                    .Order()];
+            }
 
             HashSet<DateOnly> built = [.. demand.Existing.Where(x => x.IsActive).Select(x => RotaTime.LocalDate(x.StartUtc))];
 
@@ -160,14 +174,17 @@ public sealed class PartyStaffingWatch(
                     continue;
                 }
 
+                string title = $"Party staffing out of date: {day.ToString("ddd d MMM", RotaFormat.Uk)}";
+                string detail = Detail(check, names, positions);
+
+                // The recheck only keeps an open alert's text current (a shift named in it may be gone
+                // by now); it never creates one, so an alert resolved by hand stays resolved.
                 if (!mayRaise)
                 {
+                    await RefreshIfOpenAsync(ctx, location, day, title, detail, cancellationToken);
                     outcome.StillOpen.Add(day);
                     continue;
                 }
-
-                string title = $"Party staffing out of date: {day.ToString("ddd d MMM", RotaFormat.Uk)}";
-                string detail = Detail(check, names, positions);
 
                 Result<OperationsAlertRaiseOutcome> raised = await _alertWriter.RaiseAsync(new OperationsAlertRaise(
                     location.CompanyId, location.Id, OperationsAlertType.PartyStaffingOutOfDate, OperationsAlertSeverity.Warning,
@@ -207,6 +224,26 @@ public sealed class PartyStaffingWatch(
             _logger.LogError(ex, "Party staffing check failed at {LocationId}", locationId);
             return Result<PartyStaffingCheckOutcome>.Fail($"Failed to check party staffing: {ex.Message}");
         }
+    }
+
+    private async Task RefreshIfOpenAsync(ApplicationDbContext ctx, Location location, DateOnly day, string title, string detail, CancellationToken cancellationToken)
+    {
+        string key = PartyStaffingAlerts.DedupKey(location.Id, day);
+
+        OperationsAlert? open = await ctx.OperationsAlerts
+            .AsNoTracking()
+            .TagWithCallSite()
+            .FirstOrDefaultAsync(x => x.CompanyId == location.CompanyId && x.DedupKey == key && x.Status != OperationsAlertStatus.Resolved, cancellationToken);
+
+        if (open is null || open.Detail == detail)
+        {
+            return;
+        }
+
+        // An open alert with the same key exists, so the writer refreshes it in place.
+        await _alertWriter.RaiseAsync(new OperationsAlertRaise(
+            location.CompanyId, location.Id, OperationsAlertType.PartyStaffingOutOfDate, OperationsAlertSeverity.Warning,
+            key, title, detail, PartyStaffingAlerts.RotaLink(location.Id, day)), cancellationToken);
     }
 
     private async Task ResolveAsync(Location location, DateOnly day, PartyStaffingCheckOutcome outcome, string note, CancellationToken cancellationToken)
