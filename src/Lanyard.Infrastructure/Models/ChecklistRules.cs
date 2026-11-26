@@ -157,6 +157,54 @@ public static class ChecklistRules
     /// <summary>A reading must fit the column: up to 9 digits, 2 after the point.</summary>
     public static bool IsValidReading(decimal reading) => reading > -10_000_000m && reading < 10_000_000m && decimal.Round(reading, 2) == reading;
 
+    /// <summary>
+    /// How a reading compares with a task's acceptable range. Both ends are included, and an open
+    /// end ("at most 5") is no limit on that side.
+    /// </summary>
+    public static ChecklistReadingStatus Check(decimal reading, decimal? min, decimal? max)
+    {
+        if (min is null && max is null)
+        {
+            return ChecklistReadingStatus.NoRange;
+        }
+
+        if (min is decimal low && reading < low)
+        {
+            return ChecklistReadingStatus.TooLow;
+        }
+
+        if (max is decimal high && reading > high)
+        {
+            return ChecklistReadingStatus.TooHigh;
+        }
+
+        return ChecklistReadingStatus.InRange;
+    }
+
+    public static bool IsOutOfRange(ChecklistReadingStatus status) => status is ChecklistReadingStatus.TooLow or ChecklistReadingStatus.TooHigh;
+
+    /// <summary>"0–5 °C", "at most 5 °C", "at least 63 °C", or null with no range.</summary>
+    public static string? RangeText(decimal? min, decimal? max, string? unit)
+    {
+        string suffix = string.IsNullOrEmpty(unit) ? string.Empty : " " + unit;
+
+        return (min, max) switch
+        {
+            (decimal low, decimal high) when low == high => $"exactly {ReadingText(low)}{suffix}",
+            (decimal low, decimal high) => $"{ReadingText(low)}–{ReadingText(high)}{suffix}",
+            (null, decimal high) => $"at most {ReadingText(high)}{suffix}",
+            (decimal low, null) => $"at least {ReadingText(low)}{suffix}",
+            _ => null
+        };
+    }
+
+    /// <summary>A reading as people read it: "4", "4.5", "-18.25".</summary>
+    public static string ReadingText(decimal reading) => reading.ToString("0.##", Uk);
+
+    /// <summary>"8 °C" - a reading with its unit.</summary>
+    public static string ReadingText(decimal reading, string? unit) =>
+        string.IsNullOrEmpty(unit) ? ReadingText(reading) : $"{ReadingText(reading)} {unit}";
+
     /// <summary>What's wrong with a checklist's settings, or null when it can be saved.</summary>
     public static string? Validate(Checklist checklist)
     {
@@ -233,6 +281,26 @@ public static class ChecklistRules
         if (task.Response == ChecklistResponse.Number && task.Unit?.Trim().Length > MaxUnitLength)
         {
             return $"The unit can be at most {MaxUnitLength} characters.";
+        }
+
+        if (task.Response != ChecklistResponse.Number && (task.MinReading is not null || task.MaxReading is not null))
+        {
+            return "Only a number reading can have an acceptable range.";
+        }
+
+        if (task.MinReading is decimal min && !IsValidReading(min) || task.MaxReading is decimal max && !IsValidReading(max))
+        {
+            return "Each end of the range must be a number with at most two decimal places.";
+        }
+
+        if (task.MinReading is decimal low && task.MaxReading is decimal high && low > high)
+        {
+            return "The lowest acceptable reading can't be above the highest.";
+        }
+
+        if (!System.Enum.IsDefined(task.ReadingAlert))
+        {
+            return "Choose what happens when a reading is outside the range.";
         }
 
         return null;

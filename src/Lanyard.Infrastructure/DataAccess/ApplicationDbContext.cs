@@ -706,6 +706,8 @@ namespace Lanyard.Infrastructure.DataAccess
                 entity.Property(x => x.Title).HasMaxLength(ChecklistRules.MaxTaskTitleLength);
                 entity.Property(x => x.Detail).HasMaxLength(ChecklistRules.MaxTaskDetailLength);
                 entity.Property(x => x.Unit).HasMaxLength(ChecklistRules.MaxUnitLength);
+                entity.Property(x => x.MinReading).HasPrecision(9, 2);
+                entity.Property(x => x.MaxReading).HasPrecision(9, 2);
             });
 
             modelBuilder.Entity<ChecklistRun>(entity =>
@@ -725,6 +727,8 @@ namespace Lanyard.Infrastructure.DataAccess
                 entity.Property(x => x.Title).HasMaxLength(ChecklistRules.MaxTaskTitleLength);
                 entity.Property(x => x.Detail).HasMaxLength(ChecklistRules.MaxTaskDetailLength);
                 entity.Property(x => x.Unit).HasMaxLength(ChecklistRules.MaxUnitLength);
+                entity.Property(x => x.MinReading).HasPrecision(9, 2);
+                entity.Property(x => x.MaxReading).HasPrecision(9, 2);
                 entity.HasOne(x => x.Task).WithMany().HasForeignKey(x => x.TaskId).OnDelete(DeleteBehavior.SetNull);
                 // Restrict, not Cascade: today's untouched run is rebuilt when its checklist changes
                 // (ChecklistRunStore.EnsureRunsAsync), and a tick saved in the moment between "untouched"

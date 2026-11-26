@@ -11,3 +11,54 @@
     font-size: 0.8rem;
     color: var(--colorNeutralForeground3);
 }
+
+.task-range {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    min-width: 0;
+}
+
+.task-range-legend {
+    padding: 0;
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+
+.task-range-inputs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.task-range-field {
+    flex: 1 1 140px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.task-range-field label {
+    font-size: 0.875rem;
+}
+
+.task-range-input {
+    min-height: 32px;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0 10px;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: 4px;
+    background: var(--colorNeutralBackground1);
+    color: var(--colorNeutralForeground1);
+    font: inherit;
+}
+
+.task-range-input:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+    outline-offset: 1px;
+}

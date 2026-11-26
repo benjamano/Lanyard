@@ -1140,5 +1140,17 @@
       "Or turn on Save automatically as people type, so the text is always ready to type into on the kiosk and saves itself a moment after typing stops.",
       "Text widgets stay read-only everywhere else, and saving the dashboard in the designer no longer overwrites what was typed on the kiosk."
     ]
+  },
+  {
+    "version": "1.4.39",
+    "releaseDate": "2026-11-26",
+    "summary": "Checklist readings can have an acceptable range, and a reading outside it alerts a manager.",
+    "details": [
+      "A number task on a checklist, such as a fridge temperature, can have a lowest and highest acceptable reading",
+      "A reading outside the range shows a warning before and after it's ticked, on a phone, the clock-in terminal and kiosk checklist cards, with an optional note to say what was done",
+      "Each task chooses whether a reading outside its range raises an Operations Alert and notifies the location's Managers, raises an alert only, or is just flagged on the task",
+      "The alert clears itself when a reading inside the range is recorded for that task the same day",
+      "Fixed kiosk checklist cards checking the wrong location's Checklists switch"
+    ]
   }
 ]

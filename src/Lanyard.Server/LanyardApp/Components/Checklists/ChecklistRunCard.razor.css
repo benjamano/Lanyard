@@ -169,3 +169,28 @@
     outline: 2px solid var(--colorStrokeFocus2);
     outline-offset: 1px;
 }
+
+.run-item-range {
+    font-size: 0.875rem;
+    color: var(--colorNeutralForeground3);
+}
+
+.run-item-warning {
+    padding-left: 40px;
+}
+
+/* A reading's verdict: icon and words together, never colour alone. */
+.run-reading {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+}
+
+.run-reading-out {
+    color: var(--colorPaletteDarkOrangeForeground1, var(--colorNeutralForeground1));
+}
+
+.run-reading-in {
+    color: var(--colorNeutralForeground2);
+}

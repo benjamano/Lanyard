@@ -314,6 +314,11 @@ public class ChecklistService(
             target.Response = task.Response;
             target.Unit = task.Response == ChecklistResponse.Number && !string.IsNullOrWhiteSpace(task.Unit) ? task.Unit.Trim() : null;
 
+            bool number = task.Response == ChecklistResponse.Number;
+            target.MinReading = number ? task.MinReading : null;
+            target.MaxReading = number ? task.MaxReading : null;
+            target.ReadingAlert = task.ReadingAlert;
+
             await ctx.SaveChangesAsync();
 
             return Result<ChecklistTask>.Ok(target);

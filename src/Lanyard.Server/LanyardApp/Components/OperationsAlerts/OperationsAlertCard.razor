@@ -91,7 +91,7 @@
 
     private bool CanOpenLink => ShowLink || Alert.Type is OperationsAlertType.MissedClockIn
         or OperationsAlertType.TrainingOverdue or OperationsAlertType.StaffDocumentExpiring or OperationsAlertType.StaffDocumentExpired
-        or OperationsAlertType.ChecklistMissed;
+        or OperationsAlertType.ChecklistMissed or OperationsAlertType.ChecklistReadingOutOfRange;
 
     [Parameter]
     public bool Compact { get; set; }
@@ -111,7 +111,7 @@
         OperationsAlertType.AutomationRuleFailed => "Open Automation",
         OperationsAlertType.MissedClockIn => "Open Timesheets",
         OperationsAlertType.TrainingOverdue or OperationsAlertType.StaffDocumentExpiring or OperationsAlertType.StaffDocumentExpired => "Open Compliance",
-        OperationsAlertType.ChecklistMissed => "Open Checklists Today",
+        OperationsAlertType.ChecklistMissed or OperationsAlertType.ChecklistReadingOutOfRange => "Open Checklists Today",
         _ => "Open"
     };
 }

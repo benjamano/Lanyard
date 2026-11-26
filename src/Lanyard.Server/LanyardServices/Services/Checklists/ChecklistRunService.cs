@@ -1,4 +1,5 @@
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.OperationsAlerts;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
@@ -20,10 +21,14 @@ public class ChecklistRunService(
     Lanyard.Application.Services.VideoStreaming.IVideoStreamTokenService viewerTokens,
     IProjectionProgramRunnerService projectionRunner,
     IWidgetVisibilityService widgetVisibility,
+    IOperationsAlertWriter alertWriter,
     TimeProvider timeProvider,
     ILogger<ChecklistRunService> logger) : IChecklistRunService
 {
     public const int MaxHistoryDays = 62;
+
+    // One out-of-range alert per task per day: the run item's id follows the prefix.
+    public const string ReadingKeyPrefix = "checklist-reading:";
 
     private const string FeatureOff = "Checklists aren't switched on for this location.";
     private const string GrantLapsed = "Enter your PIN again to keep ticking.";
@@ -35,6 +40,7 @@ public class ChecklistRunService(
     private readonly Lanyard.Application.Services.VideoStreaming.IVideoStreamTokenService _viewerTokens = viewerTokens;
     private readonly IProjectionProgramRunnerService _projectionRunner = projectionRunner;
     private readonly IWidgetVisibilityService _widgetVisibility = widgetVisibility;
+    private readonly IOperationsAlertWriter _alertWriter = alertWriter;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger<ChecklistRunService> _logger = logger;
 
@@ -179,14 +185,14 @@ public class ChecklistRunService(
             return Result<bool>.Fail("Couldn't tell who ticked it.");
         }
 
-        Result<(string? Note, decimal? Reading)> answer = Answer(item.Response, note, reading);
+        Result<(string? Note, decimal? Reading)> answer = Answer(item.Response, note, reading, item.MinReading, item.MaxReading);
 
         if (!answer.IsSuccess)
         {
             return Result<bool>.Fail(answer.Error!);
         }
 
-        ctx.ChecklistCompletions.Add(new ChecklistCompletion
+        ChecklistCompletion completion = new()
         {
             RunItemId = item.Id,
             UserId = userId,
@@ -196,7 +202,9 @@ public class ChecklistRunService(
             ClockInTerminalId = terminalId,
             Note = answer.Data.Note,
             Reading = answer.Data.Reading
-        });
+        };
+
+        ctx.ChecklistCompletions.Add(completion);
 
         try
         {
@@ -209,14 +217,110 @@ public class ChecklistRunService(
 
         _logger.LogInformation("Checklist task {RunItemId} ticked by {UserId} ({Method})", item.Id, userId, method);
 
+        if (completion.Reading is decimal saved)
+        {
+            await ReadingAlertAsync(ctx, item, completion, saved);
+        }
+
         return Result<bool>.Ok(true);
     }
 
-    // What a tick keeps for its task's response: a number task needs a valid reading; only a
-    // tick-with-note task keeps a note. Shared with the terminal.
-    internal static Result<(string? Note, decimal? Reading)> Answer(ChecklistResponse response, string? note, decimal? reading)
+    // After a reading is saved: one outside the range raises (or refreshes) the task's alert for the
+    // day; one inside it clears that alert, as the re-check that put things right. Taking a tick back
+    // never clears it - a bad reading was still taken. The tick is the evidence, so a failure here is
+    // logged and the tick stands. Company and location come from the run, never the tenant: the
+    // terminal and kiosk tick signed out.
+    private async Task ReadingAlertAsync(ApplicationDbContext ctx, ChecklistRunItem item, ChecklistCompletion completion, decimal reading)
+    {
+        ChecklistReadingStatus status = ChecklistRules.Check(reading, item.MinReading, item.MaxReading);
+
+        if (status == ChecklistReadingStatus.NoRange)
+        {
+            return;
+        }
+
+        ChecklistRun run = item.Run!;
+        string key = $"{ReadingKeyPrefix}{item.Id:N}";
+
+        try
+        {
+            string who = await WhoTickedAsync(ctx, completion);
+            string when = RotaTime.ToVenueLocal(completion.CompletedUtc).ToString("HH:mm", RotaFormat.Uk);
+            string value = ChecklistRules.ReadingText(reading, item.Unit);
+
+            if (!ChecklistRules.IsOutOfRange(status))
+            {
+                Result<bool> cleared = await _alertWriter.ResolveAsync(run.CompanyId, key, $"Re-checked at {when}: {value} ({who}).");
+
+                if (!cleared.IsSuccess)
+                {
+                    _logger.LogWarning("Couldn't clear the reading alert for checklist task {RunItemId}: {Error}", item.Id, cleared.Error);
+                }
+
+                return;
+            }
+
+            if (item.ReadingAlert == ChecklistReadingAlert.None)
+            {
+                return;
+            }
+
+            string range = ChecklistRules.RangeText(item.MinReading, item.MaxReading, item.Unit)!;
+            string detail = $"{run.Name}, {when}, by {who}. Acceptable: {range}."
+                + (completion.Note is string written ? $" Note: {written}" : string.Empty);
+
+            Result<OperationsAlertRaiseOutcome> raised = await _alertWriter.RaiseAsync(new OperationsAlertRaise(
+                run.CompanyId, run.LocationId, OperationsAlertType.ChecklistReadingOutOfRange, OperationsAlertSeverity.Warning,
+                key, $"{item.Title} out of range: {value}", detail,
+                $"/manage/checklists/today?location={run.LocationId}",
+                SubjectClientId: completion.ClientId,
+                SubjectUserId: completion.UserId,
+                NotifyTopic: item.ReadingAlert == ChecklistReadingAlert.AlertAndNotify ? NotificationTopic.ChecklistReadingOutOfRange : null));
+
+            if (!raised.IsSuccess)
+            {
+                _logger.LogWarning("Couldn't raise the reading alert for checklist task {RunItemId}: {Error}", item.Id, raised.Error);
+            }
+            else
+            {
+                _logger.LogInformation("Checklist task {RunItemId} reading {Reading} out of range ({Status}): alert {Outcome}",
+                    item.Id, reading, status, raised.Data);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to raise or clear the reading alert for checklist task {RunItemId}", item.Id);
+        }
+    }
+
+    // "Amy C.", or the kiosk's name, for a tick just saved (its navigation isn't loaded).
+    private static async Task<string> WhoTickedAsync(ApplicationDbContext ctx, ChecklistCompletion completion)
+    {
+        if (completion.UserId is string userId)
+        {
+            UserProfile? user = await ctx.Users.AsNoTracking().TagWithCallSite().FirstOrDefaultAsync(x => x.Id == userId);
+            return RotaNames.Public(user);
+        }
+
+        string? kiosk = completion.ClientId is Guid clientId
+            ? await ctx.Clients.AsNoTracking().TagWithCallSite().Where(x => x.Id == clientId).Select(x => x.Name).FirstOrDefaultAsync()
+            : null;
+
+        return kiosk ?? "a kiosk";
+    }
+
+    // What a tick keeps for its task's response: a number task needs a valid reading; a tick-with-note
+    // task keeps its note, and a number task keeps one only when the reading is outside its range
+    // ("moved the stock to fridge 2"), never required. Shared by every way of ticking.
+    internal static Result<(string? Note, decimal? Reading)> Answer(ChecklistResponse response, string? note, decimal? reading,
+        decimal? minReading = null, decimal? maxReading = null)
     {
         string? trimmed = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+
+        if (trimmed?.Length > ChecklistRules.MaxNoteLength && response != ChecklistResponse.Tick)
+        {
+            return Result<(string?, decimal?)>.Fail($"The note can be at most {ChecklistRules.MaxNoteLength} characters.");
+        }
 
         switch (response)
         {
@@ -231,14 +335,11 @@ public class ChecklistRunService(
                     return Result<(string?, decimal?)>.Fail("That reading isn't a number Lanyard can store. Use at most two decimal places.");
                 }
 
-                return Result<(string?, decimal?)>.Ok((null, value));
+                bool outOfRange = ChecklistRules.IsOutOfRange(ChecklistRules.Check(value, minReading, maxReading));
+
+                return Result<(string?, decimal?)>.Ok((outOfRange ? trimmed : null, value));
 
             case ChecklistResponse.TickWithNote:
-                if (trimmed?.Length > ChecklistRules.MaxNoteLength)
-                {
-                    return Result<(string?, decimal?)>.Fail($"The note can be at most {ChecklistRules.MaxNoteLength} characters.");
-                }
-
                 return Result<(string?, decimal?)>.Ok((trimmed, null));
 
             default:
@@ -695,7 +796,7 @@ public class ChecklistRunService(
                 return Result<ChecklistRunView?>.Fail("That checklist isn't available any more.");
             }
 
-            if (!await ChecklistRunStore.FeaturesOnAsync(ctx, companyId))
+            if (!await ChecklistRunStore.FeaturesOnAsync(ctx, checklist.LocationId))
             {
                 return Result<ChecklistRunView?>.Fail(FeatureOff);
             }
@@ -847,7 +948,8 @@ public class ChecklistRunService(
 
     // The kiosk, if this page really is its display: the viewer token is only ever handed to a kiosk
     // over its authenticated hub connection, so a page without it (or with another kiosk's) is
-    // refused. Its company must have checklists switched on.
+    // refused. Whether checklists are on is a per-location switch, so WhyKioskCantTickAsync checks it
+    // for the checklist's own location.
     private async Task<Result<Client>> KioskAsync(ApplicationDbContext ctx, Guid clientId, string? viewerToken)
     {
         if (!_viewerTokens.ValidateViewerToken(clientId, viewerToken))
@@ -862,11 +964,6 @@ public class ChecklistRunService(
             return Result<Client>.Fail("This screen can't tick checklists.");
         }
 
-        if (!await ChecklistRunStore.FeaturesOnAsync(ctx, client.CompanyId))
-        {
-            return Result<Client>.Fail(FeatureOff);
-        }
-
         return Result<Client>.Ok(client);
     }
 
@@ -874,10 +971,28 @@ public class ChecklistRunService(
     // card must allow kiosk ticking for this checklist, sit on an active dashboard of the kiosk's
     // company, be on the kiosk's screen (the step it's showing now is that dashboard) and be shown
     // (its "Show only when…" conditions hold). So a read-only or hidden card elsewhere never opens
-    // ticking up, and neither does another kiosk in the same company.
+    // ticking up, and neither does another kiosk in the same company. Checklists must be switched on
+    // for the checklist's location.
     private async Task<string?> WhyKioskCantTickAsync(ApplicationDbContext ctx, Client kiosk, Guid widgetId, Guid checklistId, DateTime now)
     {
         const string NotHere = "This checklist can't be ticked on this screen.";
+
+        int? locationId = await ctx.Checklists
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => x.Id == checklistId && x.CompanyId == kiosk.CompanyId)
+            .Select(x => (int?)x.LocationId)
+            .FirstOrDefaultAsync();
+
+        if (locationId is not int id)
+        {
+            return NotHere;
+        }
+
+        if (!await ChecklistRunStore.FeaturesOnAsync(ctx, id))
+        {
+            return FeatureOff;
+        }
 
         ChecklistCardWidget? card = await ctx.DashboardWidgets
             .OfType<ChecklistCardWidget>()
