@@ -276,6 +276,10 @@
             pendingAutoBuildDay = null;
             Navigate(locationId, monthView, day, replace: true);
             await AutoBuildAsync(day, day, day.ToString("dddd d MMMM", RotaDisplayExtensions.Uk));
+
+            // Not an event handler, so Blazor won't re-render by itself after the reload: without
+            // this the new draft shifts are saved but the grid still shows the old rota.
+            StateHasChanged();
         }
     }
 
