@@ -11,7 +11,6 @@ using Lanyard.Tests.Services.Scheduling;
 using Lanyard.Tests.Services.Speech;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
@@ -24,7 +23,7 @@ public class AudioClipServiceTests
     private const string UserId = "user-1";
 
     private sealed class TestService(IDbContextFactory<ApplicationDbContext> factory, IFileService files, IAudioClipPlaybackService playback, ISecurityService security, ISpeechRenderService speech)
-        : AudioClipService(factory, files, playback, security, speech, new SpeechPreviewStore(new MemoryCache(new MemoryCacheOptions())), NullLogger<AudioClipService>.Instance)
+        : AudioClipService(factory, files, playback, security, speech, new SpeechPreviewStore(), NullLogger<AudioClipService>.Instance)
     {
         public HashSet<string> Online { get; } = [];
 
@@ -96,7 +95,7 @@ public class AudioClipServiceTests
 
         Mock<ISecurityService> security = new();
 
-        SpeechRenderService speech = new([new FakeSpeechEngine()], new MemoryCache(new MemoryCacheOptions()), NullLogger<SpeechRenderService>.Instance);
+        SpeechRenderService speech = new([new FakeSpeechEngine()], NullLogger<SpeechRenderService>.Instance);
 
         return new Setup
         {
@@ -503,10 +502,15 @@ public class AudioClipServiceTests
         Result<AudioClip> renamed = await s.Service.UpdateSpeechAsync(s.Admin, created.Id, Words("Closing in ten minutes."), new AudioClipDetails("Closing soon", null), UserId);
         Assert.IsTrue(renamed.IsSuccess, renamed.Error);
         Assert.AreEqual(firstFile, renamed.Data!.FileMetadataId);
+        s.Playback.Verify(p => p.PrefetchScheduledClipsAsync(It.IsAny<int>()), Times.Never);
 
         Result<AudioClip> reworded = await s.Service.UpdateSpeechAsync(s.Admin, created.Id, Words("Closing in five minutes.", pitch: -2), new AudioClipDetails("Closing soon", null), UserId);
         Assert.IsTrue(reworded.IsSuccess, reworded.Error);
         Assert.AreNotEqual(firstFile, reworded.Data!.FileMetadataId);
+
+        // The new audio is sent ahead to kiosks at every location the clip plays at.
+        s.Playback.Verify(p => p.PrefetchScheduledClipsAsync(s.Ipswich.Id), Times.Once);
+        s.Playback.Verify(p => p.PrefetchScheduledClipsAsync(s.Norwich.Id), Times.Once);
 
         s.Files.Verify(f => f.UploadFileAsync(It.IsAny<IFormFile>(), null, UserId, It.IsAny<FileUploadOptions>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
         s.Files.Verify(f => f.DeleteFileAsync(firstFile, It.IsAny<CancellationToken>()), Times.Once);
@@ -561,10 +565,10 @@ public class AudioClipServiceTests
     }
 
     [TestMethod]
-    public async Task PreviewSpeech_NeedsPermissionToPlayClips()
+    public async Task PreviewSpeech_IsForManagersAndAdmins_NotStaffWhoCanOnlyPlayClips()
     {
         Setup s = await SeedAsync();
-        s.Security.Setup(x => x.IsCurrentUserInRoleAsync(AudioClipRoles.CanPlayAudioClips)).ReturnsAsync(false);
+        s.Security.Setup(x => x.IsCurrentUserInRoleAsync(AudioClipRoles.CanPlayAudioClips)).ReturnsAsync(true);
 
         Result<Guid> staff = await s.Service.PreviewSpeechAsync(s.IpswichStaff, Words("Hello"), UserId);
         Result<Guid> manager = await s.Service.PreviewSpeechAsync(s.IpswichManager, Words("Hello"), UserId);

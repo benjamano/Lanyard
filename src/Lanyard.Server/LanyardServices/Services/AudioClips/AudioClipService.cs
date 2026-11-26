@@ -293,6 +293,20 @@ public class AudioClipService(
                 await DeleteRenderAsync(oldFile);
             }
 
+            // New audio is a new ContentVersion, which kiosks haven't got: have the ones that play
+            // this clip on a schedule or from an automation rule fetch it now, not at the moment.
+            if (rerender)
+            {
+                List<int> locations = clip.LocationId is int only
+                    ? [only]
+                    : await ctx.Locations.Where(x => x.IsActive).Select(x => x.Id).ToListAsync(ct);
+
+                foreach (int locationId in locations)
+                {
+                    await playback.PrefetchScheduledClipsAsync(locationId);
+                }
+            }
+
             logger.LogInformation("Speech audio clip {ClipId} updated (rendered again: {Rerendered})", clip.Id, rerender);
 
             return Result<AudioClip>.Ok(clip);
@@ -309,9 +323,11 @@ public class AudioClipService(
     {
         try
         {
-            if (!await CanPlayAsync(scope))
+            // The same people who can add or edit an announcement: rendering takes a voice's
+            // full attention for a moment, so it isn't open to everyone who can press Play.
+            if (!scope.IsAdmin && !scope.IsManager)
             {
-                return Result<Guid>.Fail("You don't have permission to make announcements.");
+                return Result<Guid>.Fail("Only a manager or an admin can make announcements.");
             }
 
             Result<RenderedSpeech> rendered = await speech.RenderAsync(request.Text, request.Voice, ct);

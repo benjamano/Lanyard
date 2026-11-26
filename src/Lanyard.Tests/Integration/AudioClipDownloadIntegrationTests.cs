@@ -31,13 +31,13 @@ public class AudioClipDownloadIntegrationTests
         _baseFactory.Dispose();
     }
 
-    private async Task<Guid> SeedClipAsync(string fileName, bool deleted = false)
+    private async Task<Guid> SeedClipAsync(string fileName, bool deleted = false, Lanyard.Infrastructure.Enum.AudioClipKind kind = Lanyard.Infrastructure.Enum.AudioClipKind.File)
     {
         string path = Path.GetTempFileName();
         File.WriteAllBytes(path, Enumerable.Range(0, 32).Select(i => (byte)i).ToArray());
 
         FileMetadata file = new() { Id = Guid.NewGuid(), FileName = fileName, FilePath = path, FileSize = 32, ContentType = "text/plain", IsActive = true };
-        AudioClip clip = new() { Id = Guid.NewGuid(), Name = "Closing time", FileMetadataId = file.Id, DurationSeconds = 1, CreateDate = DateTime.UtcNow, DeleteDate = deleted ? DateTime.UtcNow : null };
+        AudioClip clip = new() { Id = Guid.NewGuid(), Name = "Closing time", FileMetadataId = file.Id, DurationSeconds = 1, CreateDate = DateTime.UtcNow, DeleteDate = deleted ? DateTime.UtcNow : null, Kind = kind };
 
         using IServiceScope scope = _factory.Services.CreateScope();
         IDbContextFactory<ApplicationDbContext> dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
@@ -95,5 +95,20 @@ public class AudioClipDownloadIntegrationTests
         using HttpResponseMessage response = await GetAsync(clipId, await KioskTokenAsync());
 
         Assert.AreEqual(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task Audio_OfAnUploadedClip_MayBeCached_ButATypedAnnouncementsIsNot()
+    {
+        Guid uploaded = await SeedClipAsync("birthday.wav");
+        Guid spoken = await SeedClipAsync("announcement.wav", kind: Lanyard.Infrastructure.Enum.AudioClipKind.Speech);
+        string token = await KioskTokenAsync();
+
+        using HttpResponseMessage uploadedResponse = await GetAsync(uploaded, token);
+        using HttpResponseMessage spokenResponse = await GetAsync(spoken, token);
+
+        Assert.AreEqual(HttpStatusCode.OK, spokenResponse.StatusCode);
+        Assert.IsTrue(uploadedResponse.Headers.CacheControl?.MaxAge > TimeSpan.Zero);
+        Assert.IsTrue(spokenResponse.Headers.CacheControl?.NoStore == true);
     }
 }

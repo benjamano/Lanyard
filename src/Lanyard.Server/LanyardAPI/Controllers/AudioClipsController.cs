@@ -3,6 +3,7 @@ using Lanyard.Application.Services;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.Enum;
 using Lanyard.Shared.AudioClips;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -32,7 +33,7 @@ public class AudioClipsController(IDbContextFactory<ApplicationDbContext> factor
             .AsNoTracking()
             .TagWithCallSite()
             .Where(x => x.Id == id && x.DeleteDate == null)
-            .Select(x => new { x.FileMetadataId, FileName = x.FileMetadata!.FileName })
+            .Select(x => new { x.FileMetadataId, FileName = x.FileMetadata!.FileName, x.Kind })
             .FirstOrDefaultAsync(cancellationToken);
 
         if (clip?.FileMetadataId is not Guid fileMetadataId)
@@ -47,7 +48,18 @@ public class AudioClipsController(IDbContextFactory<ApplicationDbContext> factor
             return this.FileContentFailure(download.Error);
         }
 
+        // A typed announcement's audio changes under the same clip id when its words change, and
+        // its words could name someone, so browsers don't keep it. (Kiosks cache clips themselves,
+        // by ContentVersion, so they never relied on this header.)
+        if (clip.Kind == AudioClipKind.Speech)
+        {
+            Response.Headers.CacheControl = "no-store";
+        }
+
         // From the stored file name, never the type the uploader's browser claimed.
-        return await this.StreamFileContentAsync(download.Data, contentType: AudioClipFormats.ContentTypeFor(clip.FileName), cacheFor: TimeSpan.FromDays(1));
+        return await this.StreamFileContentAsync(
+            download.Data,
+            contentType: AudioClipFormats.ContentTypeFor(clip.FileName),
+            cacheFor: clip.Kind == AudioClipKind.Speech ? null : TimeSpan.FromDays(1));
     }
 }

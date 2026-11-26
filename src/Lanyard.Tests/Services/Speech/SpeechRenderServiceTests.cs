@@ -1,6 +1,5 @@
 using Lanyard.Application.Services.Speech;
 using Lanyard.Infrastructure.DTO;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -12,7 +11,7 @@ public class SpeechRenderServiceTests
     private static (SpeechRenderService Service, FakeSpeechEngine Engine) Create()
     {
         FakeSpeechEngine engine = new();
-        return (new SpeechRenderService([engine], new MemoryCache(new MemoryCacheOptions()), NullLogger<SpeechRenderService>.Instance), engine);
+        return (new SpeechRenderService([engine], NullLogger<SpeechRenderService>.Instance), engine);
     }
 
     [TestMethod]

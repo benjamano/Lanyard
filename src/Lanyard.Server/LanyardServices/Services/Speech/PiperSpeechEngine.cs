@@ -16,26 +16,37 @@ namespace Lanyard.Application.Services.Speech;
 /// <see cref="SpeechOptions.IdleUnloadMinutes"/> is unloaded, so a venue that never speaks costs
 /// no memory at all. A loaded voice speaks one announcement at a time; sherpa-onnx doesn't say
 /// its native object is safe to share across threads.
+///
+/// A voice is only ever disposed when nobody holds it: <see cref="LoadedVoice.Users"/> is counted
+/// under <c>_lock</c> from the moment a request is handed the voice until it has finished with it,
+/// and unloading skips any voice with users. One that's unloaded while held (it can't be, but if
+/// that changes) is disposed by its last user.
 /// </remarks>
 public sealed class PiperSpeechEngine : ISpeechEngine, IDisposable
 {
-    private sealed class LoadedVoice(OfflineTts tts) : IDisposable
+    private sealed class LoadedVoice(string key, OfflineTts tts)
     {
+        public string Key { get; } = key;
         public OfflineTts Tts { get; } = tts;
-        public SemaphoreSlim Gate { get; } = new(1, 1);
-        public DateTime LastUsedUtc { get; set; } = DateTime.UtcNow;
 
-        public void Dispose()
-        {
-            Tts.Dispose();
-            Gate.Dispose();
-        }
+        // Serialises speaking on this voice. Never disposed: a SemaphoreSlim holds no native handle
+        // unless its wait handle is used, and disposing it is what made a waiting request throw.
+        public SemaphoreSlim Gate { get; } = new(1, 1);
+
+        // Guarded by _lock.
+        public int Users { get; set; }
+        public bool Unloaded { get; set; }
+        public DateTime LastUsedUtc { get; set; } = DateTime.UtcNow;
     }
 
     private readonly SpeechOptions _options;
     private readonly ILogger<PiperSpeechEngine> _logger;
     private readonly Dictionary<string, LoadedVoice> _loaded = new(StringComparer.Ordinal);
     private readonly Lock _lock = new();
+
+    // Only one model loads at a time (each load is ~2 s of CPU and ~70 MB), but loading never
+    // holds _lock, so voices that are already loaded carry on speaking meanwhile.
+    private readonly SemaphoreSlim _loadGate = new(1, 1);
     private readonly Timer _idleTimer;
     private bool _disposed;
 
@@ -55,36 +66,41 @@ public sealed class PiperSpeechEngine : ISpeechEngine, IDisposable
 
     public async Task<Result<SpeechSamples>> SynthesiseAsync(string text, SpeechVoice voice, double speed, CancellationToken ct)
     {
+        if (voice.Engine != SpeechEngineKind.Piper)
+        {
+            return Result<SpeechSamples>.Fail("That voice isn't a Piper voice.");
+        }
+
+        LoadedVoice? held = null;
+
         try
         {
-            if (voice.Engine != SpeechEngineKind.Piper)
-            {
-                return Result<SpeechSamples>.Fail("That voice isn't a Piper voice.");
-            }
+            held = await AcquireAsync(voice, ct);
 
-            LoadedVoice? loaded = await Task.Run(() => GetOrLoad(voice), ct);
-
-            if (loaded is null)
+            if (held is null)
             {
                 return Result<SpeechSamples>.Fail($"The voice {voice.Name} isn't installed on this server.");
             }
 
-            await loaded.Gate.WaitAsync(ct);
+            await held.Gate.WaitAsync(ct);
 
             try
             {
-                loaded.LastUsedUtc = DateTime.UtcNow;
-
                 // Native and CPU-bound: off the request thread. It can't be cancelled part way, but
-                // a sentence takes about a second.
-                OfflineTtsGeneratedAudio audio = await Task.Run(() => loaded.Tts.Generate(text, (float)speed, voice.SpeakerId), ct);
+                // a sentence takes about a second. Samples is a managed copy; the native buffer
+                // behind it is freed by OfflineTtsGeneratedAudio's own finaliser.
+                LoadedVoice speaking = held;
+                SpeechSamples samples = await Task.Run(() =>
+                {
+                    OfflineTtsGeneratedAudio audio = speaking.Tts.Generate(text, (float)speed, voice.SpeakerId);
+                    return new SpeechSamples(audio.Samples, audio.SampleRate);
+                }, ct);
 
-                return Result<SpeechSamples>.Ok(new SpeechSamples(audio.Samples, audio.SampleRate));
+                return Result<SpeechSamples>.Ok(samples);
             }
             finally
             {
-                loaded.LastUsedUtc = DateTime.UtcNow;
-                loaded.Gate.Release();
+                held.Gate.Release();
             }
         }
         catch (OperationCanceledException)
@@ -96,18 +112,31 @@ public sealed class PiperSpeechEngine : ISpeechEngine, IDisposable
             _logger.LogError(ex, "Piper failed to speak with voice {VoiceId}", voice.Id);
             return Result<SpeechSamples>.Fail($"The voice couldn't speak that: {ex.Message}");
         }
+        finally
+        {
+            if (held is not null)
+            {
+                Release(held);
+            }
+        }
     }
 
-    private LoadedVoice? GetOrLoad(SpeechVoice voice)
+    // Hands back the voice with one more user counted, loading it first if need be.
+    private async Task<LoadedVoice?> AcquireAsync(SpeechVoice voice, CancellationToken ct)
     {
-        lock (_lock)
+        if (TryAcquireLoaded(voice.ModelFolder) is LoadedVoice loaded)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
+            return loaded;
+        }
 
-            if (_loaded.TryGetValue(voice.ModelFolder, out LoadedVoice? existing))
+        await _loadGate.WaitAsync(ct);
+
+        try
+        {
+            // Someone else may have loaded it while this waited.
+            if (TryAcquireLoaded(voice.ModelFolder) is LoadedVoice raced)
             {
-                existing.LastUsedUtc = DateTime.UtcNow;
-                return existing;
+                return raced;
             }
 
             (string Model, string Tokens, string DataDir)? files = FindModel(voice);
@@ -117,8 +146,6 @@ public sealed class PiperSpeechEngine : ISpeechEngine, IDisposable
                 return null;
             }
 
-            MakeRoom(Math.Max(1, _options.MaxLoadedVoices) - 1);
-
             OfflineTtsConfig config = new();
             config.Model.Vits.Model = files.Value.Model;
             config.Model.Vits.Tokens = files.Value.Tokens;
@@ -126,27 +153,74 @@ public sealed class PiperSpeechEngine : ISpeechEngine, IDisposable
             config.Model.NumThreads = Math.Max(1, _options.NumThreads);
             config.Model.Provider = "cpu";
 
-            LoadedVoice loaded = new(new OfflineTts(config));
-            _loaded[voice.ModelFolder] = loaded;
+            OfflineTts tts = await Task.Run(() => new OfflineTts(config), ct);
+            LoadedVoice fresh = new(voice.ModelFolder, tts) { Users = 1 };
+
+            lock (_lock)
+            {
+                if (_disposed)
+                {
+                    tts.Dispose();
+                    throw new ObjectDisposedException(nameof(PiperSpeechEngine));
+                }
+
+                MakeRoom(Math.Max(1, _options.MaxLoadedVoices) - 1);
+                _loaded[voice.ModelFolder] = fresh;
+            }
 
             _logger.LogInformation("Loaded speech model {ModelFolder}", voice.ModelFolder);
 
-            return loaded;
+            return fresh;
+        }
+        finally
+        {
+            _loadGate.Release();
+        }
+    }
+
+    private LoadedVoice? TryAcquireLoaded(string key)
+    {
+        lock (_lock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            if (!_loaded.TryGetValue(key, out LoadedVoice? existing))
+            {
+                return null;
+            }
+
+            existing.Users++;
+            existing.LastUsedUtc = DateTime.UtcNow;
+            return existing;
+        }
+    }
+
+    private void Release(LoadedVoice voice)
+    {
+        lock (_lock)
+        {
+            voice.Users--;
+            voice.LastUsedUtc = DateTime.UtcNow;
+
+            if (voice.Unloaded && voice.Users == 0)
+            {
+                voice.Tts.Dispose();
+            }
         }
     }
 
     // Unloads the least recently used voices until at most `keep` remain. Called under _lock. A
-    // voice that's busy speaking stays, so for a moment one more than the limit can be loaded.
+    // voice someone holds stays, so for a moment one more than the limit can be loaded.
     private void MakeRoom(int keep)
     {
-        foreach (KeyValuePair<string, LoadedVoice> candidate in _loaded.OrderBy(x => x.Value.LastUsedUtc).ToList())
+        foreach (LoadedVoice candidate in _loaded.Values.OrderBy(x => x.LastUsedUtc).ToList())
         {
             if (_loaded.Count <= keep)
             {
                 return;
             }
 
-            Unload(candidate.Key, candidate.Value);
+            Unload(candidate);
         }
     }
 
@@ -161,27 +235,26 @@ public sealed class PiperSpeechEngine : ISpeechEngine, IDisposable
 
             DateTime cutoff = DateTime.UtcNow.AddMinutes(-Math.Max(1, _options.IdleUnloadMinutes));
 
-            foreach (KeyValuePair<string, LoadedVoice> idle in _loaded.Where(x => x.Value.LastUsedUtc < cutoff).ToList())
+            foreach (LoadedVoice idle in _loaded.Values.Where(x => x.LastUsedUtc < cutoff).ToList())
             {
-                Unload(idle.Key, idle.Value);
+                Unload(idle);
             }
         }
     }
 
-    // Called under _lock. A voice speaking right now is left alone; it'll be idle soon enough.
-    private void Unload(string key, LoadedVoice voice)
+    // Called under _lock.
+    private void Unload(LoadedVoice voice)
     {
-        if (!voice.Gate.Wait(0))
+        if (voice.Users > 0)
         {
-            voice.LastUsedUtc = DateTime.UtcNow;
             return;
         }
 
-        _loaded.Remove(key);
-        voice.Gate.Release();
-        voice.Dispose();
+        _loaded.Remove(voice.Key);
+        voice.Unloaded = true;
+        voice.Tts.Dispose();
 
-        _logger.LogInformation("Unloaded speech model {ModelFolder}", key);
+        _logger.LogInformation("Unloaded speech model {ModelFolder}", voice.Key);
     }
 
     private (string Model, string Tokens, string DataDir)? FindModel(SpeechVoice voice)
@@ -234,9 +307,15 @@ public sealed class PiperSpeechEngine : ISpeechEngine, IDisposable
             _disposed = true;
             _idleTimer.Dispose();
 
+            // A voice still in use is disposed by its last user (Release).
             foreach (LoadedVoice voice in _loaded.Values)
             {
-                voice.Dispose();
+                voice.Unloaded = true;
+
+                if (voice.Users == 0)
+                {
+                    voice.Tts.Dispose();
+                }
             }
 
             _loaded.Clear();

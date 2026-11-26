@@ -221,10 +221,6 @@
     [Parameter]
     public IReadOnlyList<AudioClipFileOption> Files { get; set; } = [];
 
-    // Start on "Type an announcement" rather than an upload.
-    [Parameter]
-    public bool StartWithSpeech { get; set; }
-
     private IReadOnlyList<SpeechVoiceOption> voices = [];
     private string? speechText;
     private string voiceId = SpeechVoiceCatalogue.DefaultVoiceId;
@@ -259,7 +255,6 @@
 
         if (Clip is null)
         {
-            source = StartWithSpeech ? SpeechSource : UploadSource;
             locationValue = CanChooseEveryLocation ? EveryLocation : Locations.FirstOrDefault()?.Id.ToString() ?? EveryLocation;
             return;
         }

@@ -89,7 +89,7 @@
                                     <FluentText Class="audio-clip-words">"@clip.SpeechText"</FluentText>
                                 }
                                 <FluentText Class="audio-clips-muted">@ClipSummary(clip)</FluentText>
-                                <audio class="audio-clip-preview" controls preload="none" src="@($"/api/audioclips/{clip.Id}/audio")"></audio>
+                                <audio class="audio-clip-preview" controls preload="none" src="@($"/api/audioclips/{clip.Id}/audio?v={clip.FileMetadataId:N}")"></audio>
                             </div>
                             <div class="audio-clip-actions">
                                 <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Play())"

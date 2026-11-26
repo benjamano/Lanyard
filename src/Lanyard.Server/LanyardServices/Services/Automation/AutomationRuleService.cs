@@ -410,21 +410,29 @@ public class AutomationRuleService(
             return;
         }
 
-        List<string> parameters = await ctx.AutomationRuleActions
-            .AsNoTracking()
-            .TagWithCallSite()
-            .Where(a => a.AutomationRuleId == ruleId && a.IsActive && a.ActionType == AutomationActionTypes.PlayAudioClip)
-            .Select(a => a.ParametersJson)
-            .ToListAsync();
-
-        IEnumerable<Guid> kiosks = parameters
-            .Select(json => AutomationActionTargets.TryRead(AutomationActionTypes.PlayAudioClip, json, out AutomationActionTarget target) ? target.ClientId : Guid.Empty)
-            .Where(id => id != Guid.Empty)
-            .Distinct();
-
-        foreach (Guid kiosk in kiosks)
+        // The rule is saved by now, so nothing here may turn that into a failure.
+        try
         {
-            await clipPlayback.PrefetchClipsForKioskAsync(kiosk);
+            List<string> parameters = await ctx.AutomationRuleActions
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(a => a.AutomationRuleId == ruleId && a.IsActive && a.ActionType == AutomationActionTypes.PlayAudioClip)
+                .Select(a => a.ParametersJson)
+                .ToListAsync();
+
+            IEnumerable<Guid> kiosks = parameters
+                .Select(json => AutomationActionTargets.TryRead(AutomationActionTypes.PlayAudioClip, json, out AutomationActionTarget target) ? target.ClientId : Guid.Empty)
+                .Where(id => id != Guid.Empty)
+                .Distinct();
+
+            foreach (Guid kiosk in kiosks)
+            {
+                await clipPlayback.PrefetchClipsForKioskAsync(kiosk);
+            }
+        }
+        catch (Exception)
+        {
+            // Only an optimisation: the kiosk downloads the clip when it's played anyway.
         }
     }
 

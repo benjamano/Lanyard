@@ -30,9 +30,13 @@ public interface ISpeechRenderService
 
 public sealed class SpeechRenderService(
     IEnumerable<ISpeechEngine> engines,
-    IMemoryCache cache,
-    ILogger<SpeechRenderService> logger) : ISpeechRenderService
+    ILogger<SpeechRenderService> logger) : ISpeechRenderService, IDisposable
 {
+    // Its own cache, sized in bytes, so pressing Preview over and over can't hold more than this
+    // much audio however many different sentences are tried. A 500-character announcement at
+    // half speed is about 3.5 MB.
+    private const long CacheBytes = 48L * 1024 * 1024;
+
     // Loading a voice for the first time takes a couple of seconds; speaking a long announcement
     // a few more. Past this, something is wrong.
     private static readonly TimeSpan RenderTimeout = TimeSpan.FromSeconds(30);
@@ -42,6 +46,7 @@ public sealed class SpeechRenderService(
     private static readonly TimeSpan CacheFor = TimeSpan.FromMinutes(10);
 
     private readonly IReadOnlyList<ISpeechEngine> _engines = engines.ToList();
+    private readonly MemoryCache _cache = new(new MemoryCacheOptions { SizeLimit = CacheBytes });
 
     public IReadOnlyList<SpeechVoiceOption> ListVoices() =>
         SpeechVoiceCatalogue.Voices
@@ -110,7 +115,7 @@ public sealed class SpeechRenderService(
 
             string key = RenderKeyFor(text, voice);
 
-            if (cache.TryGetValue(CacheKey(key), out RenderedSpeech? cached) && cached is not null)
+            if (_cache.TryGetValue(CacheKey(key), out RenderedSpeech? cached) && cached is not null)
             {
                 return Result<RenderedSpeech>.Ok(cached);
             }
@@ -149,7 +154,7 @@ public sealed class SpeechRenderService(
                 Math.Round(samples.Length / (double)spoken.Data.SampleRate, 1),
                 key);
 
-            cache.Set(CacheKey(key), rendered, new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = CacheFor, Size = 1 });
+            _cache.Set(CacheKey(key), rendered, new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = CacheFor, Size = rendered.Wav.Length });
 
             logger.LogInformation("Rendered {Characters} characters of speech with voice {VoiceId} ({Seconds}s)", Clean(text).Length, voice.VoiceId, rendered.DurationSeconds);
 
@@ -206,6 +211,8 @@ public sealed class SpeechRenderService(
 
         return builder.ToString().TrimEnd();
     }
+
+    public void Dispose() => _cache.Dispose();
 
     private ISpeechEngine? EngineFor(SpeechVoice voice) => _engines.FirstOrDefault(e => e.Kind == voice.Engine);
 
