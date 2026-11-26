@@ -31,6 +31,19 @@
         </FluentText>
     </HelpSection>
 
+    <HelpSection Title="Party staffing out of date (Warning)">
+        <FluentText>
+            A party or private hire was booked, moved, changed or cancelled - by hand or by the Just Step booking import - after
+            the rota for its day was built, so the party staff on the rota no longer match the bookings. It's only raised for
+            the next 14 days, and only for days that already have shifts on the rota. There's one alert per location per day,
+            and the location's Managers get one push for each change or import, however many days it affected. Press
+            <strong>Rerun Auto-build for that day</strong> to open the rota with Auto-build ready for just that day. It adds
+            the missing party staff and takes off draft shifts for cancelled parties. A <em>published</em> shift for a cancelled
+            or moved party is never changed for you: the alert says whose it is, so you can change or remove it on the rota and
+            publish. The alert clears itself once the day matches the bookings again (within 15 minutes of a change on the rota).
+        </FluentText>
+    </HelpSection>
+
     <HelpSection Title="Booking import failed (Warning)">
         <FluentText>
             The Just Step Online booking import couldn't run for a location: the sign-in was refused, the stored password

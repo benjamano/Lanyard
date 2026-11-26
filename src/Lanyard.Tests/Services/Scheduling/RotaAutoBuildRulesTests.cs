@@ -521,4 +521,155 @@ public class RotaAutoBuildRulesTests
 
         Assert.AreEqual("ryan", pick.Shift.UserId);
     }
+
+    // --- Party staffing check ---
+
+    private static Shift PartyShift(PartyBooking party, DemandSlot slot, string? userId = "amy", bool published = false) => new()
+    {
+        Id = Guid.NewGuid(),
+        LocationId = 1,
+        UserId = userId,
+        StaffPositionId = slot.StaffPositionId,
+        StartUtc = slot.StartUtc,
+        EndUtc = slot.EndUtc,
+        PartyBookingId = party.Id,
+        PublishedDateUtc = published ? Now : null,
+        CreateByUserId = "m",
+        IsActive = true
+    };
+
+    private static List<PartyStaffingDayCheck> Check(IEnumerable<PartyBooking> parties, IEnumerable<Shift> existing, DateTime? now = null, params PartyStaffingRule[] rules)
+    {
+        List<PartyBooking> list = [.. parties];
+        (List<DemandSlot> slots, _) = RotaAutoBuildRules.ExpandParties(list, rules.Length > 0 ? rules : [Rule(null, 1)], SaturdayShifts());
+        return RotaAutoBuildRules.CheckPartyStaffing(slots, list, existing, Week, Week.AddDays(6), now ?? Now);
+    }
+
+    private static DemandSlot SlotFor(PartyBooking party) =>
+        RotaAutoBuildRules.ExpandParties([party], [Rule(null, 1)], SaturdayShifts()).Slots.Single();
+
+    [TestMethod]
+    public void CheckPartyStaffing_InLine_NothingFlagged()
+    {
+        PartyBooking party = Party("Play");
+
+        Assert.AreEqual(0, Check([party], [PartyShift(party, SlotFor(party))]).Count);
+    }
+
+    [TestMethod]
+    public void CheckPartyStaffing_NewParty_IsMissingItsStaff()
+    {
+        PartyBooking party = Party("Play");
+
+        PartyStaffingDayCheck day = Check([party], []).Single();
+
+        Assert.AreEqual(Saturday, day.Day);
+        PartyStaffingGap gap = day.Missing.Single();
+        Assert.AreEqual(party.Id, gap.PartyBookingId);
+        Assert.AreEqual(1, gap.Needed);
+        Assert.AreEqual("Party: Play", gap.PartyName, "the type, never the child's name");
+        Assert.AreEqual(0, day.Stale.Count);
+        Assert.IsTrue(day.AutoBuildCanFix);
+    }
+
+    [TestMethod]
+    public void CheckPartyStaffing_CancelledWithDraft_StaleDraftAutoBuildCanFix()
+    {
+        PartyBooking party = Party("Play");
+        Shift draft = PartyShift(party, SlotFor(party));
+        party.Status = PartyBookingStatus.Cancelled;
+
+        PartyStaffingDayCheck day = Check([party], [draft]).Single();
+
+        Assert.AreEqual(0, day.Missing.Count);
+        StalePartyShift stale = day.Stale.Single();
+        Assert.AreEqual(draft.Id, stale.ShiftId);
+        Assert.IsFalse(stale.IsPublished);
+        Assert.IsTrue(day.AutoBuildCanFix);
+    }
+
+    [TestMethod]
+    public void CheckPartyStaffing_CancelledWithPublished_StalePublishedNeedsAPerson()
+    {
+        PartyBooking party = Party("Play");
+        Shift published = PartyShift(party, SlotFor(party), published: true);
+        party.Status = PartyBookingStatus.Cancelled;
+
+        PartyStaffingDayCheck day = Check([party], [published]).Single();
+
+        StalePartyShift stale = day.Stale.Single();
+        Assert.IsTrue(stale.IsPublished);
+        Assert.IsFalse(stale.Moved);
+        Assert.IsFalse(day.AutoBuildCanFix);
+    }
+
+    [TestMethod]
+    public void CheckPartyStaffing_MovedToAnotherShift_DraftIsStaleAndStaffMissing()
+    {
+        PartyBooking party = Party("Play", 10, 12);
+        Shift draft = PartyShift(party, SlotFor(party));
+
+        // Moved into the afternoon: it now belongs to the 14:00-19:00 shift.
+        party.StartUtc = RotaTime.ToUtc(Saturday, new TimeOnly(15, 0));
+        party.EndUtc = RotaTime.ToUtc(Saturday, new TimeOnly(17, 0));
+
+        PartyStaffingDayCheck day = Check([party], [draft]).Single();
+
+        Assert.AreEqual(RotaTime.ToUtc(Saturday, new TimeOnly(14, 0)), day.Missing.Single().StartUtc);
+        Assert.AreEqual(draft.Id, day.Stale.Single().ShiftId);
+    }
+
+    [TestMethod]
+    public void CheckPartyStaffing_MovedWithPublishedShift_CountsAsMovedNotMissing()
+    {
+        PartyBooking party = Party("Play", 10, 12);
+        Shift published = PartyShift(party, SlotFor(party), published: true);
+        party.StartUtc = RotaTime.ToUtc(Saturday, new TimeOnly(15, 0));
+        party.EndUtc = RotaTime.ToUtc(Saturday, new TimeOnly(17, 0));
+
+        PartyStaffingDayCheck day = Check([party], [published]).Single();
+
+        // As Auto-build does: the published shift stands in for the party's one Host, so nothing is
+        // missing, but the manager must change its times.
+        Assert.AreEqual(0, day.Missing.Count);
+        Assert.IsTrue(day.Stale.Single().Moved);
+        Assert.IsFalse(day.AutoBuildCanFix);
+    }
+
+    [TestMethod]
+    public void CheckPartyStaffing_TypeNowNeedsMoreStaff_Missing()
+    {
+        PartyBooking party = Party("Lazer");
+        Shift one = PartyShift(party, SlotFor(party));
+
+        PartyStaffingDayCheck day = Check([party], [one], null, Rule("Lazer", 2), Rule(null, 1)).Single();
+
+        Assert.AreEqual(1, day.Missing.Single().Needed);
+        Assert.AreEqual(0, day.Stale.Count);
+    }
+
+    [TestMethod]
+    public void CheckPartyStaffing_TemplateShiftsAndShiftsMadeByHand_NeverFlagged()
+    {
+        DemandSlot am = SaturdayShifts()[0];
+        Shift template = new() { Id = Guid.NewGuid(), LocationId = 1, StaffPositionId = Host, StartUtc = am.StartUtc, EndUtc = am.EndUtc, CreateByUserId = "m", IsActive = true };
+        Shift byHand = new() { Id = Guid.NewGuid(), LocationId = 1, StaffPositionId = PartyHost, StartUtc = am.StartUtc, EndUtc = am.EndUtc, CreateByUserId = "m", IsActive = true };
+
+        Assert.AreEqual(0, Check([], [template, byHand]).Count);
+    }
+
+    [TestMethod]
+    public void CheckPartyStaffing_StartedOrRemovedShifts_Ignored()
+    {
+        PartyBooking party = Party("Play");
+        Shift draft = PartyShift(party, SlotFor(party));
+        Shift removed = PartyShift(party, SlotFor(party));
+        removed.IsActive = false;
+        party.Status = PartyBookingStatus.Cancelled;
+
+        // Once the 09:00 shift has started it's too late to matter; a removed shift never counts.
+        DateTime afterStart = RotaTime.ToUtc(Saturday, new TimeOnly(9, 30));
+        Assert.AreEqual(0, Check([party], [draft], afterStart).Count);
+        Assert.AreEqual(0, Check([party], [removed]).Count);
+    }
 }

@@ -33,5 +33,10 @@ public enum NotificationTopic
     PartyBookingImportFailed = 23,
 
     // A location checklist (Opening, Closing...) was missed. Raised as an operations alert.
-    ChecklistMissed = 24
+    ChecklistMissed = 24,
+
+    // 25 is kept for checklist readings out of range (item 10.2).
+
+    // A party change left a day's built rota with the wrong party staffing. Raised as an operations alert.
+    PartyStaffingOutOfDate = 26
 }

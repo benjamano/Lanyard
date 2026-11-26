@@ -1,5 +1,6 @@
 using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO.Scheduling;
 using Lanyard.Infrastructure.Models;
 
 namespace Lanyard.Application.Services.Parties;
@@ -23,6 +24,10 @@ public interface IPartyBookingService
     Task<Result<PartyBooking>> SetDepositPaidAsync(LocationScope scope, Guid bookingId, bool paid, string actingUserId);
 
     Task<Result<PartyBooking>> SetBalancePaidAsync(LocationScope scope, Guid bookingId, bool paid, string actingUserId);
+
+    // The open "Party staffing out of date" alert for the booking's day at its location, if any (so
+    // the editor can offer to rerun Auto-build for that day). Ok(null) when the day is fine.
+    Task<Result<PartyStaffingAlertView?>> GetStaffingAlertAsync(LocationScope scope, Guid bookingId);
 
     // Party types already used at the location, most-used first, for the form's suggestions.
     Task<Result<List<string>>> GetPartyTypeSuggestionsAsync(LocationScope scope, int locationId);

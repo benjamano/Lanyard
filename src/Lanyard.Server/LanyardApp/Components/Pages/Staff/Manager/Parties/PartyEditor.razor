@@ -56,6 +56,19 @@
             </FluentMessageBar>
         }
 
+        @if (staffingAlert is not null)
+        {
+            <div class="party-staffing-alert" role="status">
+                <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false" Title="@staffingAlert.Title">
+                    The rota for @staffingAlert.Day.ToString("dddd d MMMM", RotaFormat.Uk) was built before this change, so its party
+                    staff no longer match the bookings. @staffingAlert.Detail
+                </FluentMessageBar>
+                <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@(() => _navigationManager.NavigateTo(staffingAlert.LinkUrl))">
+                    Rerun Auto-build for @staffingAlert.Day.ToString("ddd d MMM", RotaFormat.Uk)
+                </FluentButton>
+            </div>
+        }
+
         @if (existing is not null && !existing.IsPrivateHire)
         {
             <section class="party-section party-print-card">
@@ -315,6 +328,9 @@
 
     private bool loaded;
     private bool isBusy;
+
+    // The open "Party staffing out of date" alert for this party's day, if its rota needs redoing.
+    private PartyStaffingAlertView? staffingAlert;
     private bool confirmingCancel;
     private string? loadError;
 
@@ -397,10 +413,12 @@
             }
 
             ShowBooking(result.Data);
+            await LoadStaffingAlertAsync();
         }
         else
         {
             existing = null;
+            staffingAlert = null;
             booking = NewBooking();
             locationId = LocationQuery is int requested && locationOptions.Any(l => l.Id == requested)
                 ? requested
@@ -654,6 +672,8 @@
             {
                 existing = reloaded.Data;
             }
+
+            await LoadStaffingAlertAsync();
         }
         finally
         {
@@ -674,6 +694,20 @@
         {
             ShowBooking(result.Data);
             await LoadLocationListsAsync();
+            await LoadStaffingAlertAsync();
         }
+    }
+
+    // A failure here only hides the banner; the Alerts page still has it.
+    private async Task LoadStaffingAlertAsync()
+    {
+        if (scope is null || existing is null)
+        {
+            staffingAlert = null;
+            return;
+        }
+
+        Result<PartyStaffingAlertView?> result = await _partyBookingService.GetStaffingAlertAsync(scope, existing.Id);
+        staffingAlert = result.IsSuccess ? result.Data : null;
     }
 }

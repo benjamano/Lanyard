@@ -3,21 +3,27 @@ using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO.Scheduling;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Lanyard.Application.Services.Parties;
 
-// partySchedule is optional only so tests that don't care about it can leave it out; the app
-// always registers one, and every booking write clears its cache so party-time automation and
-// venue screens see the change within a tick.
-public class PartyBookingService(IDbContextFactory<ApplicationDbContext> factory, IPartyScheduleProvider? partySchedule = null) : IPartyBookingService
+// partySchedule and staffingWatch are optional only so tests that don't care about them can leave
+// them out; the app always registers both. Every booking write clears the schedule cache so
+// party-time automation and venue screens see the change within a tick, and asks the staffing watch
+// whether the party's day (and the day it moved from) still has the right party staff on the rota.
+public class PartyBookingService(
+    IDbContextFactory<ApplicationDbContext> factory,
+    IPartyScheduleProvider? partySchedule = null,
+    IPartyStaffingWatch? staffingWatch = null) : IPartyBookingService
 {
     private const string NoAccess = "You can only manage parties at your own location.";
 
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly IPartyScheduleProvider? _partySchedule = partySchedule;
+    private readonly IPartyStaffingWatch? _staffingWatch = staffingWatch;
 
     public async Task<Result<List<PartyBooking>>> GetBookingsAsync(LocationScope scope, int locationId, DateOnly from, DateOnly to, bool includeCancelled = false)
     {
@@ -128,6 +134,7 @@ public class PartyBookingService(IDbContextFactory<ApplicationDbContext> factory
             DateTime now = DateTime.UtcNow;
             PartyBooking saved;
             int? previousLocationId = null;
+            DateTime? previousStartUtc = null;
 
             if (booking.Id == Guid.Empty)
             {
@@ -162,6 +169,7 @@ public class PartyBookingService(IDbContextFactory<ApplicationDbContext> factory
                 }
 
                 previousLocationId = existing.LocationId;
+                previousStartUtc = existing.StartUtc;
                 existing.LocationId = booking.LocationId;
                 existing.CompanyId = location.CompanyId;
                 existing.UpdateDate = now;
@@ -180,11 +188,53 @@ public class PartyBookingService(IDbContextFactory<ApplicationDbContext> factory
                 _partySchedule?.Invalidate(moved);
             }
 
+            await CheckStaffingAsync(saved.LocationId, saved.StartUtc, previousLocationId, previousStartUtc, actingUserId);
+
             return Result<PartyBooking>.Ok(saved);
         }
         catch (Exception ex)
         {
             return Result<PartyBooking>.Fail($"Failed to save the party: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<PartyStaffingAlertView?>> GetStaffingAlertAsync(LocationScope scope, Guid bookingId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            PartyBooking? booking = await ctx.PartyBookings
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(x => x.Id == bookingId);
+
+            if (booking is null)
+            {
+                return Result<PartyStaffingAlertView?>.Fail("Party not found.");
+            }
+
+            if (!SchedulingAccess.CanManageLocation(scope, booking.LocationId))
+            {
+                return Result<PartyStaffingAlertView?>.Fail(NoAccess);
+            }
+
+            DateOnly day = RotaTime.LocalDate(booking.StartUtc);
+            string key = PartyStaffingAlerts.DedupKey(booking.LocationId, day);
+
+            OperationsAlert? alert = await ctx.OperationsAlerts
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(x => x.DedupKey == key && x.Type == OperationsAlertType.PartyStaffingOutOfDate
+                    && x.Status != OperationsAlertStatus.Resolved);
+
+            return Result<PartyStaffingAlertView?>.Ok(alert is null
+                ? null
+                : new PartyStaffingAlertView(day, alert.Title, alert.Detail, PartyStaffingAlerts.RotaLink(booking.LocationId, day)));
+        }
+        catch (Exception ex)
+        {
+            return Result<PartyStaffingAlertView?>.Fail($"Failed to check the party's staffing: {ex.Message}");
         }
     }
 
@@ -308,12 +358,38 @@ public class PartyBookingService(IDbContextFactory<ApplicationDbContext> factory
 
             _partySchedule?.Invalidate(booking.LocationId);
 
+            // Payments don't change staffing, but cancelling and reinstating do; the check is cheap
+            // and finds nothing to do for the rest.
+            await CheckStaffingAsync(booking.LocationId, booking.StartUtc, null, null, actingUserId);
+
             return Result<PartyBooking>.Ok(booking);
         }
         catch (Exception ex)
         {
             return Result<PartyBooking>.Fail($"Failed to {action}: {ex.Message}");
         }
+    }
+
+    // The party's day, and the day and location it was moved from. Never fails the save.
+    private async Task CheckStaffingAsync(int locationId, DateTime startUtc, int? previousLocationId, DateTime? previousStartUtc, string actingUserId)
+    {
+        if (_staffingWatch is null)
+        {
+            return;
+        }
+
+        DateOnly day = RotaTime.LocalDate(startUtc);
+        int oldLocation = previousLocationId ?? locationId;
+        DateOnly oldDay = previousStartUtc is DateTime before ? RotaTime.LocalDate(before) : day;
+
+        if (oldLocation == locationId)
+        {
+            await _staffingWatch.CheckDaysAsync(locationId, oldDay == day ? [day] : [oldDay, day], actingUserId);
+            return;
+        }
+
+        await _staffingWatch.CheckDaysAsync(oldLocation, [oldDay], actingUserId);
+        await _staffingWatch.CheckDaysAsync(locationId, [day], actingUserId);
     }
 
     // Everything the booking form edits. Status, payment dates and audit fields are deliberately

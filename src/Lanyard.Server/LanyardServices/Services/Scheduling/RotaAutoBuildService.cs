@@ -15,7 +15,8 @@ public class RotaAutoBuildService(
     IDbContextFactory<ApplicationDbContext> factory,
     IContractRequirementService contractRequirementService,
     ILogger<RotaAutoBuildService> logger,
-    TimeProvider? timeProvider = null) : IRotaAutoBuildService
+    TimeProvider? timeProvider = null,
+    IPartyStaffingWatch? staffingWatch = null) : IRotaAutoBuildService
 {
     // A month view is at most 31 days; a little slack for callers that pad it.
     public const int MaxRangeDays = 42;
@@ -24,12 +25,25 @@ public class RotaAutoBuildService(
     private readonly IContractRequirementService _contractRequirementService = contractRequirementService;
     private readonly ILogger<RotaAutoBuildService> _logger = logger;
     private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
+    private readonly IPartyStaffingWatch? _staffingWatch = staffingWatch;
 
     public Task<Result<AutoBuildResult>> PreviewAsync(LocationScope scope, int locationId, DateOnly from, DateOnly to) =>
         RunAsync(scope, locationId, from, to, actingUserId: null);
 
-    public Task<Result<AutoBuildResult>> ApplyAsync(LocationScope scope, int locationId, DateOnly from, DateOnly to, string actingUserId) =>
-        RunAsync(scope, locationId, from, to, actingUserId);
+    public async Task<Result<AutoBuildResult>> ApplyAsync(LocationScope scope, int locationId, DateOnly from, DateOnly to, string actingUserId)
+    {
+        Result<AutoBuildResult> result = await RunAsync(scope, locationId, from, to, actingUserId);
+
+        // Clears any "party staffing out of date" alert this build put right (even one with nothing to
+        // add, when the rota was already fixed by hand). Only clears: building one week never raises
+        // alerts for days nobody changed.
+        if (result.IsSuccess && _staffingWatch is not null)
+        {
+            await _staffingWatch.RecheckOpenAsync(locationId);
+        }
+
+        return result;
+    }
 
     private async Task<Result<AutoBuildResult>> RunAsync(LocationScope scope, int locationId, DateOnly from, DateOnly to, string? actingUserId)
     {
@@ -69,63 +83,28 @@ public class RotaAutoBuildService(
             DateOnly today = RotaTime.Today(nowUtc);
             DateOnly firstDay = from < today ? today : from;
 
-            List<ShiftTemplate> templates = await ShiftTemplateService.ForLocation(ctx, locationId).ToListAsync();
-
-            // A template's archived position is skipped rather than recreated.
-            foreach (ShiftTemplate template in templates)
-            {
-                template.Slots = template.Slots.Where(x => x.StaffPosition is { IsActive: true }).ToList();
-            }
+            List<ShiftTemplate> templates = await RotaDemandLoader.LoadTemplatesAsync(ctx, locationId);
 
             if (firstDay > to)
             {
                 return Result<AutoBuildResult>.Ok(new AutoBuildResult(location.GetDisplayName(), from, to, templates.Count, 0, []));
             }
 
-            List<RotaHoliday> holidays = await RotaHolidayService.ForRangeAsync(ctx, locationId, firstDay, to);
-
-            DateTime windowStartUtc = RotaTime.StartOfDayUtc(firstDay);
-            DateTime windowEndUtc = RotaTime.StartOfDayUtc(to.AddDays(1));
-
-            // Booked parties add their type's staff, when the company uses both modules.
-            List<PartyBooking> parties = [];
-            List<PartyStaffingRule> partyRules = [];
-
-            if (await CompanyFeatureQueries.IsEnabledForLocationAsync(ctx, location.Id, CompanyFeature.Parties))
-            {
-                partyRules = (await PartyStaffingService.ForLocation(ctx, locationId).ToListAsync())
-                    .Where(x => x.StaffPosition is { IsActive: true })
-                    .ToList();
-
-                if (partyRules.Count > 0)
-                {
-                    parties = await ctx.PartyBookings
-                        .AsNoTracking()
-                        .TagWithCallSite()
-                        .Where(x => x.LocationId == locationId && x.Status == PartyBookingStatus.Booked
-                            && x.StartUtc >= windowStartUtc && x.StartUtc < windowEndUtc)
-                        .ToListAsync();
-                }
-            }
+            RotaDemand loaded = await RotaDemandLoader.LoadAsync(ctx, locationId, templates, firstDay, to);
+            List<RotaHoliday> holidays = loaded.Holidays;
+            List<PartyBooking> parties = loaded.Parties;
+            List<PartyStaffingRule> partyRules = loaded.PartyRules;
+            List<PartyBooking> uncovered = loaded.Uncovered;
+            List<Shift> existing = loaded.Existing;
+            DateTime windowStartUtc = loaded.WindowStartUtc;
+            DateTime windowEndUtc = loaded.WindowEndUtc;
 
             // Parties are matched to every template shift those days, including any already started,
             // so a party during a shift that's under way isn't reported as having no shift.
-            List<DemandSlot> templateDemand = RotaAutoBuildRules.ExpandTemplates(templates, firstDay, to, holidays);
-            (List<DemandSlot> partyDemand, List<PartyBooking> uncovered) = RotaAutoBuildRules.ExpandParties(parties, partyRules, templateDemand);
-
-            List<DemandSlot> demand = templateDemand
-                .Concat(partyDemand)
+            List<DemandSlot> demand = loaded.TemplateDemand
+                .Concat(loaded.PartyDemand)
                 .Where(x => x.StartUtc > nowUtc)
                 .ToList();
-
-            // Shifts that could count towards the demand, plus every party shift Auto-build made in
-            // the window (whatever happened to the party since).
-            List<Shift> existing = await ctx.Shifts
-                .AsNoTracking()
-                .TagWithCallSite()
-                .Where(x => x.LocationId == locationId && x.IsActive
-                    && x.StartUtc >= windowStartUtc.AddHours(-6) && x.StartUtc < windowEndUtc.AddDays(1))
-                .ToListAsync();
 
             (List<DemandSlot> remaining, int covered, List<Shift> unmatched) = RotaAutoBuildRules.Match(demand, existing);
 

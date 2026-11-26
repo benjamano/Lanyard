@@ -106,7 +106,13 @@ public static class NotificationTopics
         // Once per checklist per day, when it goes past its due time with tasks left. Push only:
         // it matters on the day, and the Checklists Today page has the history.
         new(NotificationTopic.ChecklistMissed, NotificationTopicGroup.Operations,
-            "Checklist missed", "An opening, closing or other checklist at your location wasn't finished in time.", DefaultPush: true, DefaultEmail: false, ManagerOnly: true)
+            "Checklist missed", "An opening, closing or other checklist at your location wasn't finished in time.", DefaultPush: true, DefaultEmail: false, ManagerOnly: true),
+
+        // One summary per location each time parties change (a booking saved, or an import run), never
+        // one per day, so a season of imported bookings is a single push. Push only: it's about the
+        // coming fortnight's rota, and the alert stays on the Alerts page until it's sorted.
+        new(NotificationTopic.PartyStaffingOutOfDate, NotificationTopicGroup.Operations,
+            "Party staffing out of date", "A party was booked, moved or cancelled after the rota for its day was built.", DefaultPush: true, DefaultEmail: false, ManagerOnly: true)
     ];
 
     public static NotificationTopicInfo Get(NotificationTopic topic) =>

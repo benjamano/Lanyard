@@ -65,3 +65,38 @@ public sealed record AutoBuildResult(
 
     public int PeopleCount => Lines.Where(x => !x.IsOpen).Select(x => x.UserId).Distinct().Count();
 }
+
+// A party's extra staff the rota doesn't have yet: the template shift (times) they'd join, and how
+// many of the position are still missing.
+public sealed record PartyStaffingGap(
+    Guid PartyBookingId,
+    string PartyName,
+    DateTime StartUtc,
+    DateTime EndUtc,
+    Guid StaffPositionId,
+    string PositionName,
+    int Needed);
+
+// A party shift on the rota that no longer matches what its party needs: the party was cancelled,
+// moved, changed type, or its staffing rule changed. Moved is a published shift that still counts
+// for its own party (same position) but whose times no longer line up, so it must be changed by
+// hand rather than replaced.
+public sealed record StalePartyShift(
+    Guid ShiftId,
+    Guid PartyBookingId,
+    string? UserId,
+    Guid? StaffPositionId,
+    DateTime StartUtc,
+    DateTime EndUtc,
+    bool IsPublished,
+    bool Moved);
+
+// One venue-local day whose party staffing no longer matches its bookings.
+public sealed record PartyStaffingDayCheck(DateOnly Day, List<PartyStaffingGap> Missing, List<StalePartyShift> Stale)
+{
+    // Auto-build adds the missing staff and takes off stale drafts; published shifts need a person.
+    public bool AutoBuildCanFix => Stale.All(x => !x.IsPublished);
+}
+
+// The open "Party staffing out of date" alert for a party's day, for the party editor's banner.
+public sealed record PartyStaffingAlertView(DateOnly Day, string Title, string? Detail, string LinkUrl);

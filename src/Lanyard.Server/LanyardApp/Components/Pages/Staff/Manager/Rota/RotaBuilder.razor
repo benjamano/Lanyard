@@ -162,6 +162,13 @@
     [SupplyParameterFromQuery(Name = "date")]
     public string? DateQuery { get; set; }
 
+    // "day" opens Auto-build for just the ?date= day once the rota is on screen - the link a
+    // "Party staffing out of date" alert and the party editor use.
+    [SupplyParameterFromQuery(Name = "autobuild")]
+    public string? AutoBuildQuery { get; set; }
+
+    private DateOnly? pendingAutoBuildDay;
+
     private record LocationOption(int Id, string Name);
 
     private LocationScope? scope;
@@ -229,6 +236,11 @@
         monthView = string.Equals(ViewQuery, "month", StringComparison.OrdinalIgnoreCase);
         anchor = DateOnly.TryParseExact(DateQuery, "yyyy-MM-dd", out DateOnly parsed) ? parsed : today;
 
+        if (string.Equals(AutoBuildQuery, "day", StringComparison.OrdinalIgnoreCase) && DateQuery is not null && anchor >= today)
+        {
+            pendingAutoBuildDay = anchor;
+        }
+
         locationId = LocationQuery is int requested && locationOptions.Any(l => l.Id == requested)
             ? requested
             : scope.LocationId is int own && locationOptions.Any(l => l.Id == own)
@@ -255,6 +267,15 @@
         {
             _viewportRef = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("viewportWatcher.init", _viewportRef, 700);
+        }
+
+        // Once, after the rota has loaded: drop ?autobuild from the address (so a refresh or Back
+        // doesn't open it again), then open Auto-build for that one day.
+        if (pendingAutoBuildDay is DateOnly day && view is not null && !isBusy)
+        {
+            pendingAutoBuildDay = null;
+            Navigate(locationId, monthView, day, replace: true);
+            await AutoBuildAsync(day, day, day.ToString("dddd d MMMM", RotaDisplayExtensions.Uk));
         }
     }
 
@@ -296,10 +317,10 @@
 
     // All navigation goes through the URL so the page is linkable and back/forward work;
     // OnParametersSetAsync then loads whatever the URL now describes.
-    private void Navigate(int? location, bool month, DateOnly date)
+    private void Navigate(int? location, bool month, DateOnly date, bool replace = false)
     {
         string viewName = month ? "month" : "week";
-        _navigationManager.NavigateTo($"/manage/rota?location={location}&view={viewName}&date={date:yyyy-MM-dd}");
+        _navigationManager.NavigateTo($"/manage/rota?location={location}&view={viewName}&date={date:yyyy-MM-dd}", replace: replace);
     }
 
     private Task MoveAsync(int direction)
@@ -444,7 +465,9 @@
         await LoadAsync();
     }
 
-    private async Task AutoBuildAsync()
+    private Task AutoBuildAsync() => AutoBuildAsync(From, To, RangeLabel);
+
+    private async Task AutoBuildAsync(DateOnly from, DateOnly to, string rangeLabel)
     {
         if (view is null || locationId is not int location)
         {
@@ -456,9 +479,9 @@
             options.Width = "640px";
             options.Modal = true;
             options.Parameters.Add(nameof(AutoBuildDialog.LocationId), location);
-            options.Parameters.Add(nameof(AutoBuildDialog.From), From);
-            options.Parameters.Add(nameof(AutoBuildDialog.To), To);
-            options.Parameters.Add(nameof(AutoBuildDialog.RangeLabel), RangeLabel);
+            options.Parameters.Add(nameof(AutoBuildDialog.From), from);
+            options.Parameters.Add(nameof(AutoBuildDialog.To), to);
+            options.Parameters.Add(nameof(AutoBuildDialog.RangeLabel), rangeLabel);
         });
 
         if (result.Value is not AutoBuildResult built)

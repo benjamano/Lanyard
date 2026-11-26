@@ -201,6 +201,64 @@ public static class RotaAutoBuildRules
         return (remaining, covered, unused);
     }
 
+    // Which days' party staffing no longer matches the bookings, judged exactly as Auto-build would
+    // judge it: a party slot the rota has no shift for is Missing, and a party shift (draft or
+    // published) that counts towards no slot is Stale. As Auto-build does, a published stale shift
+    // for the same party and position stands in for one of that party's missing staff (it's the
+    // same person, at the wrong times) and is marked Moved instead. Template shifts never count:
+    // only party staffing is checked. Only days from..to, and only what hasn't started by nowUtc.
+    // partyDemand is ExpandParties' Slots; parties name the gaps.
+    public static List<PartyStaffingDayCheck> CheckPartyStaffing(
+        IEnumerable<DemandSlot> partyDemand, IEnumerable<PartyBooking> parties, IEnumerable<Shift> existing,
+        DateOnly from, DateOnly to, DateTime nowUtc)
+    {
+        bool InRange(DateTime startUtc)
+        {
+            DateOnly day = RotaTime.LocalDate(startUtc);
+            return startUtc > nowUtc && day >= from && day <= to;
+        }
+
+        List<DemandSlot> slots = partyDemand.Where(x => x.PartyBookingId is not null && InRange(x.StartUtc)).ToList();
+        List<Shift> partyShifts = existing.Where(x => x.IsActive && x.PartyBookingId is not null && InRange(x.StartUtc)).ToList();
+
+        (List<DemandSlot> remaining, _, List<Shift> unmatched) = Match(slots, partyShifts);
+
+        Dictionary<Guid, string> names = parties.GroupBy(x => x.Id).ToDictionary(g => g.Key, g => PartyName(g.First()));
+
+        List<StalePartyShift> stale = [];
+
+        foreach (Shift shift in unmatched.OrderBy(x => x.StartUtc))
+        {
+            bool published = shift.PublishedDateUtc is not null;
+            int index = published
+                ? remaining.FindIndex(x => x.PartyBookingId == shift.PartyBookingId && x.StaffPositionId == shift.StaffPositionId)
+                : -1;
+
+            if (index >= 0)
+            {
+                remaining[index] = remaining[index] with { Needed = remaining[index].Needed - 1 };
+                remaining.RemoveAll(x => x.Needed <= 0);
+            }
+
+            stale.Add(new StalePartyShift(shift.Id, shift.PartyBookingId!.Value, shift.UserId, shift.StaffPositionId,
+                shift.StartUtc, shift.EndUtc, published, Moved: index >= 0));
+        }
+
+        List<PartyStaffingGap> missing = remaining
+            .Select(x => new PartyStaffingGap(x.PartyBookingId!.Value, names.GetValueOrDefault(x.PartyBookingId!.Value, "Party"),
+                x.StartUtc, x.EndUtc, x.StaffPositionId, x.PositionName, x.Needed))
+            .ToList();
+
+        return missing.Select(x => RotaTime.LocalDate(x.StartUtc))
+            .Concat(stale.Select(x => RotaTime.LocalDate(x.StartUtc)))
+            .Distinct()
+            .Order()
+            .Select(day => new PartyStaffingDayCheck(day,
+                missing.Where(x => RotaTime.LocalDate(x.StartUtc) == day).OrderBy(x => x.StartUtc).ToList(),
+                stale.Where(x => RotaTime.LocalDate(x.StartUtc) == day).ToList()))
+            .ToList();
+    }
+
     // Decides who works every shift the slots want. cantWork answers the fixed questions about a
     // person and a shift (not at the location, doesn't hold the position, missing training, booked
     // off, a clash with a shift already on the rota) - ShiftClaimRules.WhyCantWork in practice;
