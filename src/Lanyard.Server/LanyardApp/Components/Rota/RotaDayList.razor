@@ -46,7 +46,7 @@
         <details class="day-list-warnings">
             <summary>
                 <FluentIcon Value="@(new Icons.Filled.Size16.Warning())" Color="Color.Warning" />
-                @WeekWarnings.Count contract @(WeekWarnings.Count == 1 ? "warning" : "warnings") this week
+                @WeekWarnings.Count rota @(WeekWarnings.Count == 1 ? "warning" : "warnings") this week
             </summary>
             <ul>
                 @foreach ((RotaStaffRow row, ContractWarning warning) in WeekWarnings)
@@ -86,7 +86,7 @@
             {
                 <div class="day-list-row">
                     <div class="day-list-name">
-                        <span>@row.DisplayName</span>
+                        <span>@row.DisplayName @if (row.IsYoungWorker) { <YoungWorkerChip /> }</span>
                         @if (row.PrimaryPosition?.StaffPosition is StaffPosition position)
                         {
                             <span class="day-list-position">@position.Name</span>

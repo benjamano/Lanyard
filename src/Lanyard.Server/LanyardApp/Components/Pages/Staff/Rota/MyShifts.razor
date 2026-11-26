@@ -12,6 +12,7 @@
 @using Lanyard.App.Components.Rota.Availability
 @using Microsoft.AspNetCore.Components.Routing
 @implements IDisposable
+@inject Lanyard.Application.Services.Scheduling.IYoungWorkerService _youngWorkerService
 
 <PageTitle>My Shifts</PageTitle>
 
@@ -26,6 +27,14 @@
                 <HelpButton AreaKey="@HelpRegistry.MyShifts" Topic="@HelpTopicForActiveTab" />
             </div>
         </div>
+        @if (isYoungWorker)
+        {
+            <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                Young worker hours apply to you: at most 8 hours a day and 40 a week, a 30 minute break on shifts over
+                4.5 hours, 12 hours off between working days, 48 hours off in a row each week, and no night work. Shifts
+                that would go over these show as unavailable under Up for grabs.
+            </FluentMessageBar>
+        }
         <FluentTabs @bind-ActiveTabId="activeTabId">
             <FluentTab Id="shifts" Header="Upcoming shifts" IconStart="@(new Icons.Regular.Size20.CalendarLtr())">
                 <div class="pt-3">
@@ -73,6 +82,7 @@
     };
     private string? currentUserId;
     private MyShiftsList? shiftsList;
+    private bool isYoungWorker;
 
     // /rota/time-off opens straight on the Time off tab (it's what the nav's "Time Off" link and any
     // "your request was decided" link point at). /rota and /rota/time-off are the same component,
@@ -85,6 +95,14 @@
 
         Result<string> userId = await _securityService.GetCurrentUserIdAsync();
         currentUserId = userId.IsSuccess ? userId.Data : null;
+
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (currentUserId is not null && scope.IsSuccess && scope.Data?.CompanyId is int companyId)
+        {
+            Result<bool> young = await _youngWorkerService.IsYoungWorkerAsync(currentUserId, companyId, RotaTime.Today(DateTime.UtcNow));
+            isYoungWorker = young.IsSuccess && young.Data;
+        }
     }
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)

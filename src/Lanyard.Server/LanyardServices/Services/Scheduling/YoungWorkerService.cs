@@ -161,6 +161,31 @@ public class YoungWorkerService(
         }
     }
 
+    public async Task<Result<List<YoungWorkerBreach>>> CheckShiftAsync(LocationScope scope, Shift draft)
+    {
+        try
+        {
+            if (!SchedulingAccess.CanManageLocation(scope, draft.LocationId))
+            {
+                return Result<List<YoungWorkerBreach>>.Fail("You can only check shifts for your own location.");
+            }
+
+            if (draft.UserId is not string userId || draft.EndUtc <= draft.StartUtc)
+            {
+                return Result<List<YoungWorkerBreach>>.Ok([]);
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            return Result<List<YoungWorkerBreach>>.Ok(await ShiftClaimRules.YoungWorkerBreachesAsync(ctx, userId, draft));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to check young worker limits for {UserId}", draft.UserId);
+            return Result<List<YoungWorkerBreach>>.Fail($"Failed to check the young worker limits: {ex.Message}");
+        }
+    }
+
     public async Task<Result<bool>> IsYoungWorkerAsync(string userId, int companyId, DateOnly today)
     {
         try
