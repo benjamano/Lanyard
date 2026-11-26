@@ -3,6 +3,7 @@ using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 
@@ -22,7 +23,7 @@ public class CompanyLocationServiceTests
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options));
 
-        return new CompanyLocationService(factoryMock.Object);
+        return new CompanyLocationService(factoryMock.Object, new MemoryCache(new MemoryCacheOptions()));
     }
 
     private static async Task<(Company company, Location location)> SeedCompanyAndLocationAsync(
