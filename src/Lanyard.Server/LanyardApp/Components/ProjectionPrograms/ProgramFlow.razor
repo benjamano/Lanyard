@@ -103,7 +103,8 @@
                                             <KioskPicker Value="@ParseKioskId(paramValue.Value)"
                                                          ValueChanged="@(id => paramValue.Value = id?.ToString() ?? string.Empty)"
                                                          Label="@parameter.Name"
-                                                         LaserGameKiosksOnly="true" />
+                                                         LaserGameKiosksOnly="true"
+                                                         Required="true" />
                                         }
                                         else if (string.Equals(parameter.DataType, "Integer", StringComparison.OrdinalIgnoreCase))
                                         {

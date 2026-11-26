@@ -6,9 +6,11 @@
 
 @inject ILaserGameStatusStore _laserGameStatusStore
 
+<div class="game-wait">
 <FluentStack Orientation="@Orientation.Vertical" VerticalGap="2" Width="auto">
-    <FluentStack Orientation="@Orientation.Horizontal" HorizontalGap="6" VerticalAlignment="@VerticalAlignment.Center" Wrap="true" Width="auto">
-        <FluentIcon Value="@(new Icons.Regular.Size16.HourglassHalf())" Color="Color.Primary" />
+    @* No wrap: the text wraps beside the icon instead of the icon sitting on a line of its own. *@
+    <FluentStack Orientation="@Orientation.Horizontal" HorizontalGap="6" VerticalAlignment="@VerticalAlignment.Top" Width="auto">
+        <FluentIcon Value="@(new Icons.Regular.Size16.HourglassHalf())" Color="Color.Primary" Class="game-wait-icon" />
         <FluentText Size="@(Compact ? TextSize.Size200 : TextSize.Size300)">
             Waiting for @GameWaitStepNames.WaitingFor(Wait.Event, Wait.SecondsLeft) on @Wait.KioskName
             @if (!Compact && Wait.GiveUpAfterMinutes is int minutes)
@@ -20,12 +22,13 @@
 
     @if (!isReporting)
     {
-        <FluentStack Orientation="@Orientation.Horizontal" HorizontalGap="6" VerticalAlignment="@VerticalAlignment.Center" Width="auto">
-            <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Color="Color.Warning" />
+        <FluentStack Orientation="@Orientation.Horizontal" HorizontalGap="6" VerticalAlignment="@VerticalAlignment.Top" Width="auto">
+            <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Color="Color.Warning" Class="game-wait-icon" />
             <FluentText Size="TextSize.Size200" Color="Color.Warning">@Wait.KioskName isn't reporting a game</FluentText>
         </FluentStack>
     }
 </FluentStack>
+</div>
 
 @code {
     [Parameter, EditorRequired]
