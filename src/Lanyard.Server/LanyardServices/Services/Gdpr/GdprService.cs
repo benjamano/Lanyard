@@ -438,6 +438,18 @@ public class GdprService : IGdprService
                 preference.UpdatedByUserId = null;
             }
 
+            // Young worker dates they set for other people stay (the limits still apply), without
+            // their name. Every company's - the whole account is going.
+            List<YoungWorkerStatus> youngWorkerDatesSetByUser = await ctx.YoungWorkerStatuses
+                .IgnoreQueryFilters()
+                .Where(x => x.UpdatedByUserId == userId)
+                .ToListAsync();
+
+            foreach (YoungWorkerStatus status in youngWorkerDatesSetByUser)
+            {
+                status.UpdatedByUserId = null;
+            }
+
             List<PartyStaffingRule> staffingRulesSetByUser = await ctx.PartyStaffingRules
                 .Where(x => x.UpdatedByUserId == userId)
                 .ToListAsync();
@@ -634,6 +646,7 @@ public class GdprService : IGdprService
             // account is going.
             ctx.StaffAvailabilities.RemoveRange(await ctx.StaffAvailabilities.IgnoreQueryFilters().Where(x => x.UserId == userId).ToListAsync());
             ctx.StaffWorkPreferences.RemoveRange(await ctx.StaffWorkPreferences.IgnoreQueryFilters().Where(x => x.UserId == userId).ToListAsync());
+            ctx.YoungWorkerStatuses.RemoveRange(await ctx.YoungWorkerStatuses.IgnoreQueryFilters().Where(x => x.UserId == userId).ToListAsync());
             ctx.ShiftTemplateSlotRegulars.RemoveRange(await ctx.ShiftTemplateSlotRegulars.IgnoreQueryFilters().Where(x => x.UserId == userId).ToListAsync());
 
             // Their devices and notification choices exist only for them.

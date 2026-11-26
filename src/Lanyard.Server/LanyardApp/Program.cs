@@ -182,6 +182,7 @@ builder.Services.AddScoped<ISchedulingSettingsService, SchedulingSettingsService
 builder.Services.AddScoped<IRotaService, RotaService>();
 builder.Services.AddScoped<IShiftSuggestionService, ShiftSuggestionService>();
 builder.Services.AddScoped<IStaffAvailabilityService, StaffAvailabilityService>();
+builder.Services.AddScoped<IYoungWorkerService, YoungWorkerService>();
 builder.Services.AddScoped<IShiftTemplateService, ShiftTemplateService>();
 builder.Services.AddScoped<IChecklistService, ChecklistService>();
 builder.Services.AddScoped<IChecklistRunService, ChecklistRunService>();
@@ -235,6 +236,7 @@ builder.Services.AddScoped<IFeedbackService, FeedbackService>();
 builder.Services.AddHostedService<ChatDigestHostedService>();
 builder.Services.AddHostedService<ChatRetentionHostedService>();
 builder.Services.AddHostedService<TemplateSuggestionHostedService>();
+builder.Services.AddHostedService<YoungWorkerCleanupHostedService>();
 builder.Services.AddScoped<ChatUnreadTracker>();
 builder.Services.AddScoped<IClockInTerminalService, ClockInTerminalService>();
 builder.Services.AddScoped<ICalendarFeedService, CalendarFeedService>();

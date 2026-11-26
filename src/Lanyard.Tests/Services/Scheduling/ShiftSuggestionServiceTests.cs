@@ -254,6 +254,26 @@ public class ShiftSuggestionServiceTests
     }
 
     [TestMethod]
+    public async Task SuggestAsync_YoungWorker_HoursAtAnotherLocationCount_NotSuggestedWithReason()
+    {
+        World w = await SeedAsync();
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = w.Company.Id, UserId = w.Amy.Id, DateOfBirth = Monday.AddYears(-17) });
+            await ctx.SaveChangesAsync();
+        }
+
+        // Five hours at Wisbech in the morning; another four at Ipswich would be nine that day.
+        await SeedShiftAsync(w, w.Wisbech, w.Amy.Id, 2, 8, 13);
+
+        ShiftSuggestions suggestions = await SuggestAsync(w, OpenShift(w.Ipswich, w.Host.Id, dayOffset: 2, startHour: 14, endHour: 18));
+
+        Assert.AreEqual(w.Tom.Id, suggestions.Ranked.Single().UserId);
+        StringAssert.Contains(suggestions.NotSuggested.Single(x => x.UserId == w.Amy.Id).ExcludedReason, "the limit is 8 h a day");
+    }
+
+    [TestMethod]
     public async Task SuggestAsync_ClashAtAnotherLocation_NotSuggested()
     {
         World w = await SeedAsync();

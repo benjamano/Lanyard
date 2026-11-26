@@ -11,6 +11,7 @@
 |---|---|---|
 | Staff accounts (`UserProfile`) | Duration of employment + `12 months` | Access management; short tail for rehire/disputes |
 | Clock-in / shift / rota records | `6 years` | Employment/payroll record-keeping obligations |
+| Dates of birth of staff under 18 (`YoungWorkerStatus`) | Until their 18th birthday, then deleted automatically | Only needed while the young worker limits apply |
 | Location checklist ticks (who ticked which task, when, any note or reading) | `6 years` | Evidence that opening, closing and safety checks were done; same period as clock-in records |
 | Client device records (IP/MAC) | While the device is in service + `6 months` | Operations & troubleshooting |
 | Application/security logs | `90 days` | Security monitoring; data minimisation |
@@ -157,6 +158,15 @@ account** (cascading foreign key; removed explicitly by GDPR erasure, at every c
 manager who set someone else's has their name cleared from it on erasure. A removed window is kept
 inactive rather than deleted, so it's still covered by the above. The note is free text; it should
 say when, not why (no medical or family detail).
+
+### Young workers
+
+For staff under 18, a Manager or Admin records their date of birth (`YoungWorkerStatus`); the 18th
+birthday and school leaving date are worked out from it. It can't be saved for anyone 18 or over.
+Staff can't see or change it, and nobody can change their own. `YoungWorkerCleanupHostedService`
+deletes it on their 18th birthday (checked twice a day). It is also **deleted with the account** (cascading foreign key;
+removed explicitly by GDPR erasure, at every company), and a manager who set someone else's has
+their name cleared from it on erasure.
 
 ### Kiosk diagnostics
 
