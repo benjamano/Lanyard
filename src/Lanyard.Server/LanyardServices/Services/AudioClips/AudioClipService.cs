@@ -1,6 +1,7 @@
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Scheduling;
+using Lanyard.Application.Services.Speech;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
@@ -19,6 +20,8 @@ public class AudioClipService(
     IFileService fileService,
     IAudioClipPlaybackService playback,
     ISecurityService securityService,
+    ISpeechRenderService speech,
+    ISpeechPreviewStore previews,
     ILogger<AudioClipService> logger) : IAudioClipService
 {
     private const int MaxFadeMs = 10_000;
@@ -180,6 +183,152 @@ public class AudioClipService(
         }
     }
 
+    public IReadOnlyList<SpeechVoiceOption> ListVoices() => speech.ListVoices();
+
+    public async Task<Result<AudioClip>> CreateSpeechAsync(LocationScope scope, AudioClipSpeech request, AudioClipDetails details, string userId, CancellationToken ct = default)
+    {
+        Guid? storedFileId = null;
+
+        try
+        {
+            await using ApplicationDbContext ctx = await factory.CreateDbContextAsync(ct);
+
+            string? error = await CheckDetailsAsync(ctx, scope, details) ?? speech.Validate(request.Text, request.Voice);
+            if (error is not null)
+            {
+                return Result<AudioClip>.Fail(error);
+            }
+
+            Guid clipId = Guid.CreateVersion7();
+
+            Result<(FileMetadata File, RenderedSpeech Speech)> stored = await RenderAndStoreAsync(clipId, request, userId, ct);
+            if (!stored.IsSuccess)
+            {
+                return Result<AudioClip>.Fail(stored.Error!);
+            }
+
+            storedFileId = stored.Data.File.Id;
+
+            AudioClip clip = new()
+            {
+                Id = clipId,
+                Kind = AudioClipKind.Speech,
+                CreateDate = DateTime.UtcNow,
+                CreatedByUserId = userId
+            };
+
+            Apply(clip, details);
+            ApplySpeech(clip, request, stored.Data.File.Id, stored.Data.Speech);
+
+            ctx.AudioClips.Add(clip);
+            await ctx.SaveChangesAsync(ct);
+
+            logger.LogInformation("Speech audio clip {ClipId} added with voice {VoiceId}", clip.Id, clip.SpeechVoiceId);
+
+            return Result<AudioClip>.Ok(clip);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to add a speech audio clip");
+            await DeleteRenderAsync(storedFileId);
+            return Result<AudioClip>.Fail($"Failed to add the announcement: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<AudioClip>> UpdateSpeechAsync(LocationScope scope, Guid clipId, AudioClipSpeech request, AudioClipDetails details, string userId, CancellationToken ct = default)
+    {
+        Guid? storedFileId = null;
+
+        try
+        {
+            await using ApplicationDbContext ctx = await factory.CreateDbContextAsync(ct);
+
+            AudioClip? clip = await ctx.AudioClips.FirstOrDefaultAsync(x => x.Id == clipId && x.DeleteDate == null, ct);
+
+            if (clip is null)
+            {
+                return Result<AudioClip>.Fail("Audio clip not found.");
+            }
+
+            if (clip.Kind != AudioClipKind.Speech)
+            {
+                return Result<AudioClip>.Fail("Only a typed announcement can have its words changed. To use different audio, add a new clip.");
+            }
+
+            if (!CanManage(scope, clip.LocationId))
+            {
+                return Result<AudioClip>.Fail(NotYoursError(clip.LocationId));
+            }
+
+            string? error = await CheckDetailsAsync(ctx, scope, details) ?? speech.Validate(request.Text, request.Voice);
+            if (error is not null)
+            {
+                return Result<AudioClip>.Fail(error);
+            }
+
+            Guid? previousFileId = clip.FileMetadataId;
+            bool rerender = clip.SpeechRenderKey != speech.RenderKeyFor(request.Text, request.Voice) || clip.FileMetadataId is null;
+
+            Apply(clip, details);
+
+            if (rerender)
+            {
+                Result<(FileMetadata File, RenderedSpeech Speech)> stored = await RenderAndStoreAsync(clip.Id, request, userId, ct);
+                if (!stored.IsSuccess)
+                {
+                    return Result<AudioClip>.Fail(stored.Error!);
+                }
+
+                storedFileId = stored.Data.File.Id;
+                ApplySpeech(clip, request, stored.Data.File.Id, stored.Data.Speech);
+            }
+
+            clip.UpdateDate = DateTime.UtcNow;
+            await ctx.SaveChangesAsync(ct);
+            storedFileId = null;
+
+            // Only once the clip points at the new audio: nothing plays the old file now.
+            if (rerender && previousFileId is Guid oldFile && oldFile != clip.FileMetadataId)
+            {
+                await DeleteRenderAsync(oldFile);
+            }
+
+            logger.LogInformation("Speech audio clip {ClipId} updated (rendered again: {Rerendered})", clip.Id, rerender);
+
+            return Result<AudioClip>.Ok(clip);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to update speech audio clip {ClipId}", clipId);
+            await DeleteRenderAsync(storedFileId);
+            return Result<AudioClip>.Fail($"Failed to save the announcement: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<Guid>> PreviewSpeechAsync(LocationScope scope, AudioClipSpeech request, string userId, CancellationToken ct = default)
+    {
+        try
+        {
+            if (!await CanPlayAsync(scope))
+            {
+                return Result<Guid>.Fail("You don't have permission to make announcements.");
+            }
+
+            Result<RenderedSpeech> rendered = await speech.RenderAsync(request.Text, request.Voice, ct);
+            if (!rendered.IsSuccess || rendered.Data is null)
+            {
+                return Result<Guid>.Fail(rendered.Error ?? "Couldn't make the preview.");
+            }
+
+            return Result<Guid>.Ok(previews.Add(rendered.Data.Wav, userId));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to preview speech");
+            return Result<Guid>.Fail($"Failed to make the preview: {ex.Message}");
+        }
+    }
+
     public async Task<Result<bool>> DeleteAsync(LocationScope scope, Guid clipId)
     {
         try
@@ -198,9 +347,22 @@ public class AudioClipService(
                 return Result<bool>.Fail(NotYoursError(clip.LocationId));
             }
 
-            // Soft: the play history still points at it. The file stays in the file manager.
+            // Soft: the play history still points at it. An uploaded file stays in the file
+            // manager; a rendered announcement belongs to the clip alone, so it goes with it.
             clip.DeleteDate = DateTime.UtcNow;
+
+            // The play history only needs the name; the words could name someone.
+            if (clip.Kind == AudioClipKind.Speech)
+            {
+                clip.SpeechText = null;
+            }
+
             await ctx.SaveChangesAsync();
+
+            if (clip.Kind == AudioClipKind.Speech)
+            {
+                await DeleteRenderAsync(clip.FileMetadataId);
+            }
 
             logger.LogInformation("Audio clip {ClipId} deleted", clip.Id);
 
@@ -223,6 +385,7 @@ public class AudioClipService(
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Where(x => x.IsActive && x.FileSize <= AudioClipFileCheck.MaxBytes
+                    && !ctx.AudioClips.Any(c => c.FileMetadataId == x.Id && c.Kind == AudioClipKind.Speech)
                     && (x.FileName.ToLower().EndsWith(".mp3") || x.FileName.ToLower().EndsWith(".wav") || x.FileName.ToLower().EndsWith(".m4a")))
                 .OrderBy(x => x.FileName)
                 .ToListAsync();
@@ -472,6 +635,75 @@ public class AudioClipService(
         clip.DuckToPercent = details.DuckToPercent;
         clip.FadeDownMs = details.FadeDownMs;
         clip.FadeUpMs = details.FadeUpMs;
+    }
+
+    private static void ApplySpeech(AudioClip clip, AudioClipSpeech request, Guid fileId, RenderedSpeech rendered)
+    {
+        clip.SpeechText = SpeechRenderService.Clean(request.Text);
+        clip.SpeechVoiceId = request.Voice.VoiceId;
+        clip.SpeechRate = Math.Round(request.Voice.Rate, 2);
+        clip.SpeechPitch = request.Voice.Pitch;
+        clip.SpeechRenderKey = rendered.RenderKey;
+        clip.FileMetadataId = fileId;
+        clip.DurationSeconds = rendered.DurationSeconds;
+    }
+
+    // Renders the words and stores them as a hidden file (like an uploaded clip's), checked the
+    // same way an upload is.
+    private async Task<Result<(FileMetadata File, RenderedSpeech Speech)>> RenderAndStoreAsync(Guid clipId, AudioClipSpeech request, string userId, CancellationToken ct)
+    {
+        Result<RenderedSpeech> rendered = await speech.RenderAsync(request.Text, request.Voice, ct);
+        if (!rendered.IsSuccess || rendered.Data is null)
+        {
+            return Result<(FileMetadata, RenderedSpeech)>.Fail(rendered.Error ?? "Couldn't make the announcement.");
+        }
+
+        byte[] wav = rendered.Data.Wav;
+        string fileName = $"announcement-{clipId:N}.wav";
+
+        Result<double> inspected = AudioClipFileCheck.Inspect(fileName, wav.LongLength, () => new MemoryStream(wav, writable: false));
+        if (!inspected.IsSuccess)
+        {
+            return Result<(FileMetadata, RenderedSpeech)>.Fail(inspected.Error!);
+        }
+
+        using MemoryStream stream = new(wav, writable: false);
+        IFormFile file = new FormFile(stream, 0, wav.Length, "file", fileName)
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = AudioClipFormats.ContentTypeFor(fileName)
+        };
+
+        Result<FileMetadata> uploaded = await fileService.UploadFileAsync(file, null, userId, new FileUploadOptions(AddAudioToMusicLibrary: false, IsSystemFile: true), ct);
+        if (!uploaded.IsSuccess || uploaded.Data is null)
+        {
+            return Result<(FileMetadata, RenderedSpeech)>.Fail(uploaded.Error ?? "Couldn't store the announcement.");
+        }
+
+        return Result<(FileMetadata, RenderedSpeech)>.Ok((uploaded.Data, rendered.Data));
+    }
+
+    // A rendered announcement's file is only ever the clip's own, so it can go as soon as the clip
+    // lets go of it. Failing to delete it only leaves an unused hidden file, so it's just logged.
+    private async Task DeleteRenderAsync(Guid? fileId)
+    {
+        if (fileId is not Guid id)
+        {
+            return;
+        }
+
+        try
+        {
+            Result<bool> deleted = await fileService.DeleteFileAsync(id, CancellationToken.None);
+            if (!deleted.IsSuccess)
+            {
+                logger.LogWarning("Couldn't delete the old announcement audio {FileId}: {Error}", id, deleted.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Couldn't delete the old announcement audio {FileId}", id);
+        }
     }
 
     private static string NotYoursError(int? locationId) => locationId is null

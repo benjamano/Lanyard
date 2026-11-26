@@ -66,3 +66,16 @@
 .clip-actions-spacer {
     flex: 1;
 }
+
+.clip-preview {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+}
+
+.clip-preview-audio {
+    flex: 1;
+    min-width: 200px;
+    max-width: 100%;
+}

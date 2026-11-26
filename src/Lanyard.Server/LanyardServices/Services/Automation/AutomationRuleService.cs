@@ -1,5 +1,6 @@
 #nullable enable
 
+using Lanyard.Application.Services.AudioClips;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Features;
 using Lanyard.Application.Services.Parties;
@@ -17,7 +18,8 @@ namespace Lanyard.Application.Services;
 public class AutomationRuleService(
     IDbContextFactory<ApplicationDbContext> factory,
     IAutomationEngineService engineService,
-    ICurrentUserAccessor? currentUser = null) : IAutomationRuleService
+    ICurrentUserAccessor? currentUser = null,
+    IAudioClipPlaybackService? clipPlayback = null) : IAutomationRuleService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly IAutomationEngineService _engineService = engineService;
@@ -104,6 +106,7 @@ public class AutomationRuleService(
             ctx.AutomationRules.Add(rule);
             await ctx.SaveChangesAsync();
             _engineService.InvalidateRuleCache();
+            await PrefetchClipsAsync(ctx, rule.Id);
             return Result<AutomationRule>.Ok(rule);
         }
         catch (Exception ex)
@@ -168,6 +171,7 @@ public class AutomationRuleService(
 
             await ctx.SaveChangesAsync();
             _engineService.InvalidateRuleCache();
+            await PrefetchClipsAsync(ctx, existing.Id);
             return Result<AutomationRule>.Ok(existing);
         }
         catch (Exception ex)
@@ -285,6 +289,12 @@ public class AutomationRuleService(
             await ctx.SaveChangesAsync();
             _engineService.InvalidateRuleCache();
             _engineService.NotifyRuleEnabledChanged(id, isEnabled);
+
+            if (isEnabled)
+            {
+                await PrefetchClipsAsync(ctx, id);
+            }
+
             return Result<AutomationRule>.Ok(rule);
         }
         catch (Exception ex)
@@ -388,6 +398,33 @@ public class AutomationRuleService(
         catch (Exception ex)
         {
             return Result<AutomationRule>.Fail($"Couldn't copy the rule: {ex.Message}");
+        }
+    }
+
+    // A clip the rule plays is downloaded by its kiosk now, so it plays the instant the rule fires
+    // rather than after a download. Only an optimisation: failures are logged by the playback service.
+    private async Task PrefetchClipsAsync(ApplicationDbContext ctx, Guid ruleId)
+    {
+        if (clipPlayback is null)
+        {
+            return;
+        }
+
+        List<string> parameters = await ctx.AutomationRuleActions
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(a => a.AutomationRuleId == ruleId && a.IsActive && a.ActionType == AutomationActionTypes.PlayAudioClip)
+            .Select(a => a.ParametersJson)
+            .ToListAsync();
+
+        IEnumerable<Guid> kiosks = parameters
+            .Select(json => AutomationActionTargets.TryRead(AutomationActionTypes.PlayAudioClip, json, out AutomationActionTarget target) ? target.ClientId : Guid.Empty)
+            .Where(id => id != Guid.Empty)
+            .Distinct();
+
+        foreach (Guid kiosk in kiosks)
+        {
+            await clipPlayback.PrefetchClipsForKioskAsync(kiosk);
         }
     }
 

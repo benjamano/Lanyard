@@ -310,7 +310,7 @@ public class AudioClipPlaybackService(
                 return;
             }
 
-            List<AudioClipPlayCommand> commands = await ScheduledClipCommandsAsync(ctx, locationId, kiosk.CompanyId);
+            List<AudioClipPlayCommand> commands = await PrefetchCommandsAsync(ctx, clientId, locationId, kiosk.CompanyId);
 
             if (commands.Count == 0)
             {
@@ -352,14 +352,65 @@ public class AudioClipPlaybackService(
         }
     }
 
-    private static async Task<List<AudioClipPlayCommand>> ScheduledClipCommandsAsync(ApplicationDbContext ctx, int locationId, int companyId)
+    public async Task PrefetchClipsForKioskAsync(Guid clientId)
     {
+        try
+        {
+            await using ApplicationDbContext ctx = await contextFactory.CreateDbContextAsync();
+
+            string? connectionId = await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.Id == clientId)
+                .Select(x => x.MostRecentConnectionId)
+                .FirstOrDefaultAsync();
+
+            if (IsConnected(connectionId))
+            {
+                await PrefetchScheduledClipsAsync(clientId, connectionId!);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send clips to client {ClientId} to download ahead", clientId);
+        }
+    }
+
+    // The clips a kiosk should already have when it's asked to play them: those scheduled at its
+    // location, and those an enabled automation rule plays on it. A rule fires on a moment in a
+    // game ("2 minutes left"), so its clip mustn't wait for a download.
+    private static async Task<List<AudioClipPlayCommand>> PrefetchCommandsAsync(ApplicationDbContext ctx, Guid clientId, int locationId, int companyId)
+    {
+        // The parameters are JSON, so they're read here; there are only a handful of rules.
+        List<(string ActionType, string ParametersJson)> actions = (await ctx.AutomationRuleActions
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(a => a.IsActive && a.ActionType == AutomationActionTypes.PlayAudioClip
+                && a.AutomationRule!.IsActive && a.AutomationRule.IsEnabled && a.AutomationRule.CompanyId == companyId)
+            .Select(a => new { a.ActionType, a.ParametersJson })
+            .ToListAsync())
+            .Select(a => (a.ActionType, a.ParametersJson))
+            .ToList();
+
+        HashSet<Guid> automated = [];
+
+        foreach ((string actionType, string parametersJson) in actions)
+        {
+            if (AutomationActionTargets.TryRead(actionType, parametersJson, out AutomationActionTarget target) && target.ClientId == clientId)
+            {
+                automated.UnionWith(target.References.Where(r => r.Kind == AutomationActionTargetKind.AudioClip).Select(r => r.Id));
+            }
+        }
+
+        // The company check stays on the clips too: a rule's parameters are only text.
         List<AudioClip> clips = await ctx.AudioClips
             .AsNoTracking()
             .TagWithCallSite()
             .Include(x => x.FileMetadata)
             .Where(x => x.CompanyId == companyId && x.DeleteDate == null && x.FileMetadata!.IsActive
-                && ctx.AudioClipSchedules.Any(s => s.AudioClipId == x.Id && s.LocationId == locationId && s.IsEnabled && s.DeleteDate == null))
+                && (x.LocationId == null || x.LocationId == locationId)
+                && (automated.Contains(x.Id)
+                    || ctx.AudioClipSchedules.Any(s => s.AudioClipId == x.Id && s.LocationId == locationId && s.IsEnabled && s.DeleteDate == null)))
             .ToListAsync();
 
         return clips

@@ -88,3 +88,15 @@
 .audio-clips ::deep .audio-clips-warning {
     color: var(--colorStatusWarningForeground1);
 }
+
+.audio-clip-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.audio-clip-main ::deep .audio-clip-words {
+    font-style: italic;
+    overflow-wrap: anywhere;
+}

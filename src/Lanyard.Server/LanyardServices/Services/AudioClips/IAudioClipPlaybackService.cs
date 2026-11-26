@@ -52,4 +52,10 @@ public interface IAudioClipPlaybackService
 
     /// <summary>The same, for every connected kiosk at a location, after its schedules change.</summary>
     Task PrefetchScheduledClipsAsync(int locationId);
+
+    /// <summary>
+    /// The same for one kiosk, if it's connected, after an automation rule that plays a clip on it
+    /// is saved. Prefetching covers scheduled clips and clips automation plays on the kiosk.
+    /// </summary>
+    Task PrefetchClipsForKioskAsync(Guid clientId);
 }

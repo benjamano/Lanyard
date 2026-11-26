@@ -281,11 +281,32 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<Guid?>("FileMetadataId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("LocationId")
                         .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int?>("SpeechPitch")
+                        .HasColumnType("integer");
+
+                    b.Property<double?>("SpeechRate")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("SpeechRenderKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SpeechText")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("SpeechVoiceId")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
@@ -2527,11 +2548,11 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("ShowConditionsJson")
-                        .HasColumnType("text");
-
                     b.Property<int?>("PhoneOrder")
                         .HasColumnType("integer");
+
+                    b.Property<string>("ShowConditionsJson")
+                        .HasColumnType("text");
 
                     b.Property<bool>("ShowTitle")
                         .HasColumnType("boolean");

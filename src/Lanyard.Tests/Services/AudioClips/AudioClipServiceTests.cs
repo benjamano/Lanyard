@@ -2,13 +2,16 @@ using Lanyard.Application.Services;
 using Lanyard.Application.Services.AudioClips;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Speech;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Tests.Services.Scheduling;
+using Lanyard.Tests.Services.Speech;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
@@ -20,8 +23,8 @@ public class AudioClipServiceTests
 {
     private const string UserId = "user-1";
 
-    private sealed class TestService(IDbContextFactory<ApplicationDbContext> factory, IFileService files, IAudioClipPlaybackService playback, ISecurityService security)
-        : AudioClipService(factory, files, playback, security, NullLogger<AudioClipService>.Instance)
+    private sealed class TestService(IDbContextFactory<ApplicationDbContext> factory, IFileService files, IAudioClipPlaybackService playback, ISecurityService security, ISpeechRenderService speech)
+        : AudioClipService(factory, files, playback, security, speech, new SpeechPreviewStore(new MemoryCache(new MemoryCacheOptions())), NullLogger<AudioClipService>.Instance)
     {
         public HashSet<string> Online { get; } = [];
 
@@ -77,12 +80,28 @@ public class AudioClipServiceTests
             .ReturnsAsync(Result<List<AudioClipKioskOutcome>>.Ok([]));
         playback.Setup(p => p.StopAsync(It.IsAny<Guid>(), It.IsAny<int>())).ReturnsAsync(Result<bool>.Ok(true));
 
+        files.Setup(f => f.DeleteFileAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, CancellationToken _) =>
+            {
+                using ApplicationDbContext ctx = new(options);
+                FileMetadata? stored = ctx.FileMetadata.Find(id);
+                if (stored is not null)
+                {
+                    ctx.FileMetadata.Remove(stored);
+                    ctx.SaveChanges();
+                }
+
+                return Result<bool>.Ok(true);
+            });
+
         Mock<ISecurityService> security = new();
+
+        SpeechRenderService speech = new([new FakeSpeechEngine()], new MemoryCache(new MemoryCacheOptions()), NullLogger<SpeechRenderService>.Instance);
 
         return new Setup
         {
             Options = options,
-            Service = new TestService(factory.Object, files.Object, playback.Object, security.Object),
+            Service = new TestService(factory.Object, files.Object, playback.Object, security.Object, speech),
             Files = files,
             Playback = playback,
             Security = security,
@@ -416,5 +435,142 @@ public class AudioClipServiceTests
         Assert.AreEqual("Closing", play.ClipName);
         Assert.AreEqual("Lobby", play.KioskName);
         StringAssert.StartsWith(play.TriggeredBy, "Ben");
+    }
+
+    private static AudioClipSpeech Words(string text, string voice = "piper-cori", double rate = 1.0, int pitch = 0) =>
+        new(text, new SpeechVoiceSettings(voice, rate, pitch));
+
+    [TestMethod]
+    public async Task CreateSpeech_RendersTheWordsIntoAHiddenWavFile_AndAddsASpeechClip()
+    {
+        Setup s = await SeedAsync();
+
+        Result<AudioClip> result = await s.Service.CreateSpeechAsync(s.Admin, Words("Red team,   two minutes left."), new AudioClipDetails("Two minute warning", null), UserId);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        s.Files.Verify(f => f.UploadFileAsync(
+            It.Is<IFormFile>(x => x.FileName.EndsWith(".wav")),
+            null,
+            UserId,
+            It.Is<FileUploadOptions>(o => o.IsSystemFile && !o.AddAudioToMusicLibrary),
+            It.IsAny<CancellationToken>()), Times.Once);
+
+        await using ApplicationDbContext ctx = new(s.Options);
+        AudioClip clip = await ctx.AudioClips.SingleAsync();
+        Assert.AreEqual(AudioClipKind.Speech, clip.Kind);
+        Assert.AreEqual("Red team, two minutes left.", clip.SpeechText);
+        Assert.AreEqual("piper-cori", clip.SpeechVoiceId);
+        Assert.IsNotNull(clip.FileMetadataId);
+        Assert.IsNotNull(clip.SpeechRenderKey);
+        Assert.IsTrue(clip.DurationSeconds > 0);
+    }
+
+    [TestMethod]
+    public async Task CreateSpeech_RefusesEmptyTextAnUnknownVoiceAndOutOfRangeSettings_WithoutStoringAnything()
+    {
+        Setup s = await SeedAsync();
+
+        Assert.IsFalse((await s.Service.CreateSpeechAsync(s.Admin, Words("   "), new AudioClipDetails("A", null), UserId)).IsSuccess);
+        Assert.IsFalse((await s.Service.CreateSpeechAsync(s.Admin, Words("Hello", voice: "nobody"), new AudioClipDetails("A", null), UserId)).IsSuccess);
+        Assert.IsFalse((await s.Service.CreateSpeechAsync(s.Admin, Words("Hello", rate: 3), new AudioClipDetails("A", null), UserId)).IsSuccess);
+        Assert.IsFalse((await s.Service.CreateSpeechAsync(s.Admin, Words("Hello", pitch: 20), new AudioClipDetails("A", null), UserId)).IsSuccess);
+        Assert.IsFalse((await s.Service.CreateSpeechAsync(s.Admin, Words(new string('a', SpeechRules.MaxTextLength + 1)), new AudioClipDetails("A", null), UserId)).IsSuccess);
+
+        s.Files.Verify(f => f.UploadFileAsync(It.IsAny<IFormFile>(), It.IsAny<Guid?>(), It.IsAny<string>(), It.IsAny<FileUploadOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [TestMethod]
+    public async Task CreateSpeech_FollowsTheSameLocationRulesAsUploads()
+    {
+        Setup s = await SeedAsync();
+
+        Result<AudioClip> everywhere = await s.Service.CreateSpeechAsync(s.IpswichManager, Words("Hello"), new AudioClipDetails("A", null), UserId);
+        Result<AudioClip> otherLocation = await s.Service.CreateSpeechAsync(s.IpswichManager, Words("Hello"), new AudioClipDetails("A", s.Norwich.Id), UserId);
+        Result<AudioClip> own = await s.Service.CreateSpeechAsync(s.IpswichManager, Words("Hello"), new AudioClipDetails("A", s.Ipswich.Id), UserId);
+
+        Assert.IsFalse(everywhere.IsSuccess);
+        Assert.IsFalse(otherLocation.IsSuccess);
+        Assert.IsTrue(own.IsSuccess, own.Error);
+    }
+
+    [TestMethod]
+    public async Task UpdateSpeech_RendersAgainOnlyWhenTheWordsOrVoiceChange_AndDeletesTheOldAudio()
+    {
+        Setup s = await SeedAsync();
+        AudioClip created = (await s.Service.CreateSpeechAsync(s.Admin, Words("Closing in ten minutes."), new AudioClipDetails("Closing", null), UserId)).Data!;
+        Guid firstFile = created.FileMetadataId!.Value;
+
+        Result<AudioClip> renamed = await s.Service.UpdateSpeechAsync(s.Admin, created.Id, Words("Closing in ten minutes."), new AudioClipDetails("Closing soon", null), UserId);
+        Assert.IsTrue(renamed.IsSuccess, renamed.Error);
+        Assert.AreEqual(firstFile, renamed.Data!.FileMetadataId);
+
+        Result<AudioClip> reworded = await s.Service.UpdateSpeechAsync(s.Admin, created.Id, Words("Closing in five minutes.", pitch: -2), new AudioClipDetails("Closing soon", null), UserId);
+        Assert.IsTrue(reworded.IsSuccess, reworded.Error);
+        Assert.AreNotEqual(firstFile, reworded.Data!.FileMetadataId);
+
+        s.Files.Verify(f => f.UploadFileAsync(It.IsAny<IFormFile>(), null, UserId, It.IsAny<FileUploadOptions>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+        s.Files.Verify(f => f.DeleteFileAsync(firstFile, It.IsAny<CancellationToken>()), Times.Once);
+
+        await using ApplicationDbContext ctx = new(s.Options);
+        AudioClip stored = await ctx.AudioClips.SingleAsync();
+        Assert.AreEqual("Closing in five minutes.", stored.SpeechText);
+        Assert.AreEqual(-2, stored.SpeechPitch);
+    }
+
+    [TestMethod]
+    public async Task UpdateSpeech_RefusesAnUploadedClip()
+    {
+        Setup s = await SeedAsync();
+        AudioClip clip = await AddClipAsync(s, "Jingle", null);
+
+        Result<AudioClip> result = await s.Service.UpdateSpeechAsync(s.Admin, clip.Id, Words("Hello"), new AudioClipDetails("Jingle", null), UserId);
+
+        Assert.IsFalse(result.IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task Delete_OfASpeechClip_DeletesItsRenderedAudio_ButNotAnUploadedClipsFile()
+    {
+        Setup s = await SeedAsync();
+        AudioClip spoken = (await s.Service.CreateSpeechAsync(s.Admin, Words("Hello there."), new AudioClipDetails("Hello", null), UserId)).Data!;
+        AudioClip uploaded = (await s.Service.UploadAsync(s.Admin, FormFile("jingle.wav", TestWav.OfSeconds(3)), new AudioClipDetails("Jingle", null), UserId)).Data!;
+
+        Assert.IsTrue((await s.Service.DeleteAsync(s.Admin, spoken.Id)).IsSuccess);
+        Assert.IsTrue((await s.Service.DeleteAsync(s.Admin, uploaded.Id)).IsSuccess);
+
+        s.Files.Verify(f => f.DeleteFileAsync(spoken.FileMetadataId!.Value, It.IsAny<CancellationToken>()), Times.Once);
+        s.Files.Verify(f => f.DeleteFileAsync(uploaded.FileMetadataId!.Value, It.IsAny<CancellationToken>()), Times.Never);
+
+        await using ApplicationDbContext ctx = new(s.Options);
+        AudioClip deleted = await ctx.AudioClips.SingleAsync(x => x.Id == spoken.Id);
+        Assert.IsNull(deleted.SpeechText);
+        Assert.AreEqual("Hello", deleted.Name);
+    }
+
+    [TestMethod]
+    public async Task ListAudioFiles_LeavesOutASpeechClipsRenderedAudio()
+    {
+        Setup s = await SeedAsync();
+        await s.Service.CreateSpeechAsync(s.Admin, Words("Hello there."), new AudioClipDetails("Hello", null), UserId);
+        await s.Service.UploadAsync(s.Admin, FormFile("jingle.wav", TestWav.OfSeconds(3)), new AudioClipDetails("Jingle", null), UserId);
+
+        Result<List<AudioClipFileOption>> files = await s.Service.ListAudioFilesAsync(s.Admin);
+
+        Assert.IsTrue(files.IsSuccess, files.Error);
+        Assert.AreEqual("jingle.wav", files.Data!.Single().FileName);
+    }
+
+    [TestMethod]
+    public async Task PreviewSpeech_NeedsPermissionToPlayClips()
+    {
+        Setup s = await SeedAsync();
+        s.Security.Setup(x => x.IsCurrentUserInRoleAsync(AudioClipRoles.CanPlayAudioClips)).ReturnsAsync(false);
+
+        Result<Guid> staff = await s.Service.PreviewSpeechAsync(s.IpswichStaff, Words("Hello"), UserId);
+        Result<Guid> manager = await s.Service.PreviewSpeechAsync(s.IpswichManager, Words("Hello"), UserId);
+
+        Assert.IsFalse(staff.IsSuccess);
+        Assert.IsTrue(manager.IsSuccess, manager.Error);
+        s.Files.Verify(f => f.UploadFileAsync(It.IsAny<IFormFile>(), It.IsAny<Guid?>(), It.IsAny<string>(), It.IsAny<FileUploadOptions>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

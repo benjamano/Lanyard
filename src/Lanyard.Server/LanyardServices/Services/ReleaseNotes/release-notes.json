@@ -1140,5 +1140,16 @@
       "Or turn on Save automatically as people type, so the text is always ready to type into on the kiosk and saves itself a moment after typing stops.",
       "Text widgets stay read-only everywhere else, and saving the dashboard in the designer no longer overwrites what was typed on the kiosk."
     ]
+  },
+  {
+    "version": "1.4.39",
+    "releaseDate": "2026-11-26",
+    "summary": "Type an announcement and have a voice say it over the music.",
+    "details": [
+      "Add clip on Audio Clips now has Type an announcement: type what to say, choose one of nine British voices, set the speed and pitch, and press Preview to hear it.",
+      "Announcements play, schedule and work in automation rules just like uploaded clips. Pair one with Time remaining drops below to call a two minute warning in a laser tag game.",
+      "Kiosks now download the clips their automation rules play ahead of time, so they start right on the moment.",
+      "The voices run on the Lanyard server itself, so the words aren't sent to anyone else."
+    ]
   }
 ]

@@ -6,6 +6,7 @@
 @using Lanyard.App.Components.AudioClips
 @using Lanyard.App.Components.Dialogs
 @using Lanyard.Application.Services.AudioClips
+@using Lanyard.Application.Services.Speech
 
 @inject IAudioClipService _audioClipService
 @inject IAudioClipPlaybackService _audioClipPlayback
@@ -22,7 +23,7 @@
                     <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Audio clips</FluentText>
                     <FluentText Class="audio-clips-muted">
                         Short recordings to play over the kiosk music, like a closing-time call, a birthday jingle or a safety message.
-                        The music dips while a clip plays and comes back afterwards.
+                        Upload a recording, or type an announcement and choose a voice to say it. The music dips while a clip plays and comes back afterwards.
                     </FluentText>
                 </div>
                 <div class="d-flex flex-wrap gap-2">
@@ -76,7 +77,17 @@
                         AudioClip captured = clip;
                         <div class="audio-clip">
                             <div class="audio-clip-main">
-                                <FluentText Weight="TextWeight.Semibold" Class="audio-clip-name">@clip.Name</FluentText>
+                                <div class="audio-clip-title">
+                                    <FluentText Weight="TextWeight.Semibold" Class="audio-clip-name">@clip.Name</FluentText>
+                                    @if (clip.Kind == AudioClipKind.Speech)
+                                    {
+                                        <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Brand">Announcement</FluentBadge>
+                                    }
+                                </div>
+                                @if (clip.Kind == AudioClipKind.Speech && !string.IsNullOrWhiteSpace(clip.SpeechText))
+                                {
+                                    <FluentText Class="audio-clip-words">"@clip.SpeechText"</FluentText>
+                                }
                                 <FluentText Class="audio-clips-muted">@ClipSummary(clip)</FluentText>
                                 <audio class="audio-clip-preview" controls preload="none" src="@($"/api/audioclips/{clip.Id}/audio")"></audio>
                             </div>
@@ -480,7 +491,11 @@
         string where = clip.Location is null ? "Every location" : $"{clip.Location.Name} only";
         string dip = clip.EffectiveDuckToPercent == 0 ? "music goes silent" : $"music dips to {clip.EffectiveDuckToPercent}%";
 
-        return $"{AddEditAudioClipDialog.FormatDuration(clip.DurationSeconds)} · {where} · {dip}";
+        string voice = clip.Kind == AudioClipKind.Speech && SpeechVoiceCatalogue.Find(clip.SpeechVoiceId) is { } spokenBy
+            ? $" · spoken by {spokenBy.Name}"
+            : string.Empty;
+
+        return $"{AddEditAudioClipDialog.FormatDuration(clip.DurationSeconds)}{voice} · {where} · {dip}";
     }
 
     private static string PlayedBy(AudioClipPlaySummary play) => play.Source switch

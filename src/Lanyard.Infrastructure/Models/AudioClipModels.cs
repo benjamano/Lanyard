@@ -21,6 +21,8 @@ public static class AudioClipDefaults
 public class AudioClip : ICompanyOwned
 {
     public const int NameMaxLength = 100;
+    public const int SpeechTextMaxLength = 500;
+    public const int SpeechVoiceIdMaxLength = 100;
 
     public Guid Id { get; set; }
     public int CompanyId { get; set; }
@@ -35,6 +37,26 @@ public class AudioClip : ICompanyOwned
     public FileMetadata? FileMetadata { get; set; }
 
     public double DurationSeconds { get; set; }
+
+    public AudioClipKind Kind { get; set; } = AudioClipKind.File;
+
+    // Speech clips only: what is said, and by which voice. The rendered audio is FileMetadata, made
+    // again whenever any of these change (SpeechRenderKey tells when).
+    [StringLength(SpeechTextMaxLength)]
+    public string? SpeechText { get; set; }
+
+    [StringLength(SpeechVoiceIdMaxLength)]
+    public string? SpeechVoiceId { get; set; }
+
+    // 1 = normal; 0.5 is half speed, 2 twice as fast.
+    public double? SpeechRate { get; set; }
+
+    // Semitones up (positive) or down (negative) from the voice's own pitch.
+    public int? SpeechPitch { get; set; }
+
+    // A hash of the text, voice and settings the stored audio was rendered from.
+    [StringLength(64)]
+    public string? SpeechRenderKey { get; set; }
 
     // Null means every location in the company; otherwise only that location's kiosks play it.
     public int? LocationId { get; set; }
