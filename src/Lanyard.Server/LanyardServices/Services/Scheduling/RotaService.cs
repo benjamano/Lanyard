@@ -163,6 +163,13 @@ public class RotaService(
                 .GroupBy(x => x.UserId)
                 .ToDictionary(g => g.Key, g => g.First());
 
+            // Young workers' limits are judged on every shift they work, at every location, with the
+            // weeks either side for rest at the edges.
+            Dictionary<string, YoungWorkerProfile> youngWorkers =
+                await ShiftClaimRules.LoadYoungWorkerProfilesAsync(ctx, rowIds, firstWeek.AddDays(-1));
+            ILookup<string, WorkBlock> youngShifts = await ShiftClaimRules.LoadWorkBlocksAsync(ctx, youngWorkers.Keys.ToList(),
+                windowStartUtc - YoungWorkerRules.LookAround, windowEndUtc + YoungWorkerRules.LookAround);
+
             HashSet<string> memberSet = memberIds.ToHashSet();
             List<DateOnly> weekStarts = [];
 
@@ -205,6 +212,12 @@ public class RotaService(
 
                         warnings.AddRange(weekWarnings);
                         warnings.AddRange(ContractCompliance.ShiftsDuringTimeOff(user.Id, week, inWeek, approvedTimeOff));
+
+                        if (youngWorkers.TryGetValue(user.Id, out YoungWorkerProfile? young))
+                        {
+                            warnings.AddRange(YoungWorkerRules.EvaluateWeek(young, week, youngShifts[user.Id])
+                                .Select(x => new ContractWarning(user.Id, week, ContractWarningKind.YoungWorkerLimit, x.Message)));
+                        }
                     }
                 }
 
@@ -217,7 +230,9 @@ public class RotaService(
                     isMember)
                 {
                     TimeOff = userTimeOff,
-                    Availability = availabilityByUser[user.Id].ToList()
+                    Availability = availabilityByUser[user.Id].ToList(),
+                    IsYoungWorker = youngWorkers.TryGetValue(user.Id, out YoungWorkerProfile? youngProfile)
+                        && (youngProfile.IsUnder18On(from) || youngProfile.IsUnder18On(to))
                 });
             }
 
@@ -394,6 +409,13 @@ public class RotaService(
                 {
                     warnings.Add($"This person has said they can't work {StaffAvailabilityRules.Describe(unavailable)}.");
                 }
+            }
+
+            // Young worker limits: staff can't take a shift that breaks one, but a manager giving it
+            // to them directly is making that call (cover in an emergency), so only a warning.
+            if (shift.UserId is string youngId)
+            {
+                warnings.AddRange((await ShiftClaimRules.YoungWorkerBreachesAsync(ctx, youngId, shift)).Select(x => x.Message));
             }
 
             DateTime now = DateTime.UtcNow;
