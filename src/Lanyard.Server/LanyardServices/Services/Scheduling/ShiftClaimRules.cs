@@ -41,7 +41,9 @@ internal static class ShiftClaimRules
         List<(Guid Id, DateTime StartUtc, DateTime EndUtc)> Shifts,
         HashSet<DateOnly> DaysOff,
         ILookup<Guid, RequiredCourse> Requirements,
-        Dictionary<Guid, TrainingRecord> Training)
+        Dictionary<Guid, TrainingRecord> Training,
+        YoungWorkerProfile? YoungWorker = null,
+        List<WorkBlock>? YoungWorkerShifts = null)
     {
         public static readonly ILookup<Guid, RequiredCourse> NoRequirements = Array.Empty<RequiredCourse>().ToLookup(x => x.PositionId);
 
@@ -105,6 +107,11 @@ internal static class ShiftClaimRules
 
         TrainingSnapshot training = await LoadTrainingAsync(ctx, ids, positions.Select(x => x.StaffPositionId).ToList());
 
+        // Young workers need their shifts further out, with breaks, for the weekly limits and rest.
+        Dictionary<string, YoungWorkerProfile> young = await LoadYoungWorkerProfilesAsync(ctx, ids, fromDay);
+        ILookup<string, WorkBlock> youngShifts = await LoadWorkBlocksAsync(ctx, young.Keys.ToList(),
+            fromUtc - YoungWorkerRules.LookAround, toUtc + YoungWorkerRules.LookAround);
+
         return ids.ToDictionary(id => id, id => new WorkerCalendar(
             memberships.Where(x => x.UserId == id).Select(x => x.LocationId).ToHashSet(),
             positions.Where(x => x.UserId == id).Select(x => x.StaffPositionId).ToHashSet(),
@@ -113,8 +120,86 @@ internal static class ShiftClaimRules
                 .SelectMany(x => Enumerable.Range(0, x.EndDate.DayNumber - x.StartDate.DayNumber + 1).Select(d => x.StartDate.AddDays(d)))
                 .ToHashSet(),
             training.Requirements,
-            training.ByUser.GetValueOrDefault(id) ?? []));
+            training.ByUser.GetValueOrDefault(id) ?? [],
+            young.GetValueOrDefault(id),
+            young.ContainsKey(id) ? youngShifts[id].ToList() : null));
     }
+
+    // The dates of birth of whichever of these people are still under 18 on or after `fromDay`, with
+    // their company's night window. Someone in two companies with a date in both uses the later one.
+    public static async Task<Dictionary<string, YoungWorkerProfile>> LoadYoungWorkerProfilesAsync(ApplicationDbContext ctx, IReadOnlyCollection<string> userIds, DateOnly fromDay)
+    {
+        List<string> ids = userIds.Distinct().ToList();
+
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        DateOnly cutoff = YoungWorkerAge.Born18YearsBefore(fromDay);
+
+        var rows = await ctx.YoungWorkerStatuses
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => ids.Contains(x.UserId) && x.DateOfBirth > cutoff)
+            .Select(x => new
+            {
+                x.UserId,
+                x.DateOfBirth,
+                Window = ctx.CompanySchedulingSettings.Where(s => s.CompanyId == x.CompanyId).Select(s => (YoungWorkerNightWindow?)s.YoungWorkerNightWindow).FirstOrDefault()
+            })
+            .ToListAsync();
+
+        return rows
+            .GroupBy(x => x.UserId)
+            .ToDictionary(g => g.Key, g =>
+            {
+                var youngest = g.OrderByDescending(x => x.DateOfBirth).First();
+                return new YoungWorkerProfile(youngest.DateOfBirth, youngest.Window ?? YoungWorkerNightWindow.TenToSix);
+            });
+    }
+
+    // Active shifts, with breaks, for some people across [fromUtc, toUtc), at every location.
+    public static async Task<ILookup<string, WorkBlock>> LoadWorkBlocksAsync(ApplicationDbContext ctx, IReadOnlyCollection<string> userIds, DateTime fromUtc, DateTime toUtc)
+    {
+        if (userIds.Count == 0)
+        {
+            return Array.Empty<(string, WorkBlock)>().ToLookup(x => x.Item1, x => x.Item2);
+        }
+
+        var rows = await ctx.Shifts
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => x.IsActive && x.UserId != null && userIds.Contains(x.UserId) && x.StartUtc < toUtc && x.EndUtc > fromUtc)
+            .Select(x => new { UserId = x.UserId!, x.Id, x.StartUtc, x.EndUtc, x.BreakMinutes })
+            .ToListAsync();
+
+        return rows.ToLookup(x => x.UserId, x => new WorkBlock(x.Id, x.StartUtc, x.EndUtc, x.BreakMinutes));
+    }
+
+    // One person, one shift: the young worker limits giving them this shift would break, loading only
+    // what that needs. Empty for anyone who isn't a young worker.
+    public static async Task<List<YoungWorkerBreach>> YoungWorkerBreachesAsync(ApplicationDbContext ctx, string userId, Shift shift)
+    {
+        Dictionary<string, YoungWorkerProfile> young = await LoadYoungWorkerProfilesAsync(ctx, [userId], RotaTime.LocalDate(shift.StartUtc).AddDays(-1));
+
+        if (!young.TryGetValue(userId, out YoungWorkerProfile? profile))
+        {
+            return [];
+        }
+
+        ILookup<string, WorkBlock> shifts = await LoadWorkBlocksAsync(ctx, [userId],
+            shift.StartUtc - YoungWorkerRules.LookAround, shift.EndUtc + YoungWorkerRules.LookAround);
+
+        return YoungWorkerRules.Evaluate(profile, WorkBlock.From(shift), shifts[userId]);
+    }
+
+    // The young worker limits this shift would break for the calendar's owner, if they're a young
+    // worker. givingUpShiftId is a shift they hand over in the same move (a swap).
+    public static List<YoungWorkerBreach> YoungWorkerBreaches(WorkerCalendar calendar, Shift shift, Guid? givingUpShiftId) =>
+        calendar.YoungWorker is YoungWorkerProfile profile
+            ? YoungWorkerRules.Evaluate(profile, WorkBlock.From(shift), (calendar.YoungWorkerShifts ?? []).Where(x => x.Id != givingUpShiftId))
+            : [];
 
     // The training these positions need, and these people's records on it. Only active courses,
     // at companies where some location has Training switched on, count - a course nobody can take can't be required.
@@ -267,9 +352,10 @@ internal static class ShiftClaimRules
 
     // Why this person can't work this shift, or null if they can. The same rules as the rota
     // builder: at the location, holding the shift's position (if it has one) and current on its
-    // required training, not already working then, and not on approved time off that day.
-    // givingUpShiftId is a shift they hand over in the same move (a swap), which doesn't count as
-    // a clash. The calendar must cover the shift.
+    // required training, not already working then, not on approved time off that day, and - for
+    // anyone under 18 - within the young worker limits (YoungWorkerRules). givingUpShiftId is a
+    // shift they hand over in the same move (a swap), which doesn't count as a clash. The calendar
+    // must cover the shift.
     public static string? WhyCantWork(WorkerCalendar calendar, Shift shift, Guid? givingUpShiftId, bool aboutViewer)
     {
         string you = aboutViewer ? "You" : "They";
@@ -300,7 +386,14 @@ internal static class ShiftClaimRules
             return $"{youre} already working then.";
         }
 
-        return calendar.DaysOff.Contains(RotaTime.LocalDate(shift.StartUtc)) ? $"{youre} booked off that day." : null;
+        if (calendar.DaysOff.Contains(RotaTime.LocalDate(shift.StartUtc)))
+        {
+            return $"{youre} booked off that day.";
+        }
+
+        // Last, so the plainer reasons above win. Staff can't take a shift that breaks a young
+        // worker limit; a manager can still give it to them by hand (with a warning).
+        return YoungWorkerBreaches(calendar, shift, givingUpShiftId).FirstOrDefault()?.Message;
     }
 
     // One person, one shift: loads just the calendar around that shift.
@@ -337,7 +430,23 @@ internal static class ShiftClaimRules
             .Select(x => x.UserId)
             .ToListAsync()).ToHashSet();
 
-        return candidates.Where(x => !busy.Contains(x) && !off.Contains(x)).ToList();
+        List<string> free = candidates.Where(x => !busy.Contains(x) && !off.Contains(x)).ToList();
+
+        // Young workers only hear about it if they could actually take it.
+        Dictionary<string, YoungWorkerProfile> young = await LoadYoungWorkerProfilesAsync(ctx, free, day);
+
+        if (young.Count == 0)
+        {
+            return free;
+        }
+
+        ILookup<string, WorkBlock> youngShifts = await LoadWorkBlocksAsync(ctx, young.Keys.ToList(),
+            shift.StartUtc - YoungWorkerRules.LookAround, shift.EndUtc + YoungWorkerRules.LookAround);
+
+        return free
+            .Where(x => !young.TryGetValue(x, out YoungWorkerProfile? profile)
+                || YoungWorkerRules.Evaluate(profile, WorkBlock.From(shift), youngShifts[x]).Count == 0)
+            .ToList();
     }
 
     // Colleagues who could take this shift in a swap: at the location and holding its position.

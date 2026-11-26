@@ -1,0 +1,15 @@
+.young-worker-chip {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    margin-left: 6px;
+    vertical-align: middle;
+    padding: 0 5px;
+    border-radius: 4px;
+    font-size: var(--fontSizeBase100);
+    font-weight: var(--fontWeightSemibold);
+    line-height: 16px;
+    background: var(--colorPaletteMarigoldBackground2);
+    color: var(--colorPaletteMarigoldForeground2);
+    border: 1px solid var(--colorPaletteMarigoldBorder2);
+}

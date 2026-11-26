@@ -6,6 +6,7 @@
 @inject IRotaService _rotaService
 @inject IShiftClaimService _shiftClaimService
 @inject IShiftSuggestionService _shiftSuggestionService
+@inject IYoungWorkerService _youngWorkerService
 
 <FluentDialogBody>
     <TitleTemplate>
@@ -47,6 +48,25 @@
             {
                 <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
                     @SelectedName has said they can't work @StaffAvailabilityRules.Describe(unavailable)@(string.IsNullOrWhiteSpace(unavailable.Notes) ? "" : $" ({unavailable.Notes})"). You can still put them on it.
+                </FluentMessageBar>
+            }
+
+            @if (youngBreaches.Count > 0)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false" Class="shift-dialog-young">
+                    <div>@SelectedName is under 18, and this shift breaks the young worker limits. Staff can't pick up a shift like this; you can still put them on it.</div>
+                    <ul class="shift-dialog-young-list">
+                        @foreach (YoungWorkerBreach breach in youngBreaches)
+                        {
+                            <li>@breach.Message</li>
+                        }
+                    </ul>
+                    @if (youngBreaches.All(x => x.Rule == YoungWorkerRule.Break))
+                    {
+                        <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => breakMinutes = YoungWorkerRules.MinimumBreakMinutes)">
+                            Set break to @YoungWorkerRules.MinimumBreakMinutes min
+                        </FluentButton>
+                    }
                 </FluentMessageBar>
             }
 
@@ -219,6 +239,45 @@
     private string? suggestionsKey;
     private bool isSuggesting;
     private string? suggestError;
+
+    // The young worker limits the shift as entered breaks for the chosen person, checked again
+    // whenever the person, day, times or break change (only for people under 18 on this rota).
+    private List<YoungWorkerBreach> youngBreaches = [];
+    private string? youngCheckedKey;
+
+    private string YoungCheckKey => $"{userId}|{date:yyyy-MM-dd}|{startTime}|{endTime}|{breakMinutes}";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        string key = YoungCheckKey;
+
+        if (key == youngCheckedKey)
+        {
+            return;
+        }
+
+        youngCheckedKey = key;
+        bool isYoung = View.Rows.FirstOrDefault(r => r.User.Id == userId)?.IsYoungWorker == true;
+        List<YoungWorkerBreach> found = [];
+
+        if (isYoung && date is DateTime chosen)
+        {
+            Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+            if (scopeResult.IsSuccess && scopeResult.Data is not null)
+            {
+                Result<List<YoungWorkerBreach>> result = await _youngWorkerService.CheckShiftAsync(scopeResult.Data, BuildShift(DateOnly.FromDateTime(chosen), string.Empty));
+                found = result.IsSuccess ? result.Data ?? [] : [];
+            }
+        }
+
+        // Only re-render when the answer changed, and only if nothing was edited meanwhile.
+        if (youngCheckedKey == key && (found.Count != youngBreaches.Count || !found.Select(x => x.Message).SequenceEqual(youngBreaches.Select(x => x.Message))))
+        {
+            youngBreaches = found;
+            StateHasChanged();
+        }
+    }
 
     private string SuggestionKey => $"{date:yyyy-MM-dd}|{startTime}|{endTime}|{breakMinutes}|{positionId}";
 
