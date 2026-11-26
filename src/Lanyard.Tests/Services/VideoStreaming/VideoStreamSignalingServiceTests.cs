@@ -329,5 +329,70 @@ namespace Lanyard.Tests.Services.VideoStreaming
             healthyViewerMock.Verify(v => v.ReceiveOfferAsync(healthySession.Data, "offer-2"), Times.Once);
             Assert.AreEqual(1, _service.GetActiveSessionCount(clientId), "Only the healthy session should remain.");
         }
+
+        [TestMethod]
+        public async Task CreateStaffSessionAsync_WithRegisteredPublisher_StartsSessionWithoutToken()
+        {
+            Guid clientId = Guid.NewGuid();
+
+            Mock<IVideoPublisherHandle> publisherMock = CreatePublisherMock(clientId);
+            RegisterPublisherWithToken(publisherMock.Object);
+
+            Result<Guid> result = await _service.CreateStaffSessionAsync(clientId, "Webcam 1", false, 1280, 720, new Mock<IVideoViewerHandle>().Object, CancellationToken.None);
+
+            Assert.IsTrue(result.Success, result.Error);
+            publisherMock.Verify(p => p.StartSessionAsync(result.Data, "Webcam 1", false, 1280, 720), Times.Once);
+            Assert.AreEqual(1, _service.GetActiveSessionCount(clientId));
+        }
+
+        [TestMethod]
+        public async Task CreateStaffSessionAsync_NoPublisherYet_LaunchesPublisherOnClient()
+        {
+            Guid clientId = Guid.NewGuid();
+
+            Mock<IVideoPublisherHandle> publisherMock = CreatePublisherMock(clientId);
+
+            _clientServiceMock
+                .Setup(c => c.StartVideoPublisherOnClientAsync(clientId, It.IsAny<string>()))
+                .Callback<Guid, string>((_, token) => _service.RegisterPublisher(publisherMock.Object, token))
+                .ReturnsAsync(Result<bool>.Ok(true));
+
+            Result<Guid> result = await _service.CreateStaffSessionAsync(clientId, "Webcam 1", false, 1280, 720, new Mock<IVideoViewerHandle>().Object, CancellationToken.None);
+
+            Assert.IsTrue(result.Success, result.Error);
+            _clientServiceMock.Verify(c => c.StartVideoPublisherOnClientAsync(clientId, It.IsAny<string>()), Times.Once);
+        }
+
+        [TestMethod]
+        public async Task StaffAndKioskSessions_OnSameSource_AreRoutedSeparately_AndEndIndependently()
+        {
+            Guid clientId = Guid.NewGuid();
+            Guid kioskClientId = Guid.NewGuid();
+
+            Mock<IVideoPublisherHandle> publisherMock = CreatePublisherMock(clientId);
+            RegisterPublisherWithToken(publisherMock.Object);
+
+            Mock<IVideoViewerHandle> kioskViewerMock = new();
+            Mock<IVideoViewerHandle> staffViewerMock = new();
+
+            Result<Guid> kioskSession = await CreateSessionAsync(clientId, kioskClientId, kioskViewerMock.Object);
+            Result<Guid> staffSession = await _service.CreateStaffSessionAsync(clientId, "Webcam 1", false, 1280, 720, staffViewerMock.Object, CancellationToken.None);
+
+            Assert.IsTrue(kioskSession.Success, kioskSession.Error);
+            Assert.IsTrue(staffSession.Success, staffSession.Error);
+            Assert.AreEqual(2, _service.GetActiveSessionCount(clientId));
+
+            await _service.PublisherSendOfferAsync(staffSession.Data, "staff-offer");
+            staffViewerMock.Verify(v => v.ReceiveOfferAsync(staffSession.Data, "staff-offer"), Times.Once);
+            kioskViewerMock.Verify(v => v.ReceiveOfferAsync(It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
+
+            // Closing the staff preview must leave the kiosk's picture running.
+            await _service.EndSessionAsync(staffSession.Data);
+
+            Assert.AreEqual(1, _service.GetActiveSessionCount(clientId));
+            publisherMock.Verify(p => p.EndSessionAsync(staffSession.Data), Times.Once);
+            publisherMock.Verify(p => p.EndSessionAsync(kioskSession.Data), Times.Never);
+            kioskViewerMock.Verify(v => v.SessionEndedAsync(It.IsAny<Guid>(), It.IsAny<string?>()), Times.Never);
+        }
     }
 }

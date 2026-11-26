@@ -135,6 +135,14 @@
                                       IconStart="@(new Icons.Regular.Size20.Desktop())"
                                       Disabled="@(!context.IsCurrentlyConnected)"
                                       OnClick="() => OpenScreensDialogAsync(context)" />
+                        @if (context.VideoDeviceCount > 0)
+                        {
+                            <FluentButton Appearance="ButtonAppearance.Transparent"
+                                          Title="@(context.IsCurrentlyConnected ? "Live camera" : "Live camera (client is offline)")"
+                                          IconStart="@(new Icons.Regular.Size20.Video())"
+                                          Disabled="@(!context.IsCurrentlyConnected)"
+                                          OnClick="() => OpenCameraDialogAsync(context)" />
+                        }
                         <FluentButton Appearance="ButtonAppearance.Transparent"
                                       Title="@(context.IsCurrentlyConnected ? "Self-test" : "Self-test (client is offline)")"
                                       IconStart="@(new Icons.Regular.Size20.Stethoscope())"
@@ -206,6 +214,14 @@
                                   IconStart="@(new Icons.Regular.Size20.Desktop())"
                                   Disabled="@(!client.IsCurrentlyConnected)"
                                   OnClick="() => OpenScreensDialogAsync(client)" />
+                    @if (client.VideoDeviceCount > 0)
+                    {
+                        <FluentButton Appearance="ButtonAppearance.Transparent"
+                                      Title="@(client.IsCurrentlyConnected ? "Live camera" : "Live camera (client is offline)")"
+                                      IconStart="@(new Icons.Regular.Size20.Video())"
+                                      Disabled="@(!client.IsCurrentlyConnected)"
+                                      OnClick="() => OpenCameraDialogAsync(client)" />
+                    }
                     <FluentButton Appearance="ButtonAppearance.Transparent"
                                   Title="@(client.IsCurrentlyConnected ? "Self-test" : "Self-test (client is offline)")"
                                   IconStart="@(new Icons.Regular.Size20.Stethoscope())"
@@ -580,6 +596,18 @@
             options.Modal = true;
             options.Parameters.Add(nameof(ClientScreensDialog.ClientId), client.Id);
             options.Parameters.Add(nameof(ClientScreensDialog.ClientName), client.Name);
+        });
+    }
+
+    private async Task OpenCameraDialogAsync(ClientConnectedWithCapabilitiesDTO client)
+    {
+        await _dialogService.ShowDialogAsync<ClientCameraDialog>(options =>
+        {
+            options.Header.Title = $"Live camera: {client.Name}";
+            options.Width = "min(900px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ClientCameraDialog.ClientId), client.Id);
+            options.Parameters.Add(nameof(ClientCameraDialog.ClientName), client.Name);
         });
     }
 

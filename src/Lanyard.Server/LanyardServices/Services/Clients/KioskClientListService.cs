@@ -101,6 +101,7 @@ public class KioskClientListService(
                 : x.MostRecentConnectionId != null && connectedIds.Contains(x.MostRecentConnectionId),
             ProjectionEnabled = x.ProjectionEnabled,
             DmxEnabled = x.DmxEnabled,
+            VideoDeviceCount = x.VideoDeviceCount,
             ZoneScoreboardVersion = x.ZoneScoreboardVersion
         };
     }
