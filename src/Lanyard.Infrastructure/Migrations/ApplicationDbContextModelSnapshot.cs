@@ -1155,6 +1155,9 @@ namespace Lanyard.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ClientId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("ClockInTerminalId")
                         .HasColumnType("uuid");
 
@@ -1185,10 +1188,11 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("UserId")
-                        .IsRequired()
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ClientId");
 
                     b.HasIndex("ClockInTerminalId");
 
@@ -2014,37 +2018,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("Companies");
                 });
 
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.CompanyFeatureSetting", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CompanyId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Feature")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsEnabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("UpdatedByUserId")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompanyId", "Feature")
-                        .IsUnique();
-
-                    b.ToTable("CompanyFeatureSettings");
-                });
-
             modelBuilder.Entity("Lanyard.Infrastructure.Models.CompanyOnboardingSettings", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2556,6 +2529,9 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("ShowConditionsJson")
+                        .HasColumnType("text");
 
                     b.Property<int?>("PhoneOrder")
                         .HasColumnType("integer");
@@ -3330,6 +3306,37 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Locations");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.LocationFeatureSetting", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Feature")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LocationId", "Feature")
+                        .IsUnique();
+
+                    b.ToTable("LocationFeatureSettings");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.LocationOpeningHours", b =>
@@ -5509,6 +5516,32 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasDiscriminator().HasValue(5);
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ChecklistCardWidget", b =>
+                {
+                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
+
+                    b.Property<bool>("ChecklistCardAllowKioskTicking")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("ChecklistCardChecklistId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("ChecklistCardHideWhenDone")
+                        .HasColumnType("boolean");
+
+                    b.HasDiscriminator().HasValue(23);
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ChecklistsTodayWidget", b =>
+                {
+                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
+
+                    b.Property<bool>("ChecklistsHideComplete")
+                        .HasColumnType("boolean");
+
+                    b.HasDiscriminator().HasValue(22);
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientZoneLaserGameStatusWidget", b =>
                 {
                     b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
@@ -5738,6 +5771,12 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Property<string>("Content")
                         .HasColumnType("text");
+
+                    b.Property<bool>("EditableOnKiosk")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("KioskAutoSave")
+                        .HasColumnType("boolean");
 
                     b.HasDiscriminator().HasValue(2);
                 });
@@ -6228,6 +6267,11 @@ namespace Lanyard.Infrastructure.Migrations
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ChecklistCompletion", b =>
                 {
+                    b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Lanyard.Infrastructure.Models.ClockInTerminal", "ClockInTerminal")
                         .WithMany()
                         .HasForeignKey("ClockInTerminalId")
@@ -6236,7 +6280,7 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasOne("Lanyard.Infrastructure.Models.ChecklistRunItem", "RunItem")
                         .WithMany("Completions")
                         .HasForeignKey("RunItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "UndoneByUser")
@@ -6247,8 +6291,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Client");
 
                     b.Navigation("ClockInTerminal");
 
@@ -6465,17 +6510,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("BackgroundImageFile");
 
                     b.Navigation("LogoFile");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.CompanyFeatureSetting", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
-                        .WithMany()
-                        .HasForeignKey("CompanyId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Company");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.CompanyOnboardingSettings", b =>
@@ -6935,6 +6969,17 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Company");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.LocationFeatureSetting", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Location");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.LocationOpeningHours", b =>

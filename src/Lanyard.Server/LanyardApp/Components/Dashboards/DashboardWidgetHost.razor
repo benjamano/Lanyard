@@ -19,7 +19,7 @@
             <ErrorBoundary @ref="_errorBoundary">
                 <ChildContent>
                     <DynamicComponent Type="_descriptor.Component"
-                                      Parameters="DashboardWidgetCatalog.RenderParameters(_descriptor, Widget, Live, CompanyId)" />
+                                      Parameters="DashboardWidgetCatalog.RenderParameters(_descriptor, Widget, Live, CompanyId, ControlsEnabled)" />
                 </ChildContent>
                 <ErrorContent>
                     <div class="dashboard-widget-problem">
@@ -43,6 +43,11 @@
     [Parameter]
     public int? CompanyId { get; set; }
 
+    // False shows a live widget whose buttons and controls don't act: the designer's Phone and
+    // TV views show the real dashboard, but tapping a button there mustn't start a projection.
+    [Parameter]
+    public bool ControlsEnabled { get; set; } = true;
+
     private WidgetDescriptor? _descriptor;
     private ErrorBoundary? _errorBoundary;
     private WidgetType? _descriptorType;
@@ -57,8 +62,12 @@
             _descriptorType = Widget.Type;
         }
 
-        // Changing a widget's settings in the designer re-renders it, which is the moment to give
-        // a widget that failed earlier another go.
-        _errorBoundary?.Recover();
+        // In the designer, a re-render usually means a setting changed, which is the moment to give
+        // a widget that failed another go. On a live screen it would just retry (and log) the same
+        // failure on every render, so it stays showing the message.
+        if (!Live)
+        {
+            _errorBoundary?.Recover();
+        }
     }
 }

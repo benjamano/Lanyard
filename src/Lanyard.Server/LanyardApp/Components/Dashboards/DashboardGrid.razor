@@ -6,9 +6,11 @@
    query, so the designer's phone preview collapses the same way inside a narrow frame. *@
 
 @inject ICompanyFeatureService CompanyFeatures
-@inject DashboardWidgetConfigurator WidgetConfigurator
+@inject IWidgetVisibilityService WidgetVisibilityService
+@inject ILaserGameStatusStore LaserGameStatusStore
+@implements IDisposable
 
-<div class="dashboard-grid-container">
+<div class="dashboard-grid-container @(PhoneLayout ? null : "no-phone-layout")">
     <div class="dashboard-grid @(Fit ? "fit-to-screen" : null)" style="@GridStyle">
         @foreach ((DashboardWidget widget, int phoneOrder) in OrderedWidgets())
         {
@@ -18,27 +20,7 @@
                  class="dashboard-grid-item @(widget.HideOnPhone ? "hide-on-phone" : null)"
                  id="@($"widget-{widget.Id}")"
                  style="@GetWidgetStyle(widget, phoneOrder)">
-                @if (!PreviewMode)
-                {
-                    <div class="dashboard-grid-item-tools">
-                        <span class="dashboard-grid-item-name">@DashboardWidgetCatalog.NameOf(widget.Type)</span>
-                        <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" Title="Move left" IconStart="new Icons.Regular.Size16.ArrowLeft()" OnClick="@(() => Move(widget, -1, 0))" />
-                        <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" Title="Move up" IconStart="new Icons.Regular.Size16.ArrowUp()" OnClick="@(() => Move(widget, 0, -1))" />
-                        <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" Title="Move down" IconStart="new Icons.Regular.Size16.ArrowDown()" OnClick="@(() => Move(widget, 0, 1))" />
-                        <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" Title="Move right" IconStart="new Icons.Regular.Size16.ArrowRight()" OnClick="@(() => Move(widget, 1, 0))" />
-                        <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" Title="Narrower" IconStart="new Icons.Regular.Size16.SubtractCircle()" OnClick="@(() => Resize(widget, -1, 0))" />
-                        <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" Title="Wider" IconStart="new Icons.Regular.Size16.AddCircle()" OnClick="@(() => Resize(widget, 1, 0))" />
-                        <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" Title="Shorter" IconStart="new Icons.Regular.Size16.ArrowUpload()" OnClick="@(() => Resize(widget, 0, -1))" />
-                        <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" Title="Taller" IconStart="new Icons.Regular.Size16.ArrowDownload()" OnClick="@(() => Resize(widget, 0, 1))" />
-                        @if (DashboardWidgetCatalog.Get(widget.Type)?.HasSettings == true)
-                        {
-                            <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" Title="Settings" IconStart="new Icons.Regular.Size16.Settings()" OnClick="@(() => ConfigureAsync(widget))" />
-                        }
-                        <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" Title="Remove" IconStart="new Icons.Regular.Size16.Delete()" OnClick="@(() => Remove(widget))" />
-                    </div>
-                }
-
-                <DashboardWidgetHost Widget="widget" Live="PreviewMode" CompanyId="CompanyId" />
+                <DashboardWidgetHost Widget="widget" Live="PreviewMode" CompanyId="CompanyId" ControlsEnabled="ControlsEnabled" />
             </div>
         }
     </div>
@@ -48,9 +30,15 @@
     [Parameter]
     public List<DashboardWidget> Widgets { get; set; } = [];
 
-    // True on a live dashboard; false while it's being edited.
+    // True on a live dashboard (home screen, kiosk, the designer's preview): buttons and controls
+    // act, and widgets from modules the company doesn't have are left out. Editing happens in the
+    // designer (Components/Dashboards/Designer), which draws widgets itself.
     [Parameter]
-    public bool PreviewMode { get; set; }
+    public bool PreviewMode { get; set; } = true;
+
+    // See DashboardWidgetHost.ControlsEnabled: off for previews that aren't meant to act.
+    [Parameter]
+    public bool ControlsEnabled { get; set; } = true;
 
     // The company that owns the dashboard. Kiosk displays render without a signed-in user, so
     // nothing filters their data by company - widgets that read company data scope to this.
@@ -65,16 +53,33 @@
     [Parameter]
     public bool FitToScreen { get; set; }
 
+    // Collapse to the one-column phone layout when narrow. Off on kiosks: a narrow kiosk screen
+    // isn't a phone, and widgets hidden on phones should still show there.
+    [Parameter]
+    public bool PhoneLayout { get; set; } = true;
+
     // Widgets from a module the viewer's company doesn't have (CompanyFeatureCatalog.ForWidget)
-    // are left out when viewing. The editor still shows them so an admin can see and remove them.
+    // are left out when viewing.
     // Until the lookup finishes every module counts as hidden, so a widget the company doesn't have
     // never gets to render (and load its data) in the meantime.
     private IReadOnlySet<CompanyFeature> _hiddenFeatures = System.Enum.GetValues<CompanyFeature>().ToHashSet();
 
+    private static readonly TimeSpan VisibilityRecheck = TimeSpan.FromSeconds(30);
+
+    private WidgetVisibilityLookups _visibilityLookups = WidgetVisibilityLookups.Empty;
+    private DateTime _visibilityNowUtc = DateTime.UtcNow;
+    private PeriodicTimer? _visibilityTimer;
+    private CancellationTokenSource? _visibilityCancellation;
+    private bool _watchingGames;
+
     private bool Fit => FitToScreen && PreviewMode;
 
+    // Checklists resolves the viewer's working location from their open time entry; its service applies that location's feature switch.
     private IEnumerable<DashboardWidget> VisibleWidgets => PreviewMode
-        ? Widgets.Where(w => CompanyFeatureCatalog.ForWidget(w.Type) is not CompanyFeature feature || !_hiddenFeatures.Contains(feature))
+        ? Widgets.Where(w => WidgetVisibilityService.IsShown(w, CompanyId ?? -1, _visibilityLookups, _visibilityNowUtc)
+            && (w is ChecklistsTodayWidget
+            || CompanyFeatureCatalog.ForWidget(w.Type) is not CompanyFeature feature
+            || !_hiddenFeatures.Contains(feature)))
         : Widgets;
 
     private string GridStyle
@@ -82,7 +87,9 @@
         get
         {
             int rowHeight = Math.Clamp(RowHeight <= 0 ? Dashboard.DefaultRowHeight : RowHeight, Dashboard.MinRowHeight, Dashboard.MaxRowHeight);
-            int rows = Math.Max(1, DashboardLayoutEngine.RowCount(Widgets.Select(ToRect)));
+            // Only what's shown: a widget left out for a missing module mustn't keep its rows empty
+            // on a fit-to-screen TV.
+            int rows = Math.Max(1, DashboardLayoutEngine.RowCount(VisibleWidgets.Select(ToRect)));
 
             return $"--dashboard-row-height: {rowHeight}px; --dashboard-rows: {rows};";
         }
@@ -93,9 +100,90 @@
         _hiddenFeatures = await CompanyFeatures.GetHiddenFeaturesForCurrentUserAsync();
     }
 
-    protected override void OnParametersSet()
+    private bool AnyConditions => Widgets.Any(w => !string.IsNullOrWhiteSpace(w.ShowConditionsJson));
+
+    private async Task RefreshVisibilityAsync()
+    {
+        _visibilityNowUtc = DateTime.UtcNow;
+
+        if (!PreviewMode || !AnyConditions)
+        {
+            return;
+        }
+
+        Result<WidgetVisibilityLookups> lookups = await WidgetVisibilityService.LoadAsync(Widgets);
+        _visibilityLookups = lookups.Data ?? WidgetVisibilityLookups.Empty;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        _visibilityCancellation = new CancellationTokenSource();
+        _visibilityTimer = new PeriodicTimer(VisibilityRecheck);
+        _ = RecheckLoopAsync(_visibilityTimer, _visibilityCancellation.Token);
+
+        LaserGameStatusStore.OnStatusUpdated += OnGameStatusUpdated;
+        _watchingGames = true;
+    }
+
+    private async Task RecheckLoopAsync(PeriodicTimer timer, CancellationToken token)
+    {
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                if (!PreviewMode || !AnyConditions)
+                {
+                    continue;
+                }
+
+                await InvokeAsync(async () =>
+                {
+                    await RefreshVisibilityAsync();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+        {
+            // The dashboard closed.
+        }
+    }
+
+    private void OnGameStatusUpdated(Lanyard.Shared.DTO.LaserGameStatusDTO status)
+    {
+        if (!PreviewMode || !Widgets.Any(w => WidgetShowConditions.Parse(w.ShowConditionsJson).Any(c => c.ConditionType == AutomationConditionType.ClientGameStatus)))
+        {
+            return;
+        }
+
+        _ = InvokeAsync(() =>
+        {
+            _visibilityNowUtc = DateTime.UtcNow;
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        if (_watchingGames)
+        {
+            LaserGameStatusStore.OnStatusUpdated -= OnGameStatusUpdated;
+        }
+
+        _visibilityCancellation?.Cancel();
+        _visibilityCancellation?.Dispose();
+        _visibilityTimer?.Dispose();
+    }
+
+    protected override async Task OnParametersSetAsync()
     {
         ApplyLayout(DashboardLayoutEngine.Normalize(Widgets.Select(ToRect)));
+        await RefreshVisibilityAsync();
     }
 
     // Desktop order (top-to-bottom, then left-to-right) is the render order, and each widget's
@@ -133,22 +221,6 @@
                 widget.GridW = rect.W;
                 widget.GridH = rect.H;
             }
-        }
-    }
-
-    private void Move(DashboardWidget widget, int dx, int dy) =>
-        ApplyLayout(DashboardLayoutEngine.Move([.. Widgets.Select(ToRect)], widget.Id, widget.GridX + dx, widget.GridY + dy));
-
-    private void Resize(DashboardWidget widget, int dw, int dh) =>
-        ApplyLayout(DashboardLayoutEngine.Resize([.. Widgets.Select(ToRect)], widget.Id, widget.GridW + dw, widget.GridH + dh));
-
-    private void Remove(DashboardWidget widget) => Widgets.Remove(widget);
-
-    private async Task ConfigureAsync(DashboardWidget widget)
-    {
-        if (await WidgetConfigurator.ConfigureAsync(widget))
-        {
-            StateHasChanged();
         }
     }
 

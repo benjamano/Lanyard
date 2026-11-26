@@ -30,6 +30,7 @@ export const meta = {
   title: 'Publishing the rota',        // title card, also read aloud
   subtitle: 'For managers',            // optional, defaults to "Lanyard walkthrough"
   start: '/rota',                      // opened before step 1 (not narrated)
+  // cookies: [{ name: 'lanyard_terminal', value: '<raw token>' }],  // optional, set before the first load
 };
 
 export default [

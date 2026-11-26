@@ -1,3 +1,4 @@
+using Lanyard.Tests.TestUtilities;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
@@ -329,7 +330,7 @@ public class RotaAutoBuildServiceTests
 
         await using (ApplicationDbContext ctx = new(w.Options))
         {
-            ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = w.Ipswich.CompanyId, Feature = CompanyFeature.Parties, IsEnabled = false });
+            await TestFeatures.SwitchOffForCompanyAsync(ctx, w.Ipswich.CompanyId, CompanyFeature.Parties);
             await ctx.SaveChangesAsync();
         }
 

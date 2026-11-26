@@ -19,6 +19,7 @@ public static class OperationsAlertFormat
         OperationsAlertType.TrainingOverdue => "Training overdue",
         OperationsAlertType.StaffDocumentExpiring => "Document expiring",
         OperationsAlertType.StaffDocumentExpired => "Document expired",
+        OperationsAlertType.ChecklistMissed => "Checklist missed",
         _ => type.ToString()
     };
 

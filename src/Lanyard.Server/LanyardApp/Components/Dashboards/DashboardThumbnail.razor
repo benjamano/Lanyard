@@ -1,0 +1,27 @@
+@* A dashboard's layout in miniature: each widget as a tinted block with its icon, on the same
+   12-column grid. Drawn from the widgets' places only, so there's no screenshot to keep up to date. *@
+
+<div class="dashboard-thumbnail @(Widgets.Count == 0 ? "is-empty" : null)"
+     style="--thumb-rows: @Math.Max(3, Widgets.Select(w => w.Y + w.H).DefaultIfEmpty(0).Max());"
+     aria-hidden="true">
+    @if (Widgets.Count == 0)
+    {
+        <span class="dashboard-thumbnail-empty">No widgets yet</span>
+    }
+    @foreach (DashboardCardWidget widget in Widgets)
+    {
+        WidgetDescriptor? descriptor = DashboardWidgetCatalog.Get(widget.Type);
+        <div class="dashboard-thumbnail-block category-@((descriptor?.Category ?? WidgetCategory.General).ToString().ToLowerInvariant())"
+             style="grid-column: @(widget.X + 1) / span @widget.W; grid-row: @(widget.Y + 1) / span @widget.H;">
+            @if (descriptor is not null && widget.W >= 2)
+            {
+                <FluentIcon Value="@descriptor.Icon()" Width="14px" />
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required IReadOnlyList<DashboardCardWidget> Widgets { get; set; }
+}

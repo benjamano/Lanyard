@@ -1,3 +1,4 @@
+using Lanyard.Tests.TestUtilities;
 #nullable enable
 
 using Lanyard.Application.Services;
@@ -1049,6 +1050,7 @@ public class AutomationRuleServiceTests
         Location location = new() { CompanyId = companyId, Name = $"Location {companyId}", IsActive = isActive, CreateDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow };
         ctx.Locations.Add(location);
         await ctx.SaveChangesAsync();
+        await TestFeatures.SwitchOnEverywhereAsync(ctx);
 
         return location.Id;
     }
@@ -1447,6 +1449,110 @@ public class AutomationRuleServiceTests
         CollectionAssert.AreEqual(new[] { "Zebra", "Apple", "Copy of Zebra" }, rules.Data!.Select(r => r.Name).ToArray());
     }
 
+    private sealed class FakeCurrentUser(string? userId) : Lanyard.Application.Services.Authentication.ICurrentUserAccessor
+    {
+        public Task<Result<string>> GetCurrentUserIdAsync() => Task.FromResult(userId == null
+            ? Result<string>.Fail("User is not authenticated")
+            : Result<string>.Ok(userId));
+    }
+
+    private static (AutomationRuleService Rules, RecordingActionExecutor Executor) TenantServiceWithUser(
+        DbContextOptions<ApplicationDbContext> options, int companyId, string? userId)
+    {
+        Mock<IDbContextFactory<ApplicationDbContext>> tenantFactory = new();
+        tenantFactory
+            .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new ApplicationDbContext(options, new FixedTenantProvider(companyId)));
+
+        RecordingActionExecutor executor = new();
+        AutomationEngineService engine = new(GetFactory(options), [executor], new LaserGameStatusStore(), new Lanyard.Tests.Services.OperationsAlerts.RecordingOperationsAlertWriter(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance, new Lanyard.Tests.Services.Automation.NoPartiesSchedule());
+
+        return (new AutomationRuleService(tenantFactory.Object, engine, new FakeCurrentUser(userId)), executor);
+    }
+
+    private static async Task<AutomationRule> SeedTestableRuleAsync(DbContextOptions<ApplicationDbContext> options)
+    {
+        Guid kioskId = await SeedKioskAsync(options, companyId: 1);
+        AutomationRule rule = BuildRule(kioskId, name: "Winner lights");
+        rule.CompanyId = 1;
+        await SeedRuleDirectlyAsync(options, rule);
+
+        await using ApplicationDbContext ctx = new(options);
+        ctx.Users.Add(new UserProfile { Id = "user-sam", UserName = "sam", FirstName = "Sam", LastName = "Taylor" });
+        await ctx.SaveChangesAsync();
+
+        return rule;
+    }
+
+    [TestMethod]
+    public async Task TestRunRule_RunsAsTheSignedInUser()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        AutomationRule rule = await SeedTestableRuleAsync(options);
+        (AutomationRuleService service, RecordingActionExecutor executor) = TenantServiceWithUser(options, 1, "user-sam");
+
+        Result<AutomationTestRunResult> result = await service.TestRunRuleAsync(rule.Id, checkConditions: false);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.HasCount(1, executor.ExecutedActionIds);
+
+        await using ApplicationDbContext ctx = new(options);
+        AutomationRuleExecution execution = await ctx.AutomationRuleExecutions.SingleAsync();
+        Assert.AreEqual("Manual test by Sam Taylor", execution.TriggerEvent);
+        Assert.AreEqual("user-sam", execution.TestRunByUserId);
+        Assert.IsTrue(execution.IsTestRun);
+    }
+
+    [TestMethod]
+    public async Task TestRunRule_CannotTestAnotherCompanysRule()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        AutomationRule rule = await SeedTestableRuleAsync(options);
+        (AutomationRuleService service, RecordingActionExecutor executor) = TenantServiceWithUser(options, 2, "user-sam");
+
+        Result<AutomationTestRunResult> result = await service.TestRunRuleAsync(rule.Id, checkConditions: false);
+
+        Assert.AreEqual("Rule not found.", result.Error);
+        Assert.IsEmpty(executor.ExecutedActionIds);
+    }
+
+    [TestMethod]
+    public async Task TestRunRule_NeedsASignedInUser()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        AutomationRule rule = await SeedTestableRuleAsync(options);
+        (AutomationRuleService service, RecordingActionExecutor executor) = TenantServiceWithUser(options, 1, null);
+
+        Result<AutomationTestRunResult> result = await service.TestRunRuleAsync(rule.Id, checkConditions: false);
+
+        Assert.AreEqual("Only a signed-in user can test a rule.", result.Error);
+        Assert.IsEmpty(executor.ExecutedActionIds);
+    }
+
+    [TestMethod]
+    public async Task DescribeActions_NamesTheKioskAndScene_InOrder()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid kioskId = await SeedKioskAsync(options, companyId: 1);
+        Guid sceneId = await SeedDmxSceneAsync(options, kioskId, 1);
+
+        AutomationRule rule = BuildRule(kioskId);
+        rule.CompanyId = 1;
+        rule.Actions.Add(DmxAction(kioskId, sceneId));
+        rule.Actions.Add(ActionOf(AutomationActionTypes.MusicControl, $"{{\"TargetClientId\":\"{kioskId}\",\"Operation\":\"Pause\"}}"));
+        rule.Actions[2].SortOrder = 2;
+        await SeedRuleDirectlyAsync(options, rule);
+
+        (AutomationRuleService service, _) = TenantServiceWithUser(options, 1, "user-sam");
+
+        Result<List<AutomationActionDescription>> result = await service.DescribeActionsAsync(rule.Id);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        CollectionAssert.AreEqual(
+            new[] { "TestAction", "Start lighting scene 'Scene' on Kiosk 1", "Pause the music on Kiosk 1" },
+            result.Data!.Select(d => d.Text).ToArray());
+    }
+
     private static async Task DrainAsync(AutomationEngineService engine)
     {
         while (engine.Reader.TryRead(out GameStatusTransitionEvent? ev))
@@ -1529,7 +1635,7 @@ public class AutomationRuleServiceTests
 
         await using (ApplicationDbContext ctx = new(options))
         {
-            ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = 1, Feature = CompanyFeature.Parties, IsEnabled = false });
+            await TestFeatures.SwitchOffForCompanyAsync(ctx, 1, CompanyFeature.Parties);
             await ctx.SaveChangesAsync();
         }
 

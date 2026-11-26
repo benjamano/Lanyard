@@ -2,7 +2,9 @@ using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Application.Services.Locations;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 
 namespace Lanyard.Application.Services.Themes;
@@ -10,9 +12,11 @@ namespace Lanyard.Application.Services.Themes;
 public class SeasonalThemeService(
     IDbContextFactory<ApplicationDbContext> factory,
     TimeProvider timeProvider,
+    IMemoryCache cache,
     ILogger<SeasonalThemeService> logger) : ISeasonalThemeService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly IMemoryCache _cache = cache;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger<SeasonalThemeService> _logger = logger;
 
@@ -65,6 +69,12 @@ public class SeasonalThemeService(
     {
         try
         {
+            // Asked on every new circuit by the staff layout; only ever changed by SetUserOptInAsync.
+            if (_cache.TryGetValue(BrandingCache.SeasonalOptIn(userId), out bool cached))
+            {
+                return Result<bool>.Ok(cached);
+            }
+
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             bool? show = await ctx.Users
@@ -74,7 +84,14 @@ public class SeasonalThemeService(
                 .Select(x => (bool?)x.ShowSeasonalThemes)
                 .FirstOrDefaultAsync();
 
-            return show is bool value ? Result<bool>.Ok(value) : Result<bool>.Fail("Account not found.");
+            if (show is not bool value)
+            {
+                return Result<bool>.Fail("Account not found.");
+            }
+
+            _cache.Set(BrandingCache.SeasonalOptIn(userId), value, BrandingCache.Ttl);
+
+            return Result<bool>.Ok(value);
         }
         catch (Exception ex)
         {
@@ -99,6 +116,8 @@ public class SeasonalThemeService(
 
             user.ShowSeasonalThemes = show;
             await ctx.SaveChangesAsync();
+
+            _cache.Remove(BrandingCache.SeasonalOptIn(userId));
 
             return Result<bool>.Ok(show);
         }

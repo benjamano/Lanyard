@@ -1,0 +1,19 @@
+@inherits WidgetSettingsBase<OperationsAlertsWidget>
+
+<div class="widget-settings">
+    <FluentSelect TOption="SeverityOption" TValue="string" Items="@Options" OptionText="@(x => x.Label)" OptionValue="@(x => x.Value)"
+                  Label="Show" Width="100%"
+                  Value="@(W.AlertMinimumSeverity is OperationsAlertSeverity s ? ((int)s).ToString() : "")"
+                  ValueChanged="@((string? v) => SetAsync(() => W.AlertMinimumSeverity = int.TryParse(v, out int severity) ? (OperationsAlertSeverity)severity : null, "Changed which alerts show"))" />
+    <FluentSwitch Value="@W.AlertOnlyUnacknowledged" ValueChanged="@(v => SetAsync(() => W.AlertOnlyUnacknowledged = v, v ? "Hid acknowledged alerts" : "Showed acknowledged alerts"))" Label="Hide alerts someone has acknowledged" />
+</div>
+@code {
+    private record SeverityOption(string Value, string Label);
+
+    private static readonly List<SeverityOption> Options =
+    [
+        new("", "Every alert"),
+        new(((int)OperationsAlertSeverity.Warning).ToString(), "Warnings and critical"),
+        new(((int)OperationsAlertSeverity.Critical).ToString(), "Critical only")
+    ];
+}

@@ -1,0 +1,8 @@
+@inherits WidgetSettingsBase<WhoIsOnTodayWidget>
+
+<div class="widget-settings">
+    <LocationPicker Value="@W.LocationId" ValueChanged="@(v => SetAsync(() => W.LocationId = v, "Changed the location"))"
+                    NoneText="Whoever is viewing" ManagersPickTheirOwn="true" />
+    <div class="widget-settings-note">With "Whoever is viewing", each person sees their own location and a signed-out screen shows nothing. Picking a location lets a kiosk screen show it too, using first names only.</div>
+    <FluentSwitch Value="@W.ShowClockStatus" ValueChanged="@(v => SetAsync(() => W.ShowClockStatus = v, v ? "Showed clock-in status" : "Hid clock-in status"))" Label="Show who has clocked in" />
+</div>

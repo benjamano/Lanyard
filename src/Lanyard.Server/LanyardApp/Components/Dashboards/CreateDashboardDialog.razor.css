@@ -1,0 +1,61 @@
+.create-dashboard {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.create-dashboard-label {
+    font-weight: var(--fontWeightSemibold);
+    margin-top: 4px;
+}
+
+.create-dashboard-templates {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 10px;
+}
+
+.create-dashboard-template {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusLarge);
+    background: var(--colorNeutralBackground1);
+    cursor: pointer;
+}
+
+.create-dashboard-template:hover {
+    background: var(--colorNeutralBackground1Hover);
+}
+
+.create-dashboard-template:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+    outline-offset: 2px;
+}
+
+.create-dashboard-template.is-selected {
+    border-color: var(--colorBrandStroke1);
+    box-shadow: inset 0 0 0 1px var(--colorBrandStroke1);
+    background: var(--colorBrandBackground2);
+}
+
+.create-dashboard-template-name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: var(--fontWeightSemibold);
+}
+
+.create-dashboard-template-name ::deep svg {
+    fill: currentColor;
+}
+
+.create-dashboard-template-description {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}

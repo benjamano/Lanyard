@@ -1,11 +1,16 @@
 <HelpTab>
-    <FluentText>Select the cog above a widget while editing to change its settings.</FluentText>
+    <FluentText>Select a widget in the dashboard designer to change its settings on the right.</FluentText>
 
     <HelpSection Title="For everyone">
         <ul>
             <li><strong>Greeting</strong>: says hello to whoever is signed in.</li>
-            <li><strong>Digital Clock</strong>: 24-hour, date and milliseconds options.</li>
-            <li><strong>Text Area</strong>: your own formatted text.</li>
+            <li><strong>Clock</strong>: 24-hour, date and milliseconds options.</li>
+            <li><strong>Text</strong>: your own formatted text, typed in the widget's settings. It's read-only on home
+                screens and kiosks, unless you turn on <strong>Can be edited on the kiosk screen</strong>: then a kiosk
+                showing it gets an <strong>Edit</strong> button, so staff can update a notice board at the screen itself
+                and press <strong>Save</strong>. Turn on <strong>Save automatically as people type</strong> as well, and the
+                kiosk shows the text ready to type into, saving a moment after typing stops, with no Edit or Save button.
+                While kiosk editing is on, the words belong to the kiosk and are shown read-only in the designer.</li>
             <li><strong>Announcements</strong>: live announcements for the viewer's location, pinned first.</li>
             <li><strong>My Training</strong>: the viewer's own courses.</li>
             <li><strong>My Shifts</strong>: the viewer's upcoming shifts, and optionally time off.</li>
@@ -21,7 +26,7 @@
                 If your company uses Parties, it also shows the parties, children and party games in the range, and
                 hours with a party on are never listed as out of line.</li>
             <li><strong>What's On Today</strong>: today's parties, children and staff on, and the parties still to come. Click
-                one to open it, or <strong>View the day</strong> to open <a href="/manage/whats-on">What's On</a>. Use its cog
+                one to open it, or <strong>View the day</strong> to open <a href="/manage/whats-on">What's On</a>. Select it in the designer
                 to set how many to list and, for Admins, which location.</li>
         </ul>
     </HelpSection>
@@ -41,8 +46,14 @@
                 or off.</li>
             <li><strong>Kiosk Health</strong>: which kiosks are online, struggling or offline.</li>
             <li><strong>Operations Alerts</strong>: the open alerts for the locations you manage, with Acknowledge and
-                Resolve. Use its cog in the editor to show only warnings and critical alerts, or hide ones someone has
+                Resolve. Select it in the designer to show only warnings and critical alerts, or hide ones someone has
                 acknowledged. On a kiosk dashboard nobody is signed in, so it shows no alerts.</li>
+            <li><strong>Checklist Card</strong>: one checklist with its tasks, for a wall screen such as a kiosk. Right-click it
+                in the editor to choose the checklist and whether it can be ticked on a kiosk, where ticks are recorded as the
+                kiosk. It can hide itself once every task is ticked.</li>
+            <li><strong>Checklists Today</strong>: today's checklists where the viewer is working, with how many tasks are done
+                and whether each is overdue. Select it in the designer and choose <strong>Widget settings…</strong> to hide
+                checklists that are already done. On a kiosk dashboard nobody is signed in, so it asks you to sign in.</li>
         </ul>
     </HelpSection>
 </HelpTab>
