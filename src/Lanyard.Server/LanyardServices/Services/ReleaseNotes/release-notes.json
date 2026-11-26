@@ -1140,5 +1140,14 @@
       "Or turn on Save automatically as people type, so the text is always ready to type into on the kiosk and saves itself a moment after typing stops.",
       "Text widgets stay read-only everywhere else, and saving the dashboard in the designer no longer overwrites what was typed on the kiosk."
     ]
+  },
+  {
+    "version": "1.4.40",
+    "releaseDate": "2026-11-26",
+    "summary": "Booking import only runs where Parties is switched on.",
+    "details": [
+      "The Just Step Online booking import now only brings bookings in at locations that have Parties switched on, and the Booking Import page is hidden while Parties is off.",
+      "A failed booking import now shows as Booking import failed on the Alerts page, with an Open Booking Import link."
+    ]
   }
 ]

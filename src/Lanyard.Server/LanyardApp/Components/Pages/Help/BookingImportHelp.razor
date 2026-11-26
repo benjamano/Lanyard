@@ -1,5 +1,6 @@
 @page "/help/booking-import"
 @attribute [Authorize(Roles = "Admin")]
+@attribute [RequiresFeature(CompanyFeature.Parties)]
 
 @using Microsoft.AspNetCore.Authorization
 @using Lanyard.App.Components.Help.BookingImport

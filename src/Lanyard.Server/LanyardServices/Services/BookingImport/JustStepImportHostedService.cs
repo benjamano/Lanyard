@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Features;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.Enum;
@@ -84,6 +85,10 @@ public sealed class JustStepImportHostedService(
                 .AsNoTracking()
                 .TagWithCallSite()
                 .ToListAsync(cancellationToken);
+
+            // Only locations that use Parties, since that's where the bookings go.
+            HashSet<int> partiesOn = await CompanyFeatureQueries.GetEnabledLocationIdsAsync(ctx, CompanyFeature.Parties, cancellationToken);
+            candidates = [.. candidates.Where(x => partiesOn.Contains(x.LocationId))];
 
             if (candidates.Count == 0)
             {

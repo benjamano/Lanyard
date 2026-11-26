@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Features;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Parties;
 using Lanyard.Application.Services.OperationsAlerts;
@@ -273,6 +274,16 @@ public sealed class BookingImportService : IBookingImportService
         try
         {
             await using ApplicationDbContext ctx = await _systemFactory.CreateDbContextAsync(cancellationToken);
+
+            // Bookings land in Parties, so nothing is fetched or written for a location without it, even
+            // when the import was set up before Parties was switched off there.
+            if (!await CompanyFeatureQueries.IsEnabledForLocationAsync(ctx, locationId, CompanyFeature.Parties, cancellationToken))
+            {
+                run.Status = BookingImportRunStatus.Skipped;
+                run.Error = "Parties is switched off at this location.";
+                await ResolveAlertAsync(companyId, locationId, cancellationToken);
+                return await SaveRunAsync(ctx, run, cancellationToken);
+            }
 
             BookingImportSettings? settings = await ctx.BookingImportSettings
                 .AsNoTracking()
