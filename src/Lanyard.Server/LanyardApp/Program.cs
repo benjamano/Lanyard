@@ -218,6 +218,8 @@ builder.Services.Configure<OperationsAlertOptions>(builder.Configuration.GetSect
 builder.Services.AddHostedService<OperationsAlertRetentionHostedService>();
 builder.Services.AddHostedService<MissedClockInAlertHostedService>();
 builder.Services.AddHostedService<ChecklistMissedAlertHostedService>();
+builder.Services.AddSingleton<IPartyStaffingWatch, PartyStaffingWatch>();
+builder.Services.AddHostedService<PartyStaffingRecheckHostedService>();
 builder.Services.AddHostedService<ComplianceAlertSweepHostedService>();
 builder.Services.AddSingleton<IKioskClientListCache, KioskClientListCache>();
 builder.Services.AddScoped<IShiftClaimService, ShiftClaimService>();

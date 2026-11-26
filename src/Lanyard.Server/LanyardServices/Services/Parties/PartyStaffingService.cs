@@ -9,10 +9,15 @@ using Microsoft.Extensions.Logging;
 
 namespace Lanyard.Application.Services.Parties;
 
+// staffingWatch is optional only so tests that don't care about it can leave it out. A rule change
+// can change what every party needs, so it re-checks all the location's watched days.
 public class PartyStaffingService(
     IDbContextFactory<ApplicationDbContext> factory,
-    ILogger<PartyStaffingService> logger) : IPartyStaffingService
+    ILogger<PartyStaffingService> logger,
+    IPartyStaffingWatch? staffingWatch = null) : IPartyStaffingService
 {
+    private readonly IPartyStaffingWatch? _staffingWatch = staffingWatch;
+
     private const string NoAccess = "You can only change party settings for your own location.";
 
     public const int MaxStaff = 20;
@@ -152,6 +157,11 @@ public class PartyStaffingService(
 
             _logger.LogInformation("Party staffing rule {RuleId} saved for {LocationId} by {ActingUserId}", target.Id, target.LocationId, actingUserId);
 
+            if (_staffingWatch is not null)
+            {
+                await _staffingWatch.CheckWatchedDaysAsync(target.LocationId, actingUserId);
+            }
+
             target.StaffPosition = position;
             return Result<PartyStaffingRule>.Ok(target);
         }
@@ -182,6 +192,11 @@ public class PartyStaffingService(
             await ctx.SaveChangesAsync();
 
             _logger.LogInformation("Party staffing rule {RuleId} removed by {ActingUserId}", ruleId, actingUserId);
+
+            if (_staffingWatch is not null)
+            {
+                await _staffingWatch.CheckWatchedDaysAsync(rule.LocationId, actingUserId);
+            }
 
             return Result<bool>.Ok(true);
         }

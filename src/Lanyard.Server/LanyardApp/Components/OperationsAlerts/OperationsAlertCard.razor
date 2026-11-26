@@ -85,13 +85,14 @@
     public bool ShowLocation { get; set; }
 
     // Admins can open every linked page. The kiosk and automation pages are Admin-only, so a
-    // Manager only gets the link for staff alerts (Timesheets and Compliance are theirs too).
+    // Manager only gets the link for staff alerts (Timesheets and Compliance are theirs too), and
+    // for checklists and party staffing (their own Checklists and Rota pages).
     [Parameter]
     public bool ShowLink { get; set; }
 
     private bool CanOpenLink => ShowLink || Alert.Type is OperationsAlertType.MissedClockIn
         or OperationsAlertType.TrainingOverdue or OperationsAlertType.StaffDocumentExpiring or OperationsAlertType.StaffDocumentExpired
-        or OperationsAlertType.ChecklistMissed;
+        or OperationsAlertType.ChecklistMissed or OperationsAlertType.PartyStaffingOutOfDate;
 
     [Parameter]
     public bool Compact { get; set; }
@@ -113,6 +114,7 @@
         OperationsAlertType.TrainingOverdue or OperationsAlertType.StaffDocumentExpiring or OperationsAlertType.StaffDocumentExpired => "Open Compliance",
         OperationsAlertType.ChecklistMissed => "Open Checklists Today",
         OperationsAlertType.PartyBookingImportFailed => "Open Booking Import",
+        OperationsAlertType.PartyStaffingOutOfDate => "Rerun Auto-build for that day",
         _ => "Open"
     };
 }

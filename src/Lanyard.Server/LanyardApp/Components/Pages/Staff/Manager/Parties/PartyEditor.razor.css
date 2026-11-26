@@ -189,3 +189,12 @@
     gap: 12px;
     width: 100%;
 }
+
+/* The "party staffing out of date" banner and its Rerun Auto-build button, stacked so the button
+   never squeezes the text on a phone. */
+.party-staffing-alert {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+}

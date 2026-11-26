@@ -21,6 +21,7 @@ public static class OperationsAlertFormat
         OperationsAlertType.StaffDocumentExpired => "Document expired",
         OperationsAlertType.ChecklistMissed => "Checklist missed",
         OperationsAlertType.PartyBookingImportFailed => "Booking import failed",
+        OperationsAlertType.PartyStaffingOutOfDate => "Party staffing out of date",
         _ => type.ToString()
     };
 
