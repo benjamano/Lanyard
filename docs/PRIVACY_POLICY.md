@@ -16,7 +16,8 @@ protection matters is **Benjamin Mercer, benmercer76@btinternet.com**.
 
 | Category | Data | Where |
 |---|---|---|
-| Staff account | Username, email, first/last name, date of birth, preferred language, hashed password | `UserProfile` |
+| Staff account | Username, email, first/last name, preferred language, hashed password | `UserProfile` |
+| Young workers | Date of birth, for staff under 18 only | `YoungWorkerStatus` |
 | Staff attendance | Clock-in/out times, shifts, rota assignments | ClockIn / Shift / Rota records |
 | Location checklists | Which opening, closing and other checklist tasks someone ticked, when, where (phone or clock-in terminal), and any note or reading they entered | Checklist completion records |
 | Device/network | Client device IP addresses, MAC/physical addresses of network interfaces | `Client`, network interface records |
@@ -32,8 +33,13 @@ protection matters is **Benjamin Mercer, benmercer76@btinternet.com**.
 We do **not** ask for special-category data, but staff documents can contain it: an identity
 document or right-to-work check may show nationality, and a DBS check shows criminal-record
 information. These files are kept private to Admins and the person's Managers, are never shown
-in the File Manager, and are deleted when the person's data is erased. Note that **date of
-birth** is collected for staff; if any data subjects are minors, additional safeguards apply.
+in the File Manager, and are deleted when the person's data is erased.
+
+Staff can be under 18. A date of birth is collected **only for staff under 18**: a Manager records
+it so the rota keeps them within the legal limits on young workers' hours, breaks, rest and night
+work, and so anyone under school leaving age isn't rostered automatically. Only Admins and Managers
+of their company can see it; the person only sees that young worker hours apply to them. It is
+deleted automatically on their 18th birthday, and on erasure.
 
 ## 3. Why we process it and our legal basis
 
@@ -41,6 +47,7 @@ birth** is collected for staff; if any data subjects are minors, additional safe
 |---|---|
 | Managing staff accounts and access control | Contract / legitimate interests |
 | Recording working time (clock-in, shifts, rota) | Legal obligation (employment records) / contract |
+| Keeping staff under 18 within young worker limits | Legal obligation (Working Time Regulations 1998) |
 | Recording who completed location checklists (opening, closing, safety checks) | Legitimate interests (running the venue safely) / contract |
 | Checking the right to work, identity, DBS and qualifications (staff documents) | Legal obligation (right-to-work checks) / contract; criminal-record data under the relevant Schedule 1 condition of the Data Protection Act 2018 |
 | Training, time off, chat and notifications | Contract / legitimate interests |

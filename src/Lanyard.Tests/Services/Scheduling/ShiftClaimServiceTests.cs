@@ -169,6 +169,94 @@ public class ShiftClaimServiceTests
         StringAssert.Contains(wrongPosition.Error, "don't work as CSA");
     }
 
+    private static async Task MarkUnder18Async(World w, UserProfile user)
+    {
+        await using ApplicationDbContext ctx = new(w.Options);
+        ctx.YoungWorkerStatuses.Add(new YoungWorkerStatus { Id = Guid.NewGuid(), CompanyId = w.Company.Id, UserId = user.Id, DateOfBirth = DateOnly.FromDateTime(Day).AddYears(-17) });
+        await ctx.SaveChangesAsync();
+    }
+
+    [TestMethod]
+    public async Task PickUp_YoungWorker_RefusedForANightShift_AdultAllowed()
+    {
+        World w = await SeedAsync();
+        await MarkUnder18Async(w, w.Amy);
+        Shift late = await ShiftAsync(w, null, startHour: 18, hours: 5);
+
+        Result<ShiftClaim> amy = await w.Service.PickUpAsync(w.Amy.Id, late.Id, null);
+        Result<ShiftClaim> tom = await w.Service.PickUpAsync(w.Tom.Id, late.Id, null);
+
+        Assert.IsFalse(amy.IsSuccess);
+        StringAssert.Contains(amy.Error, "Under 18");
+        Assert.IsTrue(tom.IsSuccess, tom.Error);
+    }
+
+    [TestMethod]
+    public async Task Decide_YoungWorker_ApprovalRefusedOnceTheDayWouldBeTooLong()
+    {
+        World w = await SeedAsync();
+        Shift open = await ShiftAsync(w, null, startHour: 9, hours: 4);
+
+        Result<ShiftClaim> claim = await w.Service.PickUpAsync(w.Amy.Id, open.Id, null);
+        Assert.IsTrue(claim.IsSuccess, claim.Error);
+
+        // Since asking, Amy has been marked under 18 and given another 5 hours that day.
+        await MarkUnder18Async(w, w.Amy);
+        await ShiftAsync(w, w.Amy.Id, startHour: 13, hours: 5);
+
+        Result<bool> decided = await w.Service.DecideAsync(w.ManagerScope, claim.Data!.Id, true, null, w.Manager.Id);
+
+        Assert.IsFalse(decided.IsSuccess);
+        StringAssert.Contains(decided.Error, "limit is 8 h a day");
+        Assert.IsNull((await ReloadAsync(w, open.Id)).UserId);
+    }
+
+    [TestMethod]
+    public async Task Release_OpenShiftAnnouncement_SkipsAYoungWorkerWhoCantTakeIt()
+    {
+        World w = await SeedAsync();
+        await MarkUnder18Async(w, w.Amy);
+        Shift late = await ShiftAsync(w, w.Priya.Id, startHour: 18, hours: 5);
+
+        Result<bool> released = await w.Service.ReleaseShiftAsync(w.ManagerScope, late.Id, w.Manager.Id);
+
+        Assert.IsTrue(released.IsSuccess, released.Error);
+        List<string> told = Told(w, NotificationTopic.OpenShift);
+        CollectionAssert.Contains(told, w.Tom.Id);
+        CollectionAssert.DoesNotContain(told, w.Amy.Id, "the shift runs into the night, so Amy (under 18) isn't told about it");
+    }
+
+    [TestMethod]
+    public async Task OfferSwap_YoungWorker_CantOfferForANightShift()
+    {
+        World w = await SeedAsync();
+        await MarkUnder18Async(w, w.Amy);
+        Shift toms = await ShiftAsync(w, w.Tom.Id, startHour: 18, hours: 5);
+        Shift amys = await ShiftAsync(w, w.Amy.Id, startHour: 9, hours: 4, dayOffset: 1);
+
+        ShiftClaim swap = (await w.Service.RequestSwapAsync(w.Tom.Id, toms.Id, null)).Data!;
+        Result<ShiftClaim> offer = await w.Service.OfferSwapAsync(w.Amy.Id, swap.Id, amys.Id);
+
+        Assert.IsFalse(offer.IsSuccess);
+        StringAssert.Contains(offer.Error, "Under 18");
+    }
+
+    [TestMethod]
+    public async Task OfferSwap_YoungWorker_ShiftTheyGiveUpDoesntCountTowardsTheDay()
+    {
+        World w = await SeedAsync();
+        await MarkUnder18Async(w, w.Amy);
+
+        // Amy works 09-14; taking Tom's 15-19 as well would be 9 h, but she hands her 09-14 to Tom.
+        Shift amys = await ShiftAsync(w, w.Amy.Id, startHour: 9, hours: 5);
+        Shift toms = await ShiftAsync(w, w.Tom.Id, startHour: 15, hours: 4);
+
+        ShiftClaim swap = (await w.Service.RequestSwapAsync(w.Tom.Id, toms.Id, null)).Data!;
+        Result<ShiftClaim> offer = await w.Service.OfferSwapAsync(w.Amy.Id, swap.Id, amys.Id);
+
+        Assert.IsTrue(offer.IsSuccess, offer.Error);
+    }
+
     [TestMethod]
     public async Task PickUp_RefusedOnApprovedTimeOff()
     {
