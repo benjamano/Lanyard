@@ -1011,22 +1011,7 @@
       "The Week view shows Monday to Sunday, side by side on a computer and one under another on a phone, with each day's parties and headcount. Click a day to open its timeline, or a party to open it.",
       "Totals at the top add up the parties, children and adults expected, hot and cold food, parties not paid in full with the balance due, and provisional holds.",
       "The Day view also lists everyone on the published rota that day, with their times and position.",
-      "New What's On Today dashboard widget (Admins and Managers): today's parties, children and staff on, and the parties still to come, with a link to the day's timeline. Right-click it to choose how many to list and, for Admins, which location.",
-      "New Duplicate rule button on Automation: it copies a rule with its trigger, conditions and actions as \"Copy of\" the rule's name, switched off, and opens it so you can change what's different before turning it on.",
-      "The Automation rule list now fits on a phone: each rule's name shows in full with its kiosk and trigger underneath, instead of being cut short with the switch and buttons off the side of the screen.",
-      "The Edit and Delete buttons on Automation, and the rule names in the Execution Log, now work with the keyboard and screen readers and show what they do when you hover over them.",
-      "Automation rules can now only drive your own company's kiosks, playlists, projection programs, lighting scenes and audio clips. This was already checked for lighting actions; music, projection and audio clip actions are now checked too, both when a rule is saved and every time it runs.",
-      "An automation rule saved while Lanyard was reloading its rules no longer goes unnoticed until the next save: it now starts working straight away.",
-      "New Identify displays button (the # button) for each kiosk on the Clients page, and at the top of a kiosk's Settings > Projection tab (Admins). For 8 seconds every screen on that kiosk shows a large number with its name, resolution and the program set up for it, so you can tell which Screen 1, 2 or 3 in Lanyard is which physical screen. Whatever is playing carries on underneath.",
-      "The Projection tab also lists each screen's details under the button, and marks a screen as Changed when Windows has renumbered the screens since the kiosk last reported them, for example after a screen was unplugged, so you can check its projection is still on the right screen.",
-      "Kiosks now tell Lanyard straight away when a screen is plugged in, unplugged or changes resolution, instead of only when they reconnect, and the kiosk self-test lists the screens it can see. Both need Lanyard Client 1.0.49.",
-      "Screens are now numbered Screen 1, Screen 2 and so on everywhere you pick or see one: the Screen pickers in Automation rules and the Projection Status and Button dashboard widgets, Add Projection, the Projection tab and the Screens window. Each Screen picker has the # Identify displays button beside it, as do Add Projection and the Screens window, so you can check which screen is which before choosing.",
-      "New Party time trigger for Automation rules: run lights, music or projection actions when a booked party starts, eats, plays laser tag or ends, at the time or up to 120 minutes before. Choose the location, and optionally one room.",
-      "A party time rule runs once for each party. Parties that reach the same moment together run it once, so two 2pm parties don't start the lights twice. Cancelled parties, provisional Just Step bookings and private hires don't run it.",
-      "Moving or cancelling a party, by hand or through the Just Step import, changes when its rules run straight away.",
-      "The Execution Log shows which party a party time run was for, with an Open party button, and never the child's name.",
-      "New \"A party is or isn't on\" condition for Automation rules: only run a rule while a booked party is on at a location (or in one room), or only while none is. For example, play the party version of the game lights during parties.",
-      "Training course sections can no longer contain scripts or other unsafe content. Only the formatting the course editor offers (headings, bold, italic, lists, links and images) is kept, including in sections saved before this change."
+      "New What's On Today dashboard widget (Admins and Managers): today's parties, children and staff on, and the parties still to come, with a link to the day's timeline. Right-click it to choose how many to list and, for Admins, which location."
     ]
   },
   {
@@ -1047,7 +1032,18 @@
       "New Rota > Checklists page (Managers and Admins): set up the routines a location runs, such as Opening, Closing or Party room reset, each with its tasks in order.",
       "Choose the days each checklist runs and when it's due: a number of minutes after opening or before closing (from the location's opening hours), a set time such as 10:00, or no set time. Days the location is closed are skipped.",
       "A checklist task can ask for just a tick, a tick with an optional note, or a number reading with a unit, such as a fridge temperature in °C. Reorder tasks with the up and down arrows.",
-      "A checklist can be limited to one position, such as Duty Manager for Closing; otherwise anyone on that day's rota can tick it. Checklists can be switched on or off per company under Companies & Locations."
+      "A checklist can be limited to one position, such as Duty Manager for Closing; otherwise anyone on that day's rota can tick it. Checklists can be switched on or off per company under Companies & Locations.",
+      "New Checklists page for staff: today's checklists where you're working, with each task ticked off on your phone. Your name and the time are recorded, a reading or note can be added where the task asks for one, and you can untick your own mistakes the same day.",
+      "New Rota > Checklists Today page for managers: each of today's checklists with who ticked what and when, Overdue once past its due time, and the last 14 days with anything Missed. Pick a day to see exactly what was done.",
+      "Checklists on the clock-in terminal: a Checklists button appears when there's one today. Tap your name, enter your clock-in PIN (it doesn't clock you in) and tick tasks; press Done when finished. Ticks say they were made on the terminal.",
+      "The clock-in terminal now warns before it closes the PIN pad or checklists for being left alone: a Still there? message counts down, and Keep going gives you the full time again.",
+      "Missed checklists show up on Operations Alerts: when a checklist goes past its due time with tasks left (or its day ends, if it has no set time), the location's Managers and the company's Admins get one Checklist missed alert and a push. It clears itself if the checklist is finished late.",
+      "New Checklists Today dashboard widget: today's checklists with how many tasks are done and whether each is overdue, with an option to hide the finished ones.",
+      "Dashboard widgets can now be shown only at certain times: while editing a dashboard, the eye button on a widget sets Show only when… with the same conditions as automation rules (time of day, days of the week, a kiosk in or out of a game, a location open or closed). Outside them the widget's space stays empty.",
+      "New Checklist Card dashboard widget: one checklist with its tasks for a wall screen, such as the laser arena's closing checks on the laser kiosk after 18:00. It can allow ticking on a kiosk, where nobody signs in and the tick is recorded as the kiosk.",
+      "New Duplicate rule button on Automation: it copies a rule with its trigger, conditions and actions as \"Copy of\" the rule's name, switched off, and opens it so you can change what's different before turning it on.",
+      "The Automation rule list now fits on a phone: each rule's name shows in full with its kiosk and trigger underneath, instead of being cut short with the switch and buttons off the side of the screen.",
+      "The Edit and Delete buttons on Automation, and the rule names in the Execution Log, now work with the keyboard and screen readers and show what they do when you hover over them."
     ]
   },
   {
@@ -1064,6 +1060,89 @@
   },
   {
     "version": "1.4.33",
+    "releaseDate": "2026-11-22",
+    "summary": "A redesigned dashboard editor, and features can now be switched on per location.",
+    "details": [
+      "Drag widgets from a searchable, grouped widget list straight onto a dashboard, or tap one to add it.",
+      "Drag widgets to move them; anything in the way moves down to make room, with an outline showing where it will land.",
+      "Resize widgets by dragging their edges or corner.",
+      "Select a widget to change its title, size, phone visibility and settings in a side panel, and duplicate or remove it.",
+      "Text widgets are now typed in the side panel, and the dashboard updates as you type.",
+      "Keyboard shortcuts: arrow keys move the selected widget, Shift+arrows resize it, Delete removes it and Ctrl+D duplicates it.",
+      "Works with touch on tablets and phones, where the widget list and settings open as panels.",
+      "Choose a row height for each dashboard (compact, comfortable or spacious), and tidy up gaps in one go.",
+      "Fixed a deleted dashboard still showing on kiosk screens, and a designer tab left open being able to save it back.",
+      "Fixed the last few words typed into a Text widget being lost when saving straight away.",
+      "Features for on Companies & Locations now has a switch for every feature at every location. Staff only see the features switched on for the location they signed in to.",
+      "A new location starts with every feature off. Use All on under its name to switch everything on at once.",
+      "Every existing location keeps the features its company had, so nothing changes until you change it.",
+      "Company-wide things, such as calendar feeds, onboarding emails and audio clips in automation rules, work when at least one location has the feature."
+    ]
+  },
+  {
+    "version": "1.4.34",
+    "releaseDate": "2026-11-24",
+    "summary": "Test automation rules on demand and see what each action will do first.",
+    "details": [
+      "Admins can run enabled automation rules on demand. A confirmation shows the real actions that will happen before the test runs, and the result shows which actions passed or failed.",
+      "Tests appear in the Execution Log with a Test badge and who ran them. They don't raise Operations Alerts or count as the rule's last run."
+    ]
+  },
+  {
+    "version": "1.4.34",
+    "releaseDate": "2026-11-22",
+    "summary": "Every dashboard widget's settings are now in the designer's side panel, with no pop-ups.",
+    "details": [
+      "Select a widget in the dashboard designer to change its settings right there, and see the change on the dashboard straight away.",
+      "Kiosk, location and screen choices work the same way on every widget.",
+      "A widget that still needs something choosing, like a kiosk or an automation rule, says so on the dashboard and in its settings.",
+      "A widget whose kiosk has been removed now says so in its settings, instead of looking unset."
+    ]
+  },
+  {
+    "version": "1.4.35",
+    "releaseDate": "2026-11-22",
+    "summary": "Undo, redo and safer saving in the dashboard designer.",
+    "details": [
+      "Undo and redo in the dashboard designer, with toolbar buttons and Ctrl+Z / Ctrl+Shift+Z.",
+      "Press Ctrl+S to save. The designer shows whether there are unsaved changes.",
+      "Leaving the designer with unsaved changes now asks first.",
+      "If someone else saved the same dashboard while you were editing it, you're told when you save instead of overwriting their work without warning."
+    ]
+  },
+  {
+    "version": "1.4.36",
+    "releaseDate": "2026-11-22",
+    "summary": "Lay dashboards out for phones and kiosk TVs.",
+    "details": [
+      "New Desktop, Tablet, Phone and TV views in the dashboard designer.",
+      "Phone view: drag widgets into the order they should appear on phones and hide any you don't need there, with a live phone preview.",
+      "TV view: see a dashboard full-screen at 1920 × 1080, and turn on Fill the screen so it fits a kiosk TV exactly with no scrolling.",
+      "Home screens on phones now follow each dashboard's phone order and hidden widgets."
+    ]
+  },
+  {
+    "version": "1.4.37",
+    "releaseDate": "2026-11-22",
+    "summary": "A new Dashboards page, with ready-made layouts and copying.",
+    "details": [
+      "The Dashboards page now shows each dashboard as a card with a picture of its layout, and badges for your home screen, everyone's home screen and dashboards shown on kiosk TVs.",
+      "Start a new dashboard from a ready-made layout: Staff home screen, Manager's morning, Front desk or Arena scoreboard TV. It opens in the designer straight away.",
+      "Duplicate or delete a dashboard from its card."
+    ]
+  },
+  {
+    "version": "1.4.38",
+    "releaseDate": "2026-11-22",
+    "summary": "Text widgets can be edited on the kiosk screen.",
+    "details": [
+      "Turn on Can be edited on the kiosk screen in a Text widget's settings, and a kiosk showing it gets an Edit button, so staff can update notices at the screen itself.",
+      "Or turn on Save automatically as people type, so the text is always ready to type into on the kiosk and saves itself a moment after typing stops.",
+      "Text widgets stay read-only everywhere else, and saving the dashboard in the designer no longer overwrites what was typed on the kiosk."
+    ]
+  },
+  {
+    "version": "1.4.39",
     "releaseDate": "2026-11-22",
     "summary": "Keep staff under 18 within the UK young worker limits.",
     "details": [

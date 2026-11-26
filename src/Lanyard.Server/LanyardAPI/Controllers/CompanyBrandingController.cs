@@ -4,7 +4,10 @@ using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.Headers;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Net.Http.Headers;
 
 namespace Lanyard.API.Controllers
 {
@@ -15,14 +18,19 @@ namespace Lanyard.API.Controllers
         private readonly ICompanyLocationService _companyLocationService;
         private readonly IFileService _fileService;
         private readonly IAppIconService _appIconService;
+        private readonly IMemoryCache _cache;
         private readonly ILogger<CompanyBrandingController> _logger;
 
+        private static readonly TimeSpan VersionedMaxAge = TimeSpan.FromDays(365);
+        private static readonly TimeSpan UnversionedMaxAge = TimeSpan.FromMinutes(5);
+
         public CompanyBrandingController(ICompanyLocationService companyLocationService, IFileService fileService,
-            IAppIconService appIconService, ILogger<CompanyBrandingController> logger)
+            IAppIconService appIconService, IMemoryCache cache, ILogger<CompanyBrandingController> logger)
         {
             _companyLocationService = companyLocationService;
             _fileService = fileService;
             _appIconService = appIconService;
+            _cache = cache;
             _logger = logger;
         }
 
@@ -44,7 +52,6 @@ namespace Lanyard.API.Controllers
         // an admin explicitly designated as that company's public logo.
         [HttpGet("{companyId:int}/logo")]
         [AllowAnonymous]
-        [ResponseCache(Duration = 3600, Location = ResponseCacheLocation.Any)]
         public async Task<IActionResult> GetLogo(int companyId, CancellationToken cancellationToken)
         {
             Result<CompanyBrandingInfo> branding = await _companyLocationService.GetCompanyBrandingAsync(companyId);
@@ -54,31 +61,13 @@ namespace Lanyard.API.Controllers
                 return NotFound();
             }
 
-            Result<FileMetadata> meta = await _fileService.GetFileMetadataAsync(logoFileId, cancellationToken);
-            string? contentType = meta.Data?.ContentType;
-
-            // Resolved before opening the stream so a disallowed type never gets one opened.
-            // NotFound (rather than an explanatory error) matches this endpoint's don't-leak-details posture.
-            if (contentType is null || !AllowedImageContentTypes.Contains(contentType))
-            {
-                return NotFound();
-            }
-
-            Result<Stream> fileResult = await _fileService.DownloadFileAsync(logoFileId, cancellationToken);
-
-            if (!fileResult.Success || fileResult.Data is null)
-            {
-                return NotFound();
-            }
-
-            return File(fileResult.Data, contentType);
+            return await ServeBrandingImageAsync(logoFileId, cancellationToken);
         }
 
         // Same reasoning as GetLogo above: its own anonymous endpoint keyed by companyId,
         // never a raw file id, resolving BackgroundImageFileId server-side.
         [HttpGet("{companyId:int}/background")]
         [AllowAnonymous]
-        [ResponseCache(Duration = 3600, Location = ResponseCacheLocation.Any)]
         public async Task<IActionResult> GetBackgroundImage(int companyId, CancellationToken cancellationToken)
         {
             Result<CompanyBrandingInfo> branding = await _companyLocationService.GetCompanyBrandingAsync(companyId);
@@ -88,24 +77,73 @@ namespace Lanyard.API.Controllers
                 return NotFound();
             }
 
-            Result<FileMetadata> meta = await _fileService.GetFileMetadataAsync(backgroundImageFileId, cancellationToken);
-            string? contentType = meta.Data?.ContentType;
+            return await ServeBrandingImageAsync(backgroundImageFileId, cancellationToken);
+        }
 
+        // A file's bytes never change under its id - a new logo is a new upload with a new id - so
+        // the id is the ETag, and a URL whose ?v= is the current id can be cached by the browser for
+        // good. Anything else (no ?v=, or an old one, e.g. in an email sent before the logo changed)
+        // gets five minutes, and its revalidation is a 304 that never opens the file.
+        private async Task<IActionResult> ServeBrandingImageAsync(Guid fileId, CancellationToken cancellationToken)
+        {
+            EntityTagHeaderValue etag = new($"\"{fileId:N}\"");
+            bool versioned = string.Equals(Request.Query["v"], fileId.ToString("N"), StringComparison.OrdinalIgnoreCase);
+
+            ResponseHeaders headers = Response.GetTypedHeaders();
+            headers.ETag = etag;
+            headers.CacheControl = versioned
+                ? new CacheControlHeaderValue { Public = true, MaxAge = VersionedMaxAge, Extensions = { new NameValueHeaderValue("immutable") } }
+                : new CacheControlHeaderValue { Public = true, MaxAge = UnversionedMaxAge };
+
+            if (Request.GetTypedHeaders().IfNoneMatch.Any(x => x.Compare(etag, useStrongComparison: false)))
+            {
+                return StatusCode(StatusCodes.Status304NotModified);
+            }
+
+            string? contentType = await GetImageContentTypeAsync(fileId, cancellationToken);
+
+            // Resolved before opening the stream so a disallowed type never gets one opened.
+            // NotFound (rather than an explanatory error) matches this endpoint's don't-leak-details posture.
             if (contentType is null || !AllowedImageContentTypes.Contains(contentType))
             {
+                Response.Headers.Remove(HeaderNames.ETag);
+                Response.Headers.Remove(HeaderNames.CacheControl);
                 return NotFound();
             }
 
-            Result<Stream> fileResult = await _fileService.DownloadFileAsync(backgroundImageFileId, cancellationToken);
+            Result<Stream> fileResult = await _fileService.DownloadFileAsync(fileId, cancellationToken);
 
             if (!fileResult.Success || fileResult.Data is null)
             {
+                Response.Headers.Remove(HeaderNames.ETag);
+                Response.Headers.Remove(HeaderNames.CacheControl);
                 return NotFound();
             }
 
             return File(fileResult.Data, contentType);
         }
-    
+
+        // Like the bytes, a file's content type never changes, so it's kept rather than re-read for
+        // every logo request that misses the browser cache. Missing files aren't cached.
+        private async Task<string?> GetImageContentTypeAsync(Guid fileId, CancellationToken cancellationToken)
+        {
+            string key = BrandingCache.ImageContentType(fileId);
+
+            if (_cache.TryGetValue(key, out string? cached) && cached is not null)
+            {
+                return cached;
+            }
+
+            Result<FileMetadata> meta = await _fileService.GetFileMetadataAsync(fileId, cancellationToken);
+            string? contentType = meta.Data?.ContentType;
+
+            if (contentType is not null)
+            {
+                _cache.Set(key, contentType, BrandingCache.Ttl);
+            }
+
+            return contentType;
+        }
 
         // The installed app's manifest for one company (linked from App.razor's <head>): the company's
         // name, colour and - if it has a logo - logo icons. A company that can't be found gets the

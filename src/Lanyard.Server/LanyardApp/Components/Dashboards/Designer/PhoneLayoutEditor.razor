@@ -1,0 +1,177 @@
+@* The phone layout: on a phone the dashboard is one column, so here you choose its order (drag the
+   rows) and which widgets to leave out (the eye), with the real phone view next to it. Writes
+   PhoneOrder and HideOnPhone; the desktop layout isn't touched. *@
+
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="phone-layout">
+    <section class="phone-layout-list-pane" aria-label="Phone order">
+        <div class="phone-layout-heading">
+            <div>
+                <div class="phone-layout-title">Order on phones</div>
+                <div class="phone-layout-hint">Drag to reorder. The eye hides a widget on phones only.</div>
+            </div>
+            <FluentButton Appearance="ButtonAppearance.Subtle"
+                          IconStart="@(new Icons.Regular.Size20.ArrowReset())"
+                          Disabled="@(!Widgets.Any(w => w.PhoneOrder is not null))"
+                          Title="Use the same order as the desktop layout: top to bottom, left to right"
+                          OnClick="ResetOrderAsync">
+                Match desktop
+            </FluentButton>
+        </div>
+
+        <ol class="phone-layout-list" @ref="_listRef">
+            @foreach ((DashboardWidget widget, int index) in Ordered.Select((w, i) => (w, i)))
+            {
+                WidgetDescriptor? descriptor = DashboardWidgetCatalog.Get(widget.Type);
+                <li @key="widget.Id" class="phone-layout-row @(widget.HideOnPhone ? "is-hidden" : null)" data-reorder-id="@widget.Id">
+                    <span class="phone-layout-handle" data-reorder-handle title="Drag to reorder" aria-hidden="true">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.ReOrderDotsVertical())" />
+                    </span>
+                    <span class="phone-layout-icon">
+                        @if (descriptor is not null)
+                        {
+                            <FluentIcon Value="@descriptor.Icon()" />
+                        }
+                    </span>
+                    <span class="phone-layout-name">
+                        @(string.IsNullOrWhiteSpace(widget.Title) ? DashboardWidgetCatalog.NameOf(widget.Type) : widget.Title)
+                        @if (widget.HideOnPhone)
+                        {
+                            <span class="phone-layout-tag">Hidden on phones</span>
+                        }
+                    </span>
+                    <span class="phone-layout-actions">
+                        <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small"
+                                      IconStart="@(new Icons.Regular.Size16.ArrowUp())"
+                                      Disabled="@(index == 0)"
+                                      aria-label="@($"Move {NameOf(widget)} up")"
+                                      OnClick="@(() => ReorderAsync(widget.Id.ToString(), index - 1))" />
+                        <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small"
+                                      IconStart="@(new Icons.Regular.Size16.ArrowDown())"
+                                      Disabled="@(index == Widgets.Count - 1)"
+                                      aria-label="@($"Move {NameOf(widget)} down")"
+                                      OnClick="@(() => ReorderAsync(widget.Id.ToString(), index + 1))" />
+                        <FluentButton Appearance="ButtonAppearance.Subtle"
+                                      IconStart="@(widget.HideOnPhone ? new Icons.Regular.Size20.EyeOff() : new Icons.Regular.Size20.Eye())"
+                                      Title="@(widget.HideOnPhone ? "Show on phones" : "Hide on phones")"
+                                      aria-label="@($"{(widget.HideOnPhone ? "Show" : "Hide")} {NameOf(widget)} on phones")"
+                                      aria-pressed="@(widget.HideOnPhone ? "true" : "false")"
+                                      OnClick="@(() => ToggleHiddenAsync(widget))" />
+                    </span>
+                </li>
+            }
+        </ol>
+
+        @if (Widgets.Count == 0)
+        {
+            <div class="phone-layout-empty">Add some widgets first.</div>
+        }
+    </section>
+
+    <section class="phone-layout-preview-pane" aria-label="Phone preview">
+        <div class="phone-frame">
+            <div class="phone-frame-screen">
+                <DashboardGrid Widgets="Widgets" CompanyId="CompanyId" RowHeight="RowHeight" PreviewMode="true" ControlsEnabled="false" />
+            </div>
+        </div>
+    </section>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required List<DashboardWidget> Widgets { get; set; }
+
+    [Parameter]
+    public int? CompanyId { get; set; }
+
+    [Parameter]
+    public int RowHeight { get; set; } = Dashboard.DefaultRowHeight;
+
+    [Parameter]
+    public EventCallback<string> OnChanged { get; set; }
+
+    private ElementReference _listRef;
+    private IJSObjectReference? _module;
+    private IJSObjectReference? _list;
+    private DotNetObjectReference<PhoneLayoutEditor>? _dotNetRef;
+
+    private List<DashboardWidget> Ordered => [.. DashboardGrid.PhoneOrder(Widgets)];
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/dashboardDesigner.js");
+            _list = await _module.InvokeAsync<IJSObjectReference>("initReorderList", _listRef, _dotNetRef);
+        }
+    }
+
+    // Moves a widget to `index` in the phone order, then numbers every widget so the order is
+    // fully stored (widgets added later, with no number, go at the end).
+    [JSInvokable]
+    public async Task ReorderAsync(string id, int index)
+    {
+        List<DashboardWidget> ordered = Ordered;
+        DashboardWidget? moving = ordered.FirstOrDefault(w => w.Id.ToString() == id);
+
+        if (moving is null)
+        {
+            return;
+        }
+
+        ordered.Remove(moving);
+        ordered.Insert(Math.Clamp(index, 0, ordered.Count), moving);
+
+        for (int i = 0; i < ordered.Count; i++)
+        {
+            ordered[i].PhoneOrder = i;
+        }
+
+        await OnChanged.InvokeAsync($"Reordered {NameOf(moving)} for phones");
+        StateHasChanged();
+    }
+
+    private async Task ToggleHiddenAsync(DashboardWidget widget)
+    {
+        widget.HideOnPhone = !widget.HideOnPhone;
+        await OnChanged.InvokeAsync(widget.HideOnPhone ? $"Hid {NameOf(widget)} on phones" : $"Showed {NameOf(widget)} on phones");
+    }
+
+    private async Task ResetOrderAsync()
+    {
+        foreach (DashboardWidget widget in Widgets)
+        {
+            widget.PhoneOrder = null;
+        }
+
+        await OnChanged.InvokeAsync("Matched the desktop order on phones");
+    }
+
+    private static string NameOf(DashboardWidget widget) =>
+        string.IsNullOrWhiteSpace(widget.Title) ? DashboardWidgetCatalog.NameOf(widget.Type) : widget.Title;
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_list is not null)
+            {
+                await _list.InvokeVoidAsync("dispose");
+                await _list.DisposeAsync();
+            }
+
+            if (_module is not null)
+            {
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+
+        _dotNetRef?.Dispose();
+    }
+}

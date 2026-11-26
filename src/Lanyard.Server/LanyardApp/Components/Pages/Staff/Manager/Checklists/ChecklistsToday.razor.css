@@ -1,0 +1,123 @@
+.checklists-today {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 8px;
+    max-width: 960px;
+}
+
+.today-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.today-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.checklists-today ::deep .today-intro {
+    color: var(--colorNeutralForeground3);
+}
+
+.today-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px;
+}
+
+.today-toolbar ::deep fluent-field {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.today-runs {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
+    gap: 12px;
+    align-items: start;
+}
+
+.history {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.history-title {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.history-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+}
+
+.history-day {
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.history-day:last-child {
+    border-bottom: none;
+}
+
+/* The whole row is one button that opens that day above. */
+.history-day-button {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 16px;
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 12px;
+    border: none;
+    background: transparent;
+    color: var(--colorNeutralForeground1);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.history-day-button:hover {
+    background: var(--colorNeutralBackground1Hover);
+}
+
+.history-day-button:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+    outline-offset: -2px;
+}
+
+.history-day-button.is-current {
+    background: var(--colorNeutralBackground1Selected);
+}
+
+.history-date {
+    min-width: 96px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.history-runs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+}
+
+.history-run {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}

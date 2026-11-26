@@ -77,6 +77,9 @@ public class ChecklistPageAuthorizationIntegrationTests
     [DataRow("/manage/checklists")]
     [DataRow("/manage/checklists/new")]
     [DataRow("/help/manage-checklists")]
+    [DataRow("/manage/checklists/today")]
+    [DataRow("/checklists")]
+    [DataRow("/help/checklists")]
     public async Task AnonymousUser_IsSentToLogin(string path)
     {
         HttpClient client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
@@ -93,6 +96,16 @@ public class ChecklistPageAuthorizationIntegrationTests
         string html = await GetPageAsAsync("checkliststaff", "/manage/checklists");
 
         Assert.IsFalse(html.Contains(PageText), "The checklist setup page rendered for a plain staff member.");
+    }
+
+    [TestMethod]
+    public async Task StaffWithoutTheManagerRole_CantSeeTheManagersBoard_ButGetTheirOwnPage()
+    {
+        string board = await GetPageAsAsync("checkliststaff", "/manage/checklists/today");
+        string own = await GetPageAsAsync("checkliststaff", "/checklists");
+
+        Assert.IsFalse(board.Contains("What has been ticked, by whom"), "The manager's board rendered for a plain staff member.");
+        StringAssert.Contains(own, "class=\"my-checklists\"");
     }
 
     [TestMethod]

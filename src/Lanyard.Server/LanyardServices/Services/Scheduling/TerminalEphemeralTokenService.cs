@@ -15,6 +15,7 @@ public class TerminalEphemeralTokenService(TimeProvider timeProvider) : ITermina
     public static readonly TimeSpan PinLockout = TimeSpan.FromSeconds(30);
     public static readonly TimeSpan MaxPinLockout = TimeSpan.FromHours(1);
     public static readonly TimeSpan PinFailureMemory = TimeSpan.FromHours(24);
+    public static readonly TimeSpan ChecklistGrantIdle = TimeSpan.FromMinutes(2);
 
     private readonly TimeProvider _timeProvider = timeProvider;
 
@@ -22,6 +23,8 @@ public class TerminalEphemeralTokenService(TimeProvider timeProvider) : ITermina
     private readonly ConcurrentDictionary<string, QrNonce> _qrNonces = new();
 
     private sealed record QrNonce(Guid TerminalId, DateTime ExpiresUtc, string? HoldKey);
+    private sealed record ChecklistGrant(Guid TerminalId, string UserId, DateTime ExpiresUtc);
+    private readonly ConcurrentDictionary<string, ChecklistGrant> _checklistGrants = new();
     private readonly ConcurrentDictionary<string, PinFailureState> _pinFailures = new();
 
     private sealed class PinFailureState
@@ -96,6 +99,41 @@ public class TerminalEphemeralTokenService(TimeProvider timeProvider) : ITermina
         entry.ExpiresUtc > Now
         && (entry.HoldKey is null
             || (holdKey is not null && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(entry.HoldKey), Encoding.UTF8.GetBytes(holdKey))));
+
+    public string IssueChecklistGrant(Guid terminalId, string userId)
+    {
+        Prune();
+
+        string token = NewToken();
+        _checklistGrants[token] = new ChecklistGrant(terminalId, userId, Now.Add(ChecklistGrantIdle));
+
+        return token;
+    }
+
+    public string? TouchChecklistGrant(string? token, Guid terminalId)
+    {
+        if (string.IsNullOrEmpty(token) || !_checklistGrants.TryGetValue(token, out ChecklistGrant? grant))
+        {
+            return null;
+        }
+
+        if (grant.ExpiresUtc <= Now || grant.TerminalId != terminalId)
+        {
+            return null;
+        }
+
+        _checklistGrants.TryUpdate(token, grant with { ExpiresUtc = Now.Add(ChecklistGrantIdle) }, grant);
+
+        return grant.UserId;
+    }
+
+    public void RevokeChecklistGrant(string? token)
+    {
+        if (!string.IsNullOrEmpty(token))
+        {
+            _checklistGrants.TryRemove(token, out _);
+        }
+    }
 
     public DateTime? PinLockedUntil(string userId)
     {
@@ -174,6 +212,11 @@ public class TerminalEphemeralTokenService(TimeProvider timeProvider) : ITermina
         foreach (KeyValuePair<string, QrNonce> entry in _qrNonces.Where(x => x.Value.ExpiresUtc <= now))
         {
             _qrNonces.TryRemove(entry.Key, out _);
+        }
+
+        foreach (KeyValuePair<string, ChecklistGrant> entry in _checklistGrants.Where(x => x.Value.ExpiresUtc <= now))
+        {
+            _checklistGrants.TryRemove(entry.Key, out _);
         }
     }
 }

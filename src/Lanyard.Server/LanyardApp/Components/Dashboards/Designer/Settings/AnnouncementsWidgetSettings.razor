@@ -1,0 +1,7 @@
+@inherits WidgetSettingsBase<AnnouncementsWidget>
+
+<div class="widget-settings">
+    <div class="widget-settings-note">Shows the announcements for the viewer's own location.</div>
+    <FluentNumberInput TValue="int" Value="@W.MaxItems" ValueChanged="@(v => SetAsync(() => W.MaxItems = Math.Clamp(v, 1, AnnouncementsWidget.MaxSupportedItems), "Changed how many announcements show"))"
+                       Min="1" Max="AnnouncementsWidget.MaxSupportedItems" Label="Most announcements to show" />
+</div>

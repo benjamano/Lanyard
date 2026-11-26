@@ -14,6 +14,10 @@ public interface IChecklistService
     // each with its active tasks in order and its position loaded.
     Task<Result<List<Checklist>>> GetChecklistsAsync(LocationScope scope, int locationId, bool includeArchived = false);
 
+    // Every active checklist the caller can set up (an Admin: the whole company; a Manager: their
+    // location), with its location, for picking one for a dashboard's Checklist card.
+    Task<Result<List<Checklist>>> GetPickableChecklistsAsync(LocationScope scope);
+
     // One checklist with its active tasks in order.
     Task<Result<Checklist>> GetChecklistAsync(LocationScope scope, Guid checklistId);
 

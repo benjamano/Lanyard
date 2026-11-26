@@ -1,0 +1,12 @@
+@using Lanyard.Infrastructure.DTO.Compliance
+@inherits WidgetSettingsBase<ComplianceSummaryWidget>
+
+<div class="widget-settings">
+    <LocationPicker Value="@W.LocationId" ValueChanged="@(v => SetAsync(() => W.LocationId = v, "Changed the location"))"
+                    NoneText="All locations" />
+    <div class="widget-settings-note">Managers always see the location they signed in to. The location set here only applies when an Admin is viewing. Staff and signed-out screens see nothing.</div>
+    <FluentNumberInput TValue="int" Value="@W.ExpiryWindowDays" ValueChanged="@(v => SetAsync(() => W.ExpiryWindowDays = Math.Clamp(v, ComplianceQuery.MinExpiryWindowDays, ComplianceQuery.MaxExpiryWindowDays), "Changed the expiry window"))"
+                       Min="ComplianceQuery.MinExpiryWindowDays" Max="ComplianceQuery.MaxExpiryWindowDays" Label="Count documents expiring within (days)" />
+    <FluentNumberInput TValue="int" Value="@W.MaxItems" ValueChanged="@(v => SetAsync(() => W.MaxItems = Math.Clamp(v, 0, ComplianceSummaryWidget.MaxSupportedItems), "Changed how many names show"))"
+                       Min="0" Max="ComplianceSummaryWidget.MaxSupportedItems" Label="Names to show per section (0 for counts only)" />
+</div>

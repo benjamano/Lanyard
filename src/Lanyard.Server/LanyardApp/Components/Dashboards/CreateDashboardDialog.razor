@@ -1,43 +1,67 @@
 @inherits FluentDialogInstance
 
 @inject IDashboardService DashboardService
+@inject NavigationManager NavigationManager
+
+@* Name a new dashboard and pick what it starts from: blank, or one of the ready-made layouts.
+   It opens in the designer straight away. *@
 
 <FluentDialogBody>
-    <TitleTemplate>
-        Create a new Dashboard
-    </TitleTemplate>
+    <TitleTemplate>New dashboard</TitleTemplate>
 
     <ChildContent>
-        <EditForm Model="@dashboard" OnValidSubmit="SubmitAsync">
-            <FluentStack Orientation="@Orientation.Vertical">
-                <FluentTextInput Placeholder="Name" Label="Name" @bind-Value="dashboard.Name" Required="true">
-                    <StartTemplate>
-                        <FluentIcon Value="new Icons.Regular.Size20.TextAddT()" Slot="start"/>
-                    </StartTemplate>
-                </FluentTextInput>
-                <FluentTextArea Placeholder="Description" Label="Description" @bind-Value="dashboard.Description" />
-            </FluentStack>
+        <div class="create-dashboard">
+            <FluentTextInput Label="Name" @bind-Value="_name" Immediate="true" Required="true" Maxlength="100" Width="100%" Placeholder="Front desk" />
+            <FluentTextArea Label="Description (optional)" @bind-Value="_description" Maxlength="500" Rows="2" Style="width: 100%;" />
 
-            <DataAnnotationsValidator />
-            <FluentValidationSummary />
+            <div class="create-dashboard-label" id="create-dashboard-start">Start from</div>
+            <div class="create-dashboard-templates" role="radiogroup" aria-labelledby="create-dashboard-start">
+                @foreach (DashboardTemplate template in DashboardTemplates.All)
+                {
+                    bool selected = template.Key == _templateKey;
+                    <button type="button"
+                            class="create-dashboard-template @(selected ? "is-selected" : null)"
+                            role="radio"
+                            aria-checked="@(selected ? "true" : "false")"
+                            @onclick="@(() => _templateKey = template.Key)">
+                        <DashboardThumbnail Widgets="template.Preview" />
+                        <span class="create-dashboard-template-name">
+                            <FluentIcon Value="@template.Icon()" Width="16px" />
+                            @template.Name
+                        </span>
+                        <span class="create-dashboard-template-description">@template.Description</span>
+                    </button>
+                }
+            </div>
 
-            <FluentButton Type="ButtonType.Submit" Appearance="ButtonAppearance.Primary" IconStart="new Icons.Regular.Size20.AddCircle()">Create</FluentButton>
-            <FluentButton OnClick="async () => await DialogInstance.CancelAsync()" Appearance="ButtonAppearance.Default">Cancel</FluentButton>
-        </EditForm>
+            @if (_error is string error)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@error</FluentMessageBar>
+            }
+        </div>
     </ChildContent>
 
-    <ActionTemplate></ActionTemplate>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Add())"
+                      Loading="_creating" Disabled="@string.IsNullOrWhiteSpace(_name)" OnClick="CreateAsync">
+            Create and open
+        </FluentButton>
+        <FluentButton OnClick="@(() => DialogInstance.CancelAsync())">Cancel</FluentButton>
+    </ActionTemplate>
 </FluentDialogBody>
 
-@code
-{
-    private Dashboard dashboard = new();
+@code {
+    private string? _name;
+    private string? _description;
+    private string _templateKey = "blank";
+    private string? _error;
+    private bool _creating;
 
     protected override async Task OnActionClickedAsync(bool primary)
     {
         if (primary)
         {
-            await SubmitAsync();
+            await CreateAsync();
         }
         else
         {
@@ -45,17 +69,36 @@
         }
     }
 
-    private async Task SubmitAsync()
+    private async Task CreateAsync()
     {
-        Result<bool> result = await DashboardService.CreateDashboardAsync(dashboard);
-        if (result.IsSuccess)
+        if (string.IsNullOrWhiteSpace(_name) || _creating)
         {
-            _toastService.ShowSuccess("Dashboard created successfully");
-            await DialogInstance.CloseAsync();
+            return;
         }
-        else
+
+        _creating = true;
+        _error = null;
+
+        DashboardTemplate template = DashboardTemplates.All.First(t => t.Key == _templateKey);
+        Dashboard dashboard = new()
         {
-            _toastService.ShowError($"Failed to create the dashboard: {result.Error}");
+            Name = _name.Trim(),
+            Description = _description,
+            FitToScreen = template.FitToScreen,
+            RowHeight = template.RowHeight,
+            Widgets = template.Build()
+        };
+
+        Result<Guid> result = await DashboardService.CreateDashboardAsync(dashboard);
+        _creating = false;
+
+        if (!result.IsSuccess)
+        {
+            _error = $"Couldn't create the dashboard: {result.Error}";
+            return;
         }
+
+        await DialogInstance.CloseAsync(result.Data);
+        NavigationManager.NavigateTo($"/manage/dashboards/{result.Data}");
     }
 }

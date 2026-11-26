@@ -1,0 +1,226 @@
+@* The right-hand panel: everything about the selected widget (its title, size, phone visibility
+   and settings), or the dashboard's own details when nothing is selected. Every change goes
+   through OnChanged so the page knows the dashboard has unsaved changes. *@
+
+@using Lanyard.App.Components.Dialogs
+
+<div class="widget-inspector">
+    @if (Widget is not null && Descriptor is not null)
+    {
+        <div class="inspector-heading">
+            <span class="inspector-heading-icon"><FluentIcon Value="@Descriptor.Icon()" /></span>
+            <div class="inspector-heading-text">
+                <div class="inspector-heading-name">@Descriptor.Name</div>
+                <div class="inspector-heading-description">@Descriptor.Description</div>
+            </div>
+            <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.Dismiss())"
+                          Title="Close" aria-label="Deselect widget" OnClick="@(() => OnDeselect.InvokeAsync())" />
+        </div>
+
+        @if (Locked)
+        {
+            <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                Your company's plan doesn't include @(Descriptor.Feature is CompanyFeature f ? CompanyFeatureCatalog.Get(f).Name : "this"),
+                so this widget won't show on the dashboard. You can remove it.
+            </FluentMessageBar>
+        }
+        else if (WidgetSetup.NeedsSetup(Widget))
+        {
+            <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                Choose what this widget shows in its settings below.
+            </FluentMessageBar>
+        }
+
+        <section class="inspector-section">
+            <h3 class="inspector-section-title">Title</h3>
+            <FluentTextInput Value="@Widget.Title"
+                             ValueChanged="@(v => ChangeAsync(() => Widget.Title = v, "Changed title"))"
+                             Immediate="true"
+                             Placeholder="@Descriptor.Name"
+                             Maxlength="100"
+                             Width="100%"
+                             aria-label="Title" />
+            <FluentSwitch Value="@Widget.ShowTitle"
+                          ValueChanged="@(v => ChangeAsync(() => Widget.ShowTitle = v, v ? "Showed title" : "Hid title"))"
+                          Label="Show the title above the widget"
+                          Disabled="@string.IsNullOrWhiteSpace(Widget.Title)" />
+        </section>
+
+        <section class="inspector-section">
+            <h3 class="inspector-section-title">Size</h3>
+            <div class="inspector-size">
+                <FluentNumberInput TValue="int" Value="@Widget.GridW" ValueChanged="@(v => OnResize.InvokeAsync((v, Widget.GridH)))"
+                                   Min="1" Max="@DashboardLayoutEngine.Columns" Label="Width (of 12)" />
+                <FluentNumberInput TValue="int" Value="@Widget.GridH" ValueChanged="@(v => OnResize.InvokeAsync((Widget.GridW, v)))"
+                                   Min="1" Max="24" Label="Height (rows)" />
+            </div>
+            <div class="inspector-hint">Or drag the handles on the widget's edges. With a widget selected, the arrow keys move it and Shift+arrows resize it.</div>
+        </section>
+
+        <section class="inspector-section">
+            <h3 class="inspector-section-title">On phones</h3>
+            <FluentSwitch Value="@(!Widget.HideOnPhone)"
+                          ValueChanged="@(v => ChangeAsync(() => Widget.HideOnPhone = !v, v ? "Showed on phones" : "Hid on phones"))"
+                          Label="Show this widget on phones" />
+        </section>
+
+        <section class="inspector-section">
+            <h3 class="inspector-section-title">Show only when</h3>
+            @if (WidgetShowConditions.Summary(Widget.ShowConditionsJson) is string onlyWhen)
+            {
+                <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative">Only @onlyWhen</FluentBadge>
+            }
+            <FluentButton Appearance="ButtonAppearance.Outline"
+                          IconStart="@(new Icons.Regular.Size20.Eye())"
+                          OnClick="EditShowConditionsAsync">
+                Show only when…
+            </FluentButton>
+        </section>
+
+        @if (Descriptor.SettingsComponent is Type settings)
+        {
+            <section class="inspector-section">
+                <h3 class="inspector-section-title">Settings</h3>
+                @* Keyed on the widget object, not its id: undo puts back a copy, and the panel (the Text
+                   widget's editor especially) must start over from that copy's values. *@
+                <DynamicComponent @key="Widget" Type="settings" Parameters="@SettingsParameters" />
+            </section>
+        }
+
+        <div class="inspector-actions">
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Copy())" OnClick="@(() => OnDuplicate.InvokeAsync())">
+                Duplicate
+            </FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Delete())" OnClick="@(() => OnRemove.InvokeAsync())">
+                Remove
+            </FluentButton>
+        </div>
+    }
+    else if (Dashboard is not null)
+    {
+        <div class="inspector-heading">
+            <span class="inspector-heading-icon"><FluentIcon Value="@(new Icons.Regular.Size20.Grid())" /></span>
+            <div class="inspector-heading-text">
+                <div class="inspector-heading-name">Dashboard</div>
+                <div class="inspector-heading-description">Select a widget to change it.</div>
+            </div>
+        </div>
+
+        <section class="inspector-section">
+            <FluentTextInput Value="@Dashboard.Name"
+                             ValueChanged="@(v => ChangeAsync(() => Dashboard.Name = v ?? string.Empty, "Renamed the dashboard"))"
+                             Immediate="true"
+                             Label="Name"
+                             Required="true"
+                             Maxlength="100"
+                             Width="100%" />
+            <FluentTextArea Value="@Dashboard.Description"
+                            ValueChanged="@(v => ChangeAsync(() => Dashboard.Description = v, "Changed the description"))"
+                            Immediate="true"
+                            Label="Description"
+                            Maxlength="500"
+                            Rows="3"
+                            Style="width: 100%;" />
+        </section>
+
+        <section class="inspector-section">
+            <h3 class="inspector-section-title">On kiosk TVs</h3>
+            <FluentSwitch Value="@Dashboard.FitToScreen"
+                          ValueChanged="@(v => ChangeAsync(() => Dashboard.FitToScreen = v, v ? "Turned on fill the screen" : "Turned off fill the screen"))"
+                          Label="Fill the screen" />
+            <div class="inspector-hint">Stretches the rows so the whole dashboard fits a kiosk TV with no scrolling. Use the TV view to check it.</div>
+        </section>
+
+        <section class="inspector-section">
+            <h3 class="inspector-section-title">Row height</h3>
+            <FluentRadioGroup TValue="int" Value="@DensityValue" ValueChanged="@(v => ChangeAsync(() => Dashboard.RowHeight = v, "Changed row height"))"
+                              Orientation="Orientation.Vertical" aria-label="Row height">
+                <FluentRadio Value="90" Label="Compact (90px)" />
+                <FluentRadio Value="Dashboard.DefaultRowHeight" Label="Comfortable (120px)" />
+                <FluentRadio Value="160" Label="Spacious (160px)" />
+            </FluentRadioGroup>
+        </section>
+
+        <section class="inspector-section">
+            <div class="inspector-stat">
+                <span>@Dashboard.Widgets.Count widget@(Dashboard.Widgets.Count == 1 ? "" : "s")</span>
+                <span>@DashboardLayoutEngine.RowCount(Dashboard.Widgets.Select(w => new WidgetRect(w.Id, w.GridX, w.GridY, w.GridW, w.GridH))) rows</span>
+            </div>
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowUp())" OnClick="@(() => OnTidy.InvokeAsync())"
+                          Title="Move every widget up as far as it will go, closing the gaps">
+                Tidy up gaps
+            </FluentButton>
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Dashboard? Dashboard { get; set; }
+
+    [Parameter]
+    public DashboardWidget? Widget { get; set; }
+
+    [Parameter]
+    public IReadOnlySet<CompanyFeature> HiddenFeatures { get; set; } = new HashSet<CompanyFeature>();
+
+    [Parameter]
+    public EventCallback<string> OnChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<(int W, int H)> OnResize { get; set; }
+
+    [Parameter]
+    public EventCallback OnDuplicate { get; set; }
+
+    [Parameter]
+    public EventCallback OnRemove { get; set; }
+
+    [Parameter]
+    public EventCallback OnDeselect { get; set; }
+
+    [Parameter]
+    public EventCallback OnTidy { get; set; }
+
+    private WidgetDescriptor? Descriptor => Widget is null ? null : DashboardWidgetCatalog.Get(Widget.Type);
+
+    private bool Locked => Descriptor?.Feature is CompanyFeature feature && HiddenFeatures.Contains(feature);
+
+    // The radio group only offers three heights; anything else (set some other way) shows as
+    // nothing picked rather than a wrong one.
+    private int DensityValue => Dashboard?.RowHeight ?? Dashboard.DefaultRowHeight;
+
+    private Dictionary<string, object?> SettingsParameters => new()
+    {
+        ["Widget"] = Widget,
+        ["OnChanged"] = OnChanged
+    };
+
+    private async Task ChangeAsync(Action change, string description)
+    {
+        change();
+        await OnChanged.InvokeAsync(description);
+    }
+
+    private async Task EditShowConditionsAsync()
+    {
+        if (Widget is null || Descriptor is null)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<WidgetShowConditionsDialog>(options =>
+        {
+            options.Modal = true;
+            options.Width = "560px";
+            options.Parameters.Add(nameof(WidgetShowConditionsDialog.Widget), Widget);
+            options.Parameters.Add(nameof(WidgetShowConditionsDialog.CompanyId), Dashboard?.CompanyId);
+            options.Parameters.Add(nameof(WidgetShowConditionsDialog.WidgetName), Widget.Title ?? Descriptor.Name);
+        });
+
+        if (!result.Cancelled)
+        {
+            await OnChanged.InvokeAsync($"Changed {Descriptor.Name} show conditions");
+        }
+    }
+}

@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Features;
 using Lanyard.Application.Services.Notifications;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO.Notifications;
@@ -50,7 +51,12 @@ internal static class ShiftClaimRules
     }
 
     // A course a position needs, with what deciding "current" and "applies here" takes.
-    public sealed record RequiredCourse(Guid PositionId, Guid CourseId, string Name, int? RecurrenceMonths, int? LocationId, bool IsShared);
+    public sealed record RequiredCourse(Guid PositionId, Guid CourseId, string Name, int? RecurrenceMonths, int? LocationId, bool IsShared)
+    {
+        // The locations with Training switched on. A course only gates shifts at those, since
+        // staff elsewhere can't open My Training to take it. Null means no restriction.
+        public IReadOnlySet<int>? TrainingLocationIds { get; init; }
+    }
 
     // Someone's record on one course: when they last passed it, and the assignment they still have
     // to complete (if any), which is where a "take the course" link goes.
@@ -196,7 +202,7 @@ internal static class ShiftClaimRules
             : [];
 
     // The training these positions need, and these people's records on it. Only active courses,
-    // at companies with Training switched on, count - a course nobody can take can't be required.
+    // at companies where some location has Training switched on, count - a course nobody can take can't be required.
     // The second query is skipped when no position needs anything, which is every company that
     // hasn't set requirements up.
     public static async Task<TrainingSnapshot> LoadTrainingAsync(ApplicationDbContext ctx, IReadOnlyCollection<string> userIds, IReadOnlyCollection<Guid> positionIds)
@@ -212,9 +218,16 @@ internal static class ShiftClaimRules
             .AsNoTracking()
             .TagWithCallSite()
             .Where(x => positionList.Contains(x.StaffPositionId) && x.Course!.IsActive
-                && !ctx.CompanyFeatureSettings.Any(f => f.CompanyId == x.Course.CompanyId && f.Feature == CompanyFeature.Training && !f.IsEnabled))
+                && ctx.LocationFeatureSettings.Any(f => f.Feature == CompanyFeature.Training && f.IsEnabled
+                    && ctx.Locations.Any(l => l.Id == f.LocationId && l.CompanyId == x.Course.CompanyId && l.IsActive)))
             .Select(x => new RequiredCourse(x.StaffPositionId, x.CourseId, x.Course!.Name, x.Course.RecurrenceMonths, x.Course.LocationId, x.Course.IsShared))
             .ToListAsync();
+
+        if (required.Count > 0)
+        {
+            HashSet<int> trainingLocationIds = await CompanyFeatureQueries.GetEnabledLocationIdsAsync(ctx, CompanyFeature.Training);
+            required = [.. required.Select(x => x with { TrainingLocationIds = trainingLocationIds })];
+        }
 
         ILookup<Guid, RequiredCourse> requirements = required.ToLookup(x => x.PositionId);
         List<string> userList = userIds.Distinct().ToList();
@@ -294,9 +307,11 @@ internal static class ShiftClaimRules
     }
 
     // Positions are company-wide but a course can belong to one location. A course that can't be
-    // taken at the shift's location (another site's, not shared) doesn't gate shifts there.
+    // taken at the shift's location (another site's, not shared, or Training switched off there)
+    // doesn't gate shifts there.
     private static bool AppliesAt(RequiredCourse course, int locationId) =>
-        course.IsShared || course.LocationId is null || course.LocationId == locationId;
+        (course.IsShared || course.LocationId is null || course.LocationId == locationId)
+        && (course.TrainingLocationIds is null || course.TrainingLocationIds.Contains(locationId));
 
     // Current means passed, and - for a recurring course - not run out by the time the shift
     // starts. Worked out from the completion date rather than the assignment status, because a

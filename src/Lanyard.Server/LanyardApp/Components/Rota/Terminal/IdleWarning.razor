@@ -1,0 +1,22 @@
+@* Warns before the shared terminal closes something for being left alone (WCAG 2.2.1 Timing
+   Adjustable): the countdown is shown, and Keep going gives the full time again. The sentence is
+   announced once; the seconds are visual only, so a screen reader isn't read a number every second. *@
+<div class="idle-warning" role="alert">
+    <div class="idle-text">
+        <span class="idle-title">Still there?</span>
+        <span>@Message <span aria-hidden="true">@SecondsLeft s</span><span class="idle-sr">a few seconds</span>.</span>
+    </div>
+    <button type="button" class="idle-keep" @onclick="OnKeepGoing">Keep going</button>
+</div>
+
+@code {
+    // Up to the countdown: "The PIN pad closes in", "Ticking as Amy C. stops in".
+    [Parameter]
+    public string Message { get; set; } = "This closes in";
+
+    [Parameter]
+    public int SecondsLeft { get; set; }
+
+    [Parameter]
+    public EventCallback OnKeepGoing { get; set; }
+}

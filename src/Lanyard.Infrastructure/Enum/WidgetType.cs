@@ -23,5 +23,7 @@ public enum WidgetType
     ComplianceSummary = 18,
     DemandStaffing = 19,
     OperationsAlerts = 20,
-    WhatsOnToday = 21
+    WhatsOnToday = 21,
+    ChecklistsToday = 22,
+    Checklist = 23
 }
