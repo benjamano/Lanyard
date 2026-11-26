@@ -1,8 +1,10 @@
+using Lanyard.Application.Services.Projection;
 using Lanyard.Application.Services.Projection.Bindings;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Shared.DTO;
 using Lanyard.Shared.Projection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -12,19 +14,28 @@ namespace Lanyard.Application.Services;
 public class ProjectionProgramRunnerService(
     ISystemDbContextFactory factory,
     IProjectionBindingResolver bindingResolver,
-    ILogger<ProjectionProgramRunnerService> logger) : IProjectionProgramRunnerService
+    ILogger<ProjectionProgramRunnerService> logger,
+    ILaserGameStatusStore laserGameStatusStore) : IProjectionProgramRunnerService
 {
     private readonly ISystemDbContextFactory _factory = factory;
     private readonly IProjectionBindingResolver _bindingResolver = bindingResolver;
+    private readonly ILaserGameStatusStore _laserGameStatusStore = laserGameStatusStore;
     private readonly ILogger<ProjectionProgramRunnerService> _logger = logger;
 
     private static readonly IReadOnlyDictionary<Guid, string> NoBoundValues = new Dictionary<Guid, string>();
+    private static readonly IReadOnlyDictionary<int, ProjectionGameWaitState> NoGameWaits = new Dictionary<int, ProjectionGameWaitState>();
 
     /// <summary>
     /// How often a held step with data-bound parameters re-resolves them, in wall-clock time (a
     /// paused screen keeps its data current too). Settable for tests.
     /// </summary>
     public TimeSpan BindingRefreshInterval { get; init; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// What one unit of a "Wait for Game" step's Give Up After setting is worth: a minute.
+    /// Settable so tests can time out in milliseconds.
+    /// </summary>
+    public TimeSpan GameWaitTimeoutUnit { get; init; } = TimeSpan.FromMinutes(1);
 
     // Hold, tick and next-step rules live in ProjectionSequence (Lanyard.Shared), so the kiosk's
     // offline player follows the same ones. Paused time doesn't count toward a step's hold, so a
@@ -52,6 +63,10 @@ public class ProjectionProgramRunnerService(
 
         // Who data-bound parameters are resolved for: the program's company and the kiosk's location.
         public required ProjectionBindingContext BindingContext { get; init; }
+
+        // "Wait for Game" steps, keyed by step index, with the watched kiosk already checked
+        // against the program's company.
+        public required IReadOnlyDictionary<int, ProjectionGameWaitState> GameWaits { get; init; }
 
         public int CurrentStepIndex;
 
@@ -133,6 +148,14 @@ public class ProjectionProgramRunnerService(
                 return Result<Guid>.Fail("Projection program has no playable steps.");
             }
 
+            Result<IReadOnlyDictionary<int, ProjectionGameWaitState>> gameWaits = await LoadGameWaitsAsync(context, program, steps);
+
+            if (!gameWaits.IsSuccess)
+            {
+                _logger.LogWarning("Refused to start projection program {ProgramId} on client {ClientId}: {Error}", programId, clientId, gameWaits.Error);
+                return Result<Guid>.Fail(gameWaits.Error!);
+            }
+
             Guid runId = Guid.NewGuid();
             CancellationTokenSource cts = new();
 
@@ -144,7 +167,8 @@ public class ProjectionProgramRunnerService(
                 Steps = steps,
                 Cts = cts,
                 IsTemporaryTrigger = isTemporaryTrigger,
-                BindingContext = new ProjectionBindingContext(program.CompanyId, client.LocationId, clientId, DateTime.UtcNow, client.PartyRoom)
+                BindingContext = new ProjectionBindingContext(program.CompanyId, client.LocationId, clientId, DateTime.UtcNow, client.PartyRoom),
+                GameWaits = gameWaits.Data!
             };
 
             lock (_lock)
@@ -172,6 +196,76 @@ public class ProjectionProgramRunnerService(
             _logger.LogError(ex, "Error starting projection program {ProgramId} for client {ClientId} display {DisplayIndex}", programId, clientId, displayIndex);
             return Result<Guid>.Fail("An error occurred while starting the projection program.");
         }
+    }
+
+    /// <summary>
+    /// Reads every "Wait for Game" step's settings and checks each watched kiosk exists and is in
+    /// the program's company. This context has no tenant filter, so without the check a program
+    /// could follow another company's games. Fails closed: the program doesn't start.
+    /// </summary>
+    private static async Task<Result<IReadOnlyDictionary<int, ProjectionGameWaitState>>> LoadGameWaitsAsync(ApplicationDbContext context, ProjectionProgram program, List<ProjectionProgramStep> steps)
+    {
+        Dictionary<int, GameWaitSettings> settingsByIndex = [];
+
+        for (int i = 0; i < steps.Count; i++)
+        {
+            if (!GameWaitStepNames.IsWaitForGame(steps[i].Template?.Name))
+            {
+                continue;
+            }
+
+            Result<GameWaitSettings> parsed = GameWaitSettings.Parse(ParameterValuesByName(steps[i]));
+
+            if (!parsed.IsSuccess)
+            {
+                return Result<IReadOnlyDictionary<int, ProjectionGameWaitState>>.Fail($"Step {i + 1} ({GameWaitStepNames.Template}): {parsed.Error}");
+            }
+
+            settingsByIndex[i] = parsed.Data!;
+        }
+
+        if (settingsByIndex.Count == 0)
+        {
+            return Result<IReadOnlyDictionary<int, ProjectionGameWaitState>>.Ok(NoGameWaits);
+        }
+
+        List<Guid> kioskIds = [.. settingsByIndex.Values.Select(s => s.KioskClientId).Distinct()];
+
+        var kiosks = await context.Clients
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(c => kioskIds.Contains(c.Id))
+            .Select(c => new { c.Id, c.CompanyId, c.Name })
+            .ToDictionaryAsync(c => c.Id);
+
+        Dictionary<int, ProjectionGameWaitState> waits = [];
+
+        foreach ((int index, GameWaitSettings settings) in settingsByIndex)
+        {
+            if (!kiosks.TryGetValue(settings.KioskClientId, out var kiosk) || kiosk.CompanyId != program.CompanyId)
+            {
+                return Result<IReadOnlyDictionary<int, ProjectionGameWaitState>>.Fail($"Step {index + 1} ({GameWaitStepNames.Template}) watches a laser kiosk that no longer exists. Choose its kiosk again.");
+            }
+
+            waits[index] = new ProjectionGameWaitState(settings.Event, settings.KioskClientId, kiosk.Name, settings.SecondsLeft, settings.GiveUpAfterMinutes);
+        }
+
+        return Result<IReadOnlyDictionary<int, ProjectionGameWaitState>>.Ok(waits);
+    }
+
+    private static Dictionary<string, string?> ParameterValuesByName(ProjectionProgramStep step)
+    {
+        Dictionary<string, string?> values = new(StringComparer.Ordinal);
+
+        foreach (ProjectionProgramParameterValue value in step.ParameterValues)
+        {
+            if (value.Parameter is { IsActive: true } parameter)
+            {
+                values[parameter.Name] = value.Value;
+            }
+        }
+
+        return values;
     }
 
     private async Task RunProgramLoopAsync(Guid clientId, int displayIndex, RunningProgram run, bool repeatInfinitely, int repeatCount, CancellationToken token)
@@ -298,6 +392,12 @@ public class ProjectionProgramRunnerService(
 
     private async Task HoldStepAsync(Guid clientId, int displayIndex, int stepIndex, RunningProgram run, ProjectionProgramStep step, CancellationToken token)
     {
+        if (run.GameWaits.TryGetValue(stepIndex, out ProjectionGameWaitState? gameWait))
+        {
+            await HoldUntilGameEventAsync(clientId, displayIndex, stepIndex, run, gameWait, token);
+            return;
+        }
+
         TimeSpan hold = ProjectionSequence.EffectiveHold(step.HoldForMilliseconds);
 
         bool hasBindings = HasBindings(step);
@@ -337,6 +437,79 @@ public class ProjectionProgramRunnerService(
             }
 
             await Task.Delay(ComputeHoldDelayMilliseconds(hold, played, run.IsPaused), token);
+        }
+    }
+
+    /// <summary>
+    /// Holds a "Wait for Game" step until its laser kiosk reports the event, the step's timeout
+    /// runs out, or a skip or stop arrives. The status store's event sees every publish in order,
+    /// so a short Get ready can't slip between two ticks; the loop also reads the store each tick
+    /// for the starting status and in case a publish lands while subscribing. The automation
+    /// engine's transition channel is never read here: it has exactly one reader.
+    /// </summary>
+    private async Task HoldUntilGameEventAsync(Guid clientId, int displayIndex, int stepIndex, RunningProgram run, ProjectionGameWaitState gameWait, CancellationToken token)
+    {
+        GameEventWait wait = new(gameWait.Event, gameWait.KioskClientId, gameWait.SecondsLeft);
+        TimeSpan? timeout = gameWait.GiveUpAfterMinutes is > 0 ? GameWaitTimeoutUnit * gameWait.GiveUpAfterMinutes.Value : null;
+
+        // Runs on the SignalR hub's thread for every kiosk's publish, so it only filters and
+        // records; it must never throw back into the hub.
+        void OnStatusUpdated(LaserGameStatusDTO status)
+        {
+            try
+            {
+                wait.Observe(status);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking a game status publish for the projection program on client {ClientId} display {DisplayIndex}", clientId, displayIndex);
+            }
+        }
+
+        _laserGameStatusStore.OnStatusUpdated += OnStatusUpdated;
+
+        try
+        {
+            TimeSpan startedAt = GetPlayedTime(run);
+
+            while (true)
+            {
+                token.ThrowIfCancellationRequested();
+
+                if (HasPendingStepIndex(run))
+                {
+                    return;
+                }
+
+                _laserGameStatusStore.TryGetStatus(gameWait.KioskClientId, out LaserGameStatusDTO? current);
+                wait.Observe(current);
+
+                // A paused step stays on screen: an event that arrives meanwhile is remembered and
+                // moves on as soon as playback resumes.
+                if (wait.Satisfied && !run.IsPaused)
+                {
+                    _logger.LogInformation("Projection program {ProgramId} on client {ClientId} display {DisplayIndex}: step {StepIndex} saw {GameEvent} on kiosk {KioskClientId}", run.ProgramId, clientId, displayIndex, stepIndex, gameWait.Event, gameWait.KioskClientId);
+                    return;
+                }
+
+                TimeSpan played = GetPlayedTime(run) - startedAt;
+
+                if (timeout.HasValue && played >= timeout.Value)
+                {
+                    _logger.LogInformation("Projection program {ProgramId} on client {ClientId} display {DisplayIndex}: step {StepIndex} gave up waiting for {GameEvent} on kiosk {KioskClientId} after {TimeoutMinutes} minutes", run.ProgramId, clientId, displayIndex, stepIndex, gameWait.Event, gameWait.KioskClientId, gameWait.GiveUpAfterMinutes);
+                    return;
+                }
+
+                int delay = timeout.HasValue
+                    ? ComputeHoldDelayMilliseconds(timeout.Value, played, run.IsPaused)
+                    : ProjectionSequence.TickMilliseconds;
+
+                await Task.Delay(delay, token);
+            }
+        }
+        finally
+        {
+            _laserGameStatusStore.OnStatusUpdated -= OnStatusUpdated;
         }
     }
 
@@ -522,6 +695,7 @@ public class ProjectionProgramRunnerService(
         CurrentStepIndex = running.CurrentStepIndex,
         IsPaused = running.IsPaused,
         IsTemporaryTrigger = running.IsTemporaryTrigger,
-        BoundValues = running.BoundValues
+        BoundValues = running.BoundValues,
+        GameWait = running.GameWaits.GetValueOrDefault(running.CurrentStepIndex)
     };
 }

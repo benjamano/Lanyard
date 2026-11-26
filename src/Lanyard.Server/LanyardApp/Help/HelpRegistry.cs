@@ -237,7 +237,7 @@ public static class HelpRegistry
 
         new(Projection,
             "Projection",
-            "Building projection programs, controlling what's on screen, and step templates.",
+            "Building projection programs, waiting for laser games, controlling what's on screen, and step templates.",
             HelpAudience.Managers,
             () => new Icons.Regular.Size20.ProjectionScreenText(),
             [

@@ -1142,12 +1142,16 @@
     ]
   },
   {
-    "version": "1.4.39",
-    "releaseDate": "2026-11-22",
-    "summary": "Keep staff under 18 within the UK young worker limits.",
+    "version": "1.4.40",
+    "releaseDate": "2026-11-26",
+    "summary": "Keep staff under 18 within the UK young worker limits. Projection programs can wait for a laser game.",
     "details": [
       "Mark staff who are under 18 (Managers and Admins): on a person's Rota tab under Manage > Users, the new Under 18 section takes their date of birth and shows when they turn 18 and, for anyone under 16, when they're over school leaving age. It's only kept for staff under 18 and deleted on their 18th birthday, and staff can't see it.",
-      "Staff now shows who is currently marked as under 18, and Rota Settings has a new choice for the night hours staff under 18 can't work: 22:00 to 06:00, or 23:00 to 07:00 if their contract says so."
+      "Staff now shows who is currently marked as under 18, and Rota Settings has a new choice for the night hours staff under 18 can't work: 22:00 to 06:00, or 23:00 to 07:00 if their contract says so.",
+      "Projection programs have a new Wait for Game step (Managers and Admins, on Projection). It holds the program until a laser kiosk's game gets ready, starts, ends, or has a set number of seconds left, and keeps the previous screen up meanwhile. One program can now run your attract loop, the live scoreboard and the results with no automation rules. Give Up After moves on anyway if the game never comes.",
+      "Projection Control and the Projection Status widget show what a Wait for Game step is waiting for, and warn when its laser kiosk isn't sending game updates.",
+      "Steps can be added to a projection program without dragging: each step in the toolbox has an Add button that puts it at the end.",
+      "Fixed: a setting added to a projection step that was already saved could be lost when the program was saved again."
     ]
   }
 ]

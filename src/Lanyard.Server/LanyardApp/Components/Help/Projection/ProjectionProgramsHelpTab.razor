@@ -9,15 +9,54 @@
         <ol>
             <li>Select <strong>New</strong>, and give the program a <strong>Program Name</strong> and optional description.</li>
             <li>Select the program in the list on the left.</li>
-            <li>Drag steps from the toolbox on the right into the flow in the middle, after <strong>START</strong>.
+            <li>Drag steps from the toolbox on the right into the flow in the middle, after <strong>START</strong>, or
+                select a step's <strong>Add</strong> button (the plus) in the toolbox to add it at the end without dragging.
                 The built-in steps are <strong>Show Text</strong>, <strong>Play a Video</strong>, <strong>Dashboard</strong>,
-                <strong>Live Capture</strong> (a camera or capture device) and <strong>Delay</strong>, which keeps the
-                previous screen up.</li>
+                <strong>Live Capture</strong> (a camera or capture device), <strong>Delay</strong>, which keeps the
+                previous screen up, and <strong>Wait for Game</strong>, which keeps it up until a laser game event.</li>
             <li>Fill in each step's settings, such as the text, the video file, or the dashboard. For a video,
                 select <strong>Browse</strong>: only videos are shown, and you can open a folder, search, use
                 <strong>Recent</strong>, or upload a new one.</li>
             <li>Right-click a step for more options, such as deleting it, then save.</li>
         </ol>
+    </HelpSection>
+
+    <HelpSection Title="Waiting for a laser game">
+        <FluentText>
+            A <strong>Wait for Game</strong> step holds the program until something happens in a laser game, instead of
+            moving on after a set time. It shows nothing new, so the step before it stays on screen. That lets one
+            program run the whole cycle, for example:
+        </FluentText>
+        <ol>
+            <li><strong>Play a Video</strong>: your attract loop.</li>
+            <li><strong>Wait for Game</strong>, <strong>Get ready</strong>: the video stays up until players get ready.</li>
+            <li><strong>Dashboard</strong>: the live scoreboard.</li>
+            <li><strong>Wait for Game</strong>, <strong>Game ends</strong>: the scoreboard stays up until the game finishes.</li>
+            <li><strong>Show Text</strong> with Last game winner: the results, then back to the start.</li>
+        </ol>
+        <FluentText>Its settings:</FluentText>
+        <ul>
+            <li><strong>Wait until</strong>:
+                <ul>
+                    <li><strong>Get ready</strong>: the kiosk shows Get ready, or a game starts (so a missed Get ready doesn't
+                        hold a whole game). Moves on straight away if it's already getting ready or playing.</li>
+                    <li><strong>Game starts</strong>: a game is in progress. Moves on straight away if one already is.</li>
+                    <li><strong>Game ends</strong>: the game that's running finishes. Moves on straight away if no game is
+                        running, as there's nothing to wait for.</li>
+                    <li><strong>Time left drops below</strong>: there are <strong>Seconds Left</strong> or fewer left in the
+                        game. It also moves on if the game stops early.</li>
+                </ul>
+            </li>
+            <li><strong>Laser Kiosk</strong>: the kiosk that runs the laser game. It can be a different kiosk from the one
+                showing the program, and you must choose one.</li>
+            <li><strong>Give Up After (minutes)</strong>: moves on anyway after this long, for example when the laser kiosk
+                is switched off. Leave it blank or 0 to wait for as long as it takes. Time while the program is paused
+                doesn't count.</li>
+        </ul>
+        <HelpNote>
+            A kiosk that's lost its connection to Lanyard plays its saved copy of the program, and leaves out Wait for Game
+            steps, along with dashboards.
+        </HelpNote>
     </HelpSection>
 
     <HelpSection Title="Live venue data in text">

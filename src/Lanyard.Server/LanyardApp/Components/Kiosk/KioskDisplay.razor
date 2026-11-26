@@ -155,8 +155,9 @@ else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.Templat
 
         ProjectionProgramStep step = _steps[stepIndex];
 
-        // A Delay step holds, it doesn't render - whatever the previous step put on screen stays.
-        if (string.Equals(step.Template?.Name, KioskTemplateConstants.TemplateNames.Delay, StringComparison.Ordinal))
+        // Delay and Wait for Game steps hold, they don't render - whatever the previous step put
+        // on screen stays.
+        if (KioskTemplateConstants.IsHoldOnly(step.Template?.Name))
         {
             return;
         }
