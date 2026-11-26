@@ -207,7 +207,7 @@ public class RotaAutoBuildService(
 
                 return new AutoBuildWorker(user.Id, RotaNames.For(user), primary?.Id, primary?.Name, pool.ContractFor(user.Id),
                     pool.ShiftsByUser[user.Id].ToList(), pool.Availability[user.Id].ToList(), pending,
-                    pool.Wishes.GetValueOrDefault(user.Id));
+                    pool.Wishes.GetValueOrDefault(user.Id), pool.CalendarFor(user.Id).YoungWorker);
             }).ToList();
 
             Dictionary<Guid, StaffPosition> positions = templates
@@ -225,6 +225,23 @@ public class RotaAutoBuildService(
                 actingUserId ?? string.Empty,
                 nowUtc,
                 positions);
+
+            int raised = picks.Count(x => x.BreakRaised);
+            int openForYoung = picks.Count(x => x.OpenForYoungWorkers);
+
+            if (openForYoung > 0)
+            {
+                warnings.Add(openForYoung == 1
+                    ? "1 shift was left open because the only staff free were under 18 and it would break their limits."
+                    : $"{openForYoung} shifts were left open because the only staff free were under 18 and they would break their limits.");
+            }
+
+            if (raised > 0)
+            {
+                warnings.Add(raised == 1
+                    ? $"The break was set to {YoungWorkerRules.MinimumBreakMinutes} minutes on 1 shift given to someone under 18."
+                    : $"The break was set to {YoungWorkerRules.MinimumBreakMinutes} minutes on {raised} shifts given to staff under 18.");
+            }
 
             AutoBuildResult result = Build(picks.Select(x => x.Line).ToList());
 

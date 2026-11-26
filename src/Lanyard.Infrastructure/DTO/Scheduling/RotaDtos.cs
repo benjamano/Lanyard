@@ -24,6 +24,10 @@ public record RotaStaffRow(
 
     public TimeOffRequest? TimeOffOn(DateOnly day) => TimeOff.FirstOrDefault(x => x.Covers(day));
 
+    // Under 18 (or under school leaving age) at some point in the range, so the young worker limits
+    // apply - shown as a chip by their name. Never the dates themselves.
+    public bool IsYoungWorker { get; init; }
+
     // Their weekly availability (StaffAvailability), shown beside the shifts.
     public List<StaffAvailability> Availability { get; init; } = [];
 
