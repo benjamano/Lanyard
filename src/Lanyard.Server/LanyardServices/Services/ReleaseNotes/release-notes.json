@@ -1140,5 +1140,14 @@
       "Or turn on Save automatically as people type, so the text is always ready to type into on the kiosk and saves itself a moment after typing stops.",
       "Text widgets stay read-only everywhere else, and saving the dashboard in the designer no longer overwrites what was typed on the kiosk."
     ]
+  },
+  {
+    "version": "1.4.39",
+    "releaseDate": "2026-11-22",
+    "summary": "Keep staff under 18 within the UK young worker limits.",
+    "details": [
+      "Mark staff who are under 18 (Managers and Admins): on a person's Rota tab under Manage > Users, the new Under 18 section takes their date of birth and shows when they turn 18 and, for anyone under 16, when they're over school leaving age. It's only kept for staff under 18 and deleted on their 18th birthday, and staff can't see it.",
+      "Staff now shows who is currently marked as under 18, and Rota Settings has a new choice for the night hours staff under 18 can't work: 22:00 to 06:00, or 23:00 to 07:00 if their contract says so."
+    ]
   }
 ]
