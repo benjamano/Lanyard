@@ -64,7 +64,7 @@
                                 @if (outOfRange)
                                 {
                                     <FluentIcon Value="@(new Icons.Filled.Size16.Warning())" Color="Color.Custom" CustomColor="currentColor" aria-hidden="true" />
-                                    <span>@ChecklistDisplay.ReadingStatusLabel(status) - outside @RangeText(current). Tell a manager.</span>
+                                    <span>@ChecklistDisplay.ReadingStatusLabel(status) (acceptable: @RangeText(current)). Tell a manager.</span>
                                 }
                                 else
                                 {
@@ -106,7 +106,8 @@
                     {
                         <div id="@warningId" class="run-item-warning" role="status">
                             <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
-                                @ChecklistRules.ReadingText(typed!.Value, current.Unit) is outside @RangeText(current). You can still tick it, but tell a manager now.
+                                @ChecklistRules.ReadingText(typed!.Value, current.Unit) is @ChecklistDisplay.ReadingStatusLabel(ReadingStatus(current, typed)!.Value).ToLowerInvariant().
+                                Acceptable: @RangeText(current). You can still tick it, but tell a manager now.
                             </FluentMessageBar>
                         </div>
                         <div class="run-item-input">

@@ -266,7 +266,9 @@ public class ChecklistRunService(
             }
 
             string range = ChecklistRules.RangeText(item.MinReading, item.MaxReading, item.Unit)!;
-            string detail = $"{run.Name}, {when}, by {who}. Acceptable: {range}."
+            // "Opening, 09:14, by Amy C." - a short name already ends in a full stop.
+            string ticked = $"{run.Name}, {when}, by {who}";
+            string detail = $"{(ticked.EndsWith('.') ? ticked : ticked + ".")} Acceptable: {range}."
                 + (completion.Note is string written ? $" Note: {written}" : string.Empty);
 
             Result<OperationsAlertRaiseOutcome> raised = await _alertWriter.RaiseAsync(new OperationsAlertRaise(

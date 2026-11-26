@@ -117,8 +117,8 @@
             detail = Existing.Detail;
             response = Existing.Response.ToString();
             unit = Existing.Unit;
-            minReading = Existing.MinReading?.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            maxReading = Existing.MaxReading?.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            minReading = Existing.MinReading?.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+            maxReading = Existing.MaxReading?.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
             readingAlert = Existing.ReadingAlert.ToString();
         }
     }

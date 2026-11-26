@@ -476,6 +476,7 @@ public class ChecklistRunServiceTests
         StringAssert.Contains(raise.Detail, "Acceptable: 0–5 °C");
         StringAssert.Contains(raise.Detail, "Amy");
         StringAssert.Contains(raise.Detail, "Note: Moved the stock to fridge 2");
+        Assert.IsFalse(raise.Detail!.Contains(".."), $"No doubled full stop after a short name: {raise.Detail}");
         Assert.AreEqual(NotificationTopic.ChecklistReadingOutOfRange, raise.NotifyTopic);
         Assert.AreEqual(w.Amy.Id, raise.SubjectUserId);
         Assert.AreEqual($"/manage/checklists/today?location={w.Ipswich.Id}", raise.LinkUrl);
