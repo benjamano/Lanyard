@@ -90,6 +90,10 @@ public sealed class DemoResetService(
 
             demoDirectory.Invalidate();
 
+            // The wipe and seed write rules, opening hours and holidays directly, and the engine
+            // caches all three with its rules, so they'd otherwise run on what was there before.
+            scope.ServiceProvider.GetService<IAutomationEngineService>()?.InvalidateRuleCache();
+
             logger.LogInformation("Demo company {CompanyId} reset", companyId);
 
             return Result<bool>.Ok(true);

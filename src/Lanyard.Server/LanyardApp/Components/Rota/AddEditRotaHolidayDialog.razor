@@ -46,7 +46,7 @@
             {
                 <FluentSelect TOption="DayOfWeek" TValue="string" Items="@dayOptions" OptionText="@(x => RotaFormat.Uk.DateTimeFormat.GetDayName(x))"
                               OptionValue="@(x => x.ToString())" @bind-Value="staffLike" Label="Staff it like a" Width="100%" />
-                <div class="holiday-dialog-hint">Auto-build uses that day's shift templates instead. It also counts as a school holiday.</div>
+                <div class="holiday-dialog-hint">Auto-build uses that day's shift templates instead, and the venue keeps that day's opening hours, so pick a day it opens. It also counts as a school holiday.</div>
             }
         </div>
     </ChildContent>
