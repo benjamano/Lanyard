@@ -7,5 +7,9 @@ public enum ContractWarningKind
     AboveMaxHours = 2,
 
     // A shift sits on a day the person has approved time off.
-    ShiftDuringTimeOff = 3
+    ShiftDuringTimeOff = 3,
+
+    // A young worker limit broken that week: hours, breaks, rest, night work, or rostering someone
+    // under school leaving age (YoungWorkerRules). The message says which.
+    YoungWorkerLimit = 4
 }

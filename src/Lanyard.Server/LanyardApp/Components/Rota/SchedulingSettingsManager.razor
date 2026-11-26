@@ -51,6 +51,21 @@
                 <FluentDivider Class="my-3" />
 
                 <div class="settings-section">
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">Staff under 18</FluentText>
+                    <div class="settings-hint">Young workers can't work at night. Mark who is under 18 on each person's Rota tab under Manage &gt; Users.</div>
+                </div>
+
+                <div class="settings-fields">
+                    <div class="settings-field">
+                        <FluentSelect TOption="ChoiceOption<YoungWorkerNightWindow>" TValue="string" Items="@nightWindowOptions" OptionText="@(x => x.Name)"
+                                      OptionValue="@(x => ((int)x.Value).ToString())" @bind-Value="nightWindow"
+                                      Label="Night hours they can't work" Width="100%" />
+                        <div class="settings-hint">The law says 22:00 to 06:00 unless their contract says 23:00 to 07:00. Midnight to 04:00 is never allowed.</div>
+                    </div>
+                </div>
+                <FluentDivider Class="my-3" />
+
+                <div class="settings-section">
                     <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">Payroll export</FluentText>
                     <div class="settings-hint">Used by Export on the Timesheets page: the one-click pay period dates, and whether breaks are taken off paid time.</div>
                 </div>
@@ -137,6 +152,12 @@
         new(BreakDeductionRule.FixedOverThreshold, "Take off a set break on long days")
     ];
 
+    private static readonly List<ChoiceOption<YoungWorkerNightWindow>> nightWindowOptions =
+    [
+        new(YoungWorkerNightWindow.TenToSix, "22:00 to 06:00"),
+        new(YoungWorkerNightWindow.ElevenToSeven, "23:00 to 07:00 (set in their contract)")
+    ];
+
     private static readonly List<MonthOption> months = Enumerable.Range(1, 12)
         .Select(m => new MonthOption(m, CultureInfo.GetCultureInfo("en-GB").DateTimeFormat.GetMonthName(m)))
         .ToList();
@@ -155,6 +176,10 @@
     private string breakRule = "0";
     private int breakMinutes = 20;
     private double breakAfterHours = 6;
+    private string nightWindow = "0";
+
+    private YoungWorkerNightWindow SelectedNightWindow =>
+        int.TryParse(nightWindow, out int value) && System.Enum.IsDefined((YoungWorkerNightWindow)value) ? (YoungWorkerNightWindow)value : YoungWorkerNightWindow.TenToSix;
 
     private PayPeriodFrequency SelectedPayPeriod =>
         int.TryParse(payPeriod, out int value) && System.Enum.IsDefined((PayPeriodFrequency)value) ? (PayPeriodFrequency)value : PayPeriodFrequency.Monthly;
@@ -220,6 +245,7 @@
         breakRule = ((int)settings.BreakDeduction).ToString();
         breakMinutes = settings.BreakDeductionMinutes;
         breakAfterHours = (double)settings.BreakDeductionAfterHours;
+        nightWindow = ((int)settings.YoungWorkerNightWindow).ToString();
     }
 
     private async Task SaveAsync()
@@ -250,7 +276,8 @@
             PayPeriodAnchorDate = payPeriodAnchor is DateTime anchor ? DateOnly.FromDateTime(anchor) : null,
             BreakDeduction = SelectedBreakRule,
             BreakDeductionMinutes = breakMinutes,
-            BreakDeductionAfterHours = (decimal)breakAfterHours
+            BreakDeductionAfterHours = (decimal)breakAfterHours,
+            YoungWorkerNightWindow = SelectedNightWindow
         };
 
         Result<CompanySchedulingSettings> result = await _schedulingSettingsService.SaveSettingsAsync(scopeResult.Data, toSave);

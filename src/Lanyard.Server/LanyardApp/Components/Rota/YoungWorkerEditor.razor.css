@@ -1,0 +1,21 @@
+.young-worker-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    max-width: 640px;
+    min-width: 0;
+}
+
+.young-worker-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    width: 100%;
+}
+
+.young-worker-hint {
+    margin-top: 4px;
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}

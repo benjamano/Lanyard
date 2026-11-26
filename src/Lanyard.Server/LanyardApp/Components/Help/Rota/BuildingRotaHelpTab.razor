@@ -65,6 +65,11 @@
             <li>Never someone who has said they can't work at that time, would go over their weekly maximum, would get less than
                 11 hours' rest overnight before or after another day's shift, or has asked for that day off. A shift nobody can take is added as an
                 <strong>open shift</strong>, which you can fill by hand or staff can pick up once it's published.</li>
+            <li>Never a shift that would break the limits for someone under 18 (see <strong>Staff under 18</strong> below), counting
+                the shifts it has just given them too. If a long shift's break is the only problem, it gives them the shift with a
+                30 minute break instead. If the only people free are under 18 and the shift would break their limits, it's left
+                open and says why, and the list says how many shifts that happened to.</li>
+            <li>Never someone under school leaving age: only you can put them on a shift.</li>
             <li>A shift's <strong>regulars</strong> (set on its template) get it first, as long as they can work it.</li>
             <li>The rest are ranked the same way as <strong>Suggest staff</strong>: people who need shifts for their contract
                 first, then people who'd rather work then, then whoever has the fewest hours that week. People who'd go past
@@ -91,8 +96,30 @@
             <li><strong>Time off</strong> and <strong>Time off asked for</strong>.</li>
             <li>School holidays, bank holidays and closed days are labelled above the day they fall on. On a phone, a dot on the
                 day shows there's one; choose the day to see what it is.</li>
-            <li>A warning icon means the person's contract isn't met that week, and a graduation cap means
-                they're missing the position's required training.</li>
+            <li>A warning icon means the person's contract isn't met that week, or one of the under-18 limits is
+                broken; hover over it (or open <strong>rota warnings</strong> on a phone) to see which. A graduation cap
+                means they're missing the position's required training.</li>
+            <li><strong>U18</strong> by a name means the young worker limits apply to them.</li>
+        </ul>
+    </HelpSection>
+
+    <HelpSection Title="Staff under 18">
+        <FluentText>
+            For anyone marked as under 18 (see <a href="/help/rota?topic=setup">Rota setup</a>), Lanyard checks the
+            young worker limits: 8 hours a day and 40 a week, a 30 minute break on shifts over 4.5 hours, 12 hours
+            off between working days, 48 hours off in a row each week, and no work in the night hours set in
+            Rota Settings (never between midnight and 04:00). Hours at every location count.
+        </FluentText>
+        <ul>
+            <li>In <strong>Add shift</strong> or <strong>Edit shift</strong>, a warning lists any limit the shift
+                would break as you fill it in. If it's only the break, <strong>Set break to 30 min</strong> fixes it.</li>
+            <li>You can still save it: the law allows an under-18 to cover in a real emergency, as long as they get
+                the rest back afterwards. The rota then shows a warning for that week.</li>
+            <li><strong>Suggest staff</strong> lists anyone it would break a limit for under <strong>Not suggested</strong>,
+                with the reason.</li>
+            <li>Staff can't pick up, swap onto or be given through a request any shift that breaks a limit.</li>
+            <li>Anyone still under school leaving age is never suggested and can't pick up shifts, because Lanyard
+                doesn't check the child employment rules. Only you can put them on a shift.</li>
         </ul>
     </HelpSection>
 </HelpTab>

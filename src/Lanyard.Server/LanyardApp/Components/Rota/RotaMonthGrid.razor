@@ -49,6 +49,10 @@
                               title="@position.Name" aria-hidden="true"></span>
                     }
                     <span class="month-name-text">@row.DisplayName</span>
+                    @if (row.IsYoungWorker)
+                    {
+                        <YoungWorkerChip />
+                    }
                 </div>
                 <div class="month-name-meta">
                     <span title="Paid hours at this location this month">@RotaDisplayExtensions.FormatHours(monthHours)</span>
