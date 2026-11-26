@@ -89,6 +89,9 @@
     private const int PreviewWidth = 1280;
     private const int PreviewHeight = 720;
     private static readonly TimeSpan AutoRetryDelay = TimeSpan.FromSeconds(5);
+    // A kiosk that lost power or network can stay registered as a video source until its page's
+    // circuit times out, and starting a session on it then hangs for a minute. Give up sooner.
+    private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(20);
 
     private enum ViewState { Loading, NoCameras, Connecting, Live, Error }
 
@@ -171,6 +174,8 @@
             return;
         }
 
+        _ = ConnectWatchdogAsync(generation);
+
         try
         {
             _selfRef ??= DotNetObjectReference.Create(this);
@@ -237,7 +242,9 @@
             answerSdp = await _videoModule!.InvokeAsync<string>("videoViewer.receiveOffer", _videoElementId, sessionId, sdpOffer,
                 false, _selfRef, _videoStreamingOptions.Value.ToIceServersJson());
 
-            if (_sessionId == sessionId || _sessionId is null)
+            // Only a start still in progress goes live: a late offer from a session the watchdog
+            // already gave up on mustn't hide the error.
+            if (_state == ViewState.Connecting && (_sessionId == sessionId || _sessionId is null))
             {
                 _state = ViewState.Live;
                 _error = null;
@@ -278,6 +285,31 @@
             }
 
             SetError(FriendlyError(error ?? "The camera stopped."));
+        });
+    }
+
+    private async Task ConnectWatchdogAsync(int generation)
+    {
+        try
+        {
+            await Task.Delay(ConnectTimeout, _disposeCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        await InvokeAsync(async () =>
+        {
+            if (generation != _generation || _state != ViewState.Connecting || _disposeCts.IsCancellationRequested)
+            {
+                return;
+            }
+
+            // Bumping the generation makes StartAsync end the session if it does come back late.
+            _generation++;
+            await StopCurrentAsync();
+            SetError("The kiosk's camera didn't respond. Check it's online, then try again.");
         });
     }
 
