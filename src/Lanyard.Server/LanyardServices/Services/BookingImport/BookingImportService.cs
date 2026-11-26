@@ -42,6 +42,11 @@ public sealed class BookingImportService : IBookingImportService
     // cache, so party-time automation sees Just Step's changes within a tick.
     private readonly IPartyScheduleProvider? _partySchedule;
 
+    // Optional only so tests can leave it out. After a run that adds, moves, retypes or cancels
+    // parties, the days it touched are checked once (not per booking) for party staffing that no
+    // longer matches an already-built rota.
+    private readonly IPartyStaffingWatch? _staffingWatch;
+
     public BookingImportService(
         IDbContextFactory<ApplicationDbContext> factory,
         ISystemDbContextFactory systemFactory,
@@ -50,9 +55,11 @@ public sealed class BookingImportService : IBookingImportService
         IDataProtectionProvider dataProtection,
         TimeProvider timeProvider,
         ILogger<BookingImportService> logger,
-        IPartyScheduleProvider? partySchedule = null)
+        IPartyScheduleProvider? partySchedule = null,
+        IPartyStaffingWatch? staffingWatch = null)
     {
         _partySchedule = partySchedule;
+        _staffingWatch = staffingWatch;
         _factory = factory;
         _systemFactory = systemFactory;
         _client = client;
@@ -322,8 +329,15 @@ public sealed class BookingImportService : IBookingImportService
                 return await SaveRunAsync(ctx, run, cancellationToken);
             }
 
-            await ApplyBookingsAsync(ctx, companyId, locationId, fetch.Data!, from, to, startedAt, run, cancellationToken);
+            HashSet<DateOnly> touchedDays = await ApplyBookingsAsync(ctx, companyId, locationId, fetch.Data!, from, to, startedAt, run, cancellationToken);
             _partySchedule?.Invalidate(locationId);
+
+            if (_staffingWatch is not null && touchedDays.Count > 0)
+            {
+                // One check for the whole run; the watch ignores days outside its horizon and sends
+                // at most one notification, however many days this run changed.
+                await _staffingWatch.CheckDaysAsync(locationId, touchedDays, null, cancellationToken);
+            }
 
             bool anyChanges = run.Imported + run.Updated > 0;
             run.Status = run.Failed > 0
@@ -358,10 +372,13 @@ public sealed class BookingImportService : IBookingImportService
     // field actually changed, so an unchanged run is a true no-op. A booking that has dropped out of
     // Just Step within the imported window is cancelled, so cancellations there flow through too.
     // A booking's Lanyard status is otherwise left alone, so a local cancellation sticks.
-    private async Task ApplyBookingsAsync(ApplicationDbContext ctx, int companyId, int locationId,
+    // Returns the venue-local days whose parties changed in a way that can change their staffing: a
+    // new booking, a new time or type (both the old and the new day), or a cancellation.
+    private async Task<HashSet<DateOnly>> ApplyBookingsAsync(ApplicationDbContext ctx, int companyId, int locationId,
         IReadOnlyList<ExternalBookingDto> bookings, DateOnly from, DateOnly to, DateTime now, BookingImportRun run, CancellationToken ct)
     {
         run.BookingsSeen = bookings.Count;
+        HashSet<DateOnly> touchedDays = [];
 
         // Just Step can list the same reference more than once in a window; keep the last and count
         // each ref once, so the run's totals are honest and we never insert the same booking twice.
@@ -426,9 +443,16 @@ public sealed class BookingImportService : IBookingImportService
                 {
                     booking.ExternalLastImportedUtc = now;
                     run.Imported++;
+                    touchedDays.Add(RotaTime.LocalDate(booking.StartUtc));
                 }
                 else if (ctx.Entry(booking).State == EntityState.Modified)
                 {
+                    if (AffectsStaffing(ctx.Entry(booking)))
+                    {
+                        touchedDays.Add(RotaTime.LocalDate(ctx.Entry(booking).Property(x => x.StartUtc).OriginalValue));
+                        touchedDays.Add(RotaTime.LocalDate(booking.StartUtc));
+                    }
+
                     booking.UpdateDate = now;
                     booking.UpdateByUserId = ImportUserId;
                     booking.ExternalLastImportedUtc = now;
@@ -443,20 +467,31 @@ public sealed class BookingImportService : IBookingImportService
             }
         }
 
-        run.Updated += await CancelDroppedBookingsAsync(ctx, locationId, refs, from, to, now, ct);
+        List<PartyBooking> cancelled = await CancelDroppedBookingsAsync(ctx, locationId, refs, from, to, now, ct);
+        run.Updated += cancelled.Count;
+        touchedDays.UnionWith(cancelled.Select(x => RotaTime.LocalDate(x.StartUtc)));
 
         await ctx.SaveChangesAsync(ct);
+
+        return touchedDays;
     }
+
+    // Party staffing goes by when a party is and what type it is; the contact, child, price and
+    // guest count don't change who's needed.
+    private static bool AffectsStaffing(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<PartyBooking> entry) =>
+        entry.Property(x => x.StartUtc).IsModified
+        || entry.Property(x => x.EndUtc).IsModified
+        || entry.Property(x => x.PartyType).IsModified;
 
     // Cancels still-booked imported parties inside the fetched window whose reference didn't come
     // back this time - they've been cancelled or removed in Just Step. Skips the whole step when the
     // report came back empty, so a one-off empty response can't wipe a window of bookings.
-    private async Task<int> CancelDroppedBookingsAsync(ApplicationDbContext ctx, int locationId, List<string> seenRefs,
+    private async Task<List<PartyBooking>> CancelDroppedBookingsAsync(ApplicationDbContext ctx, int locationId, List<string> seenRefs,
         DateOnly from, DateOnly to, DateTime now, CancellationToken ct)
     {
         if (seenRefs.Count == 0)
         {
-            return 0;
+            return [];
         }
 
         DateTime windowFromUtc = RotaTime.StartOfDayUtc(from);
@@ -483,7 +518,7 @@ public sealed class BookingImportService : IBookingImportService
             _logger.LogInformation("Cancelled {Count} booking(s) no longer in Just Step for location {LocationId}", dropped.Count, locationId);
         }
 
-        return dropped.Count;
+        return dropped;
     }
 
     private static int? AgeTurning(DateOnly partyDate, DateOnly? dob)
