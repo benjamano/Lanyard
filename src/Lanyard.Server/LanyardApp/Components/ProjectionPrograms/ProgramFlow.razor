@@ -57,7 +57,7 @@
                         <FluentAccordionItem class="mt-2" Expanded="@GameWaitStepNames.IsWaitForGame(step.Template?.Name)">
                             <HeaderTemplate>
                                 <FluentIcon Value="@(new Icons.Regular.Size20.TaskListRtl())"></FluentIcon>
-                                Parameters (@step.Template.Parameters.Count)
+                                Parameters (@VisibleParameterCount(step))
                             </HeaderTemplate>
                             <ChildContent>
                                 <FluentGrid Spacing="3">
@@ -248,6 +248,18 @@
         StateHasChanged();
 
         await NotifyStepsChangedAsync();
+    }
+
+    // Seconds Left is hidden unless a Wait for Game step waits for the time left, so don't count it.
+    private static int VisibleParameterCount(ProjectionProgramStep step)
+    {
+        int count = step.Template?.Parameters.Count ?? 0;
+
+        bool hidesSecondsLeft = GameWaitStepNames.IsWaitForGame(step.Template?.Name)
+            && GameWaitEvent(step) != ProjectionGameEvent.TimeLeftBelow
+            && step.Template!.Parameters.Any(p => p.Name == GameWaitStepNames.SecondsLeftParameter);
+
+        return hidesSecondsLeft ? count - 1 : count;
     }
 
     private static Guid? ParseKioskId(string? value) =>

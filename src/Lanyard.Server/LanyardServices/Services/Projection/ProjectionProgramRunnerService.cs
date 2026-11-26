@@ -218,7 +218,7 @@ public class ProjectionProgramRunnerService(
 
             if (!parsed.IsSuccess)
             {
-                return Result<IReadOnlyDictionary<int, ProjectionGameWaitState>>.Fail($"Step {i + 1} ({GameWaitStepNames.Template}): {parsed.Error}");
+                return Result<IReadOnlyDictionary<int, ProjectionGameWaitState>>.Fail($"Step {steps[i].SortOrder + 1} ({GameWaitStepNames.Template}): {parsed.Error}");
             }
 
             settingsByIndex[i] = parsed.Data!;
@@ -244,7 +244,7 @@ public class ProjectionProgramRunnerService(
         {
             if (!kiosks.TryGetValue(settings.KioskClientId, out var kiosk) || kiosk.CompanyId != program.CompanyId)
             {
-                return Result<IReadOnlyDictionary<int, ProjectionGameWaitState>>.Fail($"Step {index + 1} ({GameWaitStepNames.Template}) watches a laser kiosk that no longer exists. Choose its kiosk again.");
+                return Result<IReadOnlyDictionary<int, ProjectionGameWaitState>>.Fail($"Step {steps[index].SortOrder + 1} ({GameWaitStepNames.Template}) watches a laser kiosk that isn't available. Choose its kiosk again.");
             }
 
             waits[index] = new ProjectionGameWaitState(settings.Event, settings.KioskClientId, kiosk.Name, settings.SecondsLeft, settings.GiveUpAfterMinutes);
@@ -468,6 +468,10 @@ public class ProjectionProgramRunnerService(
 
         _laserGameStatusStore.OnStatusUpdated += OnStatusUpdated;
 
+        // A wait that's met straight away would otherwise return without awaiting anything, and a
+        // repeating program made only of such steps would spin the run loop flat out.
+        bool hasYielded = false;
+
         try
         {
             TimeSpan startedAt = GetPlayedTime(run);
@@ -488,6 +492,11 @@ public class ProjectionProgramRunnerService(
                 // moves on as soon as playback resumes.
                 if (wait.Satisfied && !run.IsPaused)
                 {
+                    if (!hasYielded)
+                    {
+                        await Task.Delay(ProjectionSequence.TickMilliseconds, token);
+                    }
+
                     _logger.LogInformation("Projection program {ProgramId} on client {ClientId} display {DisplayIndex}: step {StepIndex} saw {GameEvent} on kiosk {KioskClientId}", run.ProgramId, clientId, displayIndex, stepIndex, gameWait.Event, gameWait.KioskClientId);
                     return;
                 }
@@ -505,6 +514,7 @@ public class ProjectionProgramRunnerService(
                     : ProjectionSequence.TickMilliseconds;
 
                 await Task.Delay(delay, token);
+                hasYielded = true;
             }
         }
         finally

@@ -11,11 +11,15 @@ public class GameEventWaitTests
 {
     private static readonly Guid Kiosk = Guid.NewGuid();
 
+    // Each status is stamped a millisecond after the last, as the store stamps real publishes.
+    private static DateTime _clock = new(2026, 11, 26, 12, 0, 0, DateTimeKind.Utc);
+
     private static LaserGameStatusDTO Status(GameStatus status, int timeRemainingSeconds = 0, Guid? clientId = null) => new()
     {
         ClientId = clientId ?? Kiosk,
         Status = status,
-        TimeRemainingSeconds = timeRemainingSeconds
+        TimeRemainingSeconds = timeRemainingSeconds,
+        LastUpdateUtc = _clock = _clock.AddMilliseconds(1)
     };
 
     private static GameEventWait Wait(ProjectionGameEvent gameEvent, int? secondsLeft = null) => new(gameEvent, Kiosk, secondsLeft);
@@ -113,10 +117,51 @@ public class GameEventWaitTests
         GameEventWait idle = Wait(ProjectionGameEvent.GameEnds);
         idle.Observe(Status(GameStatus.NotStarted));
         Assert.IsTrue(idle.Satisfied);
+    }
 
-        GameEventWait gettingReady = Wait(ProjectionGameEvent.GameEnds);
-        gettingReady.Observe(Status(GameStatus.GetReady));
-        Assert.IsTrue(gettingReady.Satisfied);
+    [TestMethod]
+    public void GameEnds_ReachedDuringGetReady_WaitsForThatGameToFinish()
+    {
+        // Wait Get ready -> short scoreboard step -> Wait Game ends: the kiosk is usually still in
+        // Get ready when the second wait begins.
+        GameEventWait wait = Wait(ProjectionGameEvent.GameEnds);
+
+        wait.Observe(Status(GameStatus.GetReady));
+        Assert.IsFalse(wait.Satisfied, "Get ready means a game is about to run.");
+
+        wait.Observe(Status(GameStatus.InGame, 600));
+        Assert.IsFalse(wait.Satisfied);
+
+        wait.Observe(Status(GameStatus.NotStarted));
+        Assert.IsTrue(wait.Satisfied);
+    }
+
+    [TestMethod]
+    public void GameEnds_EndsWhenGetReadyIsCalledOff()
+    {
+        GameEventWait wait = Wait(ProjectionGameEvent.GameEnds);
+
+        wait.Observe(Status(GameStatus.GetReady));
+        wait.Observe(Status(GameStatus.NotStarted));
+
+        Assert.IsTrue(wait.Satisfied);
+    }
+
+    [TestMethod]
+    public void AnOlderStatusArrivingLate_IsIgnored()
+    {
+        GameEventWait wait = Wait(ProjectionGameEvent.TimeLeftBelow, secondsLeft: 30);
+
+        LaserGameStatusDTO readByTheTick = Status(GameStatus.GetReady);
+        wait.Observe(readByTheTick);
+
+        // The publish that started the game is heard first...
+        wait.Observe(Status(GameStatus.InGame, 600));
+
+        // ...then the tick's stale read lands: it mustn't look like the game just ended.
+        wait.Observe(readByTheTick);
+
+        Assert.IsFalse(wait.Satisfied);
     }
 
     [TestMethod]

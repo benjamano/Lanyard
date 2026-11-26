@@ -320,6 +320,41 @@ public class ProjectionProgramRunnerGameWaitTests
     }
 
     [TestMethod]
+    public async Task WaitsMetStraightAway_DoNotSpinTheRunLoop()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Seeded seed = await SeedAsync(options, ProjectionGameEvent.GameEnds);
+
+        // Only the wait step left, and no game running: it's met at once on every pass.
+        await using (ApplicationDbContext context = new(options))
+        {
+            foreach (ProjectionProgramStep step in context.ProjectionProgramSteps.Where(s => s.SortOrder != 1))
+            {
+                step.IsActive = false;
+            }
+
+            await context.SaveChangesAsync();
+        }
+
+        LaserGameStatusStore store = new();
+        store.UpdateStatus(seed.LaserKioskId, new LaserGameStatusDTO { Status = GameStatus.NotStarted });
+        ProjectionProgramRunnerService runner = CreateRunner(options, store);
+
+        int advances = 0;
+        runner.OnProgramStepAdvanced += (_, _, _) => Interlocked.Increment(ref advances);
+
+        Result<Guid> started = await runner.StartAsync(seed.ProjectorId, 0, seed.ProgramId, repeatInfinitely: true, 0, false);
+        Assert.IsTrue(started.IsSuccess, started.Error);
+
+        await Task.Delay(1000);
+        runner.Stop(seed.ProjectorId, 0);
+
+        // One pass per tick at most (200 ms), so about 5 in a second; a spinning loop does thousands.
+        Assert.IsTrue(advances <= 10, $"The run loop advanced {advances} times in a second.");
+        Assert.IsTrue(advances >= 2, "The program should still loop.");
+    }
+
+    [TestMethod]
     public async Task StartAsync_RefusesALaserKioskFromAnotherCompany()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();

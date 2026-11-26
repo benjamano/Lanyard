@@ -41,8 +41,9 @@
                     <li><strong>Get ready</strong>: the kiosk shows Get ready, or a game starts (so a missed Get ready doesn't
                         hold a whole game). Moves on straight away if it's already getting ready or playing.</li>
                     <li><strong>Game starts</strong>: a game is in progress. Moves on straight away if one already is.</li>
-                    <li><strong>Game ends</strong>: the game that's running finishes. Moves on straight away if no game is
-                        running, as there's nothing to wait for.</li>
+                    <li><strong>Game ends</strong>: the game that's running finishes. If players are still getting ready, it
+                        waits for that game to finish. Moves on straight away if no game is running or about to start,
+                        as there's nothing to wait for.</li>
                     <li><strong>Time left drops below</strong>: there are <strong>Seconds Left</strong> or fewer left in the
                         game. It also moves on if the game stops early.</li>
                 </ul>
