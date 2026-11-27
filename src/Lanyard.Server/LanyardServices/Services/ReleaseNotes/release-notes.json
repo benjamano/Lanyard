@@ -1144,7 +1144,7 @@
   {
     "version": "1.4.41",
     "releaseDate": "2026-11-27",
-    "summary": "Safer rotas for staff under 18, easier staff phone set-up and more flexible automation music controls.",
+    "summary": "Safer rotas for staff under 18, easier staff phone set-up, clearer dark-mode text dividers and more flexible automation music controls.",
     "details": [
       "Mark staff who are under 18 (Managers and Admins): on a person's Rota tab under Manage > Users, the new Under 18 section takes their date of birth and shows when they turn 18 and, for anyone under 16, when they're over school leaving age. It's only kept for staff under 18 and deleted on their 18th birthday, and staff can't see it.",
       "Staff now shows who is currently marked as under 18, and Rota Settings has a new choice for the night hours staff under 18 can't work: 22:00 to 06:00, or 23:00 to 07:00 if their contract says so.",
@@ -1159,6 +1159,7 @@
       "New Staff Set-up page for Managers and Admins (Management › People › Staff Set-up). It lists everyone at your location with a tick or cross for the app on their phone, notifications and Face ID sign-in, shows how many are ready, and can hide everyone who already is. Anyone who hasn't accepted their invite is marked, and locked accounts are left out. Copy set-up link copies the Get Started link to send or show as a QR code.",
       "Automation rules: a Music Control Play step with a playlist can now carry on where the music paused if that playlist is already loaded, instead of starting it again from the top. Handy for playing music while a game is on and pausing it when it ends.",
       "Music Control Play steps can also turn Shuffle on or off and set Repeat to Off, Repeat playlist or Repeat song. Leave them as they are to keep the kiosk's current setting.",
+      "Dividers in text widgets are now easy to see in dark mode, both on the kiosk screen and while editing. Opening a text widget to edit it no longer removes the dividers already in it.",
       "Coming back to Lanyard on a phone after pressing the home button now reconnects in about a second, instead of showing Reconnecting for a minute or more. If the phone's network is still waking up, it reconnects within a few seconds of the network coming back."
     ]
   }
