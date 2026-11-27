@@ -1142,7 +1142,7 @@
     ]
   },
   {
-    "version": "1.4.40",
+    "version": "1.4.41",
     "releaseDate": "2026-11-27",
     "summary": "Keep staff under 18 within the UK young worker limits. A Get Started page gets staff's phones ready in a couple of minutes.",
     "details": [
@@ -1155,7 +1155,8 @@
       "New Get Started page (/get-started) for every member of staff. It checks the phone you're on and takes you through what's left: putting the app on your Home Screen, turning on notifications (with a Send me a test button to check they arrive), and optionally Face ID or fingerprint sign-in. The install and notification steps tick off as they're done, and you'll see You're all ready to use Lanyard once the important ones are.",
       "On iPhone and iPad, Get Started shows exactly how to Add to Home Screen, and explains that notifications are turned on from the app rather than Safari. On Android, Install opens the phone's own install prompt. If notifications are blocked, it says where to allow them for your phone and rechecks when you come back.",
       "When new staff set their password, Continue to Login now signs them in and takes them straight to Get Started. Anyone can open it again from Account Management with Set up this device, beside Notifications.",
-      "Managers and Admins see a Copy link button at the bottom of Get Started, to turn into a QR code for a staff meeting so everyone can get set up at once."
+      "Managers and Admins see a Copy link button at the bottom of Get Started, to turn into a QR code for a staff meeting so everyone can get set up at once.",
+      "New Staff Set-up page for Managers and Admins (Management › People › Staff Set-up). It lists everyone at your location with a tick or cross for the app, notifications and Face ID sign-in, shows how many are ready, and can hide everyone who already is. Copy set-up link copies the Get Started link to send or show as a QR code."
     ]
   }
 ]

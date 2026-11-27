@@ -368,7 +368,7 @@ public static class HelpRegistry
 
         new(Users,
             "Users & Roles",
-            "Adding staff, their profiles, roles and permissions, locations, company features and sign-in security.",
+            "Adding staff, their profiles, roles and permissions, locations, company features, sign-in security and who has set up their phone.",
             HelpAudience.Managers,
             () => new Icons.Regular.Size20.PeopleTeam(),
             [
@@ -376,9 +376,10 @@ public static class HelpRegistry
                 new("profile", "A Person's Profile"),
                 new("roles", "Roles & Permissions"),
                 new("locations", "Companies & Locations"),
-                new("security", "Sign-in & Security")
+                new("security", "Sign-in & Security"),
+                new("staff-setup", "Staff Set-up")
             ],
-            ["/manage/users", "/manage/roles", "/manage/companies-locations"],
+            ["/manage/users", "/manage/roles", "/manage/companies-locations", "/manage/staff-setup"],
             Roles: "Admin,Manager"),
 
         new(ManageChecklists,
