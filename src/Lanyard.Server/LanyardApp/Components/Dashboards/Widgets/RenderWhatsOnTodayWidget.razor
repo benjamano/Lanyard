@@ -118,7 +118,7 @@
     private WhatsOnDay? _day;
     private int? _locationId;
     private string? _locationName;
-    private int? _loadedFor;
+    private (int? LocationId, int? CompanyId)? _loadedFor;
     private bool _viewerManagesLocation;
     private PeriodicTimer? _refreshTimer;
     private CancellationTokenSource? _refreshCancellation;
@@ -139,7 +139,7 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        if (_state != State.Loading && _loadedFor == Widget.LocationId)
+        if (_state != State.Loading && _loadedFor == (Widget.LocationId, CompanyId))
         {
             return;
         }
@@ -149,7 +149,7 @@
 
     private async Task LoadAsync()
     {
-        _loadedFor = Widget.LocationId;
+        _loadedFor = (Widget.LocationId, CompanyId);
 
         // Signed out (a kiosk screen) there's no scope; the dashboard's company stands in for it.
         Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
@@ -166,8 +166,11 @@
         Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync(dashboardCompanyId);
         List<Location> companyLocations = locations.Data ?? [];
 
-        // A company with one location gets no picker, so a kiosk falls back to that location.
-        _locationId = Widget.LocationId
+        // A Manager always sees where they signed in; everyone else the widget's location, then
+        // their own. A company with one location gets no picker, so a kiosk falls back to it.
+        bool isManagerOnly = viewer is { IsAdmin: false, IsManager: true };
+        _locationId = (isManagerOnly ? viewer!.LocationId : null)
+            ?? Widget.LocationId
             ?? viewer?.LocationId
             ?? (companyLocations.Count == 1 ? companyLocations[0].Id : null);
 

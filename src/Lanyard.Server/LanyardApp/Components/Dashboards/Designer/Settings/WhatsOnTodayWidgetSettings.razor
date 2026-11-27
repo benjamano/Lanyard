@@ -3,7 +3,7 @@
 <div class="widget-settings">
     <LocationPicker Value="@W.LocationId" ValueChanged="@(v => SetAsync(() => W.LocationId = v, "Changed the location"))"
                     NoneText="The viewer's location" />
-    <div class="widget-settings-note">Everyone who can see this dashboard sees this card, including kiosk screens, so it shows children's names on party titles. Signed-out kiosk screens have no location of their own, so pick one for a kiosk dashboard. Entries only open for Admins and the location's Managers.</div>
+    <div class="widget-settings-note">Everyone who can see this dashboard sees this card, including kiosk screens, so it shows children's names on party titles. Managers always see the location they signed in to. Signed-out kiosk screens have no location of their own, so pick one for a kiosk dashboard. Entries only open for Admins and the location's Managers.</div>
     <FluentNumberInput TValue="int" Value="@W.MaxItems" ValueChanged="@(v => SetAsync(() => W.MaxItems = Math.Clamp(v, 1, WhatsOnTodayWidget.MaxSupportedItems), "Changed how many entries show"))"
                        Min="1" Max="WhatsOnTodayWidget.MaxSupportedItems" Label="Most entries to list" />
 </div>
