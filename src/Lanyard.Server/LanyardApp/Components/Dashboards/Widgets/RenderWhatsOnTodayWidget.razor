@@ -6,9 +6,9 @@
 
 @inject IWhatsOnService _whatsOnService
 
-@* Today at one location: the day's totals and what's still to come. For the viewing Admin or
-   Manager only - parties carry children's names, so a signed-out kiosk screen gets a short note
-   and the data is never requested for it. *@
+@* Today at one location: the day's totals and what's still to come. Shown to anyone who can see
+   the dashboard, signed-out kiosk screens included. Entries only open for an Admin, or a Manager
+   at that location, since the party pages are theirs. *@
 
 <FluentCard Height="100%">
     <div class="sw-body">
@@ -28,11 +28,6 @@
             case State.Failed:
                 <div class="sw-empty" title="@_error">
                     <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Danger">Couldn't load what's on</FluentBadge>
-                </div>
-                break;
-            case State.NotManager:
-                <div class="sw-empty">
-                    <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">Shown to managers</FluentBadge>
                 </div>
                 break;
             case State.NoLocation:
@@ -71,7 +66,7 @@
                     {
                         @foreach (WhatsOnItem item in Upcoming.Take(MaxItems))
                         {
-                            <button type="button" class="sw-row" disabled="@(!AllowTrigger)" @onclick="@(() => Open(item.Href))"
+                            <button type="button" class="sw-row" disabled="@(!CanOpen)" @onclick="@(() => Open(item.Href))"
                                     title="@($"{item.TimeRange()} · {item.Title} · {item.Headcount()}")">
                                 <span class="wot-time">@RotaFormat.LocalTime(item.StartUtc)</span>
                                 <span class="sw-text">
@@ -91,7 +86,7 @@
                     }
                 </div>
 
-                @if (AllowTrigger)
+                @if (CanOpen)
                 {
                     <FluentButton Appearance="ButtonAppearance.Transparent" IconEnd="@(new Icons.Regular.Size16.ArrowRight())" OnClick="@(() => Open(DayHref))">
                         View the day
@@ -109,10 +104,14 @@
     [Parameter]
     public bool AllowTrigger { get; set; } = true;
 
+    // The dashboard's company: kiosk dashboards run signed out, so nothing else scopes the read.
+    [Parameter]
+    public int? CompanyId { get; set; }
+
     // Keeps "still to come" honest on a screen left open all day.
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(5);
 
-    private enum State { Loading, Failed, NotManager, NoLocation, Ready }
+    private enum State { Loading, Failed, NoLocation, Ready }
 
     private State _state = State.Loading;
     private string? _error;
@@ -120,6 +119,7 @@
     private int? _locationId;
     private string? _locationName;
     private int? _loadedFor;
+    private bool _viewerManagesLocation;
     private PeriodicTimer? _refreshTimer;
     private CancellationTokenSource? _refreshCancellation;
 
@@ -129,6 +129,9 @@
     private List<WhatsOnItem> Upcoming => _day is null
         ? []
         : _day.Items.Where(x => !x.IsCancelled && x.EndUtc > DateTime.UtcNow).ToList();
+
+    // Clicking through needs a live dashboard and a viewer who can open the party pages.
+    private bool CanOpen => AllowTrigger && _viewerManagesLocation;
 
     private string DayHref => _locationId is int id ? $"/manage/whats-on?location={id}" : "/manage/whats-on";
 
@@ -148,18 +151,25 @@
     {
         _loadedFor = Widget.LocationId;
 
-        // Gate first: a signed-out screen (a kiosk) or a non-manager never reaches the service,
-        // which refuses them itself as well.
+        // Signed out (a kiosk screen) there's no scope; the dashboard's company stands in for it.
         Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+        LocationScope? viewer = scope.IsSuccess ? scope.Data : null;
 
-        if (!scope.IsSuccess || scope.Data is null || !(scope.Data.IsAdmin || scope.Data.IsManager))
+        int? companyId = CompanyId ?? viewer?.CompanyId;
+
+        if (companyId is not int dashboardCompanyId)
         {
-            _state = State.NotManager;
+            _state = State.NoLocation;
             return;
         }
 
-        // Only an Admin can point the widget somewhere else; a Manager always sees their own location.
-        _locationId = scope.Data.IsAdmin ? Widget.LocationId ?? scope.Data.LocationId : scope.Data.LocationId;
+        Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync(dashboardCompanyId);
+        List<Location> companyLocations = locations.Data ?? [];
+
+        // A company with one location gets no picker, so a kiosk falls back to that location.
+        _locationId = Widget.LocationId
+            ?? viewer?.LocationId
+            ?? (companyLocations.Count == 1 ? companyLocations[0].Id : null);
 
         if (_locationId is not int locationId)
         {
@@ -167,10 +177,12 @@
             return;
         }
 
-        DateOnly today = RotaTime.Today(DateTime.UtcNow);
-        Result<WhatsOnRange> result = await _whatsOnService.GetRangeAsync(scope.Data, locationId, today, today);
+        _viewerManagesLocation = viewer is not null && (viewer.IsAdmin || (viewer.IsManager && viewer.LocationId == locationId));
 
-        if (!result.IsSuccess || result.Data?.Day(today) is not WhatsOnDay day)
+        DateOnly today = RotaTime.Today(DateTime.UtcNow);
+        Result<WhatsOnDay> result = await _whatsOnService.GetDashboardDayAsync(dashboardCompanyId, locationId, today);
+
+        if (!result.IsSuccess || result.Data is not WhatsOnDay day)
         {
             _error = result.Error;
             _state = State.Failed;
@@ -178,16 +190,14 @@
         }
 
         _day = day;
-
-        Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync();
-        _locationName = locations.Data?.FirstOrDefault(x => x.Id == locationId)?.Name;
+        _locationName = companyLocations.FirstOrDefault(x => x.Id == locationId)?.Name;
 
         _state = State.Ready;
     }
 
     private void Open(string? href)
     {
-        if (AllowTrigger && href is not null)
+        if (CanOpen && href is not null)
         {
             _navigationManager.NavigateTo(href);
         }
