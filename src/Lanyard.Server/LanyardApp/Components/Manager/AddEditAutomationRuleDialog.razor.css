@@ -74,3 +74,10 @@
         grid-template-columns: 1fr 1fr;
     }
 }
+
+/* The "carry on where it left off" tick box gets a line of its own under the rest of the music
+   step (after the remove button, hence the order), so its long label doesn't squeeze the selects. */
+.automation-music-resume {
+    order: 1;
+    flex-basis: 100%;
+}

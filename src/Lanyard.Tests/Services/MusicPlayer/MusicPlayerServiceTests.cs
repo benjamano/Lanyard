@@ -700,5 +700,60 @@ public class MusicPlayerServiceTests
         await player.HandleSongEndedAsync(clientId);
         Assert.AreEqual(songs[2], player.GetCurrentSong(clientId)!.Id);
     }
+    [TestMethod]
+    public async Task SetShuffle_OnlyReshuffles_WhenItActuallyChanges()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = Guid.NewGuid();
+        Guid playlistId = Guid.NewGuid();
+        await SeedOrderedPlaylistAsync(options, playlistId, 10);
+
+        (MusicPlayerService player, _) = GetConnectedPlayer(options, clientId);
+        await player.ShufflePlay(clientId, playlistId);
+
+        int changes = 0;
+        player.OnShuffleStateChanged += (_, _) => changes++;
+
+        Assert.IsTrue(await player.SetShuffle(clientId, true));
+        Assert.AreEqual(0, changes, "Already on: nothing changes.");
+
+        Assert.IsFalse(await player.SetShuffle(clientId, false));
+        Assert.IsFalse(player.GetShuffleEnabled(clientId));
+        Assert.AreEqual(1, changes);
+    }
+
+    [TestMethod]
+    public async Task SetRepeatMode_SetsTheModeDirectly()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = Guid.NewGuid();
+        (MusicPlayerService player, _) = GetConnectedPlayer(options, clientId);
+
+        await player.SetRepeatMode(clientId, RepeatMode.One);
+        Assert.AreEqual(RepeatMode.One, player.GetCurrentRepeatMode(clientId));
+
+        await player.SetRepeatMode(clientId, RepeatMode.Off);
+        Assert.AreEqual(RepeatMode.Off, player.GetCurrentRepeatMode(clientId));
+    }
+
+    [TestMethod]
+    public async Task IsPlaylistLoaded_IsTrueOnlyForTheLoadedPlaylistWhilePlayingOrPaused()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = Guid.NewGuid();
+        Guid playlistId = Guid.NewGuid();
+        await SeedOrderedPlaylistAsync(options, playlistId, 2);
+
+        (MusicPlayerService player, _) = GetConnectedPlayer(options, clientId);
+        Assert.IsFalse(player.IsPlaylistLoaded(clientId, playlistId), "Nothing has played yet.");
+
+        await player.Play(clientId, playlistId);
+        player.UpdatePlaybackState(clientId, NAudio.Wave.PlaybackState.Paused);
+        Assert.IsTrue(player.IsPlaylistLoaded(clientId, playlistId));
+        Assert.IsFalse(player.IsPlaylistLoaded(clientId, Guid.NewGuid()));
+
+        player.UpdatePlaybackState(clientId, NAudio.Wave.PlaybackState.Stopped);
+        Assert.IsFalse(player.IsPlaylistLoaded(clientId, playlistId));
+    }
 }
 

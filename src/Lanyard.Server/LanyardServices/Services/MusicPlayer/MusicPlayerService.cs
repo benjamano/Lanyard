@@ -1141,15 +1141,27 @@ public class MusicPlayerService : IMusicPlayerService
     /// Turning shuffle on shuffles everything after the current song; turning it off goes back to
     /// playlist order from the current song. Either way the song playing carries on.
     /// </summary>
-    public Task<bool> ToggleShuffle(Guid clientId)
+    public Task<bool> ToggleShuffle(Guid clientId) => ChangeShuffle(clientId, enabled: null);
+
+    public Task<bool> SetShuffle(Guid clientId, bool enabled) => ChangeShuffle(clientId, enabled);
+
+    // enabled null = flip it. Setting it to what it already is changes nothing, so the play
+    // order (and what plays next) stays put.
+    private Task<bool> ChangeShuffle(Guid clientId, bool? enabled)
     {
         bool isEnabled;
 
         lock (_lock)
         {
             ClientMusicState state = GetOrCreateStateLocked(clientId);
-            state.IsShuffleEnabled = !state.IsShuffleEnabled;
-            isEnabled = state.IsShuffleEnabled;
+            bool target = enabled ?? !state.IsShuffleEnabled;
+            if (state.IsShuffleEnabled == target)
+            {
+                return Task.FromResult(target);
+            }
+
+            state.IsShuffleEnabled = target;
+            isEnabled = target;
 
             if (state.CurrentQueueIndex is int current)
             {
@@ -1191,6 +1203,32 @@ public class MusicPlayerService : IMusicPlayerService
 
         return Task.FromResult(mode);
     }
+
+    public Task<RepeatMode> SetRepeatMode(Guid clientId, RepeatMode mode)
+    {
+        bool changed;
+
+        lock (_lock)
+        {
+            ClientMusicState state = GetOrCreateStateLocked(clientId);
+            changed = state.RepeatMode != mode;
+            state.RepeatMode = mode;
+        }
+
+        if (changed)
+        {
+            RaiseNowPlaying(clientId);
+        }
+
+        return Task.FromResult(mode);
+    }
+
+    public bool IsPlaylistLoaded(Guid clientId, Guid playlistId) => Read(clientId,
+        s => s.CurrentState != PlaybackState.Stopped
+            && s.CurrentSong is not null
+            && s.Queue.Count > 0
+            && s.CurrentPlaylist?.Id == playlistId,
+        false);
 
     public async Task<Result<bool>> Seek(Guid clientId, double positionSeconds)
     {
