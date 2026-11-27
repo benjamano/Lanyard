@@ -95,6 +95,8 @@ public class MusicControlActionExecutor(
     private async Task<Result<bool>> PlayAsync(MusicControlParameters parameters)
     {
         Guid clientId = parameters.TargetClientId;
+        bool previousShuffle = _musicPlayerService.GetShuffleEnabled(clientId);
+        RepeatMode previousRepeat = _musicPlayerService.GetCurrentRepeatMode(clientId);
 
         // Settings first, so a freshly loaded shuffled playlist still starts on a random song.
         if (parameters.Shuffle is On or Off)
@@ -108,16 +110,29 @@ public class MusicControlActionExecutor(
             await _musicPlayerService.SetRepeatMode(clientId, repeat);
         }
 
+        Result<bool> result;
+
         if (parameters.PlaylistId is not Guid playlistId)
         {
-            return await _musicPlayerService.Play(clientId);
+            result = await _musicPlayerService.Play(clientId);
         }
-
-        if (parameters.ResumeIfLoaded && _musicPlayerService.IsPlaylistLoaded(clientId, playlistId))
+        else if (parameters.ResumeIfLoaded && _musicPlayerService.IsPlaylistLoaded(clientId, playlistId))
         {
-            return await _musicPlayerService.Play(clientId);
+            result = await _musicPlayerService.Play(clientId);
+        }
+        else
+        {
+            result = await _musicPlayerService.Play(clientId, playlistId: playlistId);
         }
 
-        return await _musicPlayerService.Play(clientId, playlistId: playlistId);
+        // A failed step (say the playlist was deleted) shouldn't leave whatever was already
+        // playing reshuffled or stuck repeating, so put the settings back.
+        if (!result.IsSuccess)
+        {
+            await _musicPlayerService.SetShuffle(clientId, previousShuffle);
+            await _musicPlayerService.SetRepeatMode(clientId, previousRepeat);
+        }
+
+        return result;
     }
 }

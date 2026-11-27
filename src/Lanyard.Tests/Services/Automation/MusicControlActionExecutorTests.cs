@@ -299,6 +299,24 @@ public class MusicControlActionExecutorTests
     }
 
     [TestMethod]
+    public async Task Play_PutsShuffleAndRepeatBack_WhenThePlaylistCantBePlayed()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = Guid.NewGuid();
+        (MusicPlayerService player, _, MusicControlActionExecutor executor) = await GetConnectedSetupAsync(options, clientId);
+
+        await player.SetShuffle(clientId, false);
+        await player.SetRepeatMode(clientId, RepeatMode.All);
+
+        (bool success, _) = await executor.ExecuteAsync(BuildAction(
+            $$"""{"TargetClientId":"{{clientId}}","Operation":"Play","PlaylistId":"{{Guid.NewGuid()}}","Shuffle":"On","Repeat":"One"}"""), clientId);
+
+        Assert.IsFalse(success, "The playlist doesn't exist.");
+        Assert.IsFalse(player.GetShuffleEnabled(clientId));
+        Assert.AreEqual(RepeatMode.All, player.GetCurrentRepeatMode(clientId));
+    }
+
+    [TestMethod]
     public async Task ShuffleAndRepeat_AreLeftAlone_WhenNotSetOrOnPause()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();

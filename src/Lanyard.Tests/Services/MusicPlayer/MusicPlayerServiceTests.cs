@@ -755,5 +755,27 @@ public class MusicPlayerServiceTests
         player.UpdatePlaybackState(clientId, NAudio.Wave.PlaybackState.Stopped);
         Assert.IsFalse(player.IsPlaylistLoaded(clientId, playlistId));
     }
+
+    [TestMethod]
+    public async Task IsPlaylistLoaded_IsFalseAfterTheKioskReconnects_UntilItReportsAgain()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = Guid.NewGuid();
+        Guid playlistId = Guid.NewGuid();
+        await SeedOrderedPlaylistAsync(options, playlistId, 2);
+
+        (MusicPlayerService player, _) = GetConnectedPlayer(options, clientId);
+        await player.Play(clientId, playlistId);
+        player.UpdatePlaybackState(clientId, NAudio.Wave.PlaybackState.Paused);
+
+        // The kiosk app restarted: it has nothing loaded, whatever the server remembers.
+        player.MarkClientDisconnected(clientId);
+        Assert.IsFalse(player.IsPlaylistLoaded(clientId, playlistId), "Offline kiosks can't carry on.");
+        player.MarkClientConnected(clientId);
+        Assert.IsFalse(player.IsPlaylistLoaded(clientId, playlistId), "Not until the kiosk says what it's doing.");
+
+        player.UpdatePlaybackState(clientId, NAudio.Wave.PlaybackState.Paused);
+        Assert.IsTrue(player.IsPlaylistLoaded(clientId, playlistId));
+    }
 }
 

@@ -98,6 +98,11 @@ public class MusicPlayerService : IMusicPlayerService
         public int OrderPosition { get; set; }
 
         public bool IsShuffleEnabled { get; set; }
+
+        // False from when the kiosk (re)connects until it next reports its playback state. A
+        // kiosk that restarted has nothing loaded even though the state above still remembers
+        // its old queue, so "carry on where it left off" mustn't trust that queue until then.
+        public bool HasReportedSinceConnect { get; set; }
         // Defaults to looping the queue so unattended playback keeps going without someone
         // having to arm repeat on every client.
         public RepeatMode RepeatMode { get; set; } = RepeatMode.All;
@@ -317,6 +322,11 @@ public class MusicPlayerService : IMusicPlayerService
             ClientMusicState state = GetOrCreateStateLocked(clientId);
             changed = isNew || !state.IsConnected;
             state.IsConnected = true;
+
+            if (changed)
+            {
+                state.HasReportedSinceConnect = false;
+            }
         }
 
         if (changed)
@@ -388,6 +398,7 @@ public class MusicPlayerService : IMusicPlayerService
 
             clientState.CurrentState = state;
             clientState.LastPositionUpdateUtc = nowUtc;
+            clientState.HasReportedSinceConnect = true;
 
             if (state == PlaybackState.Stopped)
             {
@@ -1224,7 +1235,9 @@ public class MusicPlayerService : IMusicPlayerService
     }
 
     public bool IsPlaylistLoaded(Guid clientId, Guid playlistId) => Read(clientId,
-        s => s.CurrentState != PlaybackState.Stopped
+        s => s.IsConnected
+            && s.HasReportedSinceConnect
+            && s.CurrentState != PlaybackState.Stopped
             && s.CurrentSong is not null
             && s.Queue.Count > 0
             && s.CurrentPlaylist?.Id == playlistId,
