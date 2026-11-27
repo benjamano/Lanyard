@@ -22,6 +22,9 @@ public static class AutomationActionDescriptions
     {
         string? operation = null;
         int? holdMilliseconds = null;
+        bool resumeIfLoaded = false;
+        string? shuffle = null;
+        string? repeat = null;
 
         try
         {
@@ -35,6 +38,21 @@ public static class AutomationActionDescriptions
             if (doc.RootElement.TryGetProperty("HoldMilliseconds", out JsonElement hold) && hold.ValueKind == JsonValueKind.Number)
             {
                 holdMilliseconds = hold.GetInt32();
+            }
+
+            if (doc.RootElement.TryGetProperty("ResumeIfLoaded", out JsonElement resume) && resume.ValueKind == JsonValueKind.True)
+            {
+                resumeIfLoaded = true;
+            }
+
+            if (doc.RootElement.TryGetProperty("Shuffle", out JsonElement shuffleElement) && shuffleElement.ValueKind == JsonValueKind.String)
+            {
+                shuffle = shuffleElement.GetString();
+            }
+
+            if (doc.RootElement.TryGetProperty("Repeat", out JsonElement repeatElement) && repeatElement.ValueKind == JsonValueKind.String)
+            {
+                repeat = repeatElement.GetString();
             }
         }
         catch (JsonException)
@@ -92,11 +110,46 @@ public static class AutomationActionDescriptions
             _ => actionType
         };
 
+        string extras = actionType == AutomationActionTypes.MusicControl && operation != "Pause"
+            ? MusicExtras(resumeIfLoaded && target.References.Any(r => r.Kind == AutomationActionTargetKind.Playlist), shuffle, repeat)
+            : "";
+
         if (target.ClientId == Guid.Empty)
         {
-            return AutomationActionTargets.IsKnown(actionType) ? $"{what} (no kiosk chosen)" : what;
+            return AutomationActionTargets.IsKnown(actionType) ? $"{what} (no kiosk chosen){extras}" : what;
         }
 
-        return $"{what} on {kioskName(target.ClientId) ?? "a deleted kiosk"}";
+        return $"{what} on {kioskName(target.ClientId) ?? "a deleted kiosk"}{extras}";
+    }
+
+    // Music Play's optional settings, such as ", carrying on if it's already loaded, shuffle on".
+    private static string MusicExtras(bool resumeIfLoaded, string? shuffle, string? repeat)
+    {
+        List<string> parts = [];
+
+        if (resumeIfLoaded)
+        {
+            parts.Add("carrying on if it's already loaded");
+        }
+
+        if (shuffle is MusicControlActionExecutor.On or MusicControlActionExecutor.Off)
+        {
+            parts.Add($"shuffle {shuffle.ToLowerInvariant()}");
+        }
+
+        string? repeatText = repeat switch
+        {
+            "Off" => "repeat off",
+            "All" => "repeat the playlist",
+            "One" => "repeat the song",
+            _ => null
+        };
+
+        if (repeatText is not null)
+        {
+            parts.Add(repeatText);
+        }
+
+        return parts.Count == 0 ? "" : ", " + string.Join(", ", parts);
     }
 }
