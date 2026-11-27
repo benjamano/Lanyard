@@ -10,13 +10,17 @@ public record StaffReadinessRow(
     int InstalledDevices,
     int PushDevices,
     bool HasPasskey,
-    DateTime? LastAppUseUtc)
+    DateTime? LastAppUseUtc,
+    // Invited but hasn't set a password, so they can't have signed in to set anything up yet.
+    bool InvitePending = false)
 {
+    // InstalledDevices only counts phones and tablets (a desktop install doesn't reach them on shift).
     public bool HasApp => InstalledDevices > 0;
 
     public bool HasNotifications => PushDevices > 0;
 
-    // Matches what Get Started asks of a phone: the app installed and notifications on.
+    // Matches what Get Started asks of a phone: the app on a phone or tablet, and notifications on
+    // for at least one of their devices that is still accepting them.
     public bool IsReady => HasApp && HasNotifications;
 }
 

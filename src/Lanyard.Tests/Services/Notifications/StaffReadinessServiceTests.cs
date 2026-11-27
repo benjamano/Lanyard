@@ -21,10 +21,11 @@ public class StaffReadinessServiceTests
         factory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options));
 
-        return new StaffReadinessService(factory.Object, NullLogger<StaffReadinessService>.Instance);
+        return new StaffReadinessService(factory.Object, TimeProvider.System, NullLogger<StaffReadinessService>.Instance);
     }
 
-    private static async Task AddInstallAsync(DbContextOptions<ApplicationDbContext> options, string userId, DateTime lastSeen, string deviceId = "phone")
+    private static async Task AddInstallAsync(DbContextOptions<ApplicationDbContext> options, string userId, DateTime lastSeen, string deviceId = "phone",
+        DevicePlatform platform = DevicePlatform.IPhone)
     {
         await using ApplicationDbContext ctx = new(options);
         ctx.AppInstallations.Add(new AppInstallation
@@ -33,14 +34,15 @@ public class StaffReadinessServiceTests
             UserId = userId,
             DeviceId = deviceId,
             DeviceLabel = "Lanyard app on iPhone",
-            Platform = DevicePlatform.IPhone,
+            Platform = platform,
             FirstSeenUtc = lastSeen,
             LastSeenUtc = lastSeen
         });
         await ctx.SaveChangesAsync();
     }
 
-    private static async Task AddPushAsync(DbContextOptions<ApplicationDbContext> options, string userId, string endpoint = "https://push.example/1")
+    private static async Task AddPushAsync(DbContextOptions<ApplicationDbContext> options, string userId, string endpoint = "https://push.example/1",
+        int failures = 0)
     {
         await using ApplicationDbContext ctx = new(options);
         ctx.PushSubscriptions.Add(new UserPushSubscription
@@ -52,7 +54,8 @@ public class StaffReadinessServiceTests
             Auth = "auth",
             DeviceLabel = "Lanyard app on iPhone",
             CreatedUtc = DateTime.UtcNow,
-            LastSeenUtc = DateTime.UtcNow
+            LastSeenUtc = DateTime.UtcNow,
+            ConsecutiveFailures = failures
         });
         await ctx.SaveChangesAsync();
     }
@@ -176,4 +179,53 @@ public class StaffReadinessServiceTests
 
         Assert.IsFalse(result.IsSuccess);
     }
+
+    [TestMethod]
+    public async Task DesktopInstallsAndFailingPushDoNotCount()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (_, Location ipswich) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        UserProfile amy = await SchedulingTestHelpers.SeedUserAsync(options, ipswich, "Amy");
+
+        await AddInstallAsync(options, amy.Id, DateTime.UtcNow, "laptop", DevicePlatform.Desktop);
+        await AddPushAsync(options, amy.Id, "https://push.example/dead", failures: 2);
+
+        StaffReadinessRow row = (await Service(options).GetAsync(SchedulingTestHelpers.ManagerScopeFor(ipswich))).Data!.Single();
+
+        Assert.IsFalse(row.HasApp, "A desktop install doesn't reach them on shift");
+        Assert.IsFalse(row.HasNotifications, "A device whose last send failed isn't 'on'");
+        Assert.IsNull(row.LastAppUseUtc);
+    }
+
+    [TestMethod]
+    public async Task LeavesOutLockedAccounts_AndMarksPendingInvites()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (_, Location ipswich) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        UserProfile leaver = await SchedulingTestHelpers.SeedUserAsync(options, ipswich, "Lee");
+        UserProfile invited = await SchedulingTestHelpers.SeedUserAsync(options, ipswich, "Ivy");
+        UserProfile active = await SchedulingTestHelpers.SeedUserAsync(options, ipswich, "Amy");
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            UserProfile l = await ctx.Users.SingleAsync(x => x.Id == leaver.Id);
+            l.LockoutEnabled = true;
+            l.LockoutEnd = DateTimeOffset.MaxValue;
+            l.PasswordSetDate = DateTime.UtcNow;
+            UserProfile a = await ctx.Users.SingleAsync(x => x.Id == active.Id);
+            a.PasswordSetDate = DateTime.UtcNow;
+            await ctx.SaveChangesAsync();
+        }
+
+        List<StaffReadinessRow> rows = (await Service(options).GetAsync(SchedulingTestHelpers.ManagerScopeFor(ipswich))).Data!;
+
+        Assert.HasCount(2, rows);
+        Assert.IsFalse(rows.Any(x => x.UserId == leaver.Id));
+        Assert.IsTrue(rows.Single(x => x.UserId == invited.Id).InvitePending);
+        Assert.IsFalse(rows.Single(x => x.UserId == active.Id).InvitePending);
+    }
+
+    // HasPasskey isn't covered here: EF caches one model per context type for the whole test run, and
+    // the bare contexts these tests use leave out Identity's passkey table, so the lookup always
+    // finds the table missing. The query is checked against Postgres when verifying the page.
 }

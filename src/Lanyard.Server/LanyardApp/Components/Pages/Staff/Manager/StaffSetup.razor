@@ -32,6 +32,10 @@
             <FluentSpinner />
         </FluentStack>
     }
+    else if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
     else if (rows.Count == 0)
     {
         <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">Nobody works at @(locationName ?? "this location") yet.</FluentMessageBar>
@@ -59,9 +63,10 @@
                         <div class="staff-setup-person">
                             <a href="@($"/manage/users/{row.UserId}")">@row.Name</a>
                             <span class="staff-setup-muted">
-                                @(row.LastAppUseUtc is DateTime seen
+                                @(row.InvitePending ? "Invite not accepted yet"
+                                    : row.LastAppUseUtc is DateTime seen
                                     ? $"Last used the app {RotaTime.ToVenueLocal(seen).ToString("d MMM", RotaFormat.Uk)}"
-                                    : "Hasn't opened the app yet")
+                                    : "Hasn't opened the app on a phone yet")
                             </span>
                         </div>
                         <div class="staff-setup-chips">
@@ -85,6 +90,7 @@
 @code {
     private List<StaffReadinessRow>? rows;
     private string? locationName;
+    private string? loadError;
     private bool notReadyOnly;
 
     private static Icon Tick(bool done) => done ? new Icons.Regular.Size16.Checkmark() : new Icons.Regular.Size16.Dismiss();
@@ -99,7 +105,7 @@
 
         if (!scope.IsSuccess || scope.Data is null)
         {
-            _toastService.ShowError(scope.Error ?? "We couldn't work out which location you're in.");
+            loadError = scope.Error ?? "We couldn't work out which location you're in. Try signing out and back in.";
             rows = [];
             return;
         }
@@ -110,7 +116,9 @@
 
         if (!result.IsSuccess)
         {
-            _toastService.ShowError(result.Error ?? "Couldn't load who has set up their phone.");
+            loadError = scope.Data.LocationId is null
+                ? "Choose a location at the top of the page to see who there has set up their phone."
+                : result.Error ?? "Couldn't load who has set up their phone. Try again in a moment.";
         }
 
         rows = result.Data ?? [];
