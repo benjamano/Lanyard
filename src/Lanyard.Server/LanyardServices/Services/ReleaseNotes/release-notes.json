@@ -1144,7 +1144,7 @@
   {
     "version": "1.4.40",
     "releaseDate": "2026-11-27",
-    "summary": "Keep staff under 18 within the UK young worker limits. A Get Started page gets staff's phones ready in a couple of minutes.",
+    "summary": "Keep staff under 18 within the UK young worker limits. A Get Started page gets staff's phones ready in a couple of minutes. Automation music steps can carry on a paused playlist and set shuffle and repeat.",
     "details": [
       "Mark staff who are under 18 (Managers and Admins): on a person's Rota tab under Manage > Users, the new Under 18 section takes their date of birth and shows when they turn 18 and, for anyone under 16, when they're over school leaving age. It's only kept for staff under 18 and deleted on their 18th birthday, and staff can't see it.",
       "Staff now shows who is currently marked as under 18, and Rota Settings has a new choice for the night hours staff under 18 can't work: 22:00 to 06:00, or 23:00 to 07:00 if their contract says so.",
@@ -1155,7 +1155,10 @@
       "New Get Started page (/get-started) for every member of staff. It checks the phone you're on and takes you through what's left: putting the app on your Home Screen, turning on notifications (with a Send me a test button to check they arrive), and optionally Face ID or fingerprint sign-in. The install and notification steps tick off as they're done, and you'll see You're all ready to use Lanyard once the important ones are.",
       "On iPhone and iPad, Get Started shows exactly how to Add to Home Screen, and explains that notifications are turned on from the app rather than Safari. On Android, Install opens the phone's own install prompt. If notifications are blocked, it says where to allow them for your phone and rechecks when you come back.",
       "When new staff set their password, Continue to Login now signs them in and takes them straight to Get Started. Anyone can open it again from Account Management with Set up this device, beside Notifications.",
-      "Managers and Admins see a Copy link button at the bottom of Get Started, to turn into a QR code for a staff meeting so everyone can get set up at once."
+      "Managers and Admins see a Copy link button at the bottom of Get Started, to turn into a QR code for a staff meeting so everyone can get set up at once.",
+      "Automation rules: a Music Control Play step with a playlist can now carry on where the music paused if that playlist is already loaded, instead of starting it again from the top. Handy for playing music while a game is on and pausing it when it ends.",
+      "Music Control Play steps can also turn Shuffle on or off and set Repeat to Off, Repeat playlist or Repeat song. Leave them as they are to keep the kiosk's current setting.",
+      "Coming back to Lanyard on a phone after pressing the home button now reconnects in about a second, instead of showing Reconnecting for a minute or more. If the phone's network is still waking up, it reconnects within a few seconds of the network coming back."
     ]
   }
 ]
