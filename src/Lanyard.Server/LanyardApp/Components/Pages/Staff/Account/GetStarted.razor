@@ -13,7 +13,6 @@
 @inject IJSRuntime JS
 @inject IPushSender PushSender
 @inject IPushSubscriptionService PushSubscriptionService
-@inject IAppInstallationService AppInstallationService
 @inject IPasskeyService PasskeyService
 @inject ICompanyFeatureService CompanyFeatures
 
@@ -24,8 +23,8 @@
    fingerprint sign-in. The decision of what each step shows lives in GetStartedSteps. *@
 <div class="get-started-page">
     <div class="get-started-header">
-        <div>
-            <FluentText As="TextTag.H1" Weight="TextWeight.Semibold" Size="TextSize.Size800">
+        <div class="get-started-title">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size700" role="heading" aria-level="1">
                 @(string.IsNullOrEmpty(firstName) ? "Get set up on Lanyard" : $"Hi {firstName}, let's get you set up")
             </FluentText>
             @if (status is not null)
@@ -72,7 +71,7 @@
                 <li class="get-started-step @(status.Install == GetStartedInstall.Done ? "is-done" : "")">
                     <GetStartedStepMarker Number="1" Done="@(status.Install == GetStartedInstall.Done)" />
                     <div class="get-started-step-body">
-                        <FluentText As="TextTag.H2" Weight="TextWeight.Semibold" Size="TextSize.Size500">Put @installLinks.AppName on your Home Screen</FluentText>
+                        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500" role="heading" aria-level="2">Put @installLinks.AppName on your Home Screen</FluentText>
 
                         @if (status.Install == GetStartedInstall.Done)
                         {
@@ -84,7 +83,11 @@
                         }
                         else
                         {
-                            <FluentText>It opens like any other app, full screen, and it's the only way to get notifications on an iPhone.</FluentText>
+                            <FluentText>
+                                @(device!.IsApple
+                                    ? "It opens like any other app, full screen, and it's the only way to get notifications on an iPhone or iPad."
+                                    : "It opens full screen from your home screen, like any other app.")
+                            </FluentText>
 
                             @if (canPromptNatively)
                             {
@@ -113,7 +116,7 @@
             <li class="get-started-step @(status.Notifications == GetStartedNotifications.On ? "is-done" : "")">
                 <GetStartedStepMarker Number="@(NotificationsNumber)" Done="@(status.Notifications == GetStartedNotifications.On)" />
                 <div class="get-started-step-body">
-                    <FluentText As="TextTag.H2" Weight="TextWeight.Semibold" Size="TextSize.Size500">
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500" role="heading" aria-level="2">
                         @(device!.IsPhoneOrTablet ? "Turn on notifications" : "Notifications on this computer (optional)")
                     </FluentText>
 
@@ -213,7 +216,7 @@
             <li class="get-started-step @(status.HasPasskey ? "is-done" : "")">
                 <GetStartedStepMarker Number="@(NotificationsNumber + 1)" Done="@status.HasPasskey" />
                 <div class="get-started-step-body">
-                    <FluentText As="TextTag.H2" Weight="TextWeight.Semibold" Size="TextSize.Size500">Sign in with Face ID or fingerprint (optional)</FluentText>
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500" role="heading" aria-level="2">Sign in with Face ID or fingerprint (optional)</FluentText>
                     <PasskeysCard OnCountChanged="OnPasskeyCountChanged" />
                 </div>
             </li>
@@ -222,7 +225,7 @@
         @if (tourLinks.Count > 0)
         {
             <section class="get-started-tour">
-                <FluentText As="TextTag.H2" Weight="TextWeight.Semibold" Size="TextSize.Size500">Find your way around</FluentText>
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500" role="heading" aria-level="2">Find your way around</FluentText>
                 <div class="get-started-tiles">
                     @foreach (TourLink link in tourLinks)
                     {
@@ -287,7 +290,8 @@
     private string BlockedHelp => device switch
     {
         { IsApple: true } => $"Open Settings › Notifications › {installLinks.AppName} and turn on Allow Notifications.",
-        { Platform: DevicePlatform.Android } => "Tap the lock or settings icon beside the address (or long-press the app icon › App info › Notifications) and allow them.",
+        { Platform: DevicePlatform.Android } when browser?.IsStandalone == true => "Long-press the app icon, choose App info › Notifications, and turn them on.",
+        { Platform: DevicePlatform.Android } => "Tap the lock or settings icon beside the address, open Notifications and allow them.",
         _ => "Click the icon beside the address bar, open the site settings and allow notifications."
     };
 
@@ -340,13 +344,6 @@
 
             browser = await JS.InvokeAsync<BrowserDevice>("lanyardInstall.getDevice");
             device = DeviceDescriptor.Describe(browser.Report);
-
-            if (browser.IsStandalone && !string.IsNullOrEmpty(browser.DeviceId))
-            {
-                // DeviceSync records this on every load already; doing it here too means the
-                // manager's readiness list is right even if this is the first page opened in the app.
-                await AppInstallationService.RecordAsync(userId, browser.DeviceId, browser.Report);
-            }
 
             dotNetRef = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("lanyardInstall.watchVisible", dotNetRef);

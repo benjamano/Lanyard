@@ -14,8 +14,11 @@
     gap: 12px;
 }
 
-.get-started-header ::deep h1 {
-    margin: 0;
+.get-started-title {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
 }
 
 .get-started-page ::deep .get-started-progress,
@@ -129,7 +132,8 @@
     grid-template-rows: auto auto;
     column-gap: 10px;
     row-gap: 2px;
-    align-items: center;
+    align-items: start;
+    align-content: start;
     padding: 12px 14px;
     border-radius: var(--borderRadiusLarge, 8px);
     border: 1px solid var(--colorNeutralStroke2);
@@ -144,6 +148,7 @@
 
 .get-started-tile ::deep svg {
     grid-row: 1 / span 2;
+    margin-top: 2px;
 }
 
 .get-started-tile-title {

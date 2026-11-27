@@ -47,8 +47,10 @@ public record GetStartedStatus(
 {
     // The steps that matter for using Lanyard day to day: the app on the phone and notifications on.
     // A passkey is a nice extra, so it counts towards progress but not towards "all set".
+    // Only a phone or tablet can be "all set": on a computer the page asks for the phone instead.
     public bool AllSet =>
-        Install != GetStartedInstall.Todo
+        Install != GetStartedInstall.NotNeeded
+        && Install != GetStartedInstall.Todo
         && (!NotificationsRequired || Notifications == GetStartedNotifications.On);
 
     public bool CanSendTest => Notifications == GetStartedNotifications.On;
@@ -89,7 +91,10 @@ public static class GetStartedSteps
             done += install == GetStartedInstall.Done ? 1 : 0;
         }
 
-        if (notificationsRequired)
+        // Counted whenever it can be switched on here, so a computer's progress reads "1 of 2" rather
+        // than looking finished; it only blocks "all set" on a phone.
+        if (notifications is GetStartedNotifications.Off or GetStartedNotifications.Blocked or GetStartedNotifications.On
+            or GetStartedNotifications.NeedsInstall)
         {
             total++;
             done += notifications == GetStartedNotifications.On ? 1 : 0;

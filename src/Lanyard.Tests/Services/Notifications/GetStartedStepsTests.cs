@@ -77,8 +77,8 @@ public class GetStartedStepsTests
         Assert.AreEqual(GetStartedInstall.NotNeeded, status.Install);
         Assert.AreEqual(GetStartedNotifications.Off, status.Notifications);
         Assert.IsFalse(status.NotificationsRequired);
-        Assert.IsTrue(status.AllSet);
-        Assert.AreEqual(1, status.StepsTotal);
+        Assert.IsFalse(status.AllSet, "A computer is never 'all set' - the page asks for the phone");
+        Assert.AreEqual(2, status.StepsTotal);
     }
 
     [TestMethod]
@@ -125,6 +125,6 @@ public class GetStartedStepsTests
 
         Assert.IsTrue(status.HasPasskey);
         Assert.AreEqual(1, status.StepsDone);
-        Assert.AreEqual(1, status.StepsTotal);
+        Assert.AreEqual(2, status.StepsTotal);
     }
 }
