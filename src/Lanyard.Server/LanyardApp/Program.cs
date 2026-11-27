@@ -259,6 +259,7 @@ builder.Services.AddScoped<INotificationPreferenceService, NotificationPreferenc
 builder.Services.AddScoped<ISeasonalThemeService, SeasonalThemeService>();
 builder.Services.AddScoped<SeasonalThemeState>();
 builder.Services.AddScoped<IAppInstallationService, AppInstallationService>();
+builder.Services.AddScoped<IStaffReadinessService, StaffReadinessService>();
 builder.Services.AddHostedService<PushDeviceCleanupHostedService>();
 builder.Services.AddHostedService<NotificationDeliveryHostedService>();
 builder.Services.AddHostedService<ShiftReminderHostedService>();
