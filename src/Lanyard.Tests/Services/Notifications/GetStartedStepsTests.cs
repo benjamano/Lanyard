@@ -33,7 +33,7 @@ public class GetStartedStepsTests
         Assert.IsTrue(status.NotificationsRequired);
         Assert.IsFalse(status.AllSet);
         Assert.AreEqual(0, status.StepsDone);
-        Assert.AreEqual(3, status.StepsTotal);
+        Assert.AreEqual(2, status.StepsTotal);
     }
 
     [TestMethod]
@@ -56,7 +56,7 @@ public class GetStartedStepsTests
         Assert.IsTrue(status.CanSendTest);
         Assert.IsFalse(status.HasPasskey);
         Assert.AreEqual(2, status.StepsDone);
-        Assert.AreEqual(3, status.StepsTotal);
+        Assert.AreEqual(2, status.StepsTotal);
     }
 
     [TestMethod]
@@ -78,7 +78,7 @@ public class GetStartedStepsTests
         Assert.AreEqual(GetStartedNotifications.Off, status.Notifications);
         Assert.IsFalse(status.NotificationsRequired);
         Assert.IsFalse(status.AllSet, "A computer is never 'all set' - the page asks for the phone");
-        Assert.AreEqual(2, status.StepsTotal);
+        Assert.AreEqual(1, status.StepsTotal);
     }
 
     [TestMethod]
@@ -119,12 +119,12 @@ public class GetStartedStepsTests
     }
 
     [TestMethod]
-    public void Passkey_CountsTowardsProgress()
+    public void Passkey_IsAccountWide_SoDoesNotCountTowardsProgress()
     {
         GetStartedStatus status = Evaluate(WindowsEdge, passkeys: 2);
 
         Assert.IsTrue(status.HasPasskey);
-        Assert.AreEqual(1, status.StepsDone);
-        Assert.AreEqual(2, status.StepsTotal);
+        Assert.AreEqual(0, status.StepsDone);
+        Assert.AreEqual(1, status.StepsTotal);
     }
 }

@@ -15,6 +15,7 @@
 @inject IPushSubscriptionService PushSubscriptionService
 @inject IPasskeyService PasskeyService
 @inject ICompanyFeatureService CompanyFeatures
+@inject ILogger<GetStarted> Logger
 
 <PageTitle>Get Started</PageTitle>
 
@@ -35,7 +36,17 @@
         <HelpButton AreaKey="@HelpRegistry.GetStarted" />
     </div>
 
-    @if (status is null)
+    @if (loadFailed)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">
+            Couldn't check this device. Check your connection and try again.
+        </FluentMessageBar>
+        <div>
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowClockwise())"
+                          OnClick="RetryAsync">Try again</FluentButton>
+        </div>
+    }
+    else if (status is null)
     {
         <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
             <FluentSpinner />
@@ -50,11 +61,7 @@
                 <FluentIcon Value="@(new Icons.Filled.Size32.CheckmarkCircle())" Color="Color.Custom" CustomColor="var(--colorStatusSuccessForeground1)" />
                 <div>
                     <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">You're all ready to use @installLinks.AppName</FluentText>
-                    <FluentText>
-                        @(device!.IsPhoneOrTablet
-                            ? "Your rota, shift reminders and messages will come to this phone."
-                            : "You're set up on this computer. Open this page on your phone too, so reminders reach you there.")
-                    </FluentText>
+                    <FluentText>Your rota, shift reminders and messages will come to this phone.</FluentText>
                 </div>
             </div>
         }
@@ -213,8 +220,10 @@
                 </div>
             </li>
 
-            <li class="get-started-step @(status.HasPasskey ? "is-done" : "")">
-                <GetStartedStepMarker Number="@(NotificationsNumber + 1)" Done="@status.HasPasskey" />
+            <li class="get-started-step">
+                @* Never ticked: passkeys belong to the account, so one made on a laptop says nothing about this
+                   phone. The card itself lists which devices have one. *@
+                <GetStartedStepMarker Number="@(NotificationsNumber + 1)" Done="false" />
                 <div class="get-started-step-body">
                     <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500" role="heading" aria-level="2">Sign in with Face ID or fingerprint (optional)</FluentText>
                     <PasskeysCard OnCountChanged="OnPasskeyCountChanged" />
@@ -266,7 +275,14 @@
 
     private sealed record TourLink(string Href, string Title, string Text, Icon Icon);
 
+    // Tapping the test notification opens /get-started?test=sent, so the page carries on asking
+    // whether it arrived instead of starting over.
+    [SupplyParameterFromQuery(Name = "test")]
+    public string? TestQuery { get; set; }
+
     private GetStartedStatus? status;
+    private bool loadFailed;
+    private bool disposed;
     private DeviceDescription? device;
     private BrowserDevice? browser;
     private string? browserEndpoint;
@@ -319,6 +335,8 @@
             if (!user.IsSuccess || user.Data is null)
             {
                 _toastService.ShowError($"Failed to load your account: {user.Error}");
+                loadFailed = true;
+                StateHasChanged();
                 return;
             }
 
@@ -345,19 +363,41 @@
             browser = await JS.InvokeAsync<BrowserDevice>("lanyardInstall.getDevice");
             device = DeviceDescriptor.Describe(browser.Report);
 
-            dotNetRef = DotNetObjectReference.Create(this);
+            if (disposed)
+            {
+                return;
+            }
+
+            dotNetRef ??= DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("lanyardInstall.watchVisible", dotNetRef);
+
+            if (TestQuery == "sent")
+            {
+                testState = TestState.Sent;
+            }
 
             await RefreshAsync();
         }
         catch (JSDisconnectedException)
         {
         }
+        catch (Exception ex) when (ex is JSException or TaskCanceledException or InvalidOperationException)
+        {
+            loadFailed = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RetryAsync()
+    {
+        loadFailed = false;
+        status = null;
+        await LoadAsync();
     }
 
     private async Task RefreshAsync()
     {
-        if (userId is null || device is null || browser is null)
+        if (disposed || userId is null || device is null || browser is null)
         {
             return;
         }
@@ -392,6 +432,10 @@
         }
         catch (JSDisconnectedException)
         {
+        }
+        catch (JSException)
+        {
+            _toastService.ShowError("Couldn't check this device. Try again in a moment.");
         }
     }
 
@@ -428,19 +472,27 @@
     private async Task SendTestAsync()
     {
         isBusy = true;
+        bool delivered = false;
 
-        PushSendSummary summary = await PushSender.SendToUserAsync(userId!,
-            new PushContent("You're all set", "This is how shift reminders, rota changes and messages will look.",
-                GetStartedPath, "lanyard-test", PushMessageUrgency.Normal, TimeSpan.FromHours(1)),
-            onlyEndpoint: browserEndpoint);
-
-        isBusy = false;
-
-        if (summary.Delivered > 0)
+        try
         {
-            testState = TestState.Sent;
+            PushSendSummary summary = await PushSender.SendToUserAsync(userId!,
+                new PushContent("You're all set", "This is how shift reminders, rota changes and messages will look.",
+                    GetStartedPath + "?test=sent", "lanyard-test", PushMessageUrgency.Normal, TimeSpan.FromHours(1)),
+                onlyEndpoint: browserEndpoint);
+
+            delivered = summary.Delivered > 0;
         }
-        else
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Get Started test notification failed for {UserId}", userId);
+        }
+        finally
+        {
+            isBusy = false;
+        }
+
+        if (!delivered)
         {
             _toastService.ShowError("The test couldn't be delivered. Try turning notifications off and on again in Account Management.");
         }
@@ -448,7 +500,7 @@
         await RefreshAsync();
 
         // RefreshAsync resets the test when notifications are off; keep the answer otherwise.
-        if (summary.Delivered > 0 && status?.Notifications == GetStartedNotifications.On)
+        if (delivered && status?.Notifications == GetStartedNotifications.On)
         {
             testState = TestState.Sent;
         }
@@ -510,6 +562,8 @@
 
     public async ValueTask DisposeAsync()
     {
+        disposed = true;
+
         if (dotNetRef is not null)
         {
             try

@@ -46,7 +46,8 @@ public record GetStartedStatus(
     int StepsTotal)
 {
     // The steps that matter for using Lanyard day to day: the app on the phone and notifications on.
-    // A passkey is a nice extra, so it counts towards progress but not towards "all set".
+    // A passkey is a nice extra and belongs to the account rather than this device, so it counts
+    // towards neither progress nor "all set".
     // Only a phone or tablet can be "all set": on a computer the page asks for the phone instead.
     public bool AllSet =>
         Install != GetStartedInstall.NotNeeded
@@ -82,8 +83,8 @@ public static class GetStartedSteps
 
         bool hasPasskey = input.PasskeyCount > 0;
 
-        int total = 1; // passkey
-        int done = hasPasskey ? 1 : 0;
+        int total = 0;
+        int done = 0;
 
         if (install != GetStartedInstall.NotNeeded)
         {
