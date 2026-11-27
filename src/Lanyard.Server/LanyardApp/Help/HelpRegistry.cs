@@ -340,7 +340,8 @@ public static class HelpRegistry
                 new("runs", "Import Runs & Alerts")
             ],
             ["/manage/booking-import"],
-            Roles: "Admin"),
+            Roles: "Admin",
+            Feature: CompanyFeature.Parties),
 
         new(Feedback,
             "Lanyard Feedback",

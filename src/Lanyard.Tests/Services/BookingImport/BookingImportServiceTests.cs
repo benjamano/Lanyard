@@ -6,7 +6,9 @@ using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Tests.Services.Scheduling;
+using Lanyard.Tests.TestUtilities;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -294,5 +296,72 @@ public class BookingImportServiceTests
 
         await using ApplicationDbContext ctx = new(options);
         Assert.AreEqual(0, await ctx.PartyBookings.CountAsync());
+    }
+
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    [TestMethod]
+    public async Task RunImport_PartiesSwitchedOff_SkipsWithoutFetching_AndClearsTheAlert()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        (BookingImportService service, Mock<IJustStepClient> client, Mock<IOperationsAlertWriter> alerts) = GetService(options);
+
+        await EnableImportAsync(service, location);
+        SetupFetch(client, Booking("8388"));
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            await TestFeatures.SwitchOffForCompanyAsync(ctx, company.Id, CompanyFeature.Parties);
+            await ctx.SaveChangesAsync();
+        }
+
+        BookingImportRunView run = await service.RunImportAsync(company.Id, location.Id, BookingImportTrigger.Manual);
+
+        Assert.AreEqual(BookingImportRunStatus.Skipped, run.Status);
+        StringAssert.Contains(run.Error, "Parties");
+        client.Verify(c => c.FetchBookingsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()), Times.Never);
+        alerts.Verify(a => a.ResolveAsync(company.Id, $"juststep-import:{location.Id}", It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+
+        await using ApplicationDbContext check = new(options);
+        Assert.AreEqual(0, await check.PartyBookings.IgnoreQueryFilters().CountAsync());
+    }
+
+    [TestMethod]
+    public async Task Sweep_SkipsLocationsWithoutParties()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company play2Day, Location ipswich) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        (Company other, Location elsewhere) = await SchedulingTestHelpers.SeedCompanyAsync(options, "Other Co", "Elsewhere");
+        (BookingImportService service, _, _) = GetService(options);
+
+        await EnableImportAsync(service, ipswich);
+        await EnableImportAsync(service, elsewhere);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            await TestFeatures.SwitchOffForCompanyAsync(ctx, other.Id, CompanyFeature.Parties);
+            await ctx.SaveChangesAsync();
+        }
+
+        Mock<IBookingImportService> import = new();
+        ServiceCollection services = new();
+        services.AddSingleton(import.Object);
+        await using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Midday in winter, inside the default 07:00-23:00 hours, with no run yet so both are due.
+        JustStepImportHostedService sweep = new(SchedulingTestHelpers.GetFactory(options),
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            new FixedClock(new DateTimeOffset(2026, 12, 2, 12, 0, 0, TimeSpan.Zero)),
+            NullLogger<JustStepImportHostedService>.Instance);
+
+        int ran = await sweep.RunSweepAsync();
+
+        Assert.AreEqual(1, ran);
+        import.Verify(i => i.RunImportAsync(play2Day.Id, ipswich.Id, BookingImportTrigger.Scheduled, It.IsAny<CancellationToken>()), Times.Once);
+        import.Verify(i => i.RunImportAsync(other.Id, elsewhere.Id, It.IsAny<BookingImportTrigger>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

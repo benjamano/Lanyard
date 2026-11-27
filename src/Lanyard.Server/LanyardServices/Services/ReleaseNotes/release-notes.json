@@ -1155,5 +1155,14 @@
       "Automation rules: a Music Control Play step with a playlist can now carry on where the music paused if that playlist is already loaded, instead of starting it again from the top. Handy for playing music while a game is on and pausing it when it ends.",
       "Music Control Play steps can also turn Shuffle on or off and set Repeat to Off, Repeat playlist or Repeat song. Leave them as they are to keep the kiosk's current setting."
     ]
+  },
+  {
+    "version": "1.4.40",
+    "releaseDate": "2026-11-26",
+    "summary": "Booking import only runs where Parties is switched on.",
+    "details": [
+      "The Just Step Online booking import now only brings bookings in at locations that have Parties switched on, and the Booking Import page is hidden while Parties is off.",
+      "A failed booking import now shows as Booking import failed on the Alerts page, with an Open Booking Import link."
+    ]
   }
 ]
