@@ -58,7 +58,7 @@
     // Pages where a popup would get in the way: signing in, and the QR clock-in page mid clock-in.
     // (The clock-in terminal and kiosks use EmptyLayout, so this component isn't on them at all.)
     // The account page carries the full Notifications card instead.
-    private static readonly string[] ExcludedPrefixes = ["/login", "/rota/scan", "/account/manage", "/logout", "/handlelogout"];
+    private static readonly string[] ExcludedPrefixes = ["/login", "/rota/scan", "/account/manage", "/get-started", "/logout", "/handlelogout"];
 
     // What the installed app will be called and look like - the company's, when it's known.
     [Parameter] public string AppName { get; set; } = AppInstallLinks.DefaultAppName;

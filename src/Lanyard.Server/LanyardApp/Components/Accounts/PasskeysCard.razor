@@ -78,6 +78,9 @@
 @code {
     private static readonly CultureInfo UkCulture = CultureInfo.GetCultureInfo("en-GB");
 
+    // Tells a host page (Get Started) how many passkeys there are after each load.
+    [Parameter] public EventCallback<int> OnCountChanged { get; set; }
+
     private List<PasskeySummaryDto>? passkeys;
     private bool supportChecked;
     private bool isSupported;
@@ -118,6 +121,7 @@
         }
 
         passkeys = result.Data!;
+        await OnCountChanged.InvokeAsync(passkeys.Count);
     }
 
     private async Task AddPasskey()

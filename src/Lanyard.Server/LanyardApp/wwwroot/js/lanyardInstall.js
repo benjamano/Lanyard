@@ -11,6 +11,7 @@ window.lanyardInstall = (() => {
     // our Install button can open the browser's own install dialog later. Registered as soon as
     // this script loads, because the event can fire before Blazor has started.
     let deferredPrompt = null;
+    let visibleHandler = null;
 
     window.addEventListener('beforeinstallprompt', event => {
         event.preventDefault();
@@ -138,6 +139,27 @@ window.lanyardInstall = (() => {
             const choice = await prompt.userChoice;
 
             return choice.outcome;
+        },
+
+        // Calls dotNetRef.OnPageVisible() whenever the tab comes back into view - e.g. back from the
+        // phone's Settings after allowing notifications - so the Get Started page can re-check.
+        watchVisible(dotNetRef) {
+            this.unwatchVisible();
+
+            visibleHandler = () => {
+                if (document.visibilityState === 'visible') {
+                    dotNetRef.invokeMethodAsync('OnPageVisible').catch(() => { });
+                }
+            };
+
+            document.addEventListener('visibilitychange', visibleHandler);
+        },
+
+        unwatchVisible() {
+            if (visibleHandler) {
+                document.removeEventListener('visibilitychange', visibleHandler);
+                visibleHandler = null;
+            }
         }
     };
 })();
