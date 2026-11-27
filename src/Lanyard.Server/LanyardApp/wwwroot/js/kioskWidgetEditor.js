@@ -23,6 +23,13 @@ export const kioskWidgetEditor = (() => {
     }
 
     return {
+        // Must run before saved content is loaded into the editor: Quill drops any tag it has
+        // no blot for, so without this, opening a widget that already has dividers strips them
+        // (and the designer then sees that as an edit).
+        registerDivider() {
+            ensureDividerBlot();
+        },
+
         // Inserts a horizontal rule at the current cursor position (or at the end if the editor
         // doesn't currently have a selection), on its own line.
         insertDivider(hostElement) {

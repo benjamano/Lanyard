@@ -22,3 +22,12 @@
 .account-manage-section ::deep fluent-button {
     align-self: flex-start;
 }
+
+/* A section title with an action beside it; wraps under the title on narrow phones. */
+.account-manage-section-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 12px;
+}
