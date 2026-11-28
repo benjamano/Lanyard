@@ -1164,5 +1164,13 @@
       "Coming back to Lanyard on a phone after pressing the home button now reconnects in about a second, instead of showing Reconnecting for a minute or more. If the phone's network is still waking up, it reconnects within a few seconds of the network coming back.",
       "The Now playing dashboard widget can now show the kiosk's volume slider and EQ button: turn on Show volume and EQ in the widget's settings. They work the same as on the Music page."
     ]
+  },
+  {
+    "version": "1.4.42",
+    "releaseDate": "2026-11-28",
+    "summary": "The Laser game status dashboard card can now show past games.",
+    "details": [
+      "The Laser game status dashboard card can now list the kiosk's past games: turn on Show past games in its settings and choose How many games. Each game shows when it started, which team won, both teams' scores and how many players there were, and a new game appears as soon as it finishes. Equal team totals show as a Draw, and when nobody was on a team the gun with the top score wins."
+    ]
   }
 ]

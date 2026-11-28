@@ -488,6 +488,8 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
                 case ClientZoneLaserGameStatusWidget existingLaserGameStatus when widget is ClientZoneLaserGameStatusWidget incomingLaserGameStatus:
                     existingLaserGameStatus.ShowCurrentGameStatus = incomingLaserGameStatus.ShowCurrentGameStatus;
                     existingLaserGameStatus.ShowTimeLeft = incomingLaserGameStatus.ShowTimeLeft;
+                    existingLaserGameStatus.ShowGameHistory = incomingLaserGameStatus.ShowGameHistory;
+                    existingLaserGameStatus.GameHistoryCount = ClientZoneLaserGameStatusWidget.ClampGameHistoryCount(incomingLaserGameStatus.GameHistoryCount);
                     existingLaserGameStatus.ClientId = incomingLaserGameStatus.ClientId;
                     break;
                 case ButtonWidget existingButton when widget is ButtonWidget incomingButton:
@@ -877,6 +879,8 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
             {
                 ShowCurrentGameStatus = laserGameStatusWidget.ShowCurrentGameStatus,
                 ShowTimeLeft = laserGameStatusWidget.ShowTimeLeft,
+                ShowGameHistory = laserGameStatusWidget.ShowGameHistory,
+                GameHistoryCount = laserGameStatusWidget.GameHistoryCount,
                 ClientId = laserGameStatusWidget.ClientId
             },
             ClientZoneLaserScoreboardWidget scoreboardWidget => new ClientZoneLaserScoreboardWidget
@@ -1047,6 +1051,8 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
         {
             targetLaserGameStatus.ShowCurrentGameStatus = sourceLaserGameStatus.ShowCurrentGameStatus;
             targetLaserGameStatus.ShowTimeLeft = sourceLaserGameStatus.ShowTimeLeft;
+            targetLaserGameStatus.ShowGameHistory = sourceLaserGameStatus.ShowGameHistory;
+            targetLaserGameStatus.GameHistoryCount = sourceLaserGameStatus.GameHistoryCount;
             targetLaserGameStatus.ClientId = sourceLaserGameStatus.ClientId;
         }
 

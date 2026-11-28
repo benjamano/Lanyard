@@ -16,7 +16,7 @@ public class GameResultService(
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly ILogger<GameResultService> _logger = logger;
 
-    public async Task<Result<bool>> RecordCompletedGameAsync(Guid clientId, LaserGameStatusDTO status)
+    public async Task<Result<bool>> RecordCompletedGameAsync(Guid clientId, LaserGameStatusDTO status, DateTime? startedAtUtc = null)
     {
         try
         {
@@ -47,12 +47,16 @@ public class GameResultService(
                 return Result<bool>.Fail("Cannot record the completed game: the client was not found.");
             }
 
+            DateTime playedAtUtc = DateTime.UtcNow;
+
             GameResult gameResult = new()
             {
                 Id = Guid.NewGuid(),
                 CompanyId = companyId.Value,
                 ClientId = clientId,
-                PlayedAtUtc = DateTime.UtcNow,
+                PlayedAtUtc = playedAtUtc,
+                // A start after the end can only be a clock glitch; drop it and let readers estimate.
+                StartedAtUtc = startedAtUtc is { } start && start <= playedAtUtc ? start : null,
                 DurationSeconds = status.TotalTimeSeconds,
                 PlayerScores = [.. status.PlayerScores.Select(x => new GameResultPlayerScore
                 {
@@ -79,6 +83,81 @@ public class GameResultService(
 
             return Result<bool>.Fail($"Failed to record the completed game: {ex.Message}");
         }
+    }
+
+    public async Task<Result<IReadOnlyList<RecentGameDTO>>> GetRecentGamesAsync(Guid clientId, int take, int? companyId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            IQueryable<GameResult> query = ctx.GameResults
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Include(x => x.PlayerScores)
+                .Where(x => x.ClientId == clientId);
+
+            // Kiosk displays run as the system tenant, so scope to the dashboard's company here.
+            if (companyId.HasValue)
+            {
+                query = query.Where(x => x.CompanyId == companyId.Value);
+            }
+
+            List<GameResult> games = await query
+                .OrderByDescending(x => x.PlayedAtUtc)
+                .Take(Math.Max(1, take))
+                .ToListAsync();
+
+            List<RecentGameDTO> recentGames = [.. games.Select(ToRecentGame)];
+
+            return Result<IReadOnlyList<RecentGameDTO>>.Ok(recentGames);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load recent games for client {ClientId}", clientId);
+
+            return Result<IReadOnlyList<RecentGameDTO>>.Fail($"Failed to load recent games: {ex.Message}");
+        }
+    }
+
+    // Static and public so the winner rules can be tested without a database.
+    public static RecentGameDTO ToRecentGame(GameResult game)
+    {
+        RecentGameDTO dto = new()
+        {
+            Id = game.Id,
+            EndedAtUtc = game.PlayedAtUtc,
+            StartedAtUtc = game.StartedAtUtc ?? game.PlayedAtUtc.AddSeconds(-game.DurationSeconds),
+            StartIsEstimate = game.StartedAtUtc is null,
+            PlayerCount = game.PlayerScores.Count,
+            TeamTotals = [.. game.PlayerScores
+                .Where(x => x.Team != null)
+                .GroupBy(x => x.Team!.Value)
+                .Select(g => new RecentGameTeamTotalDTO { Team = g.Key, TotalScore = g.Sum(x => x.Score) })
+                .OrderByDescending(x => x.TotalScore)
+                .ThenBy(x => x.Team)]
+        };
+
+        if (dto.TeamTotals.Count > 0)
+        {
+            RecentGameTeamTotalDTO top = dto.TeamTotals[0];
+
+            dto.WinningScore = top.TotalScore;
+            dto.IsDraw = dto.TeamTotals.Count(x => x.TotalScore == top.TotalScore) > 1;
+            dto.WinningTeam = dto.IsDraw ? null : top.Team;
+        }
+        else if (game.PlayerScores.Count > 0)
+        {
+            // Free-for-all: nobody had a team, so the best gun wins.
+            int topScore = game.PlayerScores.Max(x => x.Score);
+            List<GameResultPlayerScore> topGuns = [.. game.PlayerScores.Where(x => x.Score == topScore)];
+
+            dto.WinningScore = topScore;
+            dto.IsDraw = topGuns.Count > 1;
+            dto.WinningGunId = dto.IsDraw ? null : topGuns[0].GunId;
+        }
+
+        return dto;
     }
 
     public async Task<Result<IReadOnlyList<HallOfFameEntryDTO>>> GetTopScoresAsync(HallOfFamePeriod period, int take, Guid? clientId, int? companyId)

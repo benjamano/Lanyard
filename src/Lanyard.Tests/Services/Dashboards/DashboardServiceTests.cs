@@ -2175,6 +2175,57 @@ public class DashboardServiceTests
     }
 
     [TestMethod]
+    public async Task DashboardService_SaveWidget_KeepsGameHistorySettings_AndClampsTheCount()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        ClientZoneLaserGameStatusWidget existing = new() { Id = Guid.NewGuid(), DashboardId = dashboard.Id };
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(existing);
+            await seedCtx.SaveChangesAsync();
+        }
+
+        Result<DashboardWidget> result = await service.SaveWidgetAsync(new ClientZoneLaserGameStatusWidget
+        {
+            Id = existing.Id,
+            DashboardId = dashboard.Id,
+            ShowGameHistory = true,
+            GameHistoryCount = 500
+        });
+
+        Assert.IsTrue(result.Success, result.Error);
+        await using ApplicationDbContext ctx = new(options);
+        ClientZoneLaserGameStatusWidget saved = await ctx.DashboardWidgets.OfType<ClientZoneLaserGameStatusWidget>().SingleAsync();
+        Assert.IsTrue(saved.ShowGameHistory);
+        Assert.AreEqual(ClientZoneLaserGameStatusWidget.MaxGameHistoryCount, saved.GameHistoryCount);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_DuplicateDashboard_CopiesGameHistorySettings()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options, "Manager");
+        Dashboard source = await SeedDashboardAsync(options, "Arena");
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(new ClientZoneLaserGameStatusWidget { DashboardId = source.Id, ShowGameHistory = true, GameHistoryCount = 8 });
+            await seedCtx.SaveChangesAsync();
+        }
+
+        Result<Guid> result = await service.DuplicateDashboardAsync(source.Id);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        await using ApplicationDbContext ctx = new(options);
+        ClientZoneLaserGameStatusWidget copy = await ctx.DashboardWidgets.OfType<ClientZoneLaserGameStatusWidget>().SingleAsync(x => x.DashboardId == result.Data);
+        Assert.IsTrue(copy.ShowGameHistory);
+        Assert.AreEqual(8, copy.GameHistoryCount);
+    }
+
+    [TestMethod]
     public async Task DashboardService_DuplicateDashboard_IsRefusedForStaff()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();

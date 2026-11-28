@@ -6,72 +6,157 @@
 @implements IDisposable
 
 @inject ILaserGameStatusStore LaserGameStatusStore
+@inject IGameResultService GameResultService
 
 <FluentCard Height="100%">
-    <FluentStack Orientation="@Orientation.Horizontal" VerticalAlignment="@VerticalAlignment.Center" HorizontalAlignment="@HorizontalAlignment.Center" Height="100%">
-        @if (Widget.ClientId == null || Widget.ClientId == Guid.Empty)
-        {
+    @if (Widget.ClientId == null || Widget.ClientId == Guid.Empty)
+    {
+        <FluentStack Orientation="@Orientation.Horizontal" VerticalAlignment="@VerticalAlignment.Center" HorizontalAlignment="@HorizontalAlignment.Center" Height="100%">
             <FluentBadge Appearance="@BadgeAppearance.Filled" Size="@BadgeSize.ExtraLarge">Please select a Client to observe</FluentBadge>
-        }
-        else
-        {
-            @if (_gameStatus == null)
-            {
-                <FluentBadge Appearance="@BadgeAppearance.Filled" Size="@BadgeSize.ExtraLarge" Color="@BadgeColor.Subtle">No game status available</FluentBadge>
-            }
-            else
-            {
-                <FluentStack Orientation="@Orientation.Vertical" HorizontalAlignment="@HorizontalAlignment.Center" VerticalAlignment="@VerticalAlignment.Center" Height="100%" Width="100%">
-                    <FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.Center" VerticalAlignment="@VerticalAlignment.Center" Height="100%" Width="100%" Margin="@Margin.VerticalAuto">
-                        <FluentBadge Appearance="@BadgeAppearance.Filled" 
-                                        Size="@BadgeSize.ExtraLarge" 
-                                        Color="@GetBadgeColor()" 
-                                        Shape="@BadgeShape.Rounded">
-                            <FluentStack Orientation="@Orientation.Horizontal"
-                                        HorizontalAlignment="@HorizontalAlignment.Center" 
-                                        VerticalAlignment="@VerticalAlignment.Center" 
-                                        Height="100%" Width="100%"
-                                        HorizontalGap="4">
-                                @if (_gameStatus.Status == GameStatus.NotStarted)
-                                {
-                                    <FluentIcon Icon="Icons.Regular.Size24.Stop" />
-                                }
-                                else if (_gameStatus.Status == GameStatus.GetReady)
-                                {
-                                    <FluentIcon Icon="Icons.Regular.Size24.Warning" />
-                                }
-                                else if (_gameStatus.Status == GameStatus.InGame)
-                                {
-                                    <FluentIcon Icon="Icons.Regular.Size24.Play" />
-                                }
-                                @GetStatusText()
-                            </FluentStack>
-                        </FluentBadge>
-                    </FluentStack>
-                    @if (Widget.ShowTimeLeft == true && _gameStatus.Status == GameStatus.InGame)
-                    {
-                        <FluentStack Margin="@Margin.TopAuto" Orientation="@Orientation.Vertical" HorizontalAlignment="@HorizontalAlignment.Center" VerticalAlignment="@VerticalAlignment.Center" Width="100%" VerticalGap="3">
-                            <FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.SpaceBetween" VerticalAlignment="@VerticalAlignment.Center" Width="100%">
-                                <FluentText Size="@TextSize.Size400" Color="@Color.Info" Weight="@TextWeight.Semibold">
-                                    Time Remaining: @(TimeSpan.FromSeconds(_displayedTimeRemainingSeconds).Humanize(precision: 2, minUnit: Humanizer.Localisation.TimeUnit.Second))
-                                </FluentText>
+        </FluentStack>
+    }
+    else if (Widget.ShowGameHistory)
+    {
+        <div class="game-status-with-history">
+            <div class="game-status-live">
+                @LiveStatus
+            </div>
 
-                                <FluentText Size="@TextSize.Size400" Color="@Color.Info" Weight="@TextWeight.Semibold">
-                                    Total Time: @(TimeSpan.FromSeconds(_gameStatus.TotalTimeSeconds).Humanize(precision: 2, minUnit: Humanizer.Localisation.TimeUnit.Second))
-                                </FluentText>
-                            </FluentStack>
-                            <FluentProgressBar Thickness="@ProgressThickness.Large" Value="@_displayedTimeRemainingSeconds" Max="@_gameStatus.TotalTimeSeconds" Min="0"  />
-                        </FluentStack>
-                    }
-                </FluentStack>
-            }
-        }
-    </FluentStack>
+            <div class="game-history">
+                <span class="game-history-title">Past games</span>
+
+                @if (_historyError)
+                {
+                    <span class="game-history-empty">Couldn't load past games</span>
+                }
+                else if (_history.Count == 0)
+                {
+                    <span class="game-history-empty">@(_historyLoaded ? "No finished games yet" : "Loading…")</span>
+                }
+                else
+                {
+                    <ul class="game-history-list">
+                        @foreach (RecentGameDTO game in _history)
+                        {
+                            <li class="game-history-row">
+                                <span class="game-history-when" title="@DescribeStartTooltip(game)">
+                                    @(game.StartIsEstimate ? "≈ " : "")@DescribeStart(game)
+                                </span>
+                                <span class="game-history-winner">
+                                    @if (game.WinningTeam is Team winningTeam)
+                                    {
+                                        <FluentIcon Value="@(new Icons.Filled.Size16.Circle())" Color="@TeamColor(winningTeam)" />
+                                        <span>@winningTeam won</span>
+                                    }
+                                    else if (game.WinningGunId is int gunId)
+                                    {
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.Trophy())" />
+                                        <span>Gun @gunId won</span>
+                                    }
+                                    else
+                                    {
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.ArrowSwap())" />
+                                        <span>Draw</span>
+                                    }
+                                </span>
+                                <span class="game-history-scores">
+                                    @if (game.TeamTotals.Count > 0)
+                                    {
+                                        for (int i = 0; i < game.TeamTotals.Count; i++)
+                                        {
+                                            RecentGameTeamTotalDTO total = game.TeamTotals[i];
+                                            if (i > 0)
+                                            {
+                                                <span class="game-history-dash"> – </span>
+                                            }
+                                            <span class="@(total.TotalScore == game.WinningScore ? "game-history-top" : "")">@total.Team @total.TotalScore.ToString("N0", Uk)</span>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="game-history-top">@game.WinningScore.ToString("N0", Uk) pts</span>
+                                    }
+                                </span>
+                                <span class="game-history-players">@game.PlayerCount @(game.PlayerCount == 1 ? "player" : "players")</span>
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <FluentStack Orientation="@Orientation.Horizontal" VerticalAlignment="@VerticalAlignment.Center" HorizontalAlignment="@HorizontalAlignment.Center" Height="100%">
+            @LiveStatus
+        </FluentStack>
+    }
 </FluentCard>
 
 @code {
     [Parameter]
     public required ClientZoneLaserGameStatusWidget Widget { get; set; } 
+
+    // The dashboard's company. Kiosk displays run with nobody signed in, so without this the
+    // history query would not be limited to the dashboard's own company.
+    [Parameter]
+    public int? CompanyId { get; set; }
+
+    private static readonly System.Globalization.CultureInfo Uk = Lanyard.Infrastructure.DTO.Scheduling.RotaFormat.Uk;
+
+    private RenderFragment LiveStatus => __builder =>
+    {
+        if (_gameStatus == null)
+        {
+            <FluentBadge Appearance="@BadgeAppearance.Filled" Size="@BadgeSize.ExtraLarge" Color="@BadgeColor.Subtle">No game status available</FluentBadge>
+        }
+        else
+        {
+            <FluentStack Orientation="@Orientation.Vertical" HorizontalAlignment="@HorizontalAlignment.Center" VerticalAlignment="@VerticalAlignment.Center" Height="100%" Width="100%">
+                <FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.Center" VerticalAlignment="@VerticalAlignment.Center" Height="100%" Width="100%" Margin="@Margin.VerticalAuto">
+                    <FluentBadge Appearance="@BadgeAppearance.Filled" 
+                                    Size="@BadgeSize.ExtraLarge" 
+                                    Color="@GetBadgeColor()" 
+                                    Shape="@BadgeShape.Rounded">
+                        <FluentStack Orientation="@Orientation.Horizontal"
+                                    HorizontalAlignment="@HorizontalAlignment.Center" 
+                                    VerticalAlignment="@VerticalAlignment.Center" 
+                                    Height="100%" Width="100%"
+                                    HorizontalGap="4">
+                            @if (_gameStatus.Status == GameStatus.NotStarted)
+                            {
+                                <FluentIcon Icon="Icons.Regular.Size24.Stop" />
+                            }
+                            else if (_gameStatus.Status == GameStatus.GetReady)
+                            {
+                                <FluentIcon Icon="Icons.Regular.Size24.Warning" />
+                            }
+                            else if (_gameStatus.Status == GameStatus.InGame)
+                            {
+                                <FluentIcon Icon="Icons.Regular.Size24.Play" />
+                            }
+                            @GetStatusText()
+                        </FluentStack>
+                    </FluentBadge>
+                </FluentStack>
+                @if (Widget.ShowTimeLeft == true && _gameStatus.Status == GameStatus.InGame)
+                {
+                    <FluentStack Margin="@Margin.TopAuto" Orientation="@Orientation.Vertical" HorizontalAlignment="@HorizontalAlignment.Center" VerticalAlignment="@VerticalAlignment.Center" Width="100%" VerticalGap="3">
+                        <FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.SpaceBetween" VerticalAlignment="@VerticalAlignment.Center" Width="100%">
+                            <FluentText Size="@TextSize.Size400" Color="@Color.Info" Weight="@TextWeight.Semibold">
+                                Time Remaining: @(TimeSpan.FromSeconds(_displayedTimeRemainingSeconds).Humanize(precision: 2, minUnit: Humanizer.Localisation.TimeUnit.Second))
+                            </FluentText>
+
+                            <FluentText Size="@TextSize.Size400" Color="@Color.Info" Weight="@TextWeight.Semibold">
+                                Total Time: @(TimeSpan.FromSeconds(_gameStatus.TotalTimeSeconds).Humanize(precision: 2, minUnit: Humanizer.Localisation.TimeUnit.Second))
+                            </FluentText>
+                        </FluentStack>
+                        <FluentProgressBar Thickness="@ProgressThickness.Large" Value="@_displayedTimeRemainingSeconds" Max="@_gameStatus.TotalTimeSeconds" Min="0"  />
+                    </FluentStack>
+                }
+            </FluentStack>
+        }
+    };
 
     private LaserGameStatusDTO? _gameStatus = null;
 
@@ -93,6 +178,7 @@
         _renderCoalescer = new RenderCoalescer(() => InvokeAsync(StateHasChanged));
 
         LaserGameStatusStore.OnStatusUpdated += OnLaserGameStatusChanged;
+        LaserGameStatusStore.OnGameRecorded += OnGameRecorded;
 
         if (Widget.ClientId != null && Widget.ClientId != Guid.Empty)
         {
@@ -134,7 +220,133 @@
         {
             await GetCurrentGameStatusAsync();
         }
+
+        // The designer edits this same Widget instance live, so a changed kiosk, count or switch
+        // has to reload here; nothing else would notice until the next game ends.
+        if (HistoryInputsChanged())
+        {
+            await LoadHistoryAsync();
+        }
     }
+
+    // ---- Past games ----
+
+    private List<RecentGameDTO> _history = [];
+    private bool _historyLoaded;
+    private bool _historyError;
+
+    private bool _isLoadingHistory;
+    private bool _historyReloadRequested;
+
+    // What the shown rows were loaded for. Null client means nothing has been loaded yet.
+    private Guid? _loadedClientId;
+    private int _loadedCount;
+    private int? _loadedCompanyId;
+    private bool _loadedShowHistory;
+
+    private bool HistoryInputsChanged() =>
+        _loadedShowHistory != Widget.ShowGameHistory
+        || (Widget.ShowGameHistory && (_loadedClientId != Widget.ClientId
+            || _loadedCount != ClientZoneLaserGameStatusWidget.ClampGameHistoryCount(Widget.GameHistoryCount)
+            || _loadedCompanyId != CompanyId));
+
+    private async Task LoadHistoryAsync()
+    {
+        // A settings change or a newly saved game landing mid-load is handed to the load already
+        // running, rather than dropped or run alongside it.
+        if (_isLoadingHistory)
+        {
+            _historyReloadRequested = true;
+            return;
+        }
+
+        _isLoadingHistory = true;
+
+        try
+        {
+            do
+            {
+                _historyReloadRequested = false;
+
+                bool show = Widget.ShowGameHistory;
+                Guid? clientId = Widget.ClientId;
+                int count = ClientZoneLaserGameStatusWidget.ClampGameHistoryCount(Widget.GameHistoryCount);
+                int? requestedCompanyId = CompanyId;
+
+                if (!show || clientId is null || clientId == Guid.Empty)
+                {
+                    _history = [];
+                    _historyError = false;
+                    _historyLoaded = false;
+                }
+                else
+                {
+                    // An unsaved dashboard in the editor has no company yet (0); the editor is
+                    // signed in, so the tenant filter already scopes it.
+                    int? companyId = requestedCompanyId is > 0 ? requestedCompanyId : null;
+
+                    Result<IReadOnlyList<RecentGameDTO>> result = await GameResultService.GetRecentGamesAsync(clientId.Value, count, companyId);
+
+                    _historyError = !result.IsSuccess;
+                    _history = result.Data?.ToList() ?? [];
+                    _historyLoaded = true;
+                }
+
+                _loadedShowHistory = show;
+                _loadedClientId = clientId;
+                _loadedCount = count;
+                _loadedCompanyId = requestedCompanyId;
+            }
+            while (_historyReloadRequested);
+        }
+        finally
+        {
+            _isLoadingHistory = false;
+        }
+    }
+
+    // Raised on the hub's thread once a finished game is saved.
+    private void OnGameRecorded(Guid clientId)
+    {
+        if (!Widget.ShowGameHistory || clientId != Widget.ClientId)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await LoadHistoryAsync();
+                StateHasChanged();
+            }
+            catch (ObjectDisposedException)
+            {
+                // The widget was removed while the reload ran.
+            }
+        });
+    }
+
+    private static string DescribeStart(RecentGameDTO game)
+    {
+        DateTime local = RotaTime.ToVenueLocal(game.StartedAtUtc);
+        DateOnly today = RotaTime.LocalDate(DateTime.UtcNow);
+
+        return DateOnly.FromDateTime(local) == today
+            ? local.ToString("HH:mm", Uk)
+            : local.ToString("ddd d MMM, HH:mm", Uk);
+    }
+
+    private static string DescribeStartTooltip(RecentGameDTO game)
+    {
+        string ended = RotaTime.ToVenueLocal(game.EndedAtUtc).ToString("HH:mm", Uk);
+
+        return game.StartIsEstimate
+            ? $"Started about this time (worked out from the game length). Ended {ended}."
+            : $"Ended {ended}.";
+    }
+
+    private static Color TeamColor(Team team) => team == Team.Red ? Color.Error : Color.Success;
 
     private async Task GetCurrentGameStatusAsync()
     {
@@ -196,6 +408,7 @@
     public void Dispose()
     {
         LaserGameStatusStore.OnStatusUpdated -= OnLaserGameStatusChanged;
+        LaserGameStatusStore.OnGameRecorded -= OnGameRecorded;
         _progressBarTimer.Dispose();
         _renderCoalescer?.Dispose();
     }

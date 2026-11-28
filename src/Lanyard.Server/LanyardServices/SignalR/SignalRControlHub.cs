@@ -343,6 +343,18 @@ public class SignalRControlHub(
 
         bool gameJustEnded = previousStatus?.Status == GameStatus.InGame && status.Status == GameStatus.NotStarted;
 
+        if (status.Status == GameStatus.InGame && previousStatus?.Status != GameStatus.InGame)
+        {
+            // With no previous status the server has only just heard from this kiosk (a restart or
+            // reconnect) and the game may have been running for a while, so work back from the
+            // time already played rather than stamping it as starting now.
+            int secondsAlreadyPlayed = previousStatus is null
+                ? Math.Max(0, status.TotalTimeSeconds - status.TimeRemainingSeconds)
+                : 0;
+
+            _laserGameStatusStore.MarkGameStarted(clientId, DateTime.UtcNow.AddSeconds(-secondsAlreadyPlayed));
+        }
+
         _laserGameStatusStore.UpdateStatus(clientId, status);
         _automationEngineService.EnqueueTransition(clientId, status.Status, status);
 
@@ -351,11 +363,19 @@ public class SignalRControlHub(
 
         if (gameJustEnded)
         {
-            Result<bool> recordResult = await _gameResultService.RecordCompletedGameAsync(clientId, status);
+            DateTime? startedAtUtc = _laserGameStatusStore.TryGetGameStart(clientId, out DateTime markedStartUtc)
+                ? markedStartUtc
+                : null;
+
+            Result<bool> recordResult = await _gameResultService.RecordCompletedGameAsync(clientId, status, startedAtUtc);
 
             if (!recordResult.IsSuccess)
             {
                 _logger.LogWarning("Failed to record completed game for client {ClientId}: {Error}", clientId, recordResult.Error);
+            }
+            else if (recordResult.Data)
+            {
+                _laserGameStatusStore.NotifyGameRecorded(clientId);
             }
         }
     }

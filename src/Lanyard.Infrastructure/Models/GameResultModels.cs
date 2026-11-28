@@ -14,7 +14,13 @@ public class GameResult : ICompanyOwned
     public Guid ClientId { get; set; }
     public Client? Client { get; set; }
 
+    // When the game finished (the InGame -> NotStarted edge).
     public DateTime PlayedAtUtc { get; set; }
+
+    // When the game went InGame, as seen by the server. Null for games recorded before this was
+    // captured, or when the server restarted mid-game and missed the start; readers then estimate
+    // it as PlayedAtUtc - DurationSeconds.
+    public DateTime? StartedAtUtc { get; set; }
 
     // Snapshot of the game's configured length, taken from LaserGameStatusDTO.TotalTimeSeconds.
     public int DurationSeconds { get; set; }

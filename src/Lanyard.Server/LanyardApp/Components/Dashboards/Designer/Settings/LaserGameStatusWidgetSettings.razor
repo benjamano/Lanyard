@@ -4,4 +4,10 @@
     <KioskPicker Value="@W.ClientId" ValueChanged="@(v => SetAsync(() => { W.ClientId = v; }, "Chose a kiosk"))" Label="Laser game kiosk" LaserGameKiosksOnly="true" />
     <FluentSwitch Value="@W.ShowCurrentGameStatus" ValueChanged="@(v => SetAsync(() => W.ShowCurrentGameStatus = v, v ? "Showed game status" : "Hid game status"))" Label="Show whether a game is on" />
     <FluentSwitch Value="@W.ShowTimeLeft" ValueChanged="@(v => SetAsync(() => W.ShowTimeLeft = v, v ? "Showed time left" : "Hid time left"))" Label="Show the time left" />
+    <FluentSwitch Value="@W.ShowGameHistory" ValueChanged="@(v => SetAsync(() => W.ShowGameHistory = v, v ? "Showed past games" : "Hid past games"))" Label="Show past games" />
+    @if (W.ShowGameHistory)
+    {
+        <FluentNumberInput TValue="int" Value="@W.GameHistoryCount" ValueChanged="@(v => SetAsync(() => W.GameHistoryCount = ClientZoneLaserGameStatusWidget.ClampGameHistoryCount(v), "Changed how many past games show"))"
+                           Min="ClientZoneLaserGameStatusWidget.MinGameHistoryCount" Max="ClientZoneLaserGameStatusWidget.MaxGameHistoryCount" Label="How many games" />
+    }
 </div>
