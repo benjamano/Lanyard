@@ -1,5 +1,6 @@
 ﻿using Lanyard.Infrastructure.DTO.ZoneScoreboard;
 using Lanyard.Shared.LaserGame;
+using Lanyard.Shared.LaserGame.Capture;
 using Lanyard.Shared.LaserGame.Pipeline;
 using Microsoft.Extensions.Logging;
 using PacketDotNet;
@@ -42,6 +43,14 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, ILaserPacketPipeline p
 
     /// <summary>The BPF filter Npcap is applying, or null when every packet is captured.</summary>
     public string? CaptureFilter { get; private set; }
+
+    /// <summary>The zone scoreboard settings last received, for the header of a recording.</summary>
+    public ZoneScoreboardSettingsDTO? CurrentSettings { get; private set; }
+
+    // Read on the capture thread for every game packet, so swapped whole rather than locked.
+    private volatile LaserCaptureRecorder? _recorder;
+
+    public void AttachRecorder(LaserCaptureRecorder? recorder) => _recorder = recorder;
     public string? ActiveDeviceName => _activeDevice?.Name;
     public DateTime? CaptureStartedUtc => FromTicks(ref _captureStartedTicks);
     public DateTime? LastPacketUtc => FromTicks(ref _lastPacketTicks);
@@ -69,8 +78,22 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, ILaserPacketPipeline p
     {
         _isConfigured = true;
         PreferredMacAddress = settings.PreferredDeviceMacAddress;
+        CurrentSettings = settings;
 
-        CaptureDeviceList devices = CaptureDeviceList.Instance;
+        CaptureDeviceList devices;
+
+        try
+        {
+            devices = CaptureDeviceList.Instance;
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or TypeInitializationException or BadImageFormatException)
+        {
+            // Npcap isn't installed, e.g. on a developer's PC. Nothing can be captured, but the
+            // kiosk carries on, and recordings can still be replayed.
+            _logger.LogWarning("Npcap isn't installed, so no laser game packets can be captured: {Error}", ex.Message);
+
+            return;
+        }
 
         if (devices.Any() == false)
         {
@@ -237,6 +260,10 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, ILaserPacketPipeline p
             {
                 return;
             }
+
+            // Before the game state sees it, so a recording keeps exactly what arrived. A no-op
+            // (one volatile read) when nothing is recording.
+            _recorder?.TryRecord(raw.Timeval.Date, ipPacket.SourceAddress, ipPacket.DestinationAddress, rawBytes);
 
             if (_logger.IsEnabled(LogLevel.Trace))
             {

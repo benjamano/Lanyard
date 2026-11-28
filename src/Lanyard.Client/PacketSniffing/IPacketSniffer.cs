@@ -1,4 +1,5 @@
 ﻿using Lanyard.Infrastructure.DTO.ZoneScoreboard;
+using Lanyard.Shared.LaserGame.Capture;
 
 namespace Lanyard.Client.PacketSniffing;
 
@@ -29,4 +30,13 @@ public interface IPacketSniffer
 
     /// <summary>A packet from the laser tag system, which shows the card is on the right network.</summary>
     DateTime? LastGamePacketUtc { get; }
+
+    /// <summary>The zone scoreboard settings last received; null before any arrive.</summary>
+    ZoneScoreboardSettingsDTO? CurrentSettings { get; }
+
+    /// <summary>
+    /// Sends every game packet to this recorder as well as the game state, until replaced or
+    /// set back to null.
+    /// </summary>
+    void AttachRecorder(LaserCaptureRecorder? recorder);
 }
