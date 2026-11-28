@@ -1173,10 +1173,11 @@
   {
     "version": "1.4.43",
     "releaseDate": "2026-11-28",
-    "summary": "Watch a kiosk's camera live from the Clients page.",
+    "summary": "Watch a kiosk's camera live from the Clients page, and gun names show on the laser scoreboard widget.",
     "details": [
       "Added a Live camera button on the Clients page for kiosks with a camera or capture card plugged in. It shows that camera live in a dialog, with a picker when there's more than one camera.",
-      "A kiosk already showing the same camera in a Live Capture step keeps working while you watch."
+      "A kiosk already showing the same camera in a Live Capture step keeps working while you watch.",
+      "The laser scoreboard dashboard widget's Name column was blank. It now shows each player's gun, such as Gun 4, and sorting by Name puts guns in number order."
     ]
   }
 ]
