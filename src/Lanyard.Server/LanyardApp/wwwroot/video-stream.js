@@ -3,8 +3,8 @@
 // videoViewer runs on the kiosk that displays the remote stream. SDP/ICE signaling
 // travels through the server's VideoStreamSignalingService via Blazor circuits.
 //
-// A module, imported by VideoPublisher.razor and KioskLiveCaptureTemplate.razor (the only pages
-// that stream video) rather than loaded on every page from App.razor.
+// A module, imported by VideoPublisher.razor, KioskLiveCaptureTemplate.razor and LiveCameraView.razor
+// (the only components that stream video) rather than loaded on every page from App.razor.
 
 import { acquireCaptureStream } from './js/liveCapture.js';
 
@@ -240,14 +240,22 @@ export const videoViewer = (() => {
                 const video = document.getElementById(videoElementId);
                 if (!video) return;
 
+                // ontrack fires once per track (video, then audio) with the same stream. Assigning
+                // srcObject again restarts the load, aborting the first play() - which the catch
+                // below used to take for blocked autoplay and mute a stream meant to have sound.
+                if (video.srcObject === e.streams[0]) return;
+
                 video.srcObject = e.streams[0];
                 video.muted = !enableAudio;
 
                 try {
                     await video.play();
-                } catch {
-                    video.muted = true;
-                    await video.play().catch(() => { });
+                } catch (err) {
+                    // Only a refusal to autoplay with sound is worth retrying muted.
+                    if (err && err.name === 'NotAllowedError' && !video.muted) {
+                        video.muted = true;
+                        await video.play().catch(() => { });
+                    }
                 }
             };
 
@@ -282,6 +290,16 @@ export const videoViewer = (() => {
                 await session.pc.addIceCandidate(candidate).catch(() => { });
             } else {
                 session.pendingCandidates.push(candidate);
+            }
+        },
+
+        // The sound button on a staff page's live camera: the stream already carries the audio.
+        setMuted(videoElementId, muted) {
+            const video = document.getElementById(videoElementId);
+            if (!video) return;
+            video.muted = !!muted;
+            if (!muted) {
+                video.play().catch(() => { });
             }
         },
 

@@ -1179,5 +1179,16 @@
       "A kiosk already showing the same camera in a Live Capture step keeps working while you watch.",
       "The laser scoreboard dashboard widget's Name column was blank. It now shows each player's gun, such as Gun 4, and sorting by Name puts guns in number order."
     ]
+  },
+  {
+    "version": "1.4.44",
+    "releaseDate": "2026-11-28",
+    "summary": "Show a kiosk's camera live on a dashboard.",
+    "details": [
+      "New Live capture dashboard widget (under Kiosks & projection). Pick a camera or capture card plugged into any of your kiosks and it plays live in the tile, the same picture a projection Live Capture step shows.",
+      "On a kiosk screen it plays straight away and keeps trying on its own if the camera drops out. On a signed-in dashboard only Admins and Managers see the picture.",
+      "Sound is off unless you turn on Play the camera's sound. In a browser it then starts muted, with a speaker button to turn it on. Fill the tile crops the picture to fill the tile instead of showing bars.",
+      "While you edit a dashboard the tile shows the camera's name instead of the picture, so the camera only switches on when the dashboard is viewed."
+    ]
   }
 ]
