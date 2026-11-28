@@ -572,7 +572,8 @@ public class WhatsOnTodayWidget : DashboardWidget
 
 // A kiosk's camera or capture card, live, streamed over the same WebRTC path as the projection
 // Live Capture step. On a kiosk it plays as that kiosk (its viewer token); on a signed-in
-// dashboard only Admins and Managers see it. The designer never opens a stream.
+// dashboard only Admins and Managers see it. The designer canvas shows a stand-in; Preview
+// and viewing the dashboard open the stream.
 public class LiveCaptureWidget : DashboardWidget
 {
     [SetsRequiredMembers]

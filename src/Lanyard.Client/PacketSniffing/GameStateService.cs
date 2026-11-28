@@ -21,6 +21,10 @@ public class GameStateService : IGameStateService
     private GameStatus _gameStatus = GameStatus.NotStarted;
 
     private TimeSpan _gameLength = TimeSpan.Zero;
+
+    // Not cleared between games: the box only reports the mode while a game runs or its settings
+    // change, and the scoreboard should keep showing the last game in its own layout.
+    private GameMode? _gameMode;
     private TimeSpan _timeRemaining = TimeSpan.Zero;
 
     private List<PlayerScoreDTO> _currentPlayerScores = [];
@@ -128,6 +132,7 @@ public class GameStateService : IGameStateService
                 TimeRemainingSeconds = (int)Math.Max(0, _timeRemaining.TotalSeconds),
                 TotalTimeSeconds = (int)Math.Max(0, _gameLength.TotalSeconds),
                 PlayerCount = playerScores.Count,
+                GameMode = _gameMode,
                 PlayerScores = playerScores,
                 LastUpdateUtc = DateTime.UtcNow
             };
@@ -173,6 +178,30 @@ public class GameStateService : IGameStateService
         }
 
         GameStateChanged?.Invoke();
+    }
+
+    public void UpdateGameMode(GameMode gameMode)
+    {
+        lock (_lock)
+        {
+            // Every timing packet repeats the mode, so only publish when it actually changes.
+            if (_gameMode == gameMode)
+            {
+                return;
+            }
+
+            _gameMode = gameMode;
+        }
+
+        GameStateChanged?.Invoke();
+    }
+
+    public GameMode? GetGameMode()
+    {
+        lock (_lock)
+        {
+            return _gameMode;
+        }
     }
 
     public void UpdateGameLength(TimeSpan gameLength)

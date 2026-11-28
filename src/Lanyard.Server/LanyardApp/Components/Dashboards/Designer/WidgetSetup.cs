@@ -15,6 +15,7 @@ public static class WidgetSetup
         MusicTimelineWidget w => w.ClientId is null,
         MusicPlaylistSelectorWidget w => w.ClientId is null,
         ProjectionStatusWidget w => w.ClientId is null,
+        LiveCaptureWidget w => w.ClientId is null || string.IsNullOrWhiteSpace(w.DeviceName),
         AutomationRuleStatusWidget w => w.AutomationRuleId is null,
         ButtonWidget w => w.ActionType is null or ButtonActionType.Unknown
             || w.ClientId is null

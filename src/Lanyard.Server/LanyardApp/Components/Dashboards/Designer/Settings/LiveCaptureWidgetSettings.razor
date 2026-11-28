@@ -5,10 +5,16 @@
 @inject IClientService ClientService
 
 <div class="widget-settings">
-    <div class="widget-settings-note">Plays on kiosk screens, and for Admins and Managers on a signed-in dashboard. The designer shows a stand-in, so editing never turns the camera on.</div>
+    <div class="widget-settings-note">Plays on kiosk screens, and for Admins and Managers on a signed-in dashboard. The designer shows a stand-in, so the camera only turns on when the dashboard is viewed or previewed.</div>
     @if (_cameras is null)
     {
         <FluentSkeleton Height="56px" Width="100%" />
+    }
+    else if (_cameras.Count == 0 && _loadFailed)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">
+            Couldn't load the cameras. Close this widget's settings and select it again to retry.
+        </FluentMessageBar>
     }
     else if (_cameras.Count == 0)
     {
@@ -44,6 +50,7 @@
     private sealed record CameraOption(string Key, Guid ClientId, string DeviceName, string Label);
 
     private List<CameraOption>? _cameras;
+    private bool _loadFailed;
 
     private string? CurrentKey => W.ClientId is Guid id && !string.IsNullOrEmpty(W.DeviceName) ? KeyFor(id, W.DeviceName) : null;
 
@@ -54,11 +61,11 @@
         if (!result.IsSuccess || result.Data is null)
         {
             _toastService.ShowError($"Couldn't load the cameras: {result.Error}");
-            _cameras = [];
-            return;
+            _loadFailed = true;
         }
 
-        List<CameraOption> cameras = [.. result.Data.Select(d => new CameraOption(KeyFor(d.ClientId, d.DeviceName), d.ClientId, d.DeviceName, $"{d.ClientName} · {d.DeviceName}"))];
+        // On a failed load this still shows the widget's own camera, so it doesn't look unset.
+        List<CameraOption> cameras = [.. (result.Data ?? []).Select(d => new CameraOption(KeyFor(d.ClientId, d.DeviceName), d.ClientId, d.DeviceName, $"{d.ClientName} · {d.DeviceName}"))];
 
         // A widget still pointing at a camera that's been unplugged would otherwise show an empty
         // picker, looking unset while it isn't. Show it, so it can be changed.

@@ -237,8 +237,13 @@ export const videoViewer = (() => {
             };
 
             pc.ontrack = async e => {
+                // A session stopped while its tracks were arriving must not take over the element.
+                if (!sessions.has(sessionId)) return;
+
                 const video = document.getElementById(videoElementId);
                 if (!video) return;
+
+                session.stream = e.streams[0];
 
                 // ontrack fires once per track (video, then audio) with the same stream. Assigning
                 // srcObject again restarts the load, aborting the first play() - which the catch
@@ -315,8 +320,10 @@ export const videoViewer = (() => {
                 }
                 earlyCandidates.delete(sessionId);
 
+                // Only blank the element if it's showing this session: a replacement session on
+                // the same element may already be live when an old one is cleaned up.
                 const video = document.getElementById(videoElementId);
-                if (video) {
+                if (video && session && (!session.stream || video.srcObject === session.stream)) {
                     video.srcObject = null;
                 }
             } catch {
