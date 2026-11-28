@@ -426,5 +426,17 @@ public class ProjectionProgramRunnerGameWaitTests
         public IReadOnlyDictionary<Guid, LaserGameStatusDTO> GetAllStatuses() => _inner.GetAllStatuses();
 
         public void RemoveStatus(Guid clientId) => _inner.RemoveStatus(clientId);
+
+        public void MarkGameStarted(Guid clientId, DateTime startedAtUtc) => _inner.MarkGameStarted(clientId, startedAtUtc);
+
+        public bool TryGetGameStart(Guid clientId, out DateTime startedAtUtc) => _inner.TryGetGameStart(clientId, out startedAtUtc);
+
+        public void NotifyGameRecorded(Guid clientId) => _inner.NotifyGameRecorded(clientId);
+
+        public event Action<Guid>? OnGameRecorded
+        {
+            add => _inner.OnGameRecorded += value;
+            remove => _inner.OnGameRecorded -= value;
+        }
     }
 }
