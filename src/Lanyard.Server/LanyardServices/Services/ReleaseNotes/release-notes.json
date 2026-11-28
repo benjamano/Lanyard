@@ -1085,7 +1085,9 @@
     "summary": "Test automation rules on demand and see what each action will do first.",
     "details": [
       "Admins can run enabled automation rules on demand. A confirmation shows the real actions that will happen before the test runs, and the result shows which actions passed or failed.",
-      "Tests appear in the Execution Log with a Test badge and who ran them. They don't raise Operations Alerts or count as the rule's last run."
+      "Tests appear in the Execution Log with a Test badge and who ran them. They don't raise Operations Alerts or count as the rule's last run.",
+      "Kiosk projection screens only play programs the kiosk itself opened: a screen's web address no longer works on another computer or for another company's program, and it no longer shows the kiosk's and program's ids while loading.",
+      "A kiosk's list of cached songs is only shown on that kiosk's own page, not on every open Clients page."
     ]
   },
   {

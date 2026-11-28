@@ -70,7 +70,6 @@ namespace Lanyard.Tests.Services.VideoStreaming
             Assert.IsTrue(service.ValidatePublisherToken(clientId, first), "Issuing a second token must not invalidate the first.");
             Assert.IsTrue(service.ValidatePublisherToken(clientId, second));
         }
-
         // A kiosk window keeps its token in its URL across a server restart; the new server must
         // take it back (same Data Protection keys), for that kiosk only.
         [TestMethod]
