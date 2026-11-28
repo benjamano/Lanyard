@@ -1,7 +1,8 @@
 <HelpTab>
     <FluentText>
         <a href="/manage/audio-clips">Audio Clips</a> are short recordings played over the kiosk music, such as
-        a closing-time call, a birthday jingle or a safety message. The music dips while a clip plays and comes
+        a closing-time call, a birthday jingle or a safety message. A clip can be an uploaded recording, or an
+        announcement you type for a voice to say. The music dips while a clip plays and comes
         back afterwards. Admins, Managers and people with the CanPlayAudioClips role can play them.
     </FluentText>
 
@@ -14,6 +15,26 @@
             <li>Set the clip volume. Turn on <strong>Change how the music dips</strong> to set the music level
                 while it plays and how quickly it fades down and back up.</li>
         </ol>
+    </HelpSection>
+
+    <HelpSection Title="Typing an announcement (managers)">
+        <ol>
+            <li>Select <strong>Add clip</strong>, and under <strong>Audio</strong> choose <strong>Type an announcement</strong>.</li>
+            <li>Type <strong>What to say</strong>, up to 500 characters, for example "Red team, this is your two minute warning."</li>
+            <li>Choose a <strong>Voice</strong>. All of them are British: English, Scottish and Northern, men and women.</li>
+            <li>Move <strong>Speed</strong> and <strong>Pitch</strong> if you like. A deep, slightly slow voice works well for
+                laser tag; a brighter, quicker one for parties.</li>
+            <li>Select <strong>Preview</strong> to hear it, then <strong>Add</strong>.</li>
+        </ol>
+        <FluentText>
+            Announcements show an <strong>Announcement</strong> tag in the list, with their words underneath. They play,
+            schedule and work in automation rules exactly like an uploaded clip. To change the words or the voice, select
+            the clip's edit button; it's spoken again when you save, and the kiosks fetch the new version.
+        </FluentText>
+        <HelpNote>
+            The words are spoken on the Lanyard server (nothing is sent to another company) and kept as the clip's audio,
+            so don't type a child's name into an announcement. Deleting an announcement deletes its audio too.
+        </HelpNote>
     </HelpSection>
 
     <HelpSection Title="Playing a clip now">
@@ -31,6 +52,15 @@
             <strong>Before closing</strong>, <strong>After opening</strong> or <strong>At a set time</strong> (UK time).
             Before closing and after opening use the location's opening hours, so set those on Companies &amp;
             Locations first. A late close after midnight counts as the day before.
+        </FluentText>
+    </HelpSection>
+
+    <HelpSection Title="Announcements in a game">
+        <FluentText>
+            To announce a moment in a laser tag game, such as a two minute warning, add an automation rule on
+            <a href="/automation">Automation</a>: choose the trigger <strong>Time remaining drops below</strong> with
+            <strong>Seconds remaining</strong> set to 120, and the action <strong>Play Audio Clip</strong> with your announcement.
+            Kiosks download the clips their rules play ahead of time, so the announcement starts right on the moment.
         </FluentText>
     </HelpSection>
 </HelpTab>

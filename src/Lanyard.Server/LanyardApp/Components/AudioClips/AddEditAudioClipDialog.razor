@@ -1,4 +1,5 @@
 @using Lanyard.Application.Services.AudioClips
+@using Lanyard.Application.Services.Speech
 @using Microsoft.AspNetCore.Http
 
 @inject IAudioClipService _audioClipService
@@ -16,6 +17,7 @@
             {
                 <FluentSelect TOption="string" TValue="string" @bind-Value="source" Label="Audio" Width="100%">
                     <FluentOption Value="@UploadSource">Upload a new file</FluentOption>
+                    <FluentOption Value="@SpeechSource">Type an announcement</FluentOption>
                     @foreach (AudioClipFileOption file in Files)
                     {
                         <FluentOption Value="@file.Id.ToString()">@file.FileName</FluentOption>
@@ -45,16 +47,74 @@
                         </FluentInputFile>
                     </div>
                 }
-                else
+                else if (source != SpeechSource)
                 {
                     <FluentText Class="clip-hint">Already in the file manager. It isn't copied; the clip plays this file.</FluentText>
                 }
             }
-            else
+            else if (Clip.Kind != AudioClipKind.Speech)
             {
                 <FluentText Class="clip-hint">
                     @FormatDuration(Clip.DurationSeconds) long. To use different audio, add a new clip.
                 </FluentText>
+            }
+
+            @if (IsSpeech)
+            {
+                <div class="clip-field">
+                    <FluentTextArea @bind-Value="speechText" Label="What to say" Rows="3" Width="100%" Required="true"
+                                    Maxlength="@SpeechRules.MaxTextLength"
+                                    Placeholder="e.g. Red team, this is your two minute warning." />
+                    <FluentText Class="clip-hint">
+                        @(speechText?.Length ?? 0) of @SpeechRules.MaxTextLength characters. The words are spoken on the server and kept as
+                        this clip's audio, so don't type a child's name: anyone who can play clips will hear it.
+                    </FluentText>
+                </div>
+
+                @if (!voices.Any(v => v.IsInstalled))
+                {
+                    <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                        No voices are installed on this server yet, so announcements can't be made. Ask your Lanyard administrator.
+                    </FluentMessageBar>
+                }
+
+                <FluentSelect TOption="string" TValue="string" @bind-Value="voiceId" Label="Voice" Width="100%">
+                    @foreach (SpeechVoiceOption voice in voices)
+                    {
+                        <FluentOption Value="@voice.Id" Disabled="@(!voice.IsInstalled)">
+                            @voice.Name: @voice.Description@(voice.IsInstalled ? "" : " (not installed)")
+                        </FluentOption>
+                    }
+                </FluentSelect>
+
+                <div class="clip-field">
+                    <FluentText Weight="TextWeight.Semibold">Speed</FluentText>
+                    <div class="clip-slider">
+                        <FluentSlider TValue="int" Min="@((int)(SpeechRules.MinRate * 100))" Max="@((int)(SpeechRules.MaxRate * 100))" Step="5"
+                                      @bind-Value="ratePercent" Class="clip-slider-input" />
+                        <FluentText Weight="TextWeight.Semibold" Class="clip-slider-value">@FormatRate(ratePercent)</FluentText>
+                    </div>
+                </div>
+
+                <div class="clip-field">
+                    <FluentText Weight="TextWeight.Semibold">Pitch</FluentText>
+                    <div class="clip-slider">
+                        <FluentSlider TValue="int" Min="@SpeechRules.MinPitch" Max="@SpeechRules.MaxPitch" Step="1"
+                                      @bind-Value="pitch" Class="clip-slider-input" />
+                        <FluentText Weight="TextWeight.Semibold" Class="clip-slider-value">@FormatPitch(pitch)</FluentText>
+                    </div>
+                </div>
+
+                <div class="clip-preview">
+                    <FluentButton Appearance="ButtonAppearance.Default" IconStart="@(new Icons.Regular.Size20.Speaker2())"
+                                  OnClick="@PreviewAsync" Disabled="@(isPreviewing || isSaving)">
+                        @(isPreviewing ? "Speaking..." : "Preview")
+                    </FluentButton>
+                    @if (previewUrl is not null)
+                    {
+                        <audio @key="previewUrl" class="clip-preview-audio" controls autoplay src="@previewUrl"></audio>
+                    }
+                </div>
             }
 
             <FluentTextInput @bind-Value="name" Label="Name" Required="true" Width="100%" Maxlength="@AudioClip.NameMaxLength"
@@ -135,6 +195,7 @@
 
 @code {
     private const string UploadSource = "upload";
+    private const string SpeechSource = "speech";
     private const string EveryLocation = "all";
 
     // What the dialog closes with when Delete is pressed; the page asks to confirm and deletes.
@@ -160,6 +221,16 @@
     [Parameter]
     public IReadOnlyList<AudioClipFileOption> Files { get; set; } = [];
 
+    private IReadOnlyList<SpeechVoiceOption> voices = [];
+    private string? speechText;
+    private string voiceId = SpeechVoiceCatalogue.DefaultVoiceId;
+    private int ratePercent = 100;
+    private int pitch;
+    private string? previewUrl;
+    private bool isPreviewing;
+
+    private bool IsSpeech => Clip is null ? source == SpeechSource : Clip.Kind == AudioClipKind.Speech;
+
     private string source = UploadSource;
     private FluentInputFileEventArgs? uploaded;
     private int uploadProgressPercent;
@@ -175,10 +246,25 @@
 
     protected override void OnInitialized()
     {
+        voices = _audioClipService.ListVoices();
+
+        if (voices.FirstOrDefault(v => v.IsInstalled) is { } firstInstalled && !voices.Any(v => v.Id == voiceId && v.IsInstalled))
+        {
+            voiceId = firstInstalled.Id;
+        }
+
         if (Clip is null)
         {
             locationValue = CanChooseEveryLocation ? EveryLocation : Locations.FirstOrDefault()?.Id.ToString() ?? EveryLocation;
             return;
+        }
+
+        if (Clip.Kind == AudioClipKind.Speech)
+        {
+            speechText = Clip.SpeechText;
+            voiceId = Clip.SpeechVoiceId ?? voiceId;
+            ratePercent = (int)Math.Round((Clip.SpeechRate ?? 1.0) * 100);
+            pitch = Clip.SpeechPitch ?? 0;
         }
 
         name = Clip.Name;
@@ -243,9 +329,17 @@
         isSaving = true;
         Result<AudioClip> result;
 
-        if (Clip is not null)
+        if (Clip is not null && IsSpeech)
+        {
+            result = await _audioClipService.UpdateSpeechAsync(Scope, Clip.Id, CurrentSpeech(), details, userResult.Data);
+        }
+        else if (Clip is not null)
         {
             result = await _audioClipService.UpdateAsync(Scope, Clip.Id, details);
+        }
+        else if (IsSpeech)
+        {
+            result = await _audioClipService.CreateSpeechAsync(Scope, CurrentSpeech(), details, userResult.Data);
         }
         else if (source != UploadSource && Guid.TryParse(source, out Guid fileId))
         {
@@ -279,6 +373,47 @@
         _toastService.ShowSuccess(Clip is null ? $"Added \"{result.Data!.Name}\"." : "Clip saved.");
         await Dialog.CloseAsync(true);
     }
+
+    private AudioClipSpeech CurrentSpeech() =>
+        new(speechText ?? string.Empty, new SpeechVoiceSettings(voiceId, ratePercent / 100.0, pitch));
+
+    private async Task PreviewAsync()
+    {
+        errorMessage = null;
+
+        Result<string> userResult = await _securityService.GetCurrentUserIdAsync();
+        if (!userResult.IsSuccess || userResult.Data is null)
+        {
+            errorMessage = "Couldn't work out who you are. Refresh the page and sign in again.";
+            return;
+        }
+
+        isPreviewing = true;
+        Result<Guid> preview = await _audioClipService.PreviewSpeechAsync(Scope, CurrentSpeech(), userResult.Data);
+        isPreviewing = false;
+
+        if (!preview.IsSuccess)
+        {
+            errorMessage = preview.Error;
+            return;
+        }
+
+        previewUrl = $"/api/speech/preview/{preview.Data:N}";
+
+        if (string.IsNullOrWhiteSpace(name) && speechText is { Length: > 0 } words)
+        {
+            name = words.Length <= 40 ? words.Trim() : words[..40].Trim() + "…";
+        }
+    }
+
+    private static string FormatRate(int percent) => percent == 100 ? "Normal" : $"{percent / 100.0:0.##}×";
+
+    private static string FormatPitch(int semitones) => semitones switch
+    {
+        0 => "Normal",
+        > 0 => $"+{semitones} higher",
+        _ => $"{semitones} lower"
+    };
 
     private async Task RequestDeleteAsync()
     {

@@ -217,6 +217,18 @@ GDPR erasure doesn't touch them. Cancelling a party keeps the row (it can be rei
 deciding, and a customer erasure request currently means deleting or blanking their bookings by
 hand. If a party's host leaves and their account is deleted, the party just loses its host.
 
+### Typed announcements (audio clips)
+
+A typed announcement (`AudioClip` with `Kind = Speech`) keeps its words (`SpeechText`) and the
+spoken audio rendered from them, stored as a hidden file. The speech is made on the Lanyard server
+by Piper voices (`Services/Speech`); the text is never sent to another company. The words and
+audio last as long as the clip: changing the words deletes the old audio file straight away, and
+deleting the clip deletes its audio file and blanks its words (the soft-deleted row keeps only
+its name, for the play history). Previews are held in server memory for 10 minutes, only for the person who asked, and
+sent with `Cache-Control: no-store`. The editor asks people not to type a child's name; a name
+typed anyway is personal data in the clip until it's edited or deleted. A GDPR erasure clears
+`CreatedByUserId` on clips, as for uploaded ones.
+
 ## Required follow-up work (tracked separately)
 
 1. **Retention sweeper** — a scheduled job that hard-deletes or anonymises records past their

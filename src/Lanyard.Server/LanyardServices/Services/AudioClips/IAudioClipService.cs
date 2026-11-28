@@ -1,4 +1,5 @@
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Speech;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Http;
@@ -24,6 +25,9 @@ public sealed record AudioClipDetails(
     int? DuckToPercent = null,
     int? FadeDownMs = null,
     int? FadeUpMs = null);
+
+/// <summary>What a speech clip says, and the voice it says it in.</summary>
+public sealed record AudioClipSpeech(string Text, SpeechVoiceSettings Voice);
 
 /// <summary>A kiosk a clip could be played on, for the Play dialog.</summary>
 public sealed record AudioClipKiosk(Guid Id, string Name, int? LocationId, string? LocationName, bool IsOnline, bool CanPlayClips, string? Version);
@@ -57,6 +61,26 @@ public interface IAudioClipService
     Task<Result<AudioClip>> CreateFromFileAsync(LocationScope scope, Guid fileId, AudioClipDetails details, string userId, CancellationToken ct = default);
 
     Task<Result<AudioClip>> UpdateAsync(LocationScope scope, Guid clipId, AudioClipDetails details);
+
+    /// <summary>
+    /// Adds a clip that speaks typed text. The speech is rendered now and stored like an uploaded
+    /// file, so it plays, schedules and automates exactly like any other clip.
+    /// </summary>
+    Task<Result<AudioClip>> CreateSpeechAsync(LocationScope scope, AudioClipSpeech speech, AudioClipDetails details, string userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Saves a speech clip's details and words. When the words or the voice changed it's rendered
+    /// again; the new audio has a new file, so kiosks fetch it fresh, and the old one is deleted.
+    /// </summary>
+    Task<Result<AudioClip>> UpdateSpeechAsync(LocationScope scope, Guid clipId, AudioClipSpeech speech, AudioClipDetails details, string userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Renders the speech for listening to before saving. Returns the id to fetch it with from
+    /// /api/speech/preview/{id}, which only this user can do, for ten minutes.
+    /// </summary>
+    Task<Result<Guid>> PreviewSpeechAsync(LocationScope scope, AudioClipSpeech speech, string userId, CancellationToken ct = default);
+
+    IReadOnlyList<SpeechVoiceOption> ListVoices();
 
     Task<Result<bool>> DeleteAsync(LocationScope scope, Guid clipId);
 

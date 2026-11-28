@@ -1191,5 +1191,16 @@
       "While you edit a dashboard the tile shows the camera's name instead of the picture, so the camera only switches on when you preview or view the dashboard.",
       "The Laser Scoreboard dashboard widget now follows the game mode: solo games show one blue Solo list ranked by score instead of putting everyone under Red Team. Team games still show Red Team and Green Team. Kiosks need client 1.0.50 or later to report the mode."
     ]
+  },
+  {
+    "version": "1.4.45",
+    "releaseDate": "2026-11-28",
+    "summary": "Type an announcement and have a voice say it over the music.",
+    "details": [
+      "Add clip on Audio Clips now has Type an announcement: type what to say, choose one of nine British voices, set the speed and pitch, and press Preview to hear it.",
+      "Announcements play, schedule and work in automation rules just like uploaded clips. Pair one with Time remaining drops below to call a two minute warning in a laser tag game.",
+      "Kiosks now download the clips their automation rules play ahead of time, so they start right on the moment.",
+      "The voices run on the Lanyard server itself, so the words aren't sent to anyone else."
+    ]
   }
 ]

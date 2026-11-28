@@ -533,4 +533,79 @@ public class AudioClipPlaybackServiceTests
 
         Assert.AreEqual(0, s.Sent.Count);
     }
+
+    private static async Task AddPlayClipRuleAsync(Setup s, Guid targetKiosk, Guid clipId, bool enabled = true, int? companyId = null)
+    {
+        await using ApplicationDbContext ctx = new(s.Options);
+        Guid ruleId = Guid.NewGuid();
+        ctx.AutomationRules.Add(new AutomationRule
+        {
+            Id = ruleId,
+            CompanyId = companyId ?? s.Company.Id,
+            Name = "Two minute warning",
+            TriggerClientId = targetKiosk,
+            TriggerType = AutomationTriggerType.TimeRemainingBelow,
+            TriggerThreshold = 120,
+            IsActive = true,
+            IsEnabled = enabled,
+            CreateDate = Now,
+            Actions =
+            [
+                new AutomationRuleAction
+                {
+                    Id = Guid.NewGuid(),
+                    AutomationRuleId = ruleId,
+                    ActionType = Lanyard.Application.Services.AutomationActionTypes.PlayAudioClip,
+                    ParametersJson = $$"""{"TargetClientId":"{{targetKiosk}}","AudioClipId":"{{clipId}}"}""",
+                    IsActive = true
+                }
+            ]
+        });
+        await ctx.SaveChangesAsync();
+    }
+
+    [TestMethod]
+    public async Task Prefetch_IncludesAClipAnEnabledAutomationRulePlaysOnTheKiosk()
+    {
+        Setup s = await SeedAsync();
+        Guid arena = await AddKioskAsync(s, "Arena", s.Ipswich);
+        await AddPlayClipRuleAsync(s, arena, s.ClipId);
+
+        await s.Service.PrefetchScheduledClipsAsync(arena, "conn-Arena");
+
+        (string method, object?[] args) = s.Sent["conn-Arena"].Single();
+        Assert.AreEqual(ClientHubMethods.PrefetchAudioClips, method);
+        Assert.AreEqual(s.ClipId, ((List<AudioClipPlayCommand>)args.Single()!).Single().ClipId);
+    }
+
+    [TestMethod]
+    public async Task Prefetch_LeavesOutRulesThatAreOff_TargetAnotherKiosk_OrBelongToAnotherCompany()
+    {
+        Setup s = await SeedAsync();
+        Guid arena = await AddKioskAsync(s, "Arena", s.Ipswich);
+        Guid lobby = await AddKioskAsync(s, "Lobby", s.Ipswich);
+        await AddPlayClipRuleAsync(s, arena, s.ClipId, enabled: false);
+        await AddPlayClipRuleAsync(s, lobby, s.ClipId);
+        await AddPlayClipRuleAsync(s, arena, s.ClipId, companyId: s.Company.Id + 1000);
+
+        await s.Service.PrefetchScheduledClipsAsync(arena, "conn-Arena");
+
+        Assert.IsFalse(s.Sent.ContainsKey("conn-Arena"));
+    }
+
+    [TestMethod]
+    public async Task PrefetchForKiosk_SendsOnlyWhenTheKioskIsConnected()
+    {
+        Setup s = await SeedAsync();
+        Guid arena = await AddKioskAsync(s, "Arena", s.Ipswich);
+        Guid offline = await AddKioskAsync(s, "Offline", s.Ipswich, connected: false);
+        await AddPlayClipRuleAsync(s, arena, s.ClipId);
+        await AddPlayClipRuleAsync(s, offline, s.ClipId);
+
+        await s.Service.PrefetchClipsForKioskAsync(arena);
+        await s.Service.PrefetchClipsForKioskAsync(offline);
+
+        Assert.AreEqual(1, s.Sent["conn-Arena"].Count);
+        Assert.IsFalse(s.Sent.ContainsKey("conn-Offline"));
+    }
 }

@@ -1682,4 +1682,26 @@ public class AutomationRuleServiceTests
         Assert.AreEqual(15, copy.Data.PartyLeadMinutes);
         Assert.AreEqual("Room 2", copy.Data.PartyRoom);
     }
+
+    [TestMethod]
+    public async Task SetRuleEnabled_On_HasTheKioskARulePlaysAClipOnDownloadItAhead()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (_, AutomationEngineService engine, _) = GetService(options);
+        Mock<Lanyard.Application.Services.AudioClips.IAudioClipPlaybackService> playback = new();
+        AutomationRuleService service = new(GetFactory(options), engine, null, playback.Object);
+
+        Guid arena = Guid.NewGuid();
+        AutomationRule rule = BuildRule(Guid.NewGuid());
+        rule.Actions[0].ActionType = AutomationActionTypes.PlayAudioClip;
+        rule.Actions[0].ParametersJson = $$"""{"TargetClientId":"{{arena}}","AudioClipId":"{{Guid.NewGuid()}}"}""";
+        await SeedRuleDirectlyAsync(options, rule);
+
+        await service.SetRuleEnabledAsync(rule.Id, false);
+        playback.Verify(p => p.PrefetchClipsForKioskAsync(It.IsAny<Guid>()), Times.Never);
+
+        await service.SetRuleEnabledAsync(rule.Id, true);
+        playback.Verify(p => p.PrefetchClipsForKioskAsync(arena), Times.Once);
+    }
 }
+
