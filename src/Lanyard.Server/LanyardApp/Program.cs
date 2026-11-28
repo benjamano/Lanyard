@@ -211,6 +211,7 @@ builder.Services.AddSingleton<ITerminalEventBus, TerminalEventBus>();
 builder.Services.AddSingleton<ITimeOffEventBus, TimeOffEventBus>();
 builder.Services.AddSingleton<IShiftClaimEventBus, ShiftClaimEventBus>();
 builder.Services.AddSingleton<IKioskFleetEventBus, KioskFleetEventBus>();
+builder.Services.AddSingleton<IClientEqualiserEventBus, ClientEqualiserEventBus>();
 builder.Services.AddSingleton<IOperationsAlertEventBus, OperationsAlertEventBus>();
 builder.Services.AddSingleton<IOperationsAlertWriter, OperationsAlertWriter>();
 builder.Services.AddScoped<IOperationsAlertService, OperationsAlertService>();

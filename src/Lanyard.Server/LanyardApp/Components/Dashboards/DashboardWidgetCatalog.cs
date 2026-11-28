@@ -65,7 +65,7 @@ public static class DashboardWidgetCatalog
             WidgetCategory.VenueAndGames, () => new Icons.Regular.Size20.Timer(), () => new ClientZoneLaserGameStatusWidget(), typeof(RenderClientZoneLaserGameStatusWidget), typeof(LaserGameStatusWidgetSettings)),
         new(WidgetType.HallOfFame, "Hall of Fame", "Best scores, accuracy and teams over a period.",
             WidgetCategory.VenueAndGames, () => new Icons.Regular.Size20.Target(), () => new HallOfFameWidget(), typeof(RenderHallOfFameWidget), typeof(HallOfFameWidgetSettings)),
-        new(WidgetType.MusicTimeline, "Now playing", "The song a kiosk is playing, with a skip button.",
+        new(WidgetType.MusicTimeline, "Now playing", "The song a kiosk is playing, with skip buttons and, if you turn them on, volume and EQ.",
             WidgetCategory.Music, () => new Icons.Regular.Size20.MusicNote2Play(), () => new MusicTimelineWidget(), typeof(RenderMusicTimelineWidget), typeof(MusicTimelineWidgetSettings)),
         new(WidgetType.MusicPlaylistSelector, "Playlist picker", "Switch the playlist a kiosk is playing.",
             WidgetCategory.Music, () => new Icons.Regular.Size20.MusicNote2(), () => new MusicPlaylistSelectorWidget(), typeof(RenderMusicPlaylistSelectorWidget), typeof(MusicPlaylistSelectorWidgetSettings)),
