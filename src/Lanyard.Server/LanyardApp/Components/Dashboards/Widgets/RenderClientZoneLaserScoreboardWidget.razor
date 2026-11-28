@@ -1,4 +1,4 @@
-﻿@using Lanyard.App.Components
+@using Lanyard.App.Components
 @using Lanyard.Application.Services.Clients
 @using Lanyard.Shared.DTO
 @using Lanyard.Shared.Enum
@@ -21,7 +21,7 @@
     else
     {
         <FluentGrid Class="h-100">
-            <FluentGridItem Md="6" Sm="12" Padding="@Padding.Right1">
+            <FluentGridItem Xs="12" Md="6" Padding="@Padding.Right1">
                 <FluentCard Height="100%" Padding="@Padding.All0" data-testid="laser-scoreboard-red">
                     @HeaderBadge("Red Team", BadgeColor.Danger, null)
                     <div class="h-100">
@@ -29,7 +29,7 @@
                     </div>
                 </FluentCard>
             </FluentGridItem>
-            <FluentGridItem Md="6" Sm="12" Padding="@Padding.Left1">
+            <FluentGridItem Xs="12" Md="6" Padding="@Padding.Left1">
                 <FluentCard Height="100%" Padding="@Padding.All0" data-testid="laser-scoreboard-green">
                     @HeaderBadge("Green Team", BadgeColor.Success, null)
                     <div class="h-100">
@@ -105,7 +105,8 @@
             _soloScores = _isSolo
                 ? status.PlayerScores
                     .OrderByDescending(x => x.Score)
-                    .Select((x, i) => new RankedScore(i + 1, x.GunName, x.Score))
+                    // Equal scores share a place (1, 1, 3), so ties aren't split arbitrarily.
+                    .Select(x => new RankedScore(1 + status.PlayerScores.Count(y => y.Score > x.Score), x.GunName, x.Score))
                     .ToList()
                     .AsQueryable()
                 : null;
