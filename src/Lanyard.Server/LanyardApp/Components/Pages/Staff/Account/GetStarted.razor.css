@@ -1,0 +1,209 @@
+.get-started-page {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 760px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.get-started-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.get-started-title {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.get-started-page ::deep .get-started-progress,
+.get-started-page ::deep .get-started-muted {
+    color: var(--colorNeutralForeground3);
+}
+
+.get-started-done {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px;
+    border-radius: var(--borderRadiusLarge, 8px);
+    background: var(--colorStatusSuccessBackground1);
+    border: 1px solid var(--colorStatusSuccessBorder1);
+}
+
+.get-started-done > div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.get-started-steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.get-started-step {
+    display: flex;
+    gap: 14px;
+    padding: 16px;
+    border-radius: var(--borderRadiusLarge, 8px);
+    background: var(--colorNeutralBackground1);
+    border: 1px solid var(--colorNeutralStroke2);
+}
+
+.get-started-step-body {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.get-started-step-body ::deep h2 {
+    margin: 4px 0 0;
+}
+
+.get-started-test {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--colorNeutralStroke2);
+}
+
+.get-started-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.get-started-tips ul {
+    margin: 6px 0 10px;
+    padding-left: 20px;
+}
+
+/* Matches a Fluent primary button; a native element so the tap reaches the JS listener directly. */
+.get-started-enable {
+    font: inherit;
+    font-weight: 600;
+    font-size: 14px;
+    min-height: 40px;
+    padding: 8px 20px;
+    border-radius: var(--borderRadiusMedium, 4px);
+    border: 1px solid transparent;
+    background: var(--colorBrandBackground);
+    color: var(--colorNeutralForegroundOnBrand);
+    cursor: pointer;
+}
+
+.get-started-enable:hover {
+    background: var(--colorBrandBackgroundHover);
+}
+
+.get-started-enable:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.get-started-tour {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.get-started-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+}
+
+.get-started-tile {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    column-gap: 10px;
+    row-gap: 2px;
+    align-items: start;
+    align-content: start;
+    padding: 12px 14px;
+    border-radius: var(--borderRadiusLarge, 8px);
+    border: 1px solid var(--colorNeutralStroke2);
+    background: var(--colorNeutralBackground1);
+    color: var(--colorNeutralForeground1);
+    text-decoration: none;
+}
+
+.get-started-tile:hover {
+    background: var(--colorNeutralBackground1Hover);
+}
+
+.get-started-tile ::deep svg {
+    grid-row: 1 / span 2;
+    margin-top: 2px;
+}
+
+.get-started-tile-title {
+    font-weight: 600;
+}
+
+.get-started-tile-text {
+    grid-column: 2;
+    font-size: 12px;
+    color: var(--colorNeutralForeground3);
+}
+
+.get-started-share {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 16px;
+    border-radius: var(--borderRadiusLarge, 8px);
+    border: 1px dashed var(--colorNeutralStroke1);
+}
+
+.get-started-share-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+}
+
+.get-started-share-row code {
+    font-size: 14px;
+    overflow-wrap: anywhere;
+    padding: 4px 8px;
+    border-radius: var(--borderRadiusMedium, 4px);
+    background: var(--colorNeutralBackground3);
+}
+
+@media (max-width: 600px) {
+    .get-started-step {
+        padding: 14px 12px;
+        gap: 10px;
+    }
+
+    .get-started-tiles {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .get-started-tile {
+        grid-template-columns: 1fr;
+    }
+
+    .get-started-tile ::deep svg {
+        grid-row: auto;
+    }
+
+    .get-started-tile-text {
+        grid-column: 1;
+    }
+}

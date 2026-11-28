@@ -31,6 +31,9 @@ export const meta = {
   subtitle: 'For managers',            // optional, defaults to "Lanyard walkthrough"
   start: '/rota',                      // opened before step 1 (not narrated)
   // cookies: [{ name: 'lanyard_terminal', value: '<raw token>' }],  // optional, set before the first load
+  // userAgent: '<iPhone UA>',          // optional, for device-specific pages (with --viewport 390x844)
+  // initScript: (arg) => { ... },        // optional, runs before the app on every load, e.g. fake install/push state
+  // initArg: { ... },                    // passed to initScript
 };
 
 export default [

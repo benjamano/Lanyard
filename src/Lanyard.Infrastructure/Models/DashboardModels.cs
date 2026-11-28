@@ -217,6 +217,10 @@ public class MusicTimelineWidget : DashboardWidget
 
     public Guid? ClientId { get; set; }
     public bool ShowSongTitle { get; set; } = true;
+
+    // Off by default so dashboards saved before this option keep their look; the slider and EQ
+    // button make the widget taller, which a small wall-screen tile may not have room for.
+    public bool ShowVolumeAndEq { get; set; }
 }
 
 // Deliberately not scoped to a single ClientId like the other client-facing widgets: the

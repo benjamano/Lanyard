@@ -49,7 +49,12 @@
 
         <FluentCard Width="100%">
             <div class="account-manage-section" id="notifications">
-                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Notifications</FluentText>
+                <div class="account-manage-section-header">
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Notifications</FluentText>
+                    <FluentAnchorButton Href="/get-started" Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.PhoneCheckmark())">
+                        Set up this device
+                    </FluentAnchorButton>
+                </div>
                 <NotificationsCard />
             </div>
         </FluentCard>
