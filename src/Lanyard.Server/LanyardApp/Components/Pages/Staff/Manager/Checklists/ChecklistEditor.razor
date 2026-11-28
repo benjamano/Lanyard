@@ -138,7 +138,7 @@
                                     {
                                         <span class="task-detail">@task.Detail</span>
                                     }
-                                    <span class="task-response">@ChecklistDisplay.ResponseLabel(task.Response, task.Unit)</span>
+                                    <span class="task-response">@ChecklistDisplay.ResponseLabel(task)</span>
                                 </div>
                                 <div class="task-actions">
                                     <FluentButton IconStart="@(new Icons.Regular.Size16.ArrowUp())" Title="Move up" aria-label="@($"Move {task.Title} up")"

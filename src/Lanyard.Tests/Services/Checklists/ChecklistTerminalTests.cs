@@ -1,4 +1,5 @@
-using Lanyard.Application.Services.Checklists;
+﻿using Lanyard.Application.Services.Checklists;
+using Lanyard.Application.Services.OperationsAlerts;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
@@ -37,7 +38,9 @@ public class ChecklistTerminalTests
         ClockInTerminal IpswichTerminal,
         ClockInTerminal WisbechTerminal,
         UserProfile Amy,
-        UserProfile Manager);
+        UserProfile Manager,
+        RecordingAlertWriter Alerts,
+        Company Company);
 
     private static async Task<World> SeedAsync()
     {
@@ -103,11 +106,12 @@ public class ChecklistTerminalTests
         TimeEntryService timeEntries = new(factory, pins, terminals, new SchedulingSettingsService(factory), tokens, new TerminalEventBus(), clock,
             NullLogger<TimeEntryService>.Instance);
 
+        RecordingAlertWriter alerts = new();
         ChecklistRunService service = new(factory, terminals, timeEntries, tokens, new Lanyard.Application.Services.VideoStreaming.VideoStreamTokenService(),
             Mock.Of<Lanyard.Application.Services.IProjectionProgramRunnerService>(), Mock.Of<Lanyard.Application.Services.IWidgetVisibilityService>(),
-            clock, NullLogger<ChecklistRunService>.Instance);
+            alerts, clock, NullLogger<ChecklistRunService>.Instance);
 
-        return new World(options, clock, service, timeEntries, ipswich, wisbech, ipswichTerminal, wisbechTerminal, amy, manager);
+        return new World(options, clock, service, timeEntries, ipswich, wisbech, ipswichTerminal, wisbechTerminal, amy, manager, alerts, company);
     }
 
     private static async Task<ChecklistRunView> DayAsync(World w, ClockInTerminal terminal, string? grant)
@@ -345,5 +349,73 @@ public class ChecklistTerminalTests
 
         Assert.IsTrue(people.IsSuccess, people.Error);
         Assert.IsFalse(people.Data!.Any(x => x.UserId == cover.Id));
+    }
+
+    // ---- Readings outside the task's acceptable range, ticked on the signed-out terminal ----
+
+    private static async Task<(World W, string Grant, ChecklistItemView Fridge)> FridgeAsync()
+    {
+        World w = await SeedAsync();
+
+        // Each location's "Lights" task becomes a fridge reading; Ipswich's is the one ticked.
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            foreach (ChecklistTask task in await ctx.ChecklistTasks.IgnoreQueryFilters().Where(x => x.Title == "Lights").ToListAsync())
+            {
+                task.Title = "Fridge";
+                task.Response = ChecklistResponse.Number;
+                task.Unit = "°C";
+                task.MaxReading = 5m;
+            }
+
+            await ctx.SaveChangesAsync();
+        }
+
+        string grant = await StartAsync(w, w.IpswichTerminal, w.Amy);
+        ChecklistItemView fridge = (await DayAsync(w, w.IpswichTerminal, grant)).Items.Single(x => x.Title == "Fridge");
+
+        return (w, grant, fridge);
+    }
+
+    [TestMethod]
+    public async Task TerminalTick_OutOfRange_RaisesForTheTerminalsLocation_EvenThoughNobodyIsSignedIn()
+    {
+        (World w, string grant, ChecklistItemView fridge) = await FridgeAsync();
+
+        Result<bool> ticked = await w.Service.CompleteOnTerminalAsync(w.IpswichTerminal.Id, grant, fridge.ItemId, "Door was left open", 9.5m);
+        Assert.IsTrue(ticked.IsSuccess, ticked.Error);
+
+        OperationsAlertRaise raise = w.Alerts.Raised.Single();
+        Assert.AreEqual(w.Company.Id, raise.CompanyId, "Named from the run: the terminal is the unfiltered system tenant.");
+        Assert.AreEqual(w.Ipswich.Id, raise.LocationId);
+        Assert.AreEqual(ChecklistReadingTestSupport.KeyFor(fridge.ItemId), raise.DedupKey);
+        Assert.AreEqual(w.Amy.Id, raise.SubjectUserId);
+        StringAssert.Contains(raise.Detail, "Acceptable: at most 5 °C");
+        StringAssert.Contains(raise.Detail, "Door was left open");
+    }
+
+    [TestMethod]
+    public async Task TerminalTick_InRange_RaisesNothing()
+    {
+        (World w, string grant, ChecklistItemView fridge) = await FridgeAsync();
+
+        Assert.IsTrue((await w.Service.CompleteOnTerminalAsync(w.IpswichTerminal.Id, grant, fridge.ItemId, null, 3m)).IsSuccess);
+
+        Assert.AreEqual(0, w.Alerts.Raised.Count);
+    }
+
+    [TestMethod]
+    public async Task TerminalUndo_LeavesTheAlertOpen_AndAnInRangeReTickClearsIt()
+    {
+        (World w, string grant, ChecklistItemView fridge) = await FridgeAsync();
+
+        Assert.IsTrue((await w.Service.CompleteOnTerminalAsync(w.IpswichTerminal.Id, grant, fridge.ItemId, null, 9m)).IsSuccess);
+        Guid completionId = (await DayAsync(w, w.IpswichTerminal, grant)).Items.Single(x => x.ItemId == fridge.ItemId).Tick!.CompletionId;
+
+        Assert.IsTrue((await w.Service.UndoOnTerminalAsync(w.IpswichTerminal.Id, grant, completionId)).IsSuccess);
+        Assert.AreEqual(0, w.Alerts.Resolved.Count);
+
+        Assert.IsTrue((await w.Service.CompleteOnTerminalAsync(w.IpswichTerminal.Id, grant, fridge.ItemId, null, 4m)).IsSuccess);
+        Assert.AreEqual(ChecklistReadingTestSupport.KeyFor(fridge.ItemId), w.Alerts.Resolved.Single().Key);
     }
 }

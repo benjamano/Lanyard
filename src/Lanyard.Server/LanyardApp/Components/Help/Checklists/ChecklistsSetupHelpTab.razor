@@ -42,9 +42,17 @@
             <li><strong>Ticking it asks for</strong>: <strong>Just a tick</strong>; <strong>A tick, with an optional
                 note</strong>; or <strong>A number reading</strong>, with an optional unit such as °C for a fridge
                 temperature.</li>
+            <li>A number reading can have an <strong>Acceptable range (optional)</strong>: a <strong>Lowest
+                acceptable</strong>, a <strong>Highest acceptable</strong>, or both. Leave one blank for an open end, such as
+                only a highest of 5 °C for a fridge. Both ends count as acceptable.</li>
+            <li>With a range set, choose <strong>When a reading is outside the range</strong>: <strong>Raise an alert and
+                notify Managers</strong> (an Operations Alert plus a push to the location's Managers and the Admins),
+                <strong>Raise an alert only</strong>, or <strong>Don't alert, just flag it on the task</strong>. A reading
+                outside the range is always flagged on the task, whichever you choose.</li>
             <li>Use the up and down arrows to change the order, the pencil to edit a task, and the bin to remove it.</li>
             <li>Changes apply from the next day the checklist runs. Today's tasks change too, as long as nobody has ticked
-                anything yet today.</li>
+                anything yet today. A reading is always judged against the range the task had on that day, so changing a
+                range never changes past days.</li>
         </ul>
     </HelpSection>
 </HelpTab>

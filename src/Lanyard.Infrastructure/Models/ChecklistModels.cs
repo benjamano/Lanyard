@@ -67,6 +67,14 @@ namespace Lanyard.Infrastructure.Models
         // For Number: "°C", "kg". Null otherwise.
         public string? Unit { get; set; }
 
+        // For Number: the acceptable range, both ends included. Either end can be left open ("at most
+        // 5 °C"); both null means any reading is fine. Null for other responses.
+        public decimal? MinReading { get; set; }
+        public decimal? MaxReading { get; set; }
+
+        // What a reading outside the range raises. Only matters when a range is set.
+        public ChecklistReadingAlert ReadingAlert { get; set; } = ChecklistReadingAlert.AlertAndNotify;
+
         public int SortOrder { get; set; }
 
         public bool IsActive { get; set; } = true;
@@ -128,6 +136,12 @@ namespace Lanyard.Infrastructure.Models
 
         public ChecklistResponse Response { get; set; }
         public string? Unit { get; set; }
+
+        // The task's range and alert setting as they were, so a reading is always judged against
+        // the range in force on the day, however the task is edited later.
+        public decimal? MinReading { get; set; }
+        public decimal? MaxReading { get; set; }
+        public ChecklistReadingAlert ReadingAlert { get; set; } = ChecklistReadingAlert.AlertAndNotify;
 
         public int SortOrder { get; set; }
 

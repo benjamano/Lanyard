@@ -20,6 +20,7 @@ public static class OperationsAlertFormat
         OperationsAlertType.StaffDocumentExpiring => "Document expiring",
         OperationsAlertType.StaffDocumentExpired => "Document expired",
         OperationsAlertType.ChecklistMissed => "Checklist missed",
+        OperationsAlertType.ChecklistReadingOutOfRange => "Checklist reading",
         _ => type.ToString()
     };
 

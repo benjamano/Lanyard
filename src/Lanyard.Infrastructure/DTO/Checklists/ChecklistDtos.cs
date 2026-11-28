@@ -12,14 +12,18 @@ public sealed record ChecklistTickView(
     string? Note,
     decimal? Reading);
 
-// One task on a day's checklist, with its live tick if it has one.
+// One task on a day's checklist, with its live tick if it has one. MinReading/MaxReading are the
+// Number task's acceptable range as it was on the day (both null: no range).
 public sealed record ChecklistItemView(
     Guid ItemId,
     string Title,
     string? Detail,
     ChecklistResponse Response,
     string? Unit,
-    ChecklistTickView? Tick);
+    ChecklistTickView? Tick,
+    Guid? TaskId = null,
+    decimal? MinReading = null,
+    decimal? MaxReading = null);
 
 // One checklist on one venue day. CanTick and CantTickReason are for the person asking: a manager's
 // board shows the same runs with CanTick worked out for the manager.

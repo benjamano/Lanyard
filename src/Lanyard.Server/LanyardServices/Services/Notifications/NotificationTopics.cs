@@ -106,7 +106,12 @@ public static class NotificationTopics
         // Once per checklist per day, when it goes past its due time with tasks left. Push only:
         // it matters on the day, and the Checklists Today page has the history.
         new(NotificationTopic.ChecklistMissed, NotificationTopicGroup.Operations,
-            "Checklist missed", "An opening, closing or other checklist at your location wasn't finished in time.", DefaultPush: true, DefaultEmail: false, ManagerOnly: true)
+            "Checklist missed", "An opening, closing or other checklist at your location wasn't finished in time.", DefaultPush: true, DefaultEmail: false, ManagerOnly: true),
+
+        // The moment someone records a reading outside its task's range, for tasks set to notify.
+        // Push only: someone has to act on it now (move the stock, call the engineer).
+        new(NotificationTopic.ChecklistReadingOutOfRange, NotificationTopicGroup.Operations,
+            "Checklist reading out of range", "A fridge temperature or other checklist reading at your location was outside its acceptable range.", DefaultPush: true, DefaultEmail: false, ManagerOnly: true)
     ];
 
     public static NotificationTopicInfo Get(NotificationTopic topic) =>

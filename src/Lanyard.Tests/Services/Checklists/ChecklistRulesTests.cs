@@ -1,4 +1,4 @@
-using Lanyard.Infrastructure.Enum;
+﻿using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -178,5 +178,49 @@ public class ChecklistRulesTests
         Assert.AreEqual("1 hr 30 min before closing", ChecklistRules.DueLabel(Checklist(ChecklistDueRule.BeforeClosing, 90)));
         Assert.AreEqual("By 10:00", ChecklistRules.DueLabel(Checklist(ChecklistDueRule.FixedTime, time: new TimeOnly(10, 0))));
         Assert.AreEqual("No set time", ChecklistRules.DueLabel(Checklist()));
+    }
+
+    [TestMethod]
+    public void Check_BothEndsAreIncluded_AndAnOpenEndIsNoLimit()
+    {
+        Assert.AreEqual(ChecklistReadingStatus.InRange, ChecklistRules.Check(0m, 0m, 5m));
+        Assert.AreEqual(ChecklistReadingStatus.InRange, ChecklistRules.Check(5m, 0m, 5m));
+        Assert.AreEqual(ChecklistReadingStatus.TooLow, ChecklistRules.Check(-0.01m, 0m, 5m));
+        Assert.AreEqual(ChecklistReadingStatus.TooHigh, ChecklistRules.Check(5.01m, 0m, 5m));
+
+        Assert.AreEqual(ChecklistReadingStatus.InRange, ChecklistRules.Check(-40m, null, 5m), "No lowest: any cold reading is fine.");
+        Assert.AreEqual(ChecklistReadingStatus.TooHigh, ChecklistRules.Check(8m, null, 5m));
+        Assert.AreEqual(ChecklistReadingStatus.TooLow, ChecklistRules.Check(60m, 63m, null));
+        Assert.AreEqual(ChecklistReadingStatus.NoRange, ChecklistRules.Check(8m, null, null));
+    }
+
+    [TestMethod]
+    public void RangeText_ReadsNaturally()
+    {
+        Assert.AreEqual("0–5 °C", ChecklistRules.RangeText(0m, 5m, "°C"));
+        Assert.AreEqual("at most 5 °C", ChecklistRules.RangeText(null, 5m, "°C"));
+        Assert.AreEqual("at least 63 °C", ChecklistRules.RangeText(63m, null, "°C"));
+        Assert.AreEqual("-18.5–-15", ChecklistRules.RangeText(-18.5m, -15m, null));
+        Assert.AreEqual("exactly 7 pH", ChecklistRules.RangeText(7m, 7m, "pH"));
+        Assert.IsNull(ChecklistRules.RangeText(null, null, "°C"));
+        Assert.AreEqual("8.25 °C", ChecklistRules.ReadingText(8.25m, "°C"));
+    }
+
+    [TestMethod]
+    public void ValidateTask_ChecksTheRange()
+    {
+        static ChecklistTask Task(ChecklistResponse response, decimal? min, decimal? max) =>
+            new() { ChecklistId = Guid.NewGuid(), Title = "Fridge", Response = response, MinReading = min, MaxReading = max };
+
+        Assert.IsNull(ChecklistRules.Validate(Task(ChecklistResponse.Number, 0m, 5m)));
+        Assert.IsNull(ChecklistRules.Validate(Task(ChecklistResponse.Number, null, 5m)));
+        Assert.IsNull(ChecklistRules.Validate(Task(ChecklistResponse.Number, 5m, 5m)));
+        StringAssert.Contains(ChecklistRules.Validate(Task(ChecklistResponse.Number, 6m, 5m)), "can't be above");
+        StringAssert.Contains(ChecklistRules.Validate(Task(ChecklistResponse.Number, 0.001m, 5m)), "two decimal places");
+        StringAssert.Contains(ChecklistRules.Validate(Task(ChecklistResponse.Tick, null, 5m)), "Only a number reading");
+        StringAssert.Contains(ChecklistRules.Validate(new ChecklistTask
+        {
+            ChecklistId = Guid.NewGuid(), Title = "Fridge", Response = ChecklistResponse.Number, ReadingAlert = (ChecklistReadingAlert)9
+        }), "outside the range");
     }
 }

@@ -31,6 +31,32 @@
                 <FluentTextInput @bind-Value="unit" Label="Unit (optional)" Placeholder="e.g. °C" Width="100%"
                                  Maxlength="@ChecklistRules.MaxUnitLength" />
                 <div class="task-dialog-hint">People type the reading in when they tick it, such as the fridge temperature.</div>
+
+                <fieldset class="task-range">
+                    <legend class="task-range-legend">Acceptable range (optional)</legend>
+                    <div class="task-range-inputs">
+                        <div class="task-range-field">
+                            <label for="task-min-reading">Lowest acceptable</label>
+                            <input id="task-min-reading" type="number" step="0.01" inputmode="decimal" class="task-range-input"
+                                   value="@minReading" @oninput="@(e => minReading = e.Value?.ToString())" />
+                        </div>
+                        <div class="task-range-field">
+                            <label for="task-max-reading">Highest acceptable</label>
+                            <input id="task-max-reading" type="number" step="0.01" inputmode="decimal" class="task-range-input"
+                                   value="@maxReading" @oninput="@(e => maxReading = e.Value?.ToString())" />
+                        </div>
+                    </div>
+                    <div class="task-dialog-hint">
+                        Leave one blank for an open end, such as only a highest for a fridge. A reading outside the range is flagged on the task.
+                    </div>
+                </fieldset>
+
+                @if (HasRange)
+                {
+                    <FluentSelect TOption="AlertOption" TValue="string" Items="@alertOptions" OptionText="@(x => x.Label)" OptionValue="@(x => x.Value)"
+                                  @bind-Value="readingAlert" Label="When a reading is outside the range" Width="100%" />
+                    <div class="task-dialog-hint">Alerts show in Operations Alerts. Notifying sends a push to this location's Managers and the Admins.</div>
+                }
             }
             else if (response == nameof(ChecklistResponse.TickWithNote))
             {
@@ -58,6 +84,14 @@
 
     private record ResponseOption(string Value, string Label);
 
+    private record AlertOption(string Value, string Label);
+
+    private readonly List<AlertOption> alertOptions =
+    [
+        .. new[] { ChecklistReadingAlert.AlertAndNotify, ChecklistReadingAlert.AlertOnly, ChecklistReadingAlert.None }
+            .Select(x => new AlertOption(x.ToString(), ChecklistDisplay.ReadingAlertLabel(x)))
+    ];
+
     private readonly List<ResponseOption> responseOptions =
     [
         new(nameof(ChecklistResponse.Tick), "Just a tick"),
@@ -69,6 +103,9 @@
     private string? detail;
     private string response = nameof(ChecklistResponse.Tick);
     private string? unit;
+    private string? minReading;
+    private string? maxReading;
+    private string readingAlert = nameof(ChecklistReadingAlert.AlertAndNotify);
     private string? errorMessage;
     private bool isBusy;
 
@@ -80,12 +117,46 @@
             detail = Existing.Detail;
             response = Existing.Response.ToString();
             unit = Existing.Unit;
+            minReading = Existing.MinReading?.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+            maxReading = Existing.MaxReading?.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+            readingAlert = Existing.ReadingAlert.ToString();
         }
+    }
+
+    private bool HasRange => !string.IsNullOrWhiteSpace(minReading) || !string.IsNullOrWhiteSpace(maxReading);
+
+    // Blank is no limit; anything else must be a number. False when it isn't.
+    private static bool TryParseBound(string? text, out decimal? value)
+    {
+        value = null;
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return true;
+        }
+
+        if (decimal.TryParse(text.Trim(), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out decimal parsed))
+        {
+            value = parsed;
+            return true;
+        }
+
+        return false;
     }
 
     private async Task SaveAsync()
     {
         errorMessage = null;
+
+        ChecklistResponse chosen = Enum.TryParse(response, out ChecklistResponse parsed) ? parsed : ChecklistResponse.Tick;
+        decimal? min = null;
+        decimal? max = null;
+
+        if (chosen == ChecklistResponse.Number && (!TryParseBound(minReading, out min) || !TryParseBound(maxReading, out max)))
+        {
+            errorMessage = "Each end of the range must be a number, or left blank.";
+            return;
+        }
 
         ChecklistTask task = new()
         {
@@ -93,8 +164,11 @@
             ChecklistId = ChecklistId,
             Title = title,
             Detail = detail,
-            Response = Enum.TryParse(response, out ChecklistResponse parsed) ? parsed : ChecklistResponse.Tick,
-            Unit = unit
+            Response = chosen,
+            Unit = unit,
+            MinReading = min,
+            MaxReading = max,
+            ReadingAlert = Enum.TryParse(readingAlert, out ChecklistReadingAlert alert) ? alert : ChecklistReadingAlert.AlertAndNotify
         };
 
         if (ChecklistRules.Validate(task) is string invalid)

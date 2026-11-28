@@ -1,5 +1,6 @@
-using Lanyard.Application.Services.Checklists;
+﻿using Lanyard.Application.Services.Checklists;
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.OperationsAlerts;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
@@ -31,7 +32,8 @@ public class ChecklistRunServiceTests
         UserProfile Tom,
         StaffPosition DutyManager,
         Checklist Opening,
-        TestClock Clock)
+        TestClock Clock,
+        RecordingAlertWriter Alerts)
     {
         public LocationScope AmyScope => SchedulingTestHelpers.StaffScopeFor(Ipswich);
         public LocationScope ManagerScope => SchedulingTestHelpers.ManagerScopeFor(Ipswich);
@@ -67,7 +69,8 @@ public class ChecklistRunServiceTests
             Tasks =
             [
                 new ChecklistTask { ChecklistId = Guid.Empty, Title = "Unlock", SortOrder = 0 },
-                new ChecklistTask { ChecklistId = Guid.Empty, Title = "Fridge", SortOrder = 1, Response = ChecklistResponse.Number, Unit = "°C" },
+                new ChecklistTask { ChecklistId = Guid.Empty, Title = "Fridge", SortOrder = 1, Response = ChecklistResponse.Number, Unit = "°C",
+                    MinReading = 0m, MaxReading = 5m },
                 new ChecklistTask { ChecklistId = Guid.Empty, Title = "Walk round", SortOrder = 2, Response = ChecklistResponse.TickWithNote }
             ]
         };
@@ -92,7 +95,7 @@ public class ChecklistRunServiceTests
             await ctx.SaveChangesAsync();
         }
 
-        return new World(options, company, ipswich, wisbech, amy, tom, duty, opening, new TestClock(Now));
+        return new World(options, company, ipswich, wisbech, amy, tom, duty, opening, new TestClock(Now), new RecordingAlertWriter());
     }
 
     private static ChecklistRunService GetService(World w)
@@ -104,7 +107,7 @@ public class ChecklistRunServiceTests
         return new ChecklistRunService(factory.Object, Mock.Of<IClockInTerminalService>(), Mock.Of<ITimeEntryService>(),
             new TerminalEphemeralTokenService(w.Clock), new Lanyard.Application.Services.VideoStreaming.VideoStreamTokenService(),
             Mock.Of<Lanyard.Application.Services.IProjectionProgramRunnerService>(), Mock.Of<Lanyard.Application.Services.IWidgetVisibilityService>(),
-            w.Clock, NullLogger<ChecklistRunService>.Instance);
+            w.Alerts, w.Clock, NullLogger<ChecklistRunService>.Instance);
     }
 
     private static async Task<ChecklistRunView> TodayAsync(World w, UserProfile user, LocationScope scope)
@@ -448,5 +451,206 @@ public class ChecklistRunServiceTests
             .Single(x => x.PrincipalEntityType.ClrType == typeof(ChecklistRunItem));
 
         Assert.AreEqual(DeleteBehavior.Restrict, fk.DeleteBehavior);
+    }
+
+    // ---- Readings outside the task's acceptable range ----
+
+    [TestMethod]
+    public async Task OutOfRangeReading_RaisesOneAlert_ForTheRunsCompanyAndLocation_AndKeepsTheNote()
+    {
+        World w = await SeedAsync();
+        ChecklistRunView run = await TodayAsync(w, w.Amy, w.AmyScope);
+        Guid fridge = Item(run, "Fridge");
+
+        Result<bool> ticked = await GetService(w).CompleteAsync(w.Amy.Id, w.AmyScope, fridge, "  Moved the stock to fridge 2 ", 8m);
+        Assert.IsTrue(ticked.IsSuccess, ticked.Error);
+
+        OperationsAlertRaise raise = w.Alerts.Raised.Single();
+        Assert.AreEqual(OperationsAlertType.ChecklistReadingOutOfRange, raise.Type);
+        Assert.AreEqual(13, (int)raise.Type, "Stored as its number: never renumber.");
+        Assert.AreEqual(OperationsAlertSeverity.Warning, raise.Severity);
+        Assert.AreEqual(w.Company.Id, raise.CompanyId);
+        Assert.AreEqual(w.Ipswich.Id, raise.LocationId);
+        Assert.AreEqual(ChecklistReadingTestSupport.KeyFor(fridge), raise.DedupKey);
+        Assert.AreEqual("Fridge out of range: 8 °C", raise.Title);
+        StringAssert.Contains(raise.Detail, "Acceptable: 0–5 °C");
+        StringAssert.Contains(raise.Detail, "Amy");
+        StringAssert.Contains(raise.Detail, "Note: Moved the stock to fridge 2");
+        Assert.IsFalse(raise.Detail!.Contains(".."), $"No doubled full stop after a short name: {raise.Detail}");
+        Assert.AreEqual(NotificationTopic.ChecklistReadingOutOfRange, raise.NotifyTopic);
+        Assert.AreEqual(w.Amy.Id, raise.SubjectUserId);
+        Assert.AreEqual($"/manage/checklists/today?location={w.Ipswich.Id}", raise.LinkUrl);
+
+        await using ApplicationDbContext ctx = new(w.Options);
+        ChecklistCompletion tick = await ctx.ChecklistCompletions.SingleAsync();
+        Assert.AreEqual(8m, tick.Reading);
+        Assert.AreEqual("Moved the stock to fridge 2", tick.Note);
+    }
+
+    [TestMethod]
+    public async Task InRangeReading_RaisesNothing_AndDropsTheNote()
+    {
+        World w = await SeedAsync();
+        ChecklistRunView run = await TodayAsync(w, w.Amy, w.AmyScope);
+
+        Result<bool> ticked = await GetService(w).CompleteAsync(w.Amy.Id, w.AmyScope, Item(run, "Fridge"), "nothing to say", 4m);
+        Assert.IsTrue(ticked.IsSuccess, ticked.Error);
+
+        Assert.AreEqual(0, w.Alerts.Raised.Count);
+
+        await using ApplicationDbContext ctx = new(w.Options);
+        Assert.IsNull((await ctx.ChecklistCompletions.SingleAsync()).Note, "A number task keeps a note only for a reading outside its range.");
+    }
+
+    [TestMethod]
+    public async Task TheTasksAlertSetting_DecidesThePushAndWhetherThereIsAnAlert()
+    {
+        World alertOnly = await SeedAsync();
+        await ChecklistReadingTestSupport.SetRangeAsync(alertOnly.Options, "Fridge", 0m, 5m, ChecklistReadingAlert.AlertOnly);
+        ChecklistRunView run = await TodayAsync(alertOnly, alertOnly.Amy, alertOnly.AmyScope);
+        Assert.IsTrue((await GetService(alertOnly).CompleteAsync(alertOnly.Amy.Id, alertOnly.AmyScope, Item(run, "Fridge"), null, 9m)).IsSuccess);
+        Assert.IsNull(alertOnly.Alerts.Raised.Single().NotifyTopic, "Alert only: no push.");
+
+        World none = await SeedAsync();
+        await ChecklistReadingTestSupport.SetRangeAsync(none.Options, "Fridge", 0m, 5m, ChecklistReadingAlert.None);
+        run = await TodayAsync(none, none.Amy, none.AmyScope);
+        Assert.IsTrue((await GetService(none).CompleteAsync(none.Amy.Id, none.AmyScope, Item(run, "Fridge"), null, 9m)).IsSuccess);
+        Assert.AreEqual(0, none.Alerts.Raised.Count, "Don't alert: flagged on the task only.");
+
+        ChecklistItemView flagged = (await TodayAsync(none, none.Amy, none.AmyScope)).Items.Single(x => x.Title == "Fridge");
+        Assert.AreEqual(ChecklistReadingStatus.TooHigh, ChecklistRules.Check(flagged.Tick!.Reading!.Value, flagged.MinReading, flagged.MaxReading));
+    }
+
+    [TestMethod]
+    public async Task NoRange_NeverRaisesOrClears()
+    {
+        World w = await SeedAsync();
+        await ChecklistReadingTestSupport.SetRangeAsync(w.Options, "Fridge", null, null);
+        ChecklistRunView run = await TodayAsync(w, w.Amy, w.AmyScope);
+
+        Assert.IsTrue((await GetService(w).CompleteAsync(w.Amy.Id, w.AmyScope, Item(run, "Fridge"), null, 99m)).IsSuccess);
+
+        Assert.AreEqual(0, w.Alerts.Raised.Count);
+        Assert.AreEqual(0, w.Alerts.Resolved.Count);
+    }
+
+    [TestMethod]
+    public async Task ManagerTick_OutOfRange_RaisesToo()
+    {
+        World w = await SeedAsync();
+        ChecklistRunView run = await TodayAsync(w, w.Amy, w.AmyScope);
+
+        Result<bool> ticked = await GetService(w).CompleteAsync(w.Tom.Id, w.ManagerScope, Item(run, "Fridge"), null, -1m, ChecklistCompletionMethod.Manager);
+        Assert.IsTrue(ticked.IsSuccess, ticked.Error);
+
+        Assert.AreEqual(w.Tom.Id, w.Alerts.Raised.Single().SubjectUserId);
+        Assert.AreEqual("Fridge out of range: -1 °C", w.Alerts.Raised.Single().Title);
+    }
+
+    [TestMethod]
+    public async Task AlertWriterDown_TheTickStillStands()
+    {
+        World w = await SeedAsync();
+        w.Alerts.Fail = true;
+        ChecklistRunView run = await TodayAsync(w, w.Amy, w.AmyScope);
+
+        Result<bool> outOfRange = await GetService(w).CompleteAsync(w.Amy.Id, w.AmyScope, Item(run, "Fridge"), null, 8m);
+        Assert.IsTrue(outOfRange.IsSuccess, "The reading is the evidence; the alert is a follow-on.");
+
+        await using ApplicationDbContext ctx = new(w.Options);
+        Assert.AreEqual(8m, (await ctx.ChecklistCompletions.SingleAsync()).Reading);
+    }
+
+    [TestMethod]
+    public async Task Undo_LeavesTheAlertOpen_AndAnInRangeReTickClearsIt()
+    {
+        World w = await SeedAsync();
+        ChecklistRunService service = GetService(w);
+        ChecklistRunView run = await TodayAsync(w, w.Amy, w.AmyScope);
+        Guid fridge = Item(run, "Fridge");
+        string key = ChecklistReadingTestSupport.KeyFor(fridge);
+
+        Assert.IsTrue((await service.CompleteAsync(w.Amy.Id, w.AmyScope, fridge, null, 8m)).IsSuccess);
+        Guid completionId = (await TodayAsync(w, w.Amy, w.AmyScope)).Items.Single(x => x.ItemId == fridge).Tick!.CompletionId;
+
+        Assert.IsTrue((await service.UndoAsync(w.Amy.Id, w.AmyScope, completionId)).IsSuccess);
+        Assert.AreEqual(0, w.Alerts.Resolved.Count, "Taking a bad reading back must not hide it.");
+
+        Assert.IsTrue((await service.CompleteAsync(w.Amy.Id, w.AmyScope, fridge, null, 4m)).IsSuccess);
+
+        (int companyId, string resolvedKey, string? note) = w.Alerts.Resolved.Single();
+        Assert.AreEqual(w.Company.Id, companyId);
+        Assert.AreEqual(key, resolvedKey);
+        StringAssert.StartsWith(note, "Re-checked at 10:00: 4 °C (Amy");
+    }
+
+    [TestMethod]
+    public async Task Undo_ThenAnotherBadReading_RaisesAgainOnTheSameKey()
+    {
+        World w = await SeedAsync();
+        ChecklistRunService service = GetService(w);
+        ChecklistRunView run = await TodayAsync(w, w.Amy, w.AmyScope);
+        Guid fridge = Item(run, "Fridge");
+
+        Assert.IsTrue((await service.CompleteAsync(w.Amy.Id, w.AmyScope, fridge, null, 8m)).IsSuccess);
+        Guid completionId = (await TodayAsync(w, w.Amy, w.AmyScope)).Items.Single(x => x.ItemId == fridge).Tick!.CompletionId;
+        Assert.IsTrue((await service.UndoAsync(w.Tom.Id, w.ManagerScope, completionId)).IsSuccess);
+        Assert.IsTrue((await service.CompleteAsync(w.Amy.Id, w.AmyScope, fridge, null, 7m)).IsSuccess);
+
+        Assert.AreEqual(2, w.Alerts.Raised.Count);
+        Assert.IsTrue(w.Alerts.Raised.All(x => x.DedupKey == ChecklistReadingTestSupport.KeyFor(fridge)), "One alert per task per day: refreshed, not doubled.");
+        Assert.AreEqual("Fridge out of range: 7 °C", w.Alerts.Raised[1].Title);
+        Assert.AreEqual(0, w.Alerts.Resolved.Count);
+    }
+
+    [TestMethod]
+    public async Task TheRange_IsTheRunsCopy_SoEditingTheTaskDoesntRewriteATickedDay()
+    {
+        World w = await SeedAsync();
+        ChecklistRunView run = await TodayAsync(w, w.Amy, w.AmyScope);
+        Assert.IsTrue((await GetService(w).CompleteAsync(w.Amy.Id, w.AmyScope, Item(run, "Unlock"), null, null)).IsSuccess);
+
+        await ChecklistReadingTestSupport.SetRangeAsync(w.Options, "Fridge", 0m, 10m);
+
+        ChecklistItemView fridge = (await TodayAsync(w, w.Amy, w.AmyScope)).Items.Single(x => x.Title == "Fridge");
+        Assert.AreEqual(5m, fridge.MaxReading, "Today's run already has a tick, so it keeps the range it was made with.");
+
+        Assert.IsTrue((await GetService(w).CompleteAsync(w.Amy.Id, w.AmyScope, fridge.ItemId, null, 8m)).IsSuccess);
+        Assert.AreEqual(1, w.Alerts.Raised.Count, "Judged against the day's range (0–5), not the edited one.");
+    }
+
+    [TestMethod]
+    public async Task TheRange_EditedBeforeAnyTick_ReachesTodaysRun()
+    {
+        World w = await SeedAsync();
+        ChecklistItemView before = (await TodayAsync(w, w.Amy, w.AmyScope)).Items.Single(x => x.Title == "Fridge");
+        Assert.AreEqual(0m, before.MinReading);
+        Assert.AreEqual(5m, before.MaxReading);
+        Assert.IsNotNull(before.TaskId);
+
+        await ChecklistReadingTestSupport.SetRangeAsync(w.Options, "Fridge", null, 8m);
+
+        ChecklistItemView after = (await TodayAsync(w, w.Amy, w.AmyScope)).Items.Single(x => x.Title == "Fridge");
+        Assert.IsNull(after.MinReading);
+        Assert.AreEqual(8m, after.MaxReading);
+    }
+
+    [TestMethod]
+    public async Task NoteLength_IsOnlyCheckedWhenTheNoteIsKept()
+    {
+        World w = await SeedAsync();
+        ChecklistRunView run = await TodayAsync(w, w.Amy, w.AmyScope);
+        string tooLong = new('x', ChecklistRules.MaxNoteLength + 1);
+
+        // In range: the note is dropped, so its length doesn't matter.
+        Result<bool> inRange = await GetService(w).CompleteAsync(w.Amy.Id, w.AmyScope, Item(run, "Fridge"), tooLong, 4m);
+        Assert.IsTrue(inRange.IsSuccess, inRange.Error);
+
+        // Out of range: the note is kept, so it must fit.
+        World other = await SeedAsync();
+        ChecklistRunView otherRun = await TodayAsync(other, other.Amy, other.AmyScope);
+        Result<bool> outOfRange = await GetService(other).CompleteAsync(other.Amy.Id, other.AmyScope, Item(otherRun, "Fridge"), tooLong, 9m);
+        Assert.IsFalse(outOfRange.IsSuccess);
+        StringAssert.Contains(outOfRange.Error, "at most");
     }
 }

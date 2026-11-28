@@ -1,4 +1,4 @@
-using Lanyard.Application.Services.Checklists;
+﻿using Lanyard.Application.Services.Checklists;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
@@ -217,6 +217,55 @@ public class ChecklistServiceTests
         Assert.AreEqual("Fridge", second.Title);
         Assert.AreEqual("°C", second.Unit);
         Assert.IsTrue(second.SortOrder > first.SortOrder);
+    }
+
+    [TestMethod]
+    public async Task SaveTaskAsync_KeepsTheRangeAndAlertSetting_AndClearsTheRangeWhenNoLongerANumber()
+    {
+        World w = await SeedAsync();
+        ChecklistService service = GetService(w.Options);
+        Checklist opening = (await service.SaveChecklistAsync(w.ManagerScope, Draft(w.Ipswich), ManagerId)).Data!;
+
+        ChecklistTask fridge = (await service.SaveTaskAsync(w.ManagerScope, new ChecklistTask
+        {
+            ChecklistId = opening.Id, Title = "Fridge", Response = ChecklistResponse.Number, Unit = "°C",
+            MinReading = 0m, MaxReading = 5m, ReadingAlert = ChecklistReadingAlert.AlertOnly
+        }, ManagerId)).Data!;
+
+        Assert.AreEqual(0m, fridge.MinReading);
+        Assert.AreEqual(5m, fridge.MaxReading);
+        Assert.AreEqual(ChecklistReadingAlert.AlertOnly, fridge.ReadingAlert);
+
+        // Saving it with the range left blank and "Don't alert" stores exactly that (None is the
+        // enum's zero, so it must not fall back to a database default).
+        Result<ChecklistTask> open = await service.SaveTaskAsync(w.ManagerScope, new ChecklistTask
+        {
+            Id = fridge.Id, ChecklistId = opening.Id, Title = "Fridge", Response = ChecklistResponse.Number, MaxReading = 8m,
+            ReadingAlert = ChecklistReadingAlert.None
+        }, ManagerId);
+        Assert.IsTrue(open.IsSuccess, open.Error);
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            ChecklistTask stored = await ctx.ChecklistTasks.IgnoreQueryFilters().SingleAsync(x => x.Id == fridge.Id);
+            Assert.IsNull(stored.MinReading);
+            Assert.AreEqual(8m, stored.MaxReading);
+            Assert.AreEqual(ChecklistReadingAlert.None, stored.ReadingAlert);
+        }
+
+        // A range on a plain tick is refused rather than silently kept.
+        Result<ChecklistTask> tick = await service.SaveTaskAsync(w.ManagerScope, new ChecklistTask
+        {
+            Id = fridge.Id, ChecklistId = opening.Id, Title = "Fridge", Response = ChecklistResponse.Tick, MaxReading = 8m
+        }, ManagerId);
+        Assert.IsFalse(tick.IsSuccess);
+
+        Result<ChecklistTask> plain = await service.SaveTaskAsync(w.ManagerScope, new ChecklistTask
+        {
+            Id = fridge.Id, ChecklistId = opening.Id, Title = "Fridge", Response = ChecklistResponse.Tick
+        }, ManagerId);
+        Assert.IsTrue(plain.IsSuccess, plain.Error);
+        Assert.IsNull(plain.Data!.MaxReading);
     }
 
     [TestMethod]

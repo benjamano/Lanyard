@@ -1262,6 +1262,17 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<decimal?>("MaxReading")
+                        .HasPrecision(9, 2)
+                        .HasColumnType("numeric(9,2)");
+
+                    b.Property<decimal?>("MinReading")
+                        .HasPrecision(9, 2)
+                        .HasColumnType("numeric(9,2)");
+
+                    b.Property<int>("ReadingAlert")
+                        .HasColumnType("integer");
+
                     b.Property<int>("Response")
                         .HasColumnType("integer");
 
@@ -1313,6 +1324,17 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
+
+                    b.Property<decimal?>("MaxReading")
+                        .HasPrecision(9, 2)
+                        .HasColumnType("numeric(9,2)");
+
+                    b.Property<decimal?>("MinReading")
+                        .HasPrecision(9, 2)
+                        .HasColumnType("numeric(9,2)");
+
+                    b.Property<int>("ReadingAlert")
+                        .HasColumnType("integer");
 
                     b.Property<int>("Response")
                         .HasColumnType("integer");

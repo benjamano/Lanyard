@@ -20,7 +20,11 @@ public enum OperationsAlertType
 
     // A location checklist went past its due time (or its day ended) with tasks left, raised by
     // ChecklistMissedAlertHostedService and cleared if it's finished late.
-    ChecklistMissed = 12
+    ChecklistMissed = 12,
+
+    // A Number checklist task's reading was outside its acceptable range, raised by
+    // ChecklistRunService when it's ticked and cleared by an in-range reading of the same task that day.
+    ChecklistReadingOutOfRange = 13
 }
 
 // Higher is more urgent, so "at least Warning" is a plain comparison. Always shown with its text

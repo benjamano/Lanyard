@@ -33,5 +33,9 @@ public enum NotificationTopic
     PartyBookingImportFailed = 23,
 
     // A location checklist (Opening, Closing...) was missed. Raised as an operations alert.
-    ChecklistMissed = 24
+    ChecklistMissed = 24,
+
+    // A checklist reading (a fridge temperature, say) was outside its task's acceptable range.
+    // Raised as an operations alert, for tasks set to notify.
+    ChecklistReadingOutOfRange = 25
 }

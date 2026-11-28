@@ -70,3 +70,27 @@ public enum ChecklistRunStatus
     // Past its due time (or the day is over) with tasks still to tick.
     Missed = 4
 }
+
+// What happens when a Number task's reading falls outside its acceptable range. The reading is
+// always flagged on the task; this only decides the operations alert. Stored, never renumber.
+public enum ChecklistReadingAlert
+{
+    // Flag it on the task only.
+    None = 0,
+
+    // Raise an operations alert, without a push.
+    AlertOnly = 1,
+
+    // Raise an operations alert and push it to the location's Managers and the company's Admins.
+    AlertAndNotify = 2
+}
+
+// How a reading compares with its task's acceptable range. Worked out, never stored.
+public enum ChecklistReadingStatus
+{
+    // The task has no range, so any reading is fine.
+    NoRange = 0,
+    InRange = 1,
+    TooLow = 2,
+    TooHigh = 3
+}

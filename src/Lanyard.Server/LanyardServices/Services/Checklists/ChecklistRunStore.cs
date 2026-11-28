@@ -140,6 +140,9 @@ internal static class ChecklistRunStore
         Detail = task.Detail,
         Response = task.Response,
         Unit = task.Unit,
+        MinReading = task.MinReading,
+        MaxReading = task.MaxReading,
+        ReadingAlert = task.ReadingAlert,
         SortOrder = sortOrder
     };
 
@@ -157,7 +160,8 @@ internal static class ChecklistRunStore
             ChecklistRunItem item = items[i];
             ChecklistTask task = tasks[i];
 
-            if (item.TaskId != task.Id || item.Title != task.Title || item.Detail != task.Detail || item.Response != task.Response || item.Unit != task.Unit)
+            if (item.TaskId != task.Id || item.Title != task.Title || item.Detail != task.Detail || item.Response != task.Response || item.Unit != task.Unit
+                || item.MinReading != task.MinReading || item.MaxReading != task.MaxReading || item.ReadingAlert != task.ReadingAlert)
             {
                 return true;
             }
@@ -236,7 +240,8 @@ internal static class ChecklistRunStore
 
             List<ChecklistItemView> items = [.. run.Items
                 .OrderBy(x => x.SortOrder)
-                .Select(x => new ChecklistItemView(x.Id, x.Title, x.Detail, x.Response, x.Unit, Tick(x.Completions.FirstOrDefault())))];
+                .Select(x => new ChecklistItemView(x.Id, x.Title, x.Detail, x.Response, x.Unit, Tick(x.Completions.FirstOrDefault()),
+                    x.TaskId, x.MinReading, x.MaxReading))];
 
             int done = items.Count(x => x.Tick is not null);
 

@@ -1,6 +1,7 @@
-using Lanyard.Application.Services;
+﻿using Lanyard.Application.Services;
 using Lanyard.Application.Services.Checklists;
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.OperationsAlerts;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Application.Services.VideoStreaming;
 using Lanyard.Infrastructure.DataAccess;
@@ -11,6 +12,7 @@ using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.Projection;
 using Lanyard.Tests.Services.Scheduling;
+using Lanyard.Tests.TestUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -38,7 +40,8 @@ public class ChecklistKioskCardTests
         Checklist Closing,
         ChecklistCardWidget Card,
         UserProfile Amy,
-        List<ProjectionRunState> Running)
+        List<ProjectionRunState> Running,
+        RecordingAlertWriter Alerts)
     {
         // The laser kiosk's display is on a Dashboard step for this dashboard (or, cleared, on nothing).
         public void ShowOnLaser(Guid dashboardId) => Running.Add(DashboardRun(LaserKiosk.Id, dashboardId));
@@ -120,10 +123,11 @@ public class ChecklistKioskCardTests
 
         WidgetVisibilityService visibility = new(new SystemDbContextFactory(options), Mock.Of<ILaserGameStatusStore>(), NullLogger<WidgetVisibilityService>.Instance);
 
+        RecordingAlertWriter alerts = new();
         ChecklistRunService service = new(factory.Object, Mock.Of<IClockInTerminalService>(), Mock.Of<ITimeEntryService>(),
-            new TerminalEphemeralTokenService(clock), tokens, runner.Object, visibility, clock, NullLogger<ChecklistRunService>.Instance);
+            new TerminalEphemeralTokenService(clock), tokens, runner.Object, visibility, alerts, clock, NullLogger<ChecklistRunService>.Instance);
 
-        return new World(options, service, tokens, clock, company, ipswich, laser, otherKiosk, closing, card, amy, running);
+        return new World(options, service, tokens, clock, company, ipswich, laser, otherKiosk, closing, card, amy, running, alerts);
     }
 
     private static async Task<ChecklistRunView> CardAsync(World w)
@@ -341,5 +345,97 @@ public class ChecklistKioskCardTests
         Assert.IsFalse((await w.Service.CompleteOnKioskAsync(reception.Id, token, readOnly.Id, card.Items[0].ItemId, null, null)).IsSuccess);
         Assert.IsFalse((await w.Service.CompleteOnKioskAsync(reception.Id, token, w.Card.Id, card.Items[0].ItemId, null, null)).IsSuccess,
             "The laser card isn't on reception's screen.");
+    }
+
+    // ---- Readings outside the task's acceptable range, ticked on a kiosk ----
+
+    [TestMethod]
+    public async Task KioskTick_OutOfRange_RaisesAsTheKiosk_WithNoPerson()
+    {
+        World w = await SeedAsync();
+        await ChecklistReadingTestSupport.SetRangeAsync(w.Options, "Fog the building", null, 40m, unit: "%");
+        string token = w.Tokens.IssueViewerToken(w.LaserKiosk.Id);
+        ChecklistItemView fog = (await CardAsync(w)).Items.Single(x => x.Title == "Fog the building");
+
+        Result<bool> ticked = await w.Service.CompleteOnKioskAsync(w.LaserKiosk.Id, token, w.Card.Id, fog.ItemId, null, 55m);
+        Assert.IsTrue(ticked.IsSuccess, ticked.Error);
+
+        OperationsAlertRaise raise = w.Alerts.Raised.Single();
+        Assert.AreEqual(w.Company.Id, raise.CompanyId);
+        Assert.AreEqual(w.Ipswich.Id, raise.LocationId);
+        Assert.IsNull(raise.SubjectUserId);
+        Assert.AreEqual(w.LaserKiosk.Id, raise.SubjectClientId);
+        Assert.AreEqual("Fog the building out of range: 55 %", raise.Title);
+        StringAssert.Contains(raise.Detail, "by Laser");
+    }
+
+    [TestMethod]
+    public async Task KioskUndo_LeavesTheAlertOpen_AndAnInRangeReTickClearsIt()
+    {
+        World w = await SeedAsync();
+        await ChecklistReadingTestSupport.SetRangeAsync(w.Options, "Fog the building", null, 40m, unit: "%");
+        string token = w.Tokens.IssueViewerToken(w.LaserKiosk.Id);
+        ChecklistItemView fog = (await CardAsync(w)).Items.Single(x => x.Title == "Fog the building");
+
+        Assert.IsTrue((await w.Service.CompleteOnKioskAsync(w.LaserKiosk.Id, token, w.Card.Id, fog.ItemId, null, 55m)).IsSuccess);
+        Guid completionId = (await CardAsync(w)).Items.Single(x => x.ItemId == fog.ItemId).Tick!.CompletionId;
+
+        Assert.IsTrue((await w.Service.UndoOnKioskAsync(w.LaserKiosk.Id, token, w.Card.Id, completionId)).IsSuccess);
+        Assert.AreEqual(0, w.Alerts.Resolved.Count);
+
+        Assert.IsTrue((await w.Service.CompleteOnKioskAsync(w.LaserKiosk.Id, token, w.Card.Id, fog.ItemId, null, 30m)).IsSuccess);
+        Assert.AreEqual(ChecklistReadingTestSupport.KeyFor(fog.ItemId), w.Alerts.Resolved.Single().Key);
+        StringAssert.Contains(w.Alerts.Resolved.Single().Note, "(Laser)");
+    }
+
+    // Checklists are switched on per location. The kiosk path used to check the company's id as if
+    // it were a location's, so a kiosk ticking another location's checklist depended on whichever
+    // location happened to share the company's number.
+    [TestMethod]
+    public async Task KioskTick_ChecksTheChecklistsOwnLocation_NotTheLocationWithTheCompanysId()
+    {
+        World w = await SeedAsync();
+        Assert.AreEqual(w.Company.Id, w.Ipswich.Id, "The test needs a location numbered like the company.");
+
+        Location wisbech = new() { CompanyId = w.Company.Id, Name = "Wisbech", IsActive = true };
+        Checklist wisbechClosing = new()
+        {
+            Id = Guid.NewGuid(),
+            CompanyId = w.Company.Id,
+            LocationId = 0,
+            Name = "Wisbech closing",
+            CreateDate = Now.AddDays(-3),
+            Tasks = [new ChecklistTask { ChecklistId = Guid.Empty, Title = "Lock up", SortOrder = 0 }]
+        };
+        ChecklistCardWidget wisbechCard = new() { DashboardId = w.Card.DashboardId, ChecklistCardChecklistId = wisbechClosing.Id, ChecklistCardAllowKioskTicking = true };
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            ctx.Locations.Add(wisbech);
+            await ctx.SaveChangesAsync();
+            wisbechClosing.LocationId = wisbech.Id;
+            ctx.Checklists.Add(wisbechClosing);
+            ctx.DashboardWidgets.Add(wisbechCard);
+            await ctx.SaveChangesAsync();
+            await TestFeatures.SwitchOnEverywhereAsync(ctx);
+
+            // Checklists off at Ipswich only - the location whose number matches the company's.
+            ctx.LocationFeatureSettings.RemoveRange(ctx.LocationFeatureSettings.Where(x => x.LocationId == w.Ipswich.Id && x.Feature == CompanyFeature.Checklists));
+            await ctx.SaveChangesAsync();
+        }
+
+        string token = w.Tokens.IssueViewerToken(w.LaserKiosk.Id);
+        Result<ChecklistRunView?> card = await w.Service.GetCardAsync(wisbechClosing.Id, w.Company.Id);
+        Assert.IsTrue(card.IsSuccess, card.Error);
+
+        Result<bool> ticked = await w.Service.CompleteOnKioskAsync(w.LaserKiosk.Id, token, wisbechCard.Id, card.Data!.Items[0].ItemId, null, null);
+        Assert.IsTrue(ticked.IsSuccess, ticked.Error);
+
+        // And Ipswich's own checklist, with the feature off there, is refused.
+        Assert.IsFalse((await w.Service.GetCardAsync(w.Closing.Id, w.Company.Id)).IsSuccess, "Checklists are off at Ipswich.");
+
+        Result<bool> canTick = await w.Service.CanTickOnKioskAsync(w.LaserKiosk.Id, token, w.Card.Id);
+        Assert.IsTrue(canTick.IsSuccess);
+        Assert.IsFalse(canTick.Data);
     }
 }
