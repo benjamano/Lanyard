@@ -315,6 +315,84 @@ public class AutomationEngineServiceTestRunTests
         Assert.AreEqual(result.Data.SkipReason, execution.SkipReason);
     }
 
+    // A location open 07:00-20:00 on Wednesdays, with Staff Scheduling on or off.
+    private static async Task<Location> SeedOpenLocationAsync(Harness harness, bool staffScheduling = true)
+    {
+        await using ApplicationDbContext ctx = new(harness.Options);
+
+        Location location = new() { CompanyId = OwnCompany, Name = "Ipswich", IsActive = true };
+        ctx.Locations.Add(location);
+        await ctx.SaveChangesAsync();
+
+        ctx.LocationOpeningHours.Add(new LocationOpeningHours
+        {
+            LocationId = location.Id,
+            DayOfWeek = DayOfWeek.Wednesday,
+            OpensAt = new TimeOnly(7, 0),
+            ClosesAt = new TimeOnly(20, 0),
+            IsActive = true
+        });
+
+        if (staffScheduling)
+        {
+            ctx.LocationFeatureSettings.Add(new LocationFeatureSetting { LocationId = location.Id, Feature = CompanyFeature.StaffScheduling, IsEnabled = true });
+        }
+
+        ctx.RotaHolidays.Add(new RotaHoliday
+        {
+            Id = Guid.NewGuid(),
+            CompanyId = OwnCompany,
+            LocationId = location.Id,
+            Name = "Summer refit",
+            Kind = RotaHolidayKind.Closed,
+            StartDate = DateOnly.FromDateTime(SummerMorningUtc),
+            EndDate = DateOnly.FromDateTime(SummerMorningUtc)
+        });
+
+        await ctx.SaveChangesAsync();
+
+        return location;
+    }
+
+    private static AutomationRuleCondition WhileOpen(int locationId) => new()
+    {
+        Id = Guid.NewGuid(),
+        ConditionType = AutomationConditionType.DuringOpeningHours,
+        ParametersJson = AutomationConditionParameters.Serialize(new OpeningHoursConditionParameters(locationId, true)),
+        IsActive = true
+    };
+
+    [TestMethod]
+    public async Task TestRun_CheckingConditions_OnAClosedDay_SaysTheLocationIsClosedForTheHoliday()
+    {
+        Harness harness = await CreateHarnessAsync();
+        Guid kioskId = await SeedKioskAsync(harness);
+        Location ipswich = await SeedOpenLocationAsync(harness);
+        AutomationRule rule = await SeedRuleAsync(harness, kioskId, [TestAction()], conditions: WhileOpen(ipswich.Id));
+
+        Result<AutomationTestRunResult> result = await harness.Engine.TestRunRuleAsync(Request(rule.Id, checkConditions: true));
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.IsTrue(result.Data!.Skipped);
+        Assert.AreEqual("Ipswich is closed today for Summer refit (Rota › Holidays)", result.Data.SkipReason);
+        Assert.IsEmpty(harness.Executor.ExecutedActionIds);
+    }
+
+    [TestMethod]
+    public async Task TestRun_CheckingConditions_IgnoresHolidaysWhereStaffSchedulingIsOff()
+    {
+        Harness harness = await CreateHarnessAsync();
+        Guid kioskId = await SeedKioskAsync(harness);
+        Location ipswich = await SeedOpenLocationAsync(harness, staffScheduling: false);
+        AutomationRule rule = await SeedRuleAsync(harness, kioskId, [TestAction()], conditions: WhileOpen(ipswich.Id));
+
+        Result<AutomationTestRunResult> result = await harness.Engine.TestRunRuleAsync(Request(rule.Id, checkConditions: true));
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.IsFalse(result.Data!.Skipped, result.Data.SkipReason);
+        Assert.HasCount(1, harness.Executor.ExecutedActionIds);
+    }
+
     [TestMethod]
     public async Task TestRun_CheckingConditions_RunsWhenTheyHold()
     {

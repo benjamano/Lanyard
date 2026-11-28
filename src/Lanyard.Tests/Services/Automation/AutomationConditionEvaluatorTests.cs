@@ -283,6 +283,72 @@ public class AutomationConditionEvaluatorTests
         StringAssert.Contains(afterClosing.Reason, "Ipswich is closed");
     }
 
+    private static AutomationLocationInfo WithHoliday(AutomationLocationInfo location, RotaHolidayKind kind, DayOfWeek? like = null) =>
+        location with
+        {
+            Holidays =
+            [
+                new RotaHoliday
+                {
+                    CompanyId = RuleCompanyId,
+                    LocationId = LocationId,
+                    Name = "Summer refit",
+                    Kind = kind,
+                    StartDate = DateOnly.FromDateTime(SummerAfternoonUtc),
+                    EndDate = DateOnly.FromDateTime(SummerAfternoonUtc),
+                    StaffLike = like
+                }
+            ]
+        };
+
+    [TestMethod]
+    public void OpeningHours_ClosedHolidayIsClosed_AndSaysWhy()
+    {
+        AutomationLocationInfo closed = WithHoliday(Ipswich(), RotaHolidayKind.Closed);
+
+        AutomationConditionCheck during = Evaluate(SummerAfternoonUtc, [DuringOpeningHours(open: true)], location: closed);
+        Assert.IsFalse(during.Passed);
+        Assert.IsFalse(during.IsMisconfigured);
+        Assert.AreEqual("Ipswich is closed today for Summer refit (Rota › Holidays)", during.Reason);
+
+        Assert.IsTrue(Evaluate(SummerAfternoonUtc, [DuringOpeningHours(open: false)], location: closed).Passed, "an 'is closed' rule runs");
+    }
+
+    [TestMethod]
+    public void OpeningHours_BankHolidayUsesTheStaffedLikeDaysHours()
+    {
+        // Wednesday 10:00-17:00 and Sunday 12:00-14:00: a Wednesday bank holiday staffed like a
+        // Sunday opens at Sunday's hours, so 16:00 venue time is shut.
+        AutomationLocationInfo withSunday = Ipswich() with
+        {
+            Hours = [.. Ipswich().Hours, new LocationOpeningHours { LocationId = LocationId, DayOfWeek = DayOfWeek.Sunday, OpensAt = new TimeOnly(12, 0), ClosesAt = new TimeOnly(14, 0), IsActive = true }]
+        };
+        Assert.IsFalse(Evaluate(SummerAfternoonUtc, [DuringOpeningHours(open: true)], location: WithHoliday(withSunday, RotaHolidayKind.BankHoliday)).Passed);
+
+        // With no Sunday hours at all it keeps its own Wednesday hours rather than shutting.
+        Assert.IsTrue(Evaluate(SummerAfternoonUtc, [DuringOpeningHours(open: true)], location: WithHoliday(Ipswich(), RotaHolidayKind.BankHoliday)).Passed);
+    }
+
+    [TestMethod]
+    public void OpeningHours_LateHoursAfterAClosedDay_NameTheHoliday()
+    {
+        // Tuesday 20:00-02:00; Tuesday marked closed; 01:00 venue time on Wednesday (00:00 UTC, BST).
+        AutomationLocationInfo late = new(RuleCompanyId, "Ipswich",
+            [new LocationOpeningHours { LocationId = LocationId, DayOfWeek = DayOfWeek.Tuesday, OpensAt = new TimeOnly(20, 0), ClosesAt = new TimeOnly(2, 0), IsActive = true }],
+            [new RotaHoliday { CompanyId = RuleCompanyId, LocationId = LocationId, Name = "Staff party", Kind = RotaHolidayKind.Closed, StartDate = new DateOnly(2026, 7, 14), EndDate = new DateOnly(2026, 7, 14) }]);
+
+        AutomationConditionCheck check = Evaluate(new DateTime(2026, 7, 15, 0, 0, 0, DateTimeKind.Utc), [DuringOpeningHours(open: true)], location: late);
+
+        Assert.IsFalse(check.Passed);
+        Assert.AreEqual("Ipswich is closed for Staff party (Rota › Holidays)", check.Reason);
+    }
+
+    [TestMethod]
+    public void OpeningHours_SchoolHolidayChangesNothing()
+    {
+        Assert.IsTrue(Evaluate(SummerAfternoonUtc, [DuringOpeningHours(open: true)], location: WithHoliday(Ipswich(), RotaHolidayKind.SchoolHoliday)).Passed);
+    }
+
     [TestMethod]
     public void OpeningHours_OutsideHoursPassesWhenClosed()
     {

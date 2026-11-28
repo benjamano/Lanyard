@@ -5,6 +5,7 @@ using Lanyard.Application.Services.Parties;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
@@ -262,7 +263,7 @@ public class AutomationEngineService(
                 .ToListAsync(ct);
 
             (Dictionary<Guid, AutomationClientInfo> conditionClients, Dictionary<int, AutomationLocationInfo> conditionLocations) =
-                await LoadConditionContextAsync(ctx, rules, ct);
+                await LoadConditionContextAsync(ctx, rules, RotaTime.Today(_timeProvider.GetUtcNow().UtcDateTime), ct);
 
             // Kiosks and locations first, so a rule is never visible without what its conditions name.
             _conditionClients = conditionClients;
@@ -283,7 +284,7 @@ public class AutomationEngineService(
     /// which load one rule that may not be in the cache (it only holds enabled rules).
     /// </summary>
     private static async Task<(Dictionary<Guid, AutomationClientInfo> Clients, Dictionary<int, AutomationLocationInfo> Locations)> LoadConditionContextAsync(
-        ApplicationDbContext ctx, List<AutomationRule> rules, CancellationToken ct)
+        ApplicationDbContext ctx, List<AutomationRule> rules, DateOnly venueToday, CancellationToken ct)
     {
         List<Guid> conditionClientIds = rules
             .SelectMany(r => r.Conditions)
@@ -325,6 +326,20 @@ public class AutomationEngineService(
                 .AsNoTracking()
                 .TagWithCallSite()
                 .ToDictionaryAsync(l => l.Id, l => new AutomationLocationInfo(l.CompanyId, l.Name, l.Hours), ct);
+
+        // Holidays from yesterday on (a late window can start on a closed day), with no end: the
+        // cache lives across days, and past holidays simply stop matching. Saving a holiday or
+        // switching Staff Scheduling clears the cache, so new ones are picked up.
+        if (conditionLocations.Count > 0)
+        {
+            Dictionary<int, List<RotaHoliday>> holidays = await RotaHolidayQueries.ForLocationsAsync(
+                ctx, conditionLocations.Keys, venueToday.AddDays(-1), DateOnly.MaxValue, ct);
+
+            foreach ((int id, List<RotaHoliday> list) in holidays)
+            {
+                conditionLocations[id] = conditionLocations[id] with { Holidays = list };
+            }
+        }
 
         return (conditionClients, conditionLocations);
     }
@@ -1351,7 +1366,7 @@ public class AutomationEngineService(
             if (request.CheckConditions)
             {
                 (Dictionary<Guid, AutomationClientInfo> clients, Dictionary<int, AutomationLocationInfo> locations) =
-                    await LoadConditionContextAsync(ctx, [rule], ct);
+                    await LoadConditionContextAsync(ctx, [rule], RotaTime.Today(_timeProvider.GetUtcNow().UtcDateTime), ct);
 
                 AutomationConditionCheck check = await CheckConditionsAsync(rule, _timeProvider.GetUtcNow().UtcDateTime, clients, locations, ct);
 

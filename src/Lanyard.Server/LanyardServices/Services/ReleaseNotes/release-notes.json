@@ -1148,7 +1148,9 @@
     "details": [
       "Mark staff who are under 18 (Managers and Admins): on a person's Rota tab under Manage > Users, the new Under 18 section takes their date of birth and shows when they turn 18 and, for anyone under 16, when they're over school leaving age. It's only kept for staff under 18 and deleted on their 18th birthday, and staff can't see it.",
       "Staff now shows who is currently marked as under 18, and Rota Settings has a new choice for the night hours staff under 18 can't work: 22:00 to 06:00, or 23:00 to 07:00 if their contract says so.",
-      "On a bank holiday marked under Rota > Holidays, opening and closing checklists are now due at the opening hours of the day it's staffed like (Sunday unless you pick another day)."
+      "On a bank holiday marked under Rota > Holidays, opening and closing checklists are now due at the opening hours of the day it's staffed like (Sunday unless you pick another day).",
+      "Days marked Closed under Rota > Holidays now count as closed for automation: \"a location is open\" rules and dashboard widgets don't run or show that day, and a skipped rule (including a test run) says why, such as \"Ipswich is closed today for Christmas Day (Rota › Holidays)\". Bank holidays use the opening hours of the day they're staffed like, or their usual hours if the venue never opens on that day.",
+      "Kiosk offline and needs-attention alerts aren't sent on a day marked Closed; a kiosk still down when the location next opens is reported then."
     ]
   }
 ]

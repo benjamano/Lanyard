@@ -1,6 +1,7 @@
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
@@ -108,6 +109,18 @@ public class WidgetVisibilityService(
                     .Select(l => new { l.Id, l.CompanyId, l.Name, Hours = l.OpeningHours.Where(h => h.IsActive).ToList() })
                     .ToListAsync())
                     .ToDictionary(l => l.Id, l => new AutomationLocationInfo(l.CompanyId, l.Name, l.Hours));
+
+            if (locations.Count > 0)
+            {
+                // Yesterday too: a late window from a closed day doesn't run on into today.
+                DateOnly today = RotaTime.Today(DateTime.UtcNow);
+                Dictionary<int, List<RotaHoliday>> holidays = await RotaHolidayQueries.ForLocationsAsync(ctx, locations.Keys, today.AddDays(-1), today.AddDays(1));
+
+                foreach ((int id, List<RotaHoliday> list) in holidays)
+                {
+                    locations[id] = locations[id] with { Holidays = list };
+                }
+            }
 
             return Result<WidgetVisibilityLookups>.Ok(new WidgetVisibilityLookups(clients, locations));
         }
