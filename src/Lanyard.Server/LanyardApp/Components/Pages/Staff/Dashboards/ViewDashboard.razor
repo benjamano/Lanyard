@@ -98,7 +98,7 @@
             @if (_widgets.Count > 0)
             {
                 @* The same live rendering as the home screen: buttons and controls act. Full screen
-                   uses the dashboard's Fit to screen setting, like a kiosk TV. *@
+                   uses the dashboard's Fill the screen setting, like a kiosk TV. *@
                 <DashboardGrid Widgets="_widgets"
                                CompanyId="_dashboard.CompanyId"
                                RowHeight="_dashboard.RowHeight"
@@ -168,7 +168,11 @@
         if (!result.IsSuccess || result.Data is null)
         {
             Logger.LogWarning("Failed to load dashboard {DashboardId} for the live view: {Error}", DashboardId, result.Error);
-            _loadError = "This dashboard couldn't be found. It may have been deleted.";
+            // Only a missing dashboard is "not found"; anything else (the database restarting, a
+            // timeout) is worth trying again rather than recreating the dashboard.
+            _loadError = result.Data is null && result.Error == "Dashboard not found."
+                ? "This dashboard couldn't be found. It may have been deleted."
+                : "This dashboard couldn't be loaded. Try again in a moment.";
             return;
         }
 
