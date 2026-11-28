@@ -70,6 +70,9 @@
     // circuit times out, and starting a session on it then hangs for a minute. Give up sooner.
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(20);
 
+    // VideoStreamSignalingService's refusal of a kiosk viewer token.
+    private const string NotAuthorisedError = "This kiosk is not authorised to open a video stream.";
+
     private enum ViewState { Idle, Connecting, Live, Error }
 
     // The kiosk the camera is plugged into.
@@ -207,9 +210,11 @@
 
             if (generation != _generation || _disposeCts.IsCancellationRequested)
             {
+                // Its offer may already have built a peer connection in the browser; close that too.
                 if (session.IsSuccess)
                 {
                     await _signalingService.EndSessionAsync(session.Data);
+                    await StopViewerAsync(session.Data);
                 }
 
                 return;
@@ -217,7 +222,8 @@
 
             if (!session.IsSuccess)
             {
-                SetError(FriendlyError(session.Error), retry: true);
+                // A refused viewer token won't fix itself by asking again every few seconds.
+                SetError(FriendlyError(session.Error), retry: session.Error != NotAuthorisedError);
                 return;
             }
 
@@ -276,16 +282,25 @@
             }
         }
         catch (JSDisconnectedException) { }
+        catch (ObjectDisposedException) { }
     }
 
     public async Task ReceiveOfferAsync(Guid sessionId, string sdpOffer)
     {
-        string answerSdp = string.Empty;
+        string? answerSdp = null;
         bool wentLive = false;
 
         await InvokeAsync(async () =>
         {
-            answerSdp = await _videoModule!.InvokeAsync<string>("videoViewer.receiveOffer", _videoElementId, sessionId, sdpOffer,
+            // Only the current session, or one whose start hasn't returned its id yet. A stale
+            // offer would otherwise build a peer connection nothing ever closes.
+            if (_disposeCts.IsCancellationRequested || _videoModule is null
+                || (_sessionId is Guid current && current != sessionId))
+            {
+                return;
+            }
+
+            answerSdp = await _videoModule.InvokeAsync<string>("videoViewer.receiveOffer", _videoElementId, sessionId, sdpOffer,
                 Audible, _selfRef, _videoStreamingOptions.Value.ToIceServersJson());
 
             // Only a start still in progress goes live: a late offer from a session the watchdog
@@ -301,6 +316,12 @@
             }
         });
 
+        if (answerSdp is null)
+        {
+            await _signalingService.EndSessionAsync(sessionId);
+            return;
+        }
+
         await _signalingService.ViewerSendAnswerAsync(sessionId, answerSdp);
 
         if (wentLive)
@@ -313,7 +334,17 @@
     {
         await InvokeAsync(async () =>
         {
-            await _videoModule!.InvokeVoidAsync("videoViewer.addIceCandidate", sessionId, candidateJson);
+            if (_disposeCts.IsCancellationRequested || _videoModule is null)
+            {
+                return;
+            }
+
+            try
+            {
+                await _videoModule.InvokeVoidAsync("videoViewer.addIceCandidate", sessionId, candidateJson);
+            }
+            catch (JSDisconnectedException) { }
+            catch (ObjectDisposedException) { }
         });
     }
 
@@ -323,6 +354,7 @@
         {
             if (_sessionId != sessionId)
             {
+                await StopViewerAsync(sessionId);
                 return;
             }
 
@@ -417,7 +449,7 @@
                 "The kiosk didn't start its camera in time. Check it's online, then try again.",
             "The video publisher is no longer reachable." =>
                 "Lost touch with the kiosk's camera. Try again.",
-            "This kiosk is not authorised to open a video stream." =>
+            NotAuthorisedError =>
                 "This screen isn't allowed to show the camera. Restart the Lanyard Client on it.",
             null or "" => "The camera couldn't be started.",
             _ => error
@@ -465,6 +497,7 @@
             }
         }
         catch (JSDisconnectedException) { }
+        catch (ObjectDisposedException) { }
         catch (InvalidOperationException) { }
     }
 
@@ -481,7 +514,9 @@
         {
             if (_videoModule is not null)
             {
-                await _videoModule.DisposeAsync();
+                IJSObjectReference module = _videoModule;
+                _videoModule = null;
+                await module.DisposeAsync();
             }
         }
         catch (JSDisconnectedException) { }

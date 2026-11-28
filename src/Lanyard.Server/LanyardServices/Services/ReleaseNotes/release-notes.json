@@ -1188,7 +1188,7 @@
       "New Live capture dashboard widget (under Kiosks & projection). Pick a camera or capture card plugged into any of your kiosks and it plays live in the tile, the same picture a projection Live Capture step shows.",
       "On a kiosk screen it plays straight away and keeps trying on its own if the camera drops out. On a signed-in dashboard only Admins and Managers see the picture.",
       "Sound is off unless you turn on Play the camera's sound. In a browser it then starts muted, with a speaker button to turn it on. Fill the tile crops the picture to fill the tile instead of showing bars.",
-      "While you edit a dashboard the tile shows the camera's name instead of the picture, so the camera only switches on when the dashboard is viewed.",
+      "While you edit a dashboard the tile shows the camera's name instead of the picture, so the camera only switches on when you preview or view the dashboard.",
       "The Laser Scoreboard dashboard widget now follows the game mode: solo games show one blue Solo list ranked by score instead of putting everyone under Red Team. Team games still show Red Team and Green Team. Kiosks need client 1.0.50 or later to report the mode."
     ]
   }
