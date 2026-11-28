@@ -1,5 +1,8 @@
 @using Lanyard.Shared.Audio
+@using Lanyard.Application.Services.Clients
+@implements IDisposable
 @inject IClientService _clientService
+@inject IClientEqualiserEventBus _equaliserEvents
 
 @* The Music page's way into a kiosk's equaliser. Says which preset (or "Custom") is on, so a kiosk
    that's been changed from flat stands out. *@
@@ -21,6 +24,42 @@
 
     private string Summary => _settings is null ? "…"
         : _settings.MatchingPreset?.Name ?? "Custom";
+
+    protected override void OnInitialized()
+    {
+        // Changed somewhere else (the Music page, another dashboard, Settings): re-read it, so a
+        // dashboard left open on a wall screen doesn't keep showing the old preset.
+        _equaliserEvents.OnChanged += HandleEqualiserChanged;
+    }
+
+    private void HandleEqualiserChanged(Guid clientId)
+    {
+        if (clientId != ClientId)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            await ReloadAsync();
+            StateHasChanged();
+        });
+    }
+
+    private async Task ReloadAsync()
+    {
+        Result<ClientEqualiserStateDTO> reloaded = await _clientService.GetClientEqualiserAsync(ClientId);
+
+        if (reloaded.IsSuccess)
+        {
+            _settings = reloaded.Data!.Settings;
+        }
+    }
+
+    public void Dispose()
+    {
+        _equaliserEvents.OnChanged -= HandleEqualiserChanged;
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -47,11 +86,6 @@
         });
 
         // Closed with Done or the X: re-read either way, since changes save as they're made.
-        Result<ClientEqualiserStateDTO> reloaded = await _clientService.GetClientEqualiserAsync(ClientId);
-
-        if (reloaded.IsSuccess)
-        {
-            _settings = reloaded.Data!.Settings;
-        }
+        await ReloadAsync();
     }
 }

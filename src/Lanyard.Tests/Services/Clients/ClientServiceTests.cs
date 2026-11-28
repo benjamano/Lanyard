@@ -31,7 +31,7 @@ namespace Lanyard.Tests.Services.Clients
                 .Options;
         }
 
-        private ClientService GetService(DbContextOptions<ApplicationDbContext> options, IKioskFleetEventBus fleetEvents = null)
+        private ClientService GetService(DbContextOptions<ApplicationDbContext> options, IKioskFleetEventBus fleetEvents = null, IClientEqualiserEventBus equaliserEvents = null)
         {
             var factoryMock = new Mock<IDbContextFactory<ApplicationDbContext>>();
             factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<System.Threading.CancellationToken>()))
@@ -48,7 +48,7 @@ namespace Lanyard.Tests.Services.Clients
             // throws on .Set() since CreateEntry() isn't stubbed.
             var cacheMock = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
 
-            return new ClientService(factoryMock.Object, hubContextMock.Object, loggerMock.Object, cacheMock, fleetEvents ?? new KioskFleetEventBus());
+            return new ClientService(factoryMock.Object, hubContextMock.Object, loggerMock.Object, cacheMock, fleetEvents ?? new KioskFleetEventBus(), equaliserEvents ?? new ClientEqualiserEventBus());
         }
 
         // SignalRControlHub.ConnectedIds is a private static set with no InternalsVisibleTo, so
@@ -62,8 +62,9 @@ namespace Lanyard.Tests.Services.Clients
                 IHubContext<SignalRControlHub> hubContext,
                 Microsoft.Extensions.Logging.ILogger<ClientService> logger,
                 Microsoft.Extensions.Caching.Memory.IMemoryCache cache,
-                IReadOnlyCollection<string> connectedIds)
-                : base(factory, hubContext, logger, cache, new KioskFleetEventBus())
+                IReadOnlyCollection<string> connectedIds,
+                IClientEqualiserEventBus equaliserEvents = null)
+                : base(factory, hubContext, logger, cache, new KioskFleetEventBus(), equaliserEvents ?? new ClientEqualiserEventBus())
             {
                 _connectedIds = connectedIds;
             }
@@ -180,7 +181,7 @@ namespace Lanyard.Tests.Services.Clients
             var loggerMock = new Mock<Microsoft.Extensions.Logging.ILogger<ClientService>>();
             var cache = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
 
-            var service = new ClientService(factoryMock.Object, hubContextMock.Object, loggerMock.Object, cache, new KioskFleetEventBus());
+            var service = new ClientService(factoryMock.Object, hubContextMock.Object, loggerMock.Object, cache, new KioskFleetEventBus(), new ClientEqualiserEventBus());
 
             var client = new Client { Id = Guid.NewGuid(), Name = "Kiosk", MostRecentConnectionId = "connection-1" };
 
@@ -1177,7 +1178,8 @@ namespace Lanyard.Tests.Services.Clients
                 hubContextMock.Object,
                 new Mock<Microsoft.Extensions.Logging.ILogger<ClientService>>().Object,
                 new Mock<Microsoft.Extensions.Caching.Memory.IMemoryCache>().Object,
-                new KioskFleetEventBus());
+                new KioskFleetEventBus(),
+                new ClientEqualiserEventBus());
 
             Result<Client?> clientResult = await service.CreateClientAsync(new Client
             {
@@ -1287,6 +1289,35 @@ namespace Lanyard.Tests.Services.Clients
             proxy.Verify(p => p.SendCoreAsync(ClientHubMethods.ReceiveEqualiserSettings,
                 It.Is<object?[]>(args => args.Length == 1 && Equals(args[0], expected)),
                 It.IsAny<System.Threading.CancellationToken>()), times);
+        }
+
+        // Open EQ buttons (Music page, Now playing widgets on dashboards) listen for this to
+        // re-read the preset, so it must fire for the saved kiosk, even one that's offline.
+        [TestMethod]
+        public async Task SetClientEqualiserAsync_TellsOpenPagesTheKioskChanged()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            var factoryMock = new Mock<IDbContextFactory<ApplicationDbContext>>();
+            factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<System.Threading.CancellationToken>()))
+                .ReturnsAsync(() => new ApplicationDbContext(options));
+            ClientEqualiserEventBus bus = new();
+            List<Guid> published = [];
+            bus.OnChanged += published.Add;
+
+            TestableClientService service = new(
+                factoryMock.Object,
+                new Mock<IHubContext<SignalRControlHub>>().Object,
+                new Mock<Microsoft.Extensions.Logging.ILogger<ClientService>>().Object,
+                new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
+                [],
+                bus);
+
+            Result<Client?> created = await service.CreateClientAsync(new Client { Name = "Bar" });
+
+            Result<ClientEqualiserStateDTO> result = await service.SetClientEqualiserAsync(created.Data!.Id, new MusicEqualiserSettings(3, 0, 0));
+
+            Assert.IsTrue(result.Success, result.Error);
+            CollectionAssert.AreEqual(new[] { created.Data.Id }, published);
         }
 
         [TestMethod]

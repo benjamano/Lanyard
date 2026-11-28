@@ -108,6 +108,16 @@ else
                     </FluentButton>
                 }
 
+                @* The saved dashboard, live, outside the designer. Unsaved changes aren't in it, so
+                   NavigationLock asks first if there are any. *@
+                <FluentButton Appearance="ButtonAppearance.Outline"
+                              IconStart="@(new Icons.Regular.Size20.Open())"
+                              Title="Open the saved dashboard live, as it looks on a home screen"
+                              aria-label="Open live"
+                              OnClick="@(() => NavigationManager.NavigateTo($"/manage/dashboards/{DashboardId}/view"))">
+                    <span class="designer-hide-phone">Open live</span>
+                </FluentButton>
+
                 <FluentButton Appearance="ButtonAppearance.Primary"
                               IconStart="@(new Icons.Regular.Size20.Save())"
                               Loading="_saving"

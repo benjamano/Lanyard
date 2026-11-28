@@ -96,11 +96,16 @@
     color: var(--colorCompoundBrandStroke);
 }
 
-/* Inserted dividers render as a plain <hr> inside the Quill editor - style it explicitly rather
-   than relying on the browser's default hr, which is barely visible against a dark theme. */
-.text-area-widget-editor-host ::deep hr {
+/* Inserted dividers render as a plain <hr> - style it explicitly in both the editor and the
+   read-only display (the kiosk screen), rather than relying on the browser's default hr. The
+   normal stroke tokens (Stroke1/Stroke2) are near-invisible against a dark kiosk background, so
+   use the accessible stroke, which is light grey in dark mode and mid grey in light mode. The
+   display content is a MarkupString, so it needs ::deep too. */
+.text-area-widget-editor-host ::deep hr,
+.text-area-widget-display-host ::deep hr {
+    height: 0;
     border: none;
-    border-top: 1px solid var(--colorNeutralStroke2);
+    border-top: 1px solid var(--colorNeutralStrokeAccessible);
     margin: 12px 0;
 }
 
