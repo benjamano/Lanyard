@@ -20,6 +20,7 @@ public sealed record ClientRowSignature(
     ClientAuthMethod? AuthMethod,
     bool ProjectionEnabled,
     bool DmxEnabled,
+    int VideoDeviceCount,
     bool IsConnected,
     KioskHealthStatus? HealthStatus,
     string HealthDetails,
@@ -52,6 +53,7 @@ public static class ClientsPageRows
                     x.LastAuthMethod,
                     x.ProjectionEnabled,
                     x.DmxEnabled,
+                    x.VideoDeviceCount,
                     x.IsCurrentlyConnected,
                     view?.Status,
                     // The badge's tooltip text, so "Last heartbeat 2 minutes ago" only counts as a

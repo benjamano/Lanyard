@@ -359,6 +359,9 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
                         .AsNoTracking()
                         .Where(y => y.IsActive && x.Id == y.ClientId)
                         .Any(),
+                    VideoDeviceCount = ctx.ClientAvailableVideoDevices
+                        .AsNoTracking()
+                        .Count(y => y.IsActive && x.Id == y.ClientId),
                     ZoneScoreboardVersion = ctx.ZoneScoreboardSettings
                         .AsNoTracking()
                         .Where(y => y.IsActive && x.Id == y.ClientId)

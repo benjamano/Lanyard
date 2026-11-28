@@ -1,3 +1,4 @@
+using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 
 namespace Lanyard.Infrastructure.DTO;
@@ -36,4 +37,18 @@ public class ProjectionRunState
     /// ProjectionProgramParameterValue.Id. Fixed values aren't in it - read those from the step.
     /// </summary>
     public IReadOnlyDictionary<Guid, string> BoundValues { get; init; } = new Dictionary<Guid, string>();
+
+    /// <summary>
+    /// Set while the current step is a "Wait for Game" step: what it is waiting for and on which
+    /// laser kiosk. Null for every other step.
+    /// </summary>
+    public ProjectionGameWaitState? GameWait { get; init; }
 }
+
+/// <summary>What a running "Wait for Game" step is waiting for.</summary>
+public sealed record ProjectionGameWaitState(
+    ProjectionGameEvent Event,
+    Guid KioskClientId,
+    string KioskName,
+    int? SecondsLeft,
+    int? GiveUpAfterMinutes);
