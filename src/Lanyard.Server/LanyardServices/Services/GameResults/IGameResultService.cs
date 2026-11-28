@@ -18,7 +18,12 @@ public interface IGameResultService
     /// The game is stored under the client's company. If the client can't be found (or isn't
     /// visible to the caller's company) nothing is written and a failed result is returned.
     /// </remarks>
-    Task<Result<bool>> RecordCompletedGameAsync(Guid clientId, LaserGameStatusDTO status);
+    // startedAtUtc is when the server saw the game go InGame; null if it missed the start.
+    Task<Result<bool>> RecordCompletedGameAsync(Guid clientId, LaserGameStatusDTO status, DateTime? startedAtUtc = null);
+
+    // The kiosk's most recent finished games, newest first, with each game's winner worked out.
+    // companyId works as it does for the Hall of Fame queries below.
+    Task<Result<IReadOnlyList<RecentGameDTO>>> GetRecentGamesAsync(Guid clientId, int take, int? companyId);
 
     // companyId limits results to one company's games. Kiosk displays run unfiltered (system
     // tenant), so they must pass the dashboard's company or they would see every company's games.

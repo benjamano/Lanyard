@@ -140,7 +140,19 @@ public class ClientZoneLaserGameStatusWidget : DashboardWidget
     public bool ShowTimeLeft { get; set; } = false;
     public bool ShowCurrentGameStatus { get; set; } = false;
 
+    // Off by default, so status widgets that existed before game history keep looking the same.
+    public bool ShowGameHistory { get; set; } = false;
+
+    // How many finished games the history list shows, newest first.
+    public int GameHistoryCount { get; set; } = DefaultGameHistoryCount;
+
     public Guid? ClientId { get; set; }
+
+    public const int DefaultGameHistoryCount = 5;
+    public const int MinGameHistoryCount = 1;
+    public const int MaxGameHistoryCount = 20;
+
+    public static int ClampGameHistoryCount(int count) => Math.Clamp(count, MinGameHistoryCount, MaxGameHistoryCount);
 }
 
 public class ClientZoneLaserScoreboardWidget : DashboardWidget

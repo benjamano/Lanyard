@@ -3234,6 +3234,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<DateTime>("PlayedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CompanyId");
@@ -5550,7 +5553,13 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("ClientZoneLaserGameStatusWidget_ClientId");
 
+                    b.Property<int>("GameHistoryCount")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("ShowCurrentGameStatus")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ShowGameHistory")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("ShowTimeLeft")

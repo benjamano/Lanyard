@@ -134,7 +134,7 @@ public class SignalRControlHubGameCaptureTests
         Guid clientId = Guid.NewGuid();
         Mock<IGameResultService> gameResultServiceMock = new();
         gameResultServiceMock
-            .Setup(x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>()))
+            .Setup(x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>(), It.IsAny<DateTime?>()))
             .ReturnsAsync(Result<bool>.Ok(true));
 
         SignalRControlHub hub = BuildHub(clientId, gameResultServiceMock, out _);
@@ -143,7 +143,7 @@ public class SignalRControlHubGameCaptureTests
         await hub.UpdateLaserGameStatus(BuildStatus(GameStatus.NotStarted));
 
         gameResultServiceMock.Verify(
-            x => x.RecordCompletedGameAsync(clientId, It.IsAny<LaserGameStatusDTO>()),
+            x => x.RecordCompletedGameAsync(clientId, It.IsAny<LaserGameStatusDTO>(), It.IsAny<DateTime?>()),
             Times.Once);
     }
 
@@ -158,7 +158,7 @@ public class SignalRControlHubGameCaptureTests
         Guid clientId = Guid.NewGuid();
         Mock<IGameResultService> gameResultServiceMock = new();
         gameResultServiceMock
-            .Setup(x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>()))
+            .Setup(x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>(), It.IsAny<DateTime?>()))
             .ReturnsAsync(Result<bool>.Ok(true));
 
         SignalRControlHub hub = BuildHub(clientId, gameResultServiceMock, out _);
@@ -167,7 +167,7 @@ public class SignalRControlHubGameCaptureTests
         await hub.UpdateLaserGameStatus(BuildStatus(GameStatus.NotStarted));
 
         gameResultServiceMock.Verify(
-            x => x.RecordCompletedGameAsync(clientId, It.Is<LaserGameStatusDTO>(dto => dto.TotalTimeSeconds > 0)),
+            x => x.RecordCompletedGameAsync(clientId, It.Is<LaserGameStatusDTO>(dto => dto.TotalTimeSeconds > 0), It.IsAny<DateTime?>()),
             Times.Once);
     }
 
@@ -177,7 +177,7 @@ public class SignalRControlHubGameCaptureTests
         Guid clientId = Guid.NewGuid();
         Mock<IGameResultService> gameResultServiceMock = new();
         gameResultServiceMock
-            .Setup(x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>()))
+            .Setup(x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>(), It.IsAny<DateTime?>()))
             .ReturnsAsync(Result<bool>.Ok(true));
 
         SignalRControlHub hub = BuildHub(clientId, gameResultServiceMock, out _);
@@ -190,7 +190,7 @@ public class SignalRControlHubGameCaptureTests
         await hub.UpdateLaserGameStatus(BuildStatus(GameStatus.NotStarted));
 
         gameResultServiceMock.Verify(
-            x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>()),
+            x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>(), It.IsAny<DateTime?>()),
             Times.Once);
     }
 
@@ -207,7 +207,7 @@ public class SignalRControlHubGameCaptureTests
         await hub.UpdateLaserGameStatus(BuildStatus(GameStatus.InGame));
 
         gameResultServiceMock.Verify(
-            x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>()),
+            x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>(), It.IsAny<DateTime?>()),
             Times.Never);
     }
 
@@ -217,7 +217,7 @@ public class SignalRControlHubGameCaptureTests
         Guid clientId = Guid.NewGuid();
         Mock<IGameResultService> gameResultServiceMock = new();
         gameResultServiceMock
-            .Setup(x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>()))
+            .Setup(x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>(), It.IsAny<DateTime?>()))
             .ReturnsAsync(Result<bool>.Ok(true));
 
         SignalRControlHub hub = BuildHub(clientId, gameResultServiceMock, out _);
@@ -228,7 +228,7 @@ public class SignalRControlHubGameCaptureTests
         await hub.UpdateLaserGameStatus(BuildStatus(GameStatus.NotStarted));
 
         gameResultServiceMock.Verify(
-            x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>()),
+            x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>(), It.IsAny<DateTime?>()),
             Times.Exactly(2));
     }
 
@@ -255,7 +255,7 @@ public class SignalRControlHubGameCaptureTests
         Guid clientId = Guid.NewGuid();
         Mock<IGameResultService> gameResultServiceMock = new();
         gameResultServiceMock
-            .Setup(x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>()))
+            .Setup(x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>(), It.IsAny<DateTime?>()))
             .ReturnsAsync(Result<bool>.Ok(true));
         SignalRControlHub hub = BuildHub(clientId, gameResultServiceMock, out _, out AutomationEngineService engine);
 
@@ -270,5 +270,92 @@ public class SignalRControlHubGameCaptureTests
         Assert.AreEqual(500, ended.FinalSnapshot.Players.Single().Score);
         Assert.AreEqual(Team.Red, ended.FinalSnapshot.Players.Single().Team);
     }
-}
 
+    [TestMethod]
+    public async Task UpdateLaserGameStatus_PassesTheStartTimeItSaw_WhenTheGameEnds()
+    {
+        Guid clientId = Guid.NewGuid();
+        Mock<IGameResultService> gameResultServiceMock = new();
+        DateTime? recordedStart = null;
+        gameResultServiceMock
+            .Setup(x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>(), It.IsAny<DateTime?>()))
+            .Callback<Guid, LaserGameStatusDTO, DateTime?>((_, _, start) => recordedStart = start)
+            .ReturnsAsync(Result<bool>.Ok(true));
+
+        SignalRControlHub hub = BuildHub(clientId, gameResultServiceMock, out ILaserGameStatusStore store);
+
+        await hub.UpdateLaserGameStatus(BuildStatus(GameStatus.NotStarted));
+        DateTime beforeStart = DateTime.UtcNow;
+        await hub.UpdateLaserGameStatus(BuildStatus(GameStatus.InGame));
+        DateTime afterStart = DateTime.UtcNow;
+
+        Assert.IsTrue(store.TryGetGameStart(clientId, out DateTime marked));
+        Assert.IsTrue(marked >= beforeStart && marked <= afterStart);
+
+        // Later InGame reports in the same game must not move the start.
+        await hub.UpdateLaserGameStatus(BuildStatus(GameStatus.InGame));
+        await hub.UpdateLaserGameStatus(BuildStatus(GameStatus.NotStarted));
+
+        Assert.AreEqual(marked, recordedStart);
+    }
+
+    [TestMethod]
+    public async Task UpdateLaserGameStatus_DoesNotMarkAStart_WhenTheFirstReportIsMidGame()
+    {
+        // A restart or reconnect mid-game: the server never saw the start, so it saves none and
+        // the history shows an estimate (marked ≈) instead of a guess presented as exact.
+        Guid clientId = Guid.NewGuid();
+        Mock<IGameResultService> gameResultServiceMock = new();
+        SignalRControlHub hub = BuildHub(clientId, gameResultServiceMock, out ILaserGameStatusStore store);
+
+        LaserGameStatusDTO midGame = BuildStatus(GameStatus.InGame);
+        midGame.TimeRemainingSeconds = 400;
+
+        await hub.UpdateLaserGameStatus(midGame);
+
+        Assert.IsFalse(store.TryGetGameStart(clientId, out _));
+    }
+
+    [TestMethod]
+    public async Task UpdateLaserGameStatus_ClearsTheStart_OnceTheGameEnds()
+    {
+        Guid clientId = Guid.NewGuid();
+        Mock<IGameResultService> gameResultServiceMock = new();
+        gameResultServiceMock
+            .Setup(x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>(), It.IsAny<DateTime?>()))
+            .ReturnsAsync(Result<bool>.Ok(true));
+        SignalRControlHub hub = BuildHub(clientId, gameResultServiceMock, out ILaserGameStatusStore store);
+
+        await hub.UpdateLaserGameStatus(BuildStatus(GameStatus.NotStarted));
+        await hub.UpdateLaserGameStatus(BuildStatus(GameStatus.InGame));
+        await hub.UpdateLaserGameStatus(BuildStatus(GameStatus.NotStarted));
+
+        // Otherwise a later game whose start the server missed would be saved with this one's.
+        Assert.IsFalse(store.TryGetGameStart(clientId, out _));
+    }
+
+    [TestMethod]
+    public async Task UpdateLaserGameStatus_RaisesGameRecorded_OnlyWhenAGameWasSaved()
+    {
+        Guid clientId = Guid.NewGuid();
+        Mock<IGameResultService> gameResultServiceMock = new();
+        gameResultServiceMock
+            .SetupSequence(x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>(), It.IsAny<DateTime?>()))
+            .ReturnsAsync(Result<bool>.Ok(true))
+            .ReturnsAsync(Result<bool>.Ok(false))
+            .ReturnsAsync(Result<bool>.Fail("boom"));
+
+        SignalRControlHub hub = BuildHub(clientId, gameResultServiceMock, out ILaserGameStatusStore store);
+
+        List<Guid> recorded = [];
+        store.OnGameRecorded += recorded.Add;
+
+        for (int i = 0; i < 3; i++)
+        {
+            await hub.UpdateLaserGameStatus(BuildStatus(GameStatus.InGame));
+            await hub.UpdateLaserGameStatus(BuildStatus(GameStatus.NotStarted));
+        }
+
+        CollectionAssert.AreEqual(new List<Guid> { clientId }, recorded);
+    }
+}

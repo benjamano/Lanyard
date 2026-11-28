@@ -63,7 +63,7 @@ public static class DashboardWidgetCatalog
             WidgetCategory.KiosksAndProjection, () => new Icons.Regular.Size20.Flash(), () => new AutomationRuleStatusWidget(), typeof(RenderAutomationRuleStatusWidget), typeof(AutomationRuleStatusWidgetSettings)),
         new(WidgetType.ClientZoneLaserScoreboard, "Laser scoreboard", "The live scores from a laser game kiosk.",
             WidgetCategory.VenueAndGames, () => new Icons.Regular.Size20.Games(), () => new ClientZoneLaserScoreboardWidget(), typeof(RenderClientZoneLaserScoreboardWidget), typeof(LaserScoreboardWidgetSettings)),
-        new(WidgetType.ClientZoneLaserGameStatus, "Laser game status", "Whether a game is on and how long is left.",
+        new(WidgetType.ClientZoneLaserGameStatus, "Laser game status", "Whether a game is on, how long is left, and past games.",
             WidgetCategory.VenueAndGames, () => new Icons.Regular.Size20.Timer(), () => new ClientZoneLaserGameStatusWidget(), typeof(RenderClientZoneLaserGameStatusWidget), typeof(LaserGameStatusWidgetSettings)),
         new(WidgetType.HallOfFame, "Hall of Fame", "Best scores, accuracy and teams over a period.",
             WidgetCategory.VenueAndGames, () => new Icons.Regular.Size20.Target(), () => new HallOfFameWidget(), typeof(RenderHallOfFameWidget), typeof(HallOfFameWidgetSettings)),
