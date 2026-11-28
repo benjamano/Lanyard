@@ -1144,7 +1144,7 @@
   {
     "version": "1.4.42",
     "releaseDate": "2026-11-27",
-    "summary": "Safer rotas for staff under 18, easier staff phone set-up, live dashboard views, kiosk volume and EQ, more flexible automation music controls and projection programs that wait for a laser game.",
+    "summary": "Safer rotas for staff under 18, easier staff phone set-up, live dashboard views, clearer dark-mode text dividers, kiosk volume and EQ, more flexible automation music controls and projection programs that wait for a laser game.",
     "details": [
       "Mark staff who are under 18 (Managers and Admins): on a person's Rota tab under Manage > Users, the new Under 18 section takes their date of birth and shows when they turn 18 and, for anyone under 16, when they're over school leaving age. It's only kept for staff under 18 and deleted on their 18th birthday, and staff can't see it.",
       "Staff now shows who is currently marked as under 18, and Rota Settings has a new choice for the night hours staff under 18 can't work: 22:00 to 06:00, or 23:00 to 07:00 if their contract says so.",
@@ -1168,6 +1168,15 @@
       "Projection Control and the Projection Status widget show what a Wait for Game step is waiting for, and warn when its laser kiosk isn't sending game updates.",
       "Steps can be added to a projection program without dragging: each step in the toolbox has an Add button that puts it at the end. The program editor now uses the full width on a phone.",
       "Fixed: a setting added to a projection step that was already saved could be lost when the program was saved again."
+    ]
+  },
+  {
+    "version": "1.4.43",
+    "releaseDate": "2026-11-28",
+    "summary": "Watch a kiosk's camera live from the Clients page.",
+    "details": [
+      "Added a Live camera button on the Clients page for kiosks with a camera or capture card plugged in. It shows that camera live in a dialog, with a picker when there's more than one camera.",
+      "A kiosk already showing the same camera in a Live Capture step keeps working while you watch."
     ]
   }
 ]
