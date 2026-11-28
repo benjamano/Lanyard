@@ -5,6 +5,7 @@
 @implements IDisposable
 
 @inject IMusicPlayerService _player
+@inject IClientService _clientService
 
 @* The same now-playing snapshot and browser-driven timeline as the Music page, so a dashboard
    left open on a wall screen doesn't re-render once a second either. *@
@@ -48,6 +49,16 @@
             </div>
 
             <MusicProgress Snapshot="snapshot" ReadOnly="@(!CanControl)" />
+
+            @if (Widget.ShowVolumeAndEq)
+            {
+                @* The Music page's own controls, so volume and EQ behave the same in both places.
+                   Keyed on the kiosk: MusicVolume reads its starting value once. *@
+                <div class="music-timeline-widget-audio" @key="clientId">
+                    <MusicVolume ClientId="clientId" Volume="snapshot.Volume" Disabled="@(!CanControl)" />
+                    <MusicEqualiserChip ClientId="clientId" KioskName="@_kioskName" Disabled="@(!CanControl)" />
+                </div>
+            }
         }
     </div>
 </FluentCard>
@@ -60,6 +71,8 @@
     public bool AllowTrigger { get; set; } = true;
 
     private MusicNowPlayingSnapshot? _snapshot;
+    private string _kioskName = "";
+    private Guid? _kioskNameFor;
 
     private bool IsPlaying => _snapshot is { IsConnected: true, State: PlaybackState.Playing };
     private bool CanControl => AllowTrigger && _snapshot?.IsConnected == true;
@@ -69,9 +82,17 @@
         _player.OnNowPlayingChanged += HandleNowPlayingChanged;
     }
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
         _snapshot = Widget.ClientId is Guid id ? _player.GetSnapshot(id) : null;
+
+        // Only the EQ dialog's heading needs the name, so skip the lookup when the controls are off.
+        if (Widget.ShowVolumeAndEq && Widget.ClientId is Guid clientId && _kioskNameFor != clientId)
+        {
+            _kioskNameFor = clientId;
+            Result<Client?> client = await _clientService.GetClientFromIdAsync(clientId);
+            _kioskName = client.Data?.Name ?? "";
+        }
     }
 
     private void HandleNowPlayingChanged(Guid clientId)

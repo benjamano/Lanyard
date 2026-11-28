@@ -2530,11 +2530,11 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("ShowConditionsJson")
-                        .HasColumnType("text");
-
                     b.Property<int?>("PhoneOrder")
                         .HasColumnType("integer");
+
+                    b.Property<string>("ShowConditionsJson")
+                        .HasColumnType("text");
 
                     b.Property<bool>("ShowTitle")
                         .HasColumnType("boolean");
@@ -5680,6 +5680,9 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnName("MusicTimelineWidget_ClientId");
 
                     b.Property<bool>("ShowSongTitle")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ShowVolumeAndEq")
                         .HasColumnType("boolean");
 
                     b.HasDiscriminator().HasValue(7);
