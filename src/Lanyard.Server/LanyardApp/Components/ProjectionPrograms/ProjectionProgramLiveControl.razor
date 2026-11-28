@@ -58,6 +58,11 @@
                                 Step @(run.CurrentStepIndex + 1) of @run.Steps.Count: @StepName(run)
                             </FluentText>
 
+                            @if (run.GameWait is { } gameWait)
+                            {
+                                <ProjectionGameWaitLine Wait="gameWait" />
+                            }
+
                             <FluentProgressBar Min="0" Max="100" Value="@Progress(run)" Width="240px" />
                         </FluentStack>
 

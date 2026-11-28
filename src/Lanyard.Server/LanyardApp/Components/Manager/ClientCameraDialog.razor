@@ -1,0 +1,115 @@
+@using Lanyard.App.Components.Clients
+@using Lanyard.Application.Services.Clients
+
+@inject IClientService _clientService
+
+<FluentDialogBody>
+    <ChildContent>
+        <div class="camera-dialog">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="14px" Class="w-100">
+            <FluentText>
+                Watch a camera plugged into <strong>@ClientName</strong> live. Nothing is recorded, and
+                any kiosk already showing this camera carries on as normal.
+            </FluentText>
+
+            @if (_devices.Count > 1)
+            {
+                <FluentSelect TOption="string" TValue="string" Label="Camera" Class="camera-picker"
+                              @bind-Value="_selectedDevice">
+                    @foreach (ClientAvailableVideoDevice device in _devices)
+                    {
+                        <FluentOption TValue="string" Value="@device.DeviceName">@device.DeviceName</FluentOption>
+                    }
+                </FluentSelect>
+            }
+            else if (_devices.Count == 1)
+            {
+                <FluentText Size="TextSize.Size200" Class="camera-name">Camera: @_selectedDevice</FluentText>
+            }
+
+            @if (_loadError is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@_loadError</FluentMessageBar>
+            }
+            else if (_loading)
+            {
+                <FluentSkeleton Width="100%" Height="240px" />
+            }
+            else if (_devices.Count == 0)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                    @ClientName hasn't reported any cameras. Plug one in and restart the Lanyard Client to see it here.
+                </FluentMessageBar>
+            }
+            else if (!string.IsNullOrEmpty(_selectedDevice))
+            {
+                @* Video only: the preview doesn't request or play the camera's sound. *@
+                <LiveCameraView SourceClientId="ClientId" DeviceName="@_selectedDevice" FixedAspect="true"
+                                OnLiveChanged="@(live => _live = live)" />
+
+                @if (_live)
+                {
+                    <FluentText Size="TextSize.Size200" Class="camera-name">
+                        Live · video only, no sound
+                    </FluentText>
+                }
+            }
+        </FluentStack>
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentStack HorizontalGap="8px" HorizontalAlignment="HorizontalAlignment.End">
+            <FluentButton OnClick="@CloseAsync">Close</FluentButton>
+        </FluentStack>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public Guid ClientId { get; set; }
+
+    [Parameter]
+    public string ClientName { get; set; } = "this kiosk";
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private List<ClientAvailableVideoDevice> _devices = [];
+    private string? _selectedDevice;
+    private bool _loading = true;
+    private string? _loadError;
+    private bool _live;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Client is company-owned, so this lookup is also the tenant check: another company's
+        // client id finds nothing and no stream is ever requested for it. LiveCameraView checks
+        // again before each start.
+        Result<Client?> client = await _clientService.GetClientFromIdAsync(ClientId);
+
+        if (!client.IsSuccess || client.Data is null)
+        {
+            _loadError = client.IsSuccess ? "This kiosk couldn't be found." : $"Couldn't load this kiosk: {client.Error}";
+            _loading = false;
+            return;
+        }
+
+        Result<IEnumerable<ClientAvailableVideoDevice>> devices = await _clientService.GetClientAvailableVideoDevicesAsync(ClientId);
+
+        if (!devices.IsSuccess)
+        {
+            _loadError = $"Couldn't load the cameras: {devices.Error}";
+            _loading = false;
+            return;
+        }
+
+        _devices = devices.Data!.ToList();
+        _selectedDevice = _devices.FirstOrDefault()?.DeviceName;
+        _loading = false;
+    }
+
+    private async Task CloseAsync()
+    {
+        await Dialog.CloseAsync();
+    }
+}

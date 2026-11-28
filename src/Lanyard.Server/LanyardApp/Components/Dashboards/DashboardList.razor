@@ -69,9 +69,9 @@ else
                 }
                 else
                 {
-                    <div class="dashboard-card-preview">
+                    <a class="dashboard-card-preview" href="@($"/manage/dashboards/{card.Id}/view")" aria-label="@($"View {card.Name}")">
                         <DashboardThumbnail Widgets="card.Widgets" />
-                    </div>
+                    </a>
                 }
 
                 <div class="dashboard-card-body">
@@ -126,9 +126,12 @@ else
                                       aria-pressed="@(isOrganisationHomeScreen ? "true" : "false")"
                                       IconStart="@(isOrganisationHomeScreen ? new Icons.Filled.Size20.People() : (Icon)new Icons.Regular.Size20.People())"
                                       OnClick="@(() => ToggleOrganisationHomeScreen(card))" />
+                    }
 
-                        <span class="dashboard-card-actions-spacer"></span>
+                    <span class="dashboard-card-actions-spacer"></span>
 
+                    @if (_canSetOrganisationDefault)
+                    {
                         <FluentButton Id="@($"dashboard-more-{card.Id}")" Appearance="ButtonAppearance.Subtle"
                                       IconStart="@(new Icons.Regular.Size20.MoreHorizontal())"
                                       aria-label="@($"More for {card.Name}")" />
@@ -138,13 +141,27 @@ else
                                 <FluentMenuItem OnClick="@(() => DeleteAsync(card))">Delete</FluentMenuItem>
                             </FluentMenuList>
                         </FluentMenu>
-
-                        <FluentButton Appearance="ButtonAppearance.Outline"
-                                      IconStart="@(new Icons.Regular.Size20.Edit())"
-                                      OnClick="@(() => Open(card.Id))">
-                            Edit
-                        </FluentButton>
                     }
+
+                    @* View and Edit stay together, and drop to their own row on a narrow card. *@
+                    <div class="dashboard-card-open">
+                        @* Opens the dashboard live, as it looks on a home screen - for everyone. *@
+                        <FluentButton Appearance="ButtonAppearance.Outline"
+                                      IconStart="@(new Icons.Regular.Size20.Eye())"
+                                      aria-label="@($"View {card.Name}")"
+                                      OnClick="@(() => View(card.Id))">
+                            View
+                        </FluentButton>
+
+                        @if (_canSetOrganisationDefault)
+                        {
+                            <FluentButton Appearance="ButtonAppearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size20.Edit())"
+                                          OnClick="@(() => Open(card.Id))">
+                                Edit
+                            </FluentButton>
+                        }
+                    </div>
                 </div>
             </article>
         }
@@ -346,6 +363,8 @@ else
     }
 
     private void Open(Guid dashboardId) => _navigationManager.NavigateTo($"/manage/dashboards/{dashboardId}");
+
+    private void View(Guid dashboardId) => _navigationManager.NavigateTo($"/manage/dashboards/{dashboardId}/view");
 
     private async Task CreateDashboardAsync()
     {

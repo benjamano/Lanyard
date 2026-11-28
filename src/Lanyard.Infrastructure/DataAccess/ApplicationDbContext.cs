@@ -319,7 +319,8 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasValue<PendingTimeOffWidget>(WidgetType.PendingTimeOff)
                 .HasValue<ComplianceSummaryWidget>(WidgetType.ComplianceSummary)
                 .HasValue<DemandStaffingWidget>(WidgetType.DemandStaffing)
-                .HasValue<WhatsOnTodayWidget>(WidgetType.WhatsOnToday);
+                .HasValue<WhatsOnTodayWidget>(WidgetType.WhatsOnToday)
+                .HasValue<LiveCaptureWidget>(WidgetType.LiveCapture);
 
             // Sibling widget types share a ClientId property in the TPH table; pin the
             // column names so EF's automatic uniquification cannot rename existing columns.
@@ -393,6 +394,22 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<DemandStaffingWidget>()
                 .Property(x => x.RangeDays)
                 .HasColumnName("DemandStaffingWidget_RangeDays");
+
+            modelBuilder.Entity<LiveCaptureWidget>()
+                .Property(x => x.ClientId)
+                .HasColumnName("LiveCaptureWidget_ClientId");
+
+            modelBuilder.Entity<LiveCaptureWidget>()
+                .Property(x => x.DeviceName)
+                .HasColumnName("LiveCaptureWidget_DeviceName");
+
+            modelBuilder.Entity<LiveCaptureWidget>()
+                .Property(x => x.EnableAudio)
+                .HasColumnName("LiveCaptureWidget_EnableAudio");
+
+            modelBuilder.Entity<LiveCaptureWidget>()
+                .Property(x => x.FillTile)
+                .HasColumnName("LiveCaptureWidget_FillTile");
 
             modelBuilder.Entity<WhatsOnTodayWidget>()
                 .Property(x => x.LocationId)

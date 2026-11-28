@@ -25,5 +25,6 @@ public enum WidgetType
     OperationsAlerts = 20,
     WhatsOnToday = 21,
     ChecklistsToday = 22,
-    Checklist = 23
+    Checklist = 23,
+    LiveCapture = 24
 }

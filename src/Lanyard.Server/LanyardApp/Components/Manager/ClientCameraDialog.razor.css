@@ -1,0 +1,13 @@
+.camera-dialog {
+    width: 100%;
+}
+
+.camera-dialog ::deep .camera-name {
+    color: var(--colorNeutralForeground3);
+    overflow-wrap: anywhere;
+}
+
+.camera-dialog ::deep .camera-picker {
+    width: 100%;
+    max-width: 420px;
+}

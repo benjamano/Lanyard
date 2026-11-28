@@ -3,7 +3,10 @@
 @using Lanyard.Infrastructure.DTO.VideoDevices
 @using Lanyard.Infrastructure.Models
 @using Lanyard.Application.Services
+@using Lanyard.Application.Services.Projection
 @using Lanyard.Application.Services.Projection.Bindings
+@using Lanyard.App.Components.Dashboards.Designer.Settings
+@using Lanyard.Infrastructure.Enum
 
 @inject DragStateService DragState
 @inject INotificationService _toastService
@@ -40,20 +43,35 @@
                         </FluentBadge>
                     }
                 </FluentStack>
+
+                @if (GameWaitStepNames.IsWaitForGame(step.Template?.Name))
+                {
+                    <div class="step-summary">@GameWaitSummary(step)</div>
+                }
                 
                 @if (step.Template?.Parameters.Any() == true)
                 {
                     <FluentAccordion Size="@AccordionItemSize.Large">
-                        <FluentAccordionItem class="mt-2" Expanded="false">
+                        @* A Wait for Game step can't play until its event and kiosk are chosen, so its
+                           settings start open. *@
+                        <FluentAccordionItem class="mt-2" Expanded="@GameWaitStepNames.IsWaitForGame(step.Template?.Name)">
                             <HeaderTemplate>
                                 <FluentIcon Value="@(new Icons.Regular.Size20.TaskListRtl())"></FluentIcon>
-                                Parameters (@step.Template.Parameters.Count)
+                                Parameters (@VisibleParameterCount(step))
                             </HeaderTemplate>
                             <ChildContent>
                                 <FluentGrid Spacing="3">
                                 @foreach (ProjectionProgramStepTemplateParameter parameter in step.Template.Parameters)
                                 {
                                     if (!parameterValueDict.TryGetValue(parameter.Id, out ProjectionProgramParameterValue? paramValue))
+                                    {
+                                        continue;
+                                    }
+
+                                    // Seconds Left only means something when waiting for the time left.
+                                    if (parameter.Name == GameWaitStepNames.SecondsLeftParameter
+                                        && GameWaitStepNames.IsWaitForGame(step.Template?.Name)
+                                        && GameWaitEvent(step) != ProjectionGameEvent.TimeLeftBelow)
                                     {
                                         continue;
                                     }
@@ -65,7 +83,42 @@
                                         || string.Equals(parameter.DataType, "VideoFile", StringComparison.OrdinalIgnoreCase);
 
                                     <FluentGridItem Xs="12">
-                                        @if (string.Equals(parameter.DataType, "Dashboard", StringComparison.OrdinalIgnoreCase))
+                                        @if (parameter.DataType == GameWaitStepNames.GameEventDataType)
+                                        {
+                                            <FluentSelect Class="w-100"
+                                                          @bind-Value="paramValue.Value"
+                                                          TOption="string"
+                                                          TValue="string"
+                                                          Label="Wait until"
+                                                          Required="true">
+                                                <FluentOption Value="@string.Empty">Choose an event...</FluentOption>
+                                                @foreach (ProjectionGameEvent gameEvent in GameWaitStepNames.Events)
+                                                {
+                                                    <FluentOption Value="@gameEvent.ToString()">@GameWaitStepNames.EventLabel(gameEvent)</FluentOption>
+                                                }
+                                            </FluentSelect>
+                                        }
+                                        else if (parameter.DataType == GameWaitStepNames.LaserKioskDataType)
+                                        {
+                                            <KioskPicker Value="@ParseKioskId(paramValue.Value)"
+                                                         ValueChanged="@(id => paramValue.Value = id?.ToString() ?? string.Empty)"
+                                                         Label="@parameter.Name"
+                                                         LaserGameKiosksOnly="true"
+                                                         Required="true" />
+                                        }
+                                        else if (string.Equals(parameter.DataType, "Integer", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            <FluentTextInput @bind-Value="@paramValue.Value"
+                                                             Label="@parameter.Name"
+                                                             TextInputType="TextInputType.Number"
+                                                             Appearance="TextInputAppearance.Outline"
+                                                             Required="@(parameter.IsRequired || parameter.Name == GameWaitStepNames.SecondsLeftParameter)"></FluentTextInput>
+                                            @if (!string.IsNullOrWhiteSpace(parameter.Description))
+                                            {
+                                                <div class="parameter-hint">@parameter.Description</div>
+                                            }
+                                        }
+                                        else if (string.Equals(parameter.DataType, "Dashboard", StringComparison.OrdinalIgnoreCase))
                                         {
                                             <FluentSelect Class="w-100"
                                                           @bind-Value="paramValue.Value"
@@ -146,6 +199,7 @@
     private static readonly string[] VideoExtensions = [".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v", ".wmv"];
     private List<Dashboard> dashboards = [];
     private List<ActiveVideoDeviceInfoDTO> videoDevices = [];
+    private Dictionary<Guid, string> kioskNames = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -170,6 +224,80 @@
         {
             videoDevices = [];
         }
+
+        // Names for the Wait for Game summary line; the pickers load their own lists.
+        Result<IEnumerable<ClientConnectedWithCapabilitiesDTO>> kioskResult = await _clientService.GetClientsWithCapabilitiesAsync();
+
+        kioskNames = kioskResult.IsSuccess && kioskResult.Data is not null
+            ? kioskResult.Data.ToDictionary(c => c.Id, c => c.Name)
+            : [];
+    }
+
+    /// <summary>Adds a step at the end without dragging, from the toolbox's Add button.</summary>
+    public async Task AddStepAtEndAsync(ProjectionProgramStepTemplate template)
+    {
+        if (SelectedProgram is null)
+        {
+            _toastService.ShowWarning("Please select a projection program to add steps to!");
+            return;
+        }
+
+        int insertIndex = SelectedProgram.ProjectionProgramSteps.Count;
+        InsertStepAt(insertIndex, CreateNewStep(template, insertIndex, SelectedProgram.Id));
+
+        StateHasChanged();
+
+        await NotifyStepsChangedAsync();
+    }
+
+    // Seconds Left is hidden unless a Wait for Game step waits for the time left, so don't count it.
+    private static int VisibleParameterCount(ProjectionProgramStep step)
+    {
+        int count = step.Template?.Parameters.Count ?? 0;
+
+        bool hidesSecondsLeft = GameWaitStepNames.IsWaitForGame(step.Template?.Name)
+            && GameWaitEvent(step) != ProjectionGameEvent.TimeLeftBelow
+            && step.Template!.Parameters.Any(p => p.Name == GameWaitStepNames.SecondsLeftParameter);
+
+        return hidesSecondsLeft ? count - 1 : count;
+    }
+
+    private static Guid? ParseKioskId(string? value) =>
+        Guid.TryParse(value, out Guid id) && id != Guid.Empty ? id : null;
+
+    private static string? ParameterValueByName(ProjectionProgramStep step, string parameterName)
+    {
+        ProjectionProgramStepTemplateParameter? parameter = step.Template?.Parameters.FirstOrDefault(p => p.Name == parameterName);
+
+        return parameter is null ? null : step.ParameterValues.FirstOrDefault(v => v.ParameterId == parameter.Id)?.Value;
+    }
+
+    private static ProjectionGameEvent? GameWaitEvent(ProjectionProgramStep step) =>
+        Enum.TryParse(ParameterValueByName(step, GameWaitStepNames.GameEventParameter), out ProjectionGameEvent gameEvent)
+            && Enum.IsDefined(gameEvent)
+            ? gameEvent
+            : null;
+
+    private string GameWaitSummary(ProjectionProgramStep step)
+    {
+        ProjectionGameEvent? gameEvent = GameWaitEvent(step);
+
+        if (gameEvent is null)
+        {
+            return "Choose what to wait for";
+        }
+
+        int? secondsLeft = int.TryParse(ParameterValueByName(step, GameWaitStepNames.SecondsLeftParameter), out int seconds) ? seconds : null;
+        string summary = $"Waits for {GameWaitStepNames.WaitingFor(gameEvent.Value, secondsLeft)}";
+
+        Guid? kioskId = ParseKioskId(ParameterValueByName(step, GameWaitStepNames.LaserKioskParameter));
+
+        if (kioskId is null)
+        {
+            return $"{summary} · choose a laser kiosk";
+        }
+
+        return kioskNames.TryGetValue(kioskId.Value, out string? name) ? $"{summary} on {name}" : summary;
     }
 
     private void OnDropAtIndex(DragEventArgs e, int insertIndex)

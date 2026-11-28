@@ -217,6 +217,10 @@ public class MusicTimelineWidget : DashboardWidget
 
     public Guid? ClientId { get; set; }
     public bool ShowSongTitle { get; set; } = true;
+
+    // Off by default so dashboards saved before this option keep their look; the slider and EQ
+    // button make the widget taller, which a small wall-screen tile may not have room for.
+    public bool ShowVolumeAndEq { get; set; }
 }
 
 // Deliberately not scoped to a single ClientId like the other client-facing widgets: the
@@ -552,4 +556,32 @@ public class WhatsOnTodayWidget : DashboardWidget
 
     public int MaxItems { get; set; }
     public int? LocationId { get; set; }
+}
+
+// A kiosk's camera or capture card, live, streamed over the same WebRTC path as the projection
+// Live Capture step. On a kiosk it plays as that kiosk (its viewer token); on a signed-in
+// dashboard only Admins and Managers see it. The designer never opens a stream.
+public class LiveCaptureWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public LiveCaptureWidget()
+    {
+        Type = WidgetType.LiveCapture;
+
+        GridW = 4;
+        GridH = 3;
+
+        EnableAudio = false;
+        FillTile = false;
+    }
+
+    // The kiosk the camera is plugged into, and the camera's name as that kiosk reported it.
+    public Guid? ClientId { get; set; }
+    public string? DeviceName { get; set; }
+
+    // Off by default. In a browser the sound still starts muted until someone unmutes it.
+    public bool EnableAudio { get; set; }
+
+    // Crop to fill the tile rather than letterboxing the whole picture.
+    public bool FillTile { get; set; }
 }

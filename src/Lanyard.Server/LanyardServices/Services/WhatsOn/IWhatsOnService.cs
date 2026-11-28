@@ -9,4 +9,8 @@ namespace Lanyard.Application.Services.WhatsOn;
 public interface IWhatsOnService
 {
     Task<Result<WhatsOnRange>> GetRangeAsync(LocationScope scope, int locationId, DateOnly from, DateOnly to, bool includeCancelled = false);
+
+    // One day for a dashboard's What's on today widget, shown to anyone who can see the dashboard,
+    // including signed-out kiosk screens. Checked against the dashboard's company, not the viewer.
+    Task<Result<WhatsOnDay>> GetDashboardDayAsync(int companyId, int locationId, DateOnly day);
 }

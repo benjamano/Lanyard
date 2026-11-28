@@ -1,0 +1,76 @@
+@* What a running "Wait for Game" step is waiting for, and a warning when its laser kiosk isn't
+   reporting a game (so the step can only move on by timing out or being skipped). Shared by
+   Live Projection Control and the Projection Status widget. *@
+@implements IDisposable
+@using Lanyard.Application.Services.Projection
+
+@inject ILaserGameStatusStore _laserGameStatusStore
+
+<div class="game-wait">
+<FluentStack Orientation="@Orientation.Vertical" VerticalGap="2" Width="auto">
+    @* No wrap: the text wraps beside the icon instead of the icon sitting on a line of its own. *@
+    <FluentStack Orientation="@Orientation.Horizontal" HorizontalGap="6" VerticalAlignment="@VerticalAlignment.Top" Width="auto">
+        <FluentIcon Value="@(new Icons.Regular.Size16.HourglassHalf())" Color="Color.Primary" Class="game-wait-icon" />
+        <FluentText Size="@(Compact ? TextSize.Size200 : TextSize.Size300)">
+            Waiting for @GameWaitStepNames.WaitingFor(Wait.Event, Wait.SecondsLeft) on @Wait.KioskName
+            @if (!Compact && Wait.GiveUpAfterMinutes is int minutes)
+            {
+                <text> &middot; gives up after @(minutes == 1 ? "1 minute" : $"{minutes} minutes")</text>
+            }
+        </FluentText>
+    </FluentStack>
+
+    @if (!isReporting)
+    {
+        <FluentStack Orientation="@Orientation.Horizontal" HorizontalGap="6" VerticalAlignment="@VerticalAlignment.Top" Width="auto">
+            <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Color="Color.Warning" Class="game-wait-icon" />
+            <FluentText Size="TextSize.Size200" Color="Color.Warning">@Wait.KioskName isn't reporting a game</FluentText>
+        </FluentStack>
+    }
+</FluentStack>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public ProjectionGameWaitState Wait { get; set; } = default!;
+
+    [Parameter]
+    public bool Compact { get; set; }
+
+    // The store raises nothing when a kiosk disconnects (it just drops its status), so this polls
+    // a dictionary lookup instead of listening to every kiosk's publishes.
+    private static readonly TimeSpan CheckInterval = TimeSpan.FromSeconds(2);
+
+    private Timer? _timer;
+    private bool isReporting = true;
+
+    protected override void OnInitialized()
+    {
+        _timer = new Timer(_ => CheckReporting(), null, CheckInterval, CheckInterval);
+    }
+
+    protected override void OnParametersSet()
+    {
+        isReporting = IsKioskReporting();
+    }
+
+    private bool IsKioskReporting() => _laserGameStatusStore.TryGetStatus(Wait.KioskClientId, out _);
+
+    private void CheckReporting()
+    {
+        bool reporting = IsKioskReporting();
+
+        if (reporting == isReporting)
+        {
+            return;
+        }
+
+        isReporting = reporting;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+}
