@@ -72,6 +72,10 @@
                 {
                     <FluentText Class="schedule-hint">The days the location opens. A late close after midnight counts as the day before.</FluentText>
                 }
+                @if (locationUsesHolidays == true)
+                {
+                    <FluentText Class="schedule-hint">Skips days marked Closed under Rota › Holidays. On a bank holiday, opening and closing follow the hours of the day it's staffed like (or its usual hours, if the venue never opens on that day).</FluentText>
+                }
             </div>
 
             @if (errorMessage is not null)
@@ -128,6 +132,7 @@
     private int offsetMinutes = 15;
     private HashSet<DayOfWeek> days = [];
     private bool? locationHasHours;
+    private bool? locationUsesHolidays;
     private string? errorMessage;
     private bool isSaving;
 
@@ -169,11 +174,23 @@
     private async Task CheckHoursAsync()
     {
         locationHasHours = null;
+        locationUsesHolidays = null;
 
-        if (int.TryParse(locationValue, out int locationId))
+        string? asked = locationValue;
+
+        if (int.TryParse(asked, out int locationId))
         {
             Result<bool> result = await _scheduleService.LocationHasHoursAsync(locationId);
+            Result<bool> holidays = await _scheduleService.LocationUsesHolidaysAsync(locationId);
+
+            // The location may have changed while these were loading; only the latest one counts.
+            if (asked != locationValue)
+            {
+                return;
+            }
+
             locationHasHours = result.IsSuccess ? result.Data : null;
+            locationUsesHolidays = holidays.IsSuccess ? holidays.Data : null;
         }
     }
 

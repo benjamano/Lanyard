@@ -45,12 +45,16 @@ public class AudioClipScheduleService(
                 .ToDictionary(x => x.Key, x => x.ToList());
 
             DateTime venueLocal = RotaTime.ToVenueLocal(timeProvider.GetUtcNow().UtcDateTime);
+            DateOnly today = DateOnly.FromDateTime(venueLocal);
+
+            // The preview looks a fortnight ahead, so it skips Closed days in that time too.
+            Dictionary<int, List<RotaHoliday>> holidays = await RotaHolidayQueries.ForLocationsAsync(ctx, locationIds, today.AddDays(-1), today.AddDays(16));
 
             return Result<List<AudioClipScheduleSummary>>.Ok(schedules
                 .Select(x =>
                 {
                     List<LocationOpeningHours> windows = hours.GetValueOrDefault(x.LocationId) ?? [];
-                    return new AudioClipScheduleSummary(x, AudioClipScheduleRules.Upcoming(x, windows, venueLocal), windows.Count > 0);
+                    return new AudioClipScheduleSummary(x, AudioClipScheduleRules.Upcoming(x, windows, venueLocal, holidays: holidays.For(x.LocationId)), windows.Count > 0);
                 })
                 .ToList());
         }
@@ -223,11 +227,37 @@ public class AudioClipScheduleService(
         }
     }
 
+    public async Task<Result<bool>> LocationUsesHolidaysAsync(int locationId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await factory.CreateDbContextAsync();
+
+            // Locations are tenant-filtered, so another company's location reads as not found.
+            if (!await ctx.Locations.AsNoTracking().AnyAsync(x => x.Id == locationId))
+            {
+                return Result<bool>.Fail("Location not found.");
+            }
+
+            return Result<bool>.Ok(await Features.CompanyFeatureQueries.IsEnabledForLocationAsync(ctx, locationId, CompanyFeature.StaffScheduling));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to check whether location {LocationId} uses rota holidays", locationId);
+            return Result<bool>.Fail($"Failed to check the location's holidays: {ex.Message}");
+        }
+    }
+
     public async Task<Result<bool>> LocationHasHoursAsync(int locationId)
     {
         try
         {
             await using ApplicationDbContext ctx = await factory.CreateDbContextAsync();
+
+            if (!await ctx.Locations.AsNoTracking().AnyAsync(x => x.Id == locationId))
+            {
+                return Result<bool>.Fail("Location not found.");
+            }
 
             return Result<bool>.Ok(await ctx.LocationOpeningHours.AsNoTracking().AnyAsync(x => x.LocationId == locationId && x.IsActive));
         }

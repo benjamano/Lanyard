@@ -50,6 +50,76 @@ public class OpeningHoursTodayBindingSourceTests
         await ctx.SaveChangesAsync();
     }
 
+    private static async Task AddHolidayAsync(DbContextOptions<ApplicationDbContext> options, RotaHolidayKind kind, string name, DayOfWeek? like = null, bool staffScheduling = true)
+    {
+        await using ApplicationDbContext ctx = new(options);
+        DateOnly today = DateOnly.FromDateTime(RotaTime.ToVenueLocal(NowUtc));
+
+        ctx.RotaHolidays.Add(new RotaHoliday
+        {
+            Id = Guid.NewGuid(), CompanyId = CompanyId, LocationId = LocationId, Name = name, Kind = kind,
+            StartDate = today, EndDate = today, StaffLike = like
+        });
+
+        if (staffScheduling)
+        {
+            ctx.LocationFeatureSettings.Add(new LocationFeatureSetting { LocationId = LocationId, Feature = CompanyFeature.StaffScheduling, IsEnabled = true });
+        }
+
+        await ctx.SaveChangesAsync();
+    }
+
+    [TestMethod]
+    public async Task ClosedDay_SaysClosedTodayAndWhy_EvenWithNoHoursSet()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedAsync(options, CompanyId);
+        await AddHolidayAsync(options, RotaHolidayKind.Closed, "Christmas Day");
+
+        Result<string?> result = await ResolveAsync(CreateSource(options));
+
+        Assert.AreEqual("Closed today – Christmas Day", result.Data);
+    }
+
+    [TestMethod]
+    public void ClosedDay_InLastNightsLateHours_SaysWhenItCloses()
+    {
+        // Friday 16 Oct 2026 18:00-02:00, Saturday closed for Christmas-style refit, 00:30 Saturday.
+        DateOnly friday = new(2026, 10, 16);
+        List<LocationOpeningHours> hours = [new() { LocationId = LocationId, DayOfWeek = DayOfWeek.Friday, OpensAt = new TimeOnly(18, 0), ClosesAt = new TimeOnly(2, 0), IsActive = true }];
+        List<RotaHoliday> holidays = [new() { CompanyId = CompanyId, LocationId = LocationId, Name = "Refit", Kind = RotaHolidayKind.Closed, StartDate = friday.AddDays(1), EndDate = friday.AddDays(1) }];
+
+        OpeningDay saturday = OpeningHoursRules.Resolve(hours, holidays, friday.AddDays(1));
+        OpeningDay fridayDay = OpeningHoursRules.Resolve(hours, holidays, friday);
+
+        Assert.AreEqual("Open until 02:00", OpeningHoursTodayBindingSource.Describe(hours, saturday, fridayDay, new DateTime(2026, 10, 17, 0, 30, 0)));
+        Assert.AreEqual("Closed today – Refit", OpeningHoursTodayBindingSource.Describe(hours, saturday, fridayDay, new DateTime(2026, 10, 17, 9, 0, 0)));
+    }
+
+    [TestMethod]
+    public async Task ClosedDay_IgnoredWhereStaffSchedulingIsOff()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedAsync(options, CompanyId, (Today, new TimeOnly(10, 0), new TimeOnly(18, 0)));
+        await AddHolidayAsync(options, RotaHolidayKind.Closed, "Refit", staffScheduling: false);
+
+        Result<string?> result = await ResolveAsync(CreateSource(options));
+
+        Assert.AreEqual("Open today 10:00 – 18:00", result.Data);
+    }
+
+    [TestMethod]
+    public async Task BankHoliday_ShowsTheStaffedLikeDaysHours()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedAsync(options, CompanyId, (Today, new TimeOnly(15, 0), new TimeOnly(19, 0)), (DayOfWeek.Sunday, new TimeOnly(10, 0), new TimeOnly(17, 0)));
+        await AddHolidayAsync(options, RotaHolidayKind.BankHoliday, "Summer bank holiday");
+
+        Result<string?> result = await ResolveAsync(CreateSource(options));
+
+        Assert.AreEqual("Open today 10:00 – 17:00", result.Data);
+    }
+
     private static Task<Result<string?>> ResolveAsync(OpeningHoursTodayBindingSource source, int? locationId = LocationId) =>
         source.ResolveAsync(new ProjectionBindingContext(CompanyId, locationId, Guid.NewGuid(), NowUtc), CancellationToken.None);
 

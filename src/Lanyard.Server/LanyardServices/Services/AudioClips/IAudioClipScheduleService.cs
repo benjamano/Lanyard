@@ -25,4 +25,7 @@ public interface IAudioClipScheduleService
 
     /// <summary>Whether the location has any opening hours set, for the dialog's warning.</summary>
     Task<Result<bool>> LocationHasHoursAsync(int locationId);
+
+    /// <summary>Whether the location's Rota Holidays apply (Staff Scheduling is on), for the dialog's hint.</summary>
+    Task<Result<bool>> LocationUsesHolidaysAsync(int locationId);
 }
