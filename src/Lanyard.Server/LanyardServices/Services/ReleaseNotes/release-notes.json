@@ -1164,5 +1164,13 @@
       "Coming back to Lanyard on a phone after pressing the home button now reconnects in about a second, instead of showing Reconnecting for a minute or more. If the phone's network is still waking up, it reconnects within a few seconds of the network coming back.",
       "The Now playing dashboard widget can now show the kiosk's volume slider and EQ button: turn on Show volume and EQ in the widget's settings. They work the same as on the Music page."
     ]
+  },
+  {
+    "version": "1.4.42",
+    "releaseDate": "2026-11-28",
+    "summary": "Gun names now show on the laser scoreboard widget.",
+    "details": [
+      "The laser scoreboard dashboard widget's Name column was blank. It now shows each player's gun, such as Gun 4, and sorting by Name puts guns in number order."
+    ]
   }
 ]
