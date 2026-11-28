@@ -99,13 +99,20 @@ a.dashboard-card-preview:focus-visible {
 
 .dashboard-card-actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 2px;
+    gap: 6px 2px;
     padding: 6px 10px 10px;
 }
 
 .dashboard-card-actions-spacer {
     flex: 1 1 auto;
+}
+
+.dashboard-card-open {
+    display: flex;
+    gap: 6px;
+    margin-left: auto;
 }
 
 .dashboards-empty {
