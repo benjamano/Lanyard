@@ -25,6 +25,7 @@ else
                   Placeholder="@(NoneText ?? "Choose a kiosk")"
                   Value="@(Value?.ToString() ?? string.Empty)"
                   ValueChanged="OnChangedAsync"
+                  Required="@Required"
                   Width="100%" />
 }
 
@@ -41,6 +42,10 @@ else
     // What no choice means, when that's allowed ("All kiosks"). Null means a kiosk must be chosen.
     [Parameter]
     public string? NoneText { get; set; }
+
+    // Marks the field as required (an asterisk); choosing is still enforced by whoever saves it.
+    [Parameter]
+    public bool Required { get; set; }
 
     // Only kiosks running a Begeara 2 laser game scoreboard, which is what the game widgets read.
     [Parameter]

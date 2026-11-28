@@ -196,6 +196,18 @@
     {
         if (_editor is not null && _loadedWidgetId != Widget.Id)
         {
+            // Teach Quill the divider (<hr>) tag first, or loading drops any saved dividers. Kept
+            // apart from the load below: if this fails (e.g. a browser still holding an older copy
+            // of the script), losing the dividers is better than the editor never loading the text.
+            try
+            {
+                _editorModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/kioskWidgetEditor.js");
+                await _editorModule.InvokeVoidAsync("kioskWidgetEditor.registerDivider");
+            }
+            catch (Microsoft.JSInterop.JSException)
+            {
+            }
+
             try
             {
                 await _editor.LoadHTMLContent(Widget.Content ?? string.Empty);

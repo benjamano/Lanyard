@@ -1,4 +1,5 @@
-﻿using Lanyard.Application.Services.Projection.Bindings;
+﻿using Lanyard.Application.Services.Projection;
+using Lanyard.Application.Services.Projection.Bindings;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
@@ -248,6 +249,13 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
                 return Result<bool>.Fail(bindingError);
             }
 
+            string? gameWaitError = await ValidateGameWaitStepsAsync(ctx, programId, stepsList);
+
+            if (gameWaitError is not null)
+            {
+                return Result<bool>.Fail(gameWaitError);
+            }
+
             List<ProjectionProgramStep> existingSteps = await ctx.ProjectionProgramSteps
                 .Include(x => x.ParameterValues)
                 .Where(x => x.ProjectionProgramId == programId && x.IsActive)
@@ -261,7 +269,7 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
                 existingStep.SortOrder = step.SortOrder;
                 existingStep.TemplateId = step.TemplateId;
 
-                await UpdateParameterValues(existingStep, step.ParameterValues);
+                UpdateParameterValues(ctx, existingStep, step.ParameterValues);
             }
 
             foreach (ProjectionProgramStep newStep in stepsList.Where(x => !existingStepsDict.ContainsKey(x.Id)))
@@ -342,10 +350,14 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
         return null;
     }
 
-    private async Task UpdateParameterValues(ProjectionProgramStep existingStep, List<ProjectionProgramParameterValue> newParameterValues)
+    /// <summary>
+    /// Brings an existing step's values in line with the editor's. Adds and removes go on the
+    /// caller's context, which saves them with the rest of the steps: they used to go on a
+    /// context of their own that was never saved, so a value added to a step that already existed
+    /// (or one taken away) was silently lost.
+    /// </summary>
+    private static void UpdateParameterValues(ApplicationDbContext ctx, ProjectionProgramStep existingStep, List<ProjectionProgramParameterValue> newParameterValues)
     {
-        await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
-
         Dictionary<Guid, ProjectionProgramParameterValue> existingValuesDict = existingStep.ParameterValues.ToDictionary(x => x.ParameterId);
 
         foreach (ProjectionProgramParameterValue newValue in newParameterValues)
@@ -373,8 +385,88 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
         {
             ctx.Remove(valueToRemove);
         }
+    }
 
-        //await _clientService.SendUpdatedProjectionProgramInfoToClientsAsync(existingStep.ProjectionProgramId);
+    /// <summary>
+    /// A "Wait for Game" step needs a game event it knows, a laser kiosk in this program's
+    /// company, and sensible numbers - the same rules the runner applies when the program starts,
+    /// so a program that saves can always play. Returns the error to show, or null.
+    /// </summary>
+    private static async Task<string?> ValidateGameWaitStepsAsync(ApplicationDbContext ctx, Guid programId, List<ProjectionProgramStep> steps)
+    {
+        HashSet<Guid> templateIds = [.. steps.Select(s => s.TemplateId)];
+
+        List<Guid> waitTemplateIds = await ctx.ProjectionProgramStepTemplates
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(t => templateIds.Contains(t.Id) && t.Name == GameWaitStepNames.Template)
+            .Select(t => t.Id)
+            .ToListAsync();
+
+        if (waitTemplateIds.Count == 0)
+        {
+            return null;
+        }
+
+        Dictionary<Guid, string> parameterNames = await ctx.ProjectionProgramStepTemplateParameters
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(p => waitTemplateIds.Contains(p.TemplateId) && p.IsActive)
+            .ToDictionaryAsync(p => p.Id, p => p.Name);
+
+        Dictionary<ProjectionProgramStep, GameWaitSettings> waits = [];
+
+        foreach (ProjectionProgramStep step in steps.Where(s => waitTemplateIds.Contains(s.TemplateId)).OrderBy(s => s.SortOrder))
+        {
+            Dictionary<string, string?> values = new(StringComparer.Ordinal);
+
+            foreach (ProjectionProgramParameterValue value in step.ParameterValues)
+            {
+                if (parameterNames.TryGetValue(value.ParameterId, out string? name))
+                {
+                    values[name] = value.Value;
+                }
+            }
+
+            Result<GameWaitSettings> parsed = GameWaitSettings.Parse(values);
+
+            if (!parsed.IsSuccess)
+            {
+                return $"Step {step.SortOrder + 1} ({GameWaitStepNames.Template}): {parsed.Error}";
+            }
+
+            waits[step] = parsed.Data!;
+        }
+
+        // The editor's context is tenant-filtered, but the company is compared explicitly too, so
+        // the check still holds if this ever runs on an unfiltered context.
+        int? companyId = await ctx.ProjectionPrograms
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(p => p.Id == programId)
+            .Select(p => (int?)p.CompanyId)
+            .FirstOrDefaultAsync();
+
+        List<Guid> kioskIds = [.. waits.Values.Select(w => w.KioskClientId).Distinct()];
+
+        HashSet<Guid> companyKiosks = companyId is null
+            ? []
+            : [.. await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(c => kioskIds.Contains(c.Id) && c.CompanyId == companyId.Value)
+                .Select(c => c.Id)
+                .ToListAsync()];
+
+        foreach ((ProjectionProgramStep step, GameWaitSettings settings) in waits.OrderBy(w => w.Key.SortOrder))
+        {
+            if (!companyKiosks.Contains(settings.KioskClientId))
+            {
+                return $"Step {step.SortOrder + 1} ({GameWaitStepNames.Template}): that laser kiosk isn't available. Choose another.";
+            }
+        }
+
+        return null;
     }
 
     public async Task<Result<bool>> DeleteProjectionProgramStepAsync(Guid id)

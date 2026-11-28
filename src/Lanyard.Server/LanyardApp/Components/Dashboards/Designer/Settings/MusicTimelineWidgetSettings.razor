@@ -3,4 +3,5 @@
 <div class="widget-settings">
     <KioskPicker Value="@W.ClientId" ValueChanged="@(v => SetAsync(() => { W.ClientId = v; }, "Chose a kiosk"))" Label="Kiosk playing the music" />
     <FluentSwitch Value="@W.ShowSongTitle" ValueChanged="@(v => SetAsync(() => W.ShowSongTitle = v, v ? "Showed the song title" : "Hid the song title"))" Label="Show the song title" />
+    <FluentSwitch Value="@W.ShowVolumeAndEq" ValueChanged="@(v => SetAsync(() => W.ShowVolumeAndEq = v, v ? "Showed volume and EQ" : "Hid volume and EQ"))" Label="Show volume and EQ" />
 </div>

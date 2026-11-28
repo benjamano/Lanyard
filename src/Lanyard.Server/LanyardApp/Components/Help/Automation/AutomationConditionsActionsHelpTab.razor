@@ -24,7 +24,12 @@
     <HelpSection Title="Actions">
         <FluentText>Each action has a <strong>Target Client</strong>, the kiosk it acts on:</FluentText>
         <ul>
-            <li><strong>Music Control</strong>: change the music, for example play a playlist.</li>
+            <li><strong>Music Control</strong>: <strong>Play</strong> or <strong>Pause</strong> the music. Play can start a
+                <strong>Playlist</strong>, and can set <strong>Shuffle</strong> (On or Off) and <strong>Repeat</strong>
+                (Off, Repeat playlist or Repeat song), or leave them as they are. With a playlist chosen, tick
+                <strong>If this playlist is already playing or paused, carry on where it left off</strong> so Play picks up
+                where the music paused instead of starting the playlist again from the top. If something else is loaded,
+                or the music was stopped, the playlist starts from the top as normal.</li>
             <li><strong>Start Projection Program</strong> and <strong>Stop Projection Program</strong>: on a chosen screen,
                 or the client's default. Screens are listed as Screen 1, Screen 2 and so on; the # button beside
                 <strong>Screen</strong> shows each number on the kiosk's screens for 8 seconds, so you can check which is
@@ -37,5 +42,9 @@
                 voice, so <strong>Time remaining drops below</strong> 120 seconds with Play Audio Clip makes a two minute warning.
                 The kiosk downloads the clip when the rule is saved, so it plays straight away.</li>
         </ul>
+        <HelpNote>
+            For example, to play music only while a game is on: one rule for when the game starts with Music Control,
+            Play, your playlist and carry on where it left off ticked, and one for when it ends with Music Control, Pause.
+        </HelpNote>
     </HelpSection>
 </HelpTab>

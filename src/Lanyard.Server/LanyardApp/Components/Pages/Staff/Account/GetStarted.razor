@@ -1,0 +1,580 @@
+@page "/get-started"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+@using Lanyard.App.Components.Accounts
+@using Lanyard.App.Components.Notifications
+@using Lanyard.App.Extensions
+@using Lanyard.Application.Services.Notifications
+@using Lanyard.Infrastructure.Enum
+@using Lib.Net.Http.WebPush
+
+@implements IAsyncDisposable
+
+@inject IJSRuntime JS
+@inject IPushSender PushSender
+@inject IPushSubscriptionService PushSubscriptionService
+@inject IPasskeyService PasskeyService
+@inject ICompanyFeatureService CompanyFeatures
+@inject ILogger<GetStarted> Logger
+
+<PageTitle>Get Started</PageTitle>
+
+@* The page staff open (from a QR code at a staff meeting, or straight after setting their password)
+   to get their phone ready: the app on the Home Screen, notifications on, and optionally Face ID or
+   fingerprint sign-in. The decision of what each step shows lives in GetStartedSteps. *@
+<div class="get-started-page">
+    <div class="get-started-header">
+        <div class="get-started-title">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size700" role="heading" aria-level="1">
+                @(string.IsNullOrEmpty(firstName) ? "Get set up on Lanyard" : $"Hi {firstName}, let's get you set up")
+            </FluentText>
+            @if (status is not null)
+            {
+                <FluentText Class="get-started-progress">@status.StepsDone of @status.StepsTotal done</FluentText>
+            }
+        </div>
+        <HelpButton AreaKey="@HelpRegistry.GetStarted" />
+    </div>
+
+    @if (loadFailed)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">
+            Couldn't check this device. Check your connection and try again.
+        </FluentMessageBar>
+        <div>
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowClockwise())"
+                          OnClick="RetryAsync">Try again</FluentButton>
+        </div>
+    }
+    else if (status is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentSpinner />
+            <FluentText>Checking this device...</FluentText>
+        </FluentStack>
+    }
+    else
+    {
+        @if (status.AllSet)
+        {
+            <div class="get-started-done" role="status">
+                <FluentIcon Value="@(new Icons.Filled.Size32.CheckmarkCircle())" Color="Color.Custom" CustomColor="var(--colorStatusSuccessForeground1)" />
+                <div>
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">You're all ready to use @installLinks.AppName</FluentText>
+                    <FluentText>Your rota, shift reminders and messages will come to this phone.</FluentText>
+                </div>
+            </div>
+        }
+        else if (!device!.IsPhoneOrTablet)
+        {
+            <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                You're on a computer. Open this page on your phone as well - that's where the app and shift reminders matter most.
+            </FluentMessageBar>
+        }
+
+        <ol class="get-started-steps">
+            @if (status.Install != GetStartedInstall.NotNeeded)
+            {
+                <li class="get-started-step @(status.Install == GetStartedInstall.Done ? "is-done" : "")">
+                    <GetStartedStepMarker Number="1" Done="@(status.Install == GetStartedInstall.Done)" />
+                    <div class="get-started-step-body">
+                        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500" role="heading" aria-level="2">Put @installLinks.AppName on your Home Screen</FluentText>
+
+                        @if (status.Install == GetStartedInstall.Done)
+                        {
+                            <FluentText>Done - you're using the app.</FluentText>
+                        }
+                        else if (installAccepted)
+                        {
+                            <FluentText>Installed. Open <strong>@installLinks.AppName</strong> from your home screen, then come back to this page from there to finish.</FluentText>
+                        }
+                        else
+                        {
+                            <FluentText>
+                                @(device!.IsApple
+                                    ? "It opens like any other app, full screen, and it's the only way to get notifications on an iPhone or iPad."
+                                    : "It opens full screen from your home screen, like any other app.")
+                            </FluentText>
+
+                            @if (canPromptNatively)
+                            {
+                                <div>
+                                    <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ArrowDownload())"
+                                                  OnClick="InstallAsync">Install @installLinks.AppName</FluentButton>
+                                </div>
+                            }
+                            else
+                            {
+                                <InstallSteps Device="@(device!)" AppName="@installLinks.AppName" IconHref="@installLinks.AppleTouchIconHref" />
+                            }
+
+                            @if (device!.IsApple)
+                            {
+                                <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                                    Once it's added, open @installLinks.AppName from your Home Screen, then scan the code again
+                                    (or open your account › <strong>Set up this device</strong>) to turn on notifications.
+                                </FluentMessageBar>
+                            }
+                        }
+                    </div>
+                </li>
+            }
+
+            <li class="get-started-step @(status.Notifications == GetStartedNotifications.On ? "is-done" : "")">
+                <GetStartedStepMarker Number="@(NotificationsNumber)" Done="@(status.Notifications == GetStartedNotifications.On)" />
+                <div class="get-started-step-body">
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500" role="heading" aria-level="2">
+                        @(device!.IsPhoneOrTablet ? "Turn on notifications" : "Notifications on this computer (optional)")
+                    </FluentText>
+
+                    @switch (status.Notifications)
+                    {
+                        case GetStartedNotifications.ServerOff:
+                            <FluentText Class="get-started-muted">Phone notifications aren't switched on for Lanyard yet. You'll still get emails.</FluentText>
+                            break;
+
+                        case GetStartedNotifications.NeedsInstall:
+                            <FluentText Class="get-started-muted">Do step 1 first. On iPhone and iPad, notifications only work from the app on your Home Screen.</FluentText>
+                            break;
+
+                        case GetStartedNotifications.IosTooOld:
+                            <FluentText Class="get-started-muted">
+                                Notifications need iOS 16.4 or later. Update your phone in Settings › General › Software Update, then come back here.
+                            </FluentText>
+                            break;
+
+                        case GetStartedNotifications.Unsupported:
+                            <FluentText Class="get-started-muted">
+                                This browser can't show notifications. Open this page in @(device!.IsApple ? "Safari" : "Chrome") instead.
+                            </FluentText>
+                            break;
+
+                        case GetStartedNotifications.Blocked:
+                            <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                                Notifications are blocked for @installLinks.AppName. @BlockedHelp Then come back here.
+                            </FluentMessageBar>
+                            <div>
+                                <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowClockwise())"
+                                              OnClick="RefreshAsync">Check again</FluentButton>
+                            </div>
+                            break;
+
+                        case GetStartedNotifications.On:
+                            <FluentText>Done - shift reminders, rota changes and messages will arrive here.</FluentText>
+                            break;
+
+                        default:
+                            <FluentText>So you hear about new rotas, shift changes and messages straight away. Tap the button, then choose <strong>Allow</strong>.</FluentText>
+                            <div>
+                                @* Plain element: the permission request must run inside the tap itself (see lanyardPush.js). *@
+                                <button type="button" class="get-started-enable" @ref="enableButton" disabled="@isBusy">
+                                    @(isBusy ? "Turning on..." : "Turn on notifications")
+                                </button>
+                            </div>
+                            break;
+                    }
+
+                    @if (status.CanSendTest)
+                    {
+                        <div class="get-started-test">
+                            @switch (testState)
+                            {
+                                case TestState.NotSent:
+                                    <FluentText>Check it works:</FluentText>
+                                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Send())"
+                                                  Loading="@isBusy" Disabled="@isBusy" OnClick="SendTestAsync">Send me a test</FluentButton>
+                                    break;
+
+                                case TestState.Sent:
+                                    <FluentText>Test sent. Did it arrive?</FluentText>
+                                    <div class="get-started-actions">
+                                        <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => testState = TestState.Arrived)">Yes</FluentButton>
+                                        <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => testState = TestState.Missing)">No</FluentButton>
+                                    </div>
+                                    break;
+
+                                case TestState.Arrived:
+                                    <FluentText>
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.Checkmark())" Color="Color.Custom" CustomColor="var(--colorStatusSuccessForeground1)" />
+                                        Notifications are working.
+                                    </FluentText>
+                                    break;
+
+                                case TestState.Missing:
+                                    <div class="get-started-tips">
+                                        <FluentText Weight="TextWeight.Semibold">If the test didn't show up:</FluentText>
+                                        <ul>
+                                            <li>Check Do Not Disturb or Focus isn't on.</li>
+                                            <li>Check notifications for @installLinks.AppName are allowed in your phone's Settings.</li>
+                                            <li>Battery saver can hold notifications back - try with it off.</li>
+                                            <li>Wait a minute: some phones bundle notifications together.</li>
+                                        </ul>
+                                        <div>
+                                            <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@isBusy" OnClick="SendTestAsync">Send another test</FluentButton>
+                                        </div>
+                                    </div>
+                                    break;
+                            }
+                        </div>
+                    }
+                </div>
+            </li>
+
+            <li class="get-started-step">
+                @* Never ticked: passkeys belong to the account, so one made on a laptop says nothing about this
+                   phone. The card itself lists which devices have one. *@
+                <GetStartedStepMarker Number="@(NotificationsNumber + 1)" Done="false" />
+                <div class="get-started-step-body">
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500" role="heading" aria-level="2">Sign in with Face ID or fingerprint (optional)</FluentText>
+                    <PasskeysCard OnCountChanged="OnPasskeyCountChanged" />
+                </div>
+            </li>
+        </ol>
+
+        @if (tourLinks.Count > 0)
+        {
+            <section class="get-started-tour">
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500" role="heading" aria-level="2">Find your way around</FluentText>
+                <div class="get-started-tiles">
+                    @foreach (TourLink link in tourLinks)
+                    {
+                        <a class="get-started-tile" href="@link.Href">
+                            <FluentIcon Value="@link.Icon" Color="Color.Custom" CustomColor="var(--colorBrandForeground1)" />
+                            <span class="get-started-tile-title">@link.Title</span>
+                            <span class="get-started-tile-text">@link.Text</span>
+                        </a>
+                    }
+                </div>
+            </section>
+        }
+
+        @if (isManager)
+        {
+            <section class="get-started-share">
+                <FluentText Weight="TextWeight.Semibold">Share this page with your team</FluentText>
+                <FluentText Class="get-started-muted">Put this link (or a QR code of it) on screen. Everyone signs in and lands here.</FluentText>
+                <div class="get-started-share-row">
+                    <code>@shareUrl</code>
+                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Copy())" OnClick="CopyLinkAsync">Copy link</FluentButton>
+                </div>
+            </section>
+        }
+    }
+</div>
+
+@code {
+    public const string GetStartedPath = "/get-started";
+
+    private enum TestState
+    {
+        NotSent,
+        Sent,
+        Arrived,
+        Missing
+    }
+
+    private sealed record TourLink(string Href, string Title, string Text, Icon Icon);
+
+    // Tapping the test notification opens /get-started?test=sent, so the page carries on asking
+    // whether it arrived instead of starting over.
+    [SupplyParameterFromQuery(Name = "test")]
+    public string? TestQuery { get; set; }
+
+    private GetStartedStatus? status;
+    private bool loadFailed;
+    private bool disposed;
+    private DeviceDescription? device;
+    private BrowserDevice? browser;
+    private string? browserEndpoint;
+    private string? userId;
+    private string? firstName;
+    private bool isManager;
+    private bool isBusy;
+    private bool canPromptNatively;
+    private bool installAccepted;
+    private bool bound;
+    private int passkeyCount;
+    private TestState testState = TestState.NotSent;
+    private AppInstallLinks installLinks = AppInstallLinks.Default;
+    private List<TourLink> tourLinks = [];
+    private string shareUrl = string.Empty;
+    private ElementReference enableButton;
+    private DotNetObjectReference<GetStarted>? dotNetRef;
+
+    private int NotificationsNumber => status?.Install == GetStartedInstall.NotNeeded ? 1 : 2;
+
+    private string BlockedHelp => device switch
+    {
+        { IsApple: true } => $"Open Settings › Notifications › {installLinks.AppName} and turn on Allow Notifications.",
+        { Platform: DevicePlatform.Android } when browser?.IsStandalone == true => "Long-press the app icon, choose App info › Notifications, and turn them on.",
+        { Platform: DevicePlatform.Android } => "Tap the lock or settings icon beside the address, open Notifications and allow them.",
+        _ => "Click the icon beside the address bar, open the site settings and allow notifications."
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadAsync();
+            return;
+        }
+
+        if (status?.Notifications == GetStartedNotifications.Off && !bound && PushSender.PublicKey is not null && dotNetRef is not null)
+        {
+            bound = true;
+            await PushTurnOn.BindAsync(JS, enableButton, dotNetRef, PushSender.PublicKey);
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            Result<UserProfile> user = await _securityService.GetCurrentUserProfileAsync();
+
+            if (!user.IsSuccess || user.Data is null)
+            {
+                _toastService.ShowError($"Failed to load your account: {user.Error}");
+                loadFailed = true;
+                StateHasChanged();
+                return;
+            }
+
+            userId = user.Data.Id;
+            firstName = user.Data.FirstName;
+            isManager = await _securityService.IsCurrentUserInRoleAsync("Admin") || await _securityService.IsCurrentUserInRoleAsync("Manager");
+            shareUrl = _navigationManager.ToAbsoluteUri(GetStartedPath).ToString();
+
+            Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+            if (scope is { IsSuccess: true, Data.CompanyId: int companyId })
+            {
+                Result<CompanyBrandingInfo> branding = await _companyLocationService.GetCompanyBrandingAsync(companyId);
+                if (branding is { IsSuccess: true, Data: CompanyBrandingInfo info })
+                {
+                    installLinks = AppInstallLinks.For(info);
+                }
+            }
+
+            Result<List<PasskeySummaryDto>> passkeys = await PasskeyService.GetMyPasskeysAsync();
+            passkeyCount = passkeys.Data?.Count ?? 0;
+
+            tourLinks = BuildTourLinks(await CompanyFeatures.GetHiddenFeaturesForCurrentUserAsync());
+
+            browser = await JS.InvokeAsync<BrowserDevice>("lanyardInstall.getDevice");
+            device = DeviceDescriptor.Describe(browser.Report);
+
+            if (disposed)
+            {
+                return;
+            }
+
+            dotNetRef ??= DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("lanyardInstall.watchVisible", dotNetRef);
+
+            if (TestQuery == "sent")
+            {
+                testState = TestState.Sent;
+            }
+
+            await RefreshAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (Exception ex) when (ex is JSException or TaskCanceledException or InvalidOperationException)
+        {
+            loadFailed = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RetryAsync()
+    {
+        loadFailed = false;
+        status = null;
+        await LoadAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (disposed || userId is null || device is null || browser is null)
+        {
+            return;
+        }
+
+        try
+        {
+            Result<List<PushDeviceView>> list = await PushSubscriptionService.GetForUserAsync(userId);
+            List<PushDeviceView> devices = list.Data ?? [];
+
+            BrowserPushState push = await JS.InvokeAsync<BrowserPushState>("lanyardPush.getState");
+            BrowserInstallState installState = await JS.InvokeAsync<BrowserInstallState>("lanyardInstall.getState");
+
+            browserEndpoint = push.Endpoint;
+            canPromptNatively = installState.CanPromptNatively;
+
+            status = GetStartedSteps.Evaluate(new GetStartedInput(
+                device,
+                browser.IsStandalone,
+                PushSender.IsConfigured,
+                push.Supported,
+                push.Permission,
+                push.Endpoint is not null && devices.Any(x => x.Endpoint == push.Endpoint),
+                passkeyCount));
+
+            if (status.Notifications != GetStartedNotifications.On)
+            {
+                testState = TestState.NotSent;
+            }
+
+            bound = false;
+            StateHasChanged();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (JSException)
+        {
+            _toastService.ShowError("Couldn't check this device. Try again in a moment.");
+        }
+    }
+
+    [JSInvokable]
+    public Task OnPageVisible() => InvokeAsync(RefreshAsync);
+
+    [JSInvokable]
+    public async Task OnPushResult(string permission, PushSubscriptionInput? subscription)
+    {
+        isBusy = true;
+        StateHasChanged();
+
+        await PushTurnOn.HandleResultAsync(permission, subscription, userId, browser!.Report, PushSubscriptionService, _toastService);
+
+        isBusy = false;
+        await RefreshAsync();
+    }
+
+    private async Task InstallAsync()
+    {
+        try
+        {
+            string outcome = await JS.InvokeAsync<string>("lanyardInstall.promptInstall");
+            installAccepted = outcome == "accepted";
+        }
+        catch (JSDisconnectedException)
+        {
+            return;
+        }
+
+        await RefreshAsync();
+    }
+
+    private async Task SendTestAsync()
+    {
+        isBusy = true;
+        bool delivered = false;
+
+        try
+        {
+            PushSendSummary summary = await PushSender.SendToUserAsync(userId!,
+                new PushContent("You're all set", "This is how shift reminders, rota changes and messages will look.",
+                    GetStartedPath + "?test=sent", "lanyard-test", PushMessageUrgency.Normal, TimeSpan.FromHours(1)),
+                onlyEndpoint: browserEndpoint);
+
+            delivered = summary.Delivered > 0;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Get Started test notification failed for {UserId}", userId);
+        }
+        finally
+        {
+            isBusy = false;
+        }
+
+        if (!delivered)
+        {
+            _toastService.ShowError("The test couldn't be delivered. Try turning notifications off and on again in Account Management.");
+        }
+
+        await RefreshAsync();
+
+        // RefreshAsync resets the test when notifications are off; keep the answer otherwise.
+        if (delivered && status?.Notifications == GetStartedNotifications.On)
+        {
+            testState = TestState.Sent;
+        }
+    }
+
+    private async Task OnPasskeyCountChanged(int count)
+    {
+        if (count == passkeyCount)
+        {
+            return;
+        }
+
+        passkeyCount = count;
+        await RefreshAsync();
+    }
+
+    private async Task CopyLinkAsync()
+    {
+        if (await JS.TryCopyToClipboardAsync(shareUrl))
+        {
+            _toastService.ShowSuccess("Link copied.");
+        }
+        else
+        {
+            _toastService.ShowError("Couldn't copy the link. Select it and copy it instead.");
+        }
+    }
+
+    private static List<TourLink> BuildTourLinks(IReadOnlySet<CompanyFeature> hidden)
+    {
+        bool Has(CompanyFeature feature) => !hidden.Contains(feature);
+
+        List<TourLink> links = [new("/", "Home", "Your start page, with what's coming up.", new Icons.Regular.Size24.Home())];
+
+        if (Has(CompanyFeature.StaffScheduling))
+        {
+            links.Add(new("/rota", "Rota", "Your shifts, swaps, time off and availability.", new Icons.Regular.Size24.CalendarLtr()));
+        }
+
+        if (Has(CompanyFeature.Chat))
+        {
+            links.Add(new("/chat", "Chat", "Message the team and your managers.", new Icons.Regular.Size24.Chat()));
+        }
+
+        if (Has(CompanyFeature.Training))
+        {
+            links.Add(new("/training", "Training", "Courses you've been asked to do.", new Icons.Regular.Size24.BookOpen()));
+        }
+
+        if (Has(CompanyFeature.Checklists) && Has(CompanyFeature.StaffScheduling))
+        {
+            links.Add(new("/checklists", "Checklists", "Opening, closing and cleaning tasks for your shift.", new Icons.Regular.Size24.TaskListLtr()));
+        }
+
+        links.Add(new("/help", "Help", "How everything works, whenever you need it.", new Icons.Regular.Size24.QuestionCircle()));
+
+        return links;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        disposed = true;
+
+        if (dotNetRef is not null)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("lanyardInstall.unwatchVisible");
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+
+            dotNetRef.Dispose();
+        }
+    }
+}

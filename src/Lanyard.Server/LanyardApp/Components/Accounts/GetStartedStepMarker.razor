@@ -1,0 +1,16 @@
+@* The numbered circle beside each Get Started step, ticked once the step is done. *@
+<span class="get-started-marker @(Done ? "is-done" : "")" aria-label="@(Done ? $"Step {Number}, done" : $"Step {Number}")">
+    @if (Done)
+    {
+        <FluentIcon Value="@(new Icons.Filled.Size20.Checkmark())" Color="Color.Custom" CustomColor="currentColor" />
+    }
+    else
+    {
+        @Number
+    }
+</span>
+
+@code {
+    [Parameter] public int Number { get; set; }
+    [Parameter] public bool Done { get; set; }
+}

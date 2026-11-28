@@ -505,6 +505,7 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
                 case MusicTimelineWidget existingTimeline when widget is MusicTimelineWidget incomingTimeline:
                     existingTimeline.ClientId = incomingTimeline.ClientId;
                     existingTimeline.ShowSongTitle = incomingTimeline.ShowSongTitle;
+                    existingTimeline.ShowVolumeAndEq = incomingTimeline.ShowVolumeAndEq;
                     break;
                 case AutomationRuleStatusWidget existingRuleStatus when widget is AutomationRuleStatusWidget incomingRuleStatus:
                     existingRuleStatus.AutomationRuleId = incomingRuleStatus.AutomationRuleId;
@@ -539,6 +540,12 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
                     existingProjectionStatus.ClientId = incomingProjectionStatus.ClientId;
                     existingProjectionStatus.DisplayIndex = incomingProjectionStatus.DisplayIndex;
                     existingProjectionStatus.ShowControls = incomingProjectionStatus.ShowControls;
+                    break;
+                case LiveCaptureWidget existingLiveCapture when widget is LiveCaptureWidget incomingLiveCapture:
+                    existingLiveCapture.ClientId = incomingLiveCapture.ClientId;
+                    existingLiveCapture.DeviceName = incomingLiveCapture.DeviceName;
+                    existingLiveCapture.EnableAudio = incomingLiveCapture.EnableAudio;
+                    existingLiveCapture.FillTile = incomingLiveCapture.FillTile;
                     break;
                 case AnnouncementsWidget existingAnnouncements when widget is AnnouncementsWidget incomingAnnouncements:
                     existingAnnouncements.MaxItems = incomingAnnouncements.MaxItems;
@@ -899,7 +906,8 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
             MusicTimelineWidget timelineWidget => new MusicTimelineWidget
             {
                 ClientId = timelineWidget.ClientId,
-                ShowSongTitle = timelineWidget.ShowSongTitle
+                ShowSongTitle = timelineWidget.ShowSongTitle,
+                ShowVolumeAndEq = timelineWidget.ShowVolumeAndEq
             },
             AutomationRuleStatusWidget ruleStatusWidget => new AutomationRuleStatusWidget
             {
@@ -946,6 +954,13 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
                 ClientId = projectionStatusWidget.ClientId,
                 DisplayIndex = projectionStatusWidget.DisplayIndex,
                 ShowControls = projectionStatusWidget.ShowControls
+            },
+            LiveCaptureWidget liveCaptureWidget => new LiveCaptureWidget
+            {
+                ClientId = liveCaptureWidget.ClientId,
+                DeviceName = liveCaptureWidget.DeviceName,
+                EnableAudio = liveCaptureWidget.EnableAudio,
+                FillTile = liveCaptureWidget.FillTile
             },
             AnnouncementsWidget announcementsWidget => new AnnouncementsWidget
             {
@@ -1073,6 +1088,7 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
         {
             targetTimeline.ClientId = sourceTimeline.ClientId;
             targetTimeline.ShowSongTitle = sourceTimeline.ShowSongTitle;
+            targetTimeline.ShowVolumeAndEq = sourceTimeline.ShowVolumeAndEq;
         }
 
         if (target is AutomationRuleStatusWidget targetRuleStatus && source is AutomationRuleStatusWidget sourceRuleStatus)
@@ -1172,6 +1188,14 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
             targetProjectionStatus.ClientId = sourceProjectionStatus.ClientId;
             targetProjectionStatus.DisplayIndex = sourceProjectionStatus.DisplayIndex;
             targetProjectionStatus.ShowControls = sourceProjectionStatus.ShowControls;
+        }
+
+        if (target is LiveCaptureWidget targetLiveCapture && source is LiveCaptureWidget sourceLiveCapture)
+        {
+            targetLiveCapture.ClientId = sourceLiveCapture.ClientId;
+            targetLiveCapture.DeviceName = sourceLiveCapture.DeviceName;
+            targetLiveCapture.EnableAudio = sourceLiveCapture.EnableAudio;
+            targetLiveCapture.FillTile = sourceLiveCapture.FillTile;
         }
     }
 }

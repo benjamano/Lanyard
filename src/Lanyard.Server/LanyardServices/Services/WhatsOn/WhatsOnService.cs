@@ -39,52 +39,96 @@ public class WhatsOnService(
                 return Result<WhatsOnRange>.Fail($"Pick a range of 1 to {MaxDays} days.");
             }
 
-            int? companyId;
-            List<WhatsOnStaff> staff;
+            WhatsOnRange? range = await LoadAsync(scope, locationId, from, to, includeCancelled);
 
-            await using (ApplicationDbContext ctx = await _factory.CreateDbContextAsync())
-            {
-                companyId = await ctx.Locations
-                    .AsNoTracking()
-                    .TagWithCallSite()
-                    .Where(x => x.Id == locationId)
-                    .Select(x => (int?)x.CompanyId)
-                    .FirstOrDefaultAsync();
-
-                if (companyId is null)
-                {
-                    return Result<WhatsOnRange>.Fail("That location doesn't exist.");
-                }
-
-                staff = await GetStaffAsync(ctx, locationId, from, to);
-            }
-
-            List<WhatsOnItem> items = [];
-            List<string> warnings = [];
-
-            // Sources run one after another: each opens its own DbContext, and a page load is a
-            // handful of small queries.
-            foreach (IWhatsOnSource source in _sources)
-            {
-                Result<List<WhatsOnItem>> result = await source.GetItemsAsync(scope, companyId.Value, locationId, from, to, includeCancelled);
-
-                if (result.IsSuccess && result.Data is not null)
-                {
-                    items.AddRange(result.Data);
-                }
-                else
-                {
-                    _logger.LogWarning("What's on source {Source} failed for {LocationId}: {Error}", source.GetType().Name, locationId, result.Error);
-                    warnings.Add(result.Error ?? "Something couldn't be loaded.");
-                }
-            }
-
-            return Result<WhatsOnRange>.Ok(Build(locationId, from, to, items, staff, warnings));
+            return range is null
+                ? Result<WhatsOnRange>.Fail("That location doesn't exist.")
+                : Result<WhatsOnRange>.Ok(range);
         }
         catch (Exception ex)
         {
             return Result<WhatsOnRange>.Fail($"Failed to load what's on: {ex.Message}");
         }
+    }
+
+    public async Task<Result<WhatsOnDay>> GetDashboardDayAsync(int companyId, int locationId, DateOnly day)
+    {
+        try
+        {
+            bool inCompany;
+
+            // Named company, not the tenant: kiosk dashboards run signed out (unfiltered).
+            await using (ApplicationDbContext ctx = await _factory.CreateDbContextAsync())
+            {
+                inCompany = await ctx.Locations
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .AnyAsync(x => x.Id == locationId && x.CompanyId == companyId && x.IsActive);
+            }
+
+            if (!inCompany)
+            {
+                return Result<WhatsOnDay>.Fail("That location isn't available.");
+            }
+
+            // The sources check the scope, so the read goes in as the dashboard's own company.
+            LocationScope dashboardScope = new(IsAdmin: true, LocationId: locationId, CompanyId: companyId, LocationDisplayName: null);
+            WhatsOnRange? range = await LoadAsync(dashboardScope, locationId, day, day, includeCancelled: false);
+
+            return range?.Day(day) is WhatsOnDay result
+                ? Result<WhatsOnDay>.Ok(result)
+                : Result<WhatsOnDay>.Fail("That location isn't available.");
+        }
+        catch (Exception ex)
+        {
+            return Result<WhatsOnDay>.Fail($"Failed to load what's on: {ex.Message}");
+        }
+    }
+
+    // Null when the location doesn't exist.
+    private async Task<WhatsOnRange?> LoadAsync(LocationScope scope, int locationId, DateOnly from, DateOnly to, bool includeCancelled)
+    {
+        int? companyId;
+        List<WhatsOnStaff> staff;
+
+        await using (ApplicationDbContext ctx = await _factory.CreateDbContextAsync())
+        {
+            companyId = await ctx.Locations
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.Id == locationId)
+                .Select(x => (int?)x.CompanyId)
+                .FirstOrDefaultAsync();
+
+            if (companyId is null)
+            {
+                return null;
+            }
+
+            staff = await GetStaffAsync(ctx, locationId, from, to);
+        }
+
+        List<WhatsOnItem> items = [];
+        List<string> warnings = [];
+
+        // Sources run one after another: each opens its own DbContext, and a page load is a
+        // handful of small queries.
+        foreach (IWhatsOnSource source in _sources)
+        {
+            Result<List<WhatsOnItem>> result = await source.GetItemsAsync(scope, companyId.Value, locationId, from, to, includeCancelled);
+
+            if (result.IsSuccess && result.Data is not null)
+            {
+                items.AddRange(result.Data);
+            }
+            else
+            {
+                _logger.LogWarning("What's on source {Source} failed for {LocationId}: {Error}", source.GetType().Name, locationId, result.Error);
+                warnings.Add(result.Error ?? "Something couldn't be loaded.");
+            }
+        }
+
+        return Build(locationId, from, to, items, staff, warnings);
     }
 
     // Buckets entries and shifts into every venue-local day of the range, earliest first.

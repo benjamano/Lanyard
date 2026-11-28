@@ -1,0 +1,17 @@
+@page "/help/get-started"
+@attribute [Authorize]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Help.GetStarted
+
+<HelpPage AreaKey="@HelpRegistry.GetStarted">
+    <FluentTab Id="help-phone" Header="Setting Up Your Phone" IconStart="@(new Icons.Regular.Size16.Phone())">
+        <GetStartedPhoneHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-troubleshooting" Header="Notifications Not Arriving" IconStart="@(new Icons.Regular.Size16.AlertOff())" DeferredLoading="true">
+        <GetStartedTroubleshootingHelpTab />
+    </FluentTab>
+    <FluentTab Id="help-team" Header="Setting Up Your Team" IconStart="@(new Icons.Regular.Size16.People())" DeferredLoading="true">
+        <GetStartedTeamHelpTab />
+    </FluentTab>
+</HelpPage>

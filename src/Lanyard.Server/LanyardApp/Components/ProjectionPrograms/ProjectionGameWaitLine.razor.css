@@ -1,0 +1,2 @@
+/* Lines the icon up with the first line of text, which may wrap below it, and stops it shrinking. */
+.game-wait ::deep .game-wait-icon{flex-shrink:0;margin-top:3px;}
