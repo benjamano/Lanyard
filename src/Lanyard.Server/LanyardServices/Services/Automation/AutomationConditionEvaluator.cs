@@ -200,9 +200,18 @@ public static class AutomationConditionEvaluator
                     return AutomationConditionCheck.NotMet($"{location.Name} is open");
                 }
 
-                if (RotaHolidayRules.For(location.HolidayList, DateOnly.FromDateTime(venueLocal)).Closed is RotaHoliday closed)
+                DateOnly today = DateOnly.FromDateTime(venueLocal);
+
+                if (RotaHolidayRules.For(location.HolidayList, today).Closed is RotaHoliday closed)
                 {
                     return AutomationConditionCheck.NotMet($"{location.Name} is closed today for {closed.Name} (Rota › Holidays)");
+                }
+
+                // Shut in what would have been yesterday's late hours, because yesterday was closed.
+                if (RotaHolidayRules.For(location.HolidayList, today.AddDays(-1)).Closed is RotaHoliday lastNight
+                    && OpeningHoursRules.IsOpen(location.Hours, [], venueLocal))
+                {
+                    return AutomationConditionCheck.NotMet($"{location.Name} is closed for {lastNight.Name} (Rota › Holidays)");
                 }
 
                 return AutomationConditionCheck.NotMet(location.Hours.Any(h => h.IsActive)
