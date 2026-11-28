@@ -135,4 +135,80 @@ public class TwoFactorLoginIntegrationTests
         HttpResponseMessage pageResponse = await client.GetAsync("/manage/dashboards");
         Assert.AreEqual(HttpStatusCode.OK, pageResponse.StatusCode);
     }
+
+    private static FormUrlEncodedContent LoginForm() => new(new Dictionary<string, string>
+    {
+        ["username"] = "admin",
+        ["password"] = CustomWebApplicationFactory.SeedAdminPassword,
+        ["locationId"] = ApplicationDbContext.SeedIpswichLocationId.ToString()
+    });
+
+    private static FormUrlEncodedContent CodeForm(string code) => new(new Dictionary<string, string>
+    {
+        ["code"] = code,
+        ["provider"] = TokenOptions.DefaultEmailProvider,
+        ["locationId"] = ApplicationDbContext.SeedIpswichLocationId.ToString()
+    });
+
+    // Security Issue 9.11: lockout was only consulted to word the error after a wrong code, so a
+    // locked-out account could still sign in with a correct one.
+    [TestMethod]
+    public async Task VerifyTwoFactorForm_LockedOutAccount_RightCodeDoesNotSignIn()
+    {
+        UserProfile admin = await EnableEmailTwoFactorForSeedAdminAsync();
+        HttpClient client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        await client.PostAsync("/api/auth/login-form", LoginForm());
+
+        using (IServiceScope scope = _factory.Services.CreateScope())
+        {
+            UserManager<UserProfile> userManager = scope.ServiceProvider.GetRequiredService<UserManager<UserProfile>>();
+            await userManager.SetLockoutEndDateAsync((await userManager.FindByIdAsync(admin.Id))!, DateTimeOffset.UtcNow.AddMinutes(15));
+        }
+
+        HttpResponseMessage verifyResponse = await client.PostAsync("/api/auth/verify-2fa-form", CodeForm(await GenerateEmailCodeAsync()));
+
+        StringAssert.Contains(verifyResponse.Headers.Location!.OriginalString, "locked");
+        HttpResponseMessage pageResponse = await client.GetAsync("/manage/dashboards");
+        Assert.IsTrue((int)pageResponse.StatusCode is >= 300 and < 400, "A locked-out account must not sign in, even with the right code.");
+    }
+
+    // Re-entering the right password between code guesses must not wipe the failed-code count.
+    [TestMethod]
+    public async Task VerifyTwoFactorForm_WrongCodes_LockTheAccountEvenIfThePasswordIsReentered()
+    {
+        UserProfile admin = await EnableEmailTwoFactorForSeedAdminAsync();
+        HttpClient client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        for (int attempt = 0; attempt < 5; attempt++)
+        {
+            await client.PostAsync("/api/auth/login-form", LoginForm());
+            await client.PostAsync("/api/auth/verify-2fa-form", CodeForm("000000"));
+        }
+
+        using IServiceScope scope = _factory.Services.CreateScope();
+        UserManager<UserProfile> userManager = scope.ServiceProvider.GetRequiredService<UserManager<UserProfile>>();
+        Assert.IsTrue(await userManager.IsLockedOutAsync((await userManager.FindByIdAsync(admin.Id))!));
+    }
+
+    // Security Issue 9.14 (login CSRF): another site posting the sign-in form would sign the
+    // victim in to the attacker's account.
+    [TestMethod]
+    public async Task LoginForm_PostedFromAnotherSite_IsRefused()
+    {
+        HttpClient client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        using HttpRequestMessage crossSite = new(HttpMethod.Post, "/api/auth/login-form") { Content = LoginForm() };
+        crossSite.Headers.Add("Origin", "https://evil.example");
+        HttpResponseMessage refused = await client.SendAsync(crossSite);
+
+        StringAssert.StartsWith(refused.Headers.Location!.OriginalString, "/login?error=");
+        Assert.IsTrue((int)(await client.GetAsync("/manage/dashboards")).StatusCode is >= 300 and < 400, "A cross-site sign-in must not sign anyone in.");
+
+        using HttpRequestMessage sameSite = new(HttpMethod.Post, "/api/auth/login-form") { Content = LoginForm() };
+        sameSite.Headers.Add("Origin", client.BaseAddress!.GetLeftPart(UriPartial.Authority));
+        HttpResponseMessage accepted = await client.SendAsync(sameSite);
+
+        Assert.AreEqual("/", accepted.Headers.Location!.OriginalString);
+    }
 }

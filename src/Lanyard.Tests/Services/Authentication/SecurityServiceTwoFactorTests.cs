@@ -351,7 +351,7 @@ namespace Lanyard.Tests.Services.Authentication
             UserProfile user = await CreateUserAsync(userManager);
             SecurityService service = BuildService(options, userManager, user.Id);
 
-            Result<List<string>> result = await service.RegenerateRecoveryCodesAsync();
+            Result<List<string>> result = await service.RegenerateRecoveryCodesAsync("P@ssword1");
 
             Assert.IsFalse(result.IsSuccess);
         }
@@ -365,11 +365,25 @@ namespace Lanyard.Tests.Services.Authentication
             SecurityService service = BuildService(options, userManager, user.Id);
 
             Result<List<string>> firstBatch = await service.EnableEmailTwoFactorAsync();
-            Result<List<string>> secondBatch = await service.RegenerateRecoveryCodesAsync();
+            Result<List<string>> secondBatch = await service.RegenerateRecoveryCodesAsync("P@ssword1");
 
             Assert.IsTrue(secondBatch.IsSuccess, secondBatch.Error);
             Assert.HasCount(8, secondBatch.Data!);
             CollectionAssert.AreNotEquivalent(firstBatch.Data, secondBatch.Data);
+        }
+            [TestMethod]
+        public async Task RegenerateRecoveryCodesAsync_WrongPassword_KeepsTheOldCodes()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            UserManager<UserProfile> userManager = BuildUserManager(options);
+            UserProfile user = await CreateUserAsync(userManager);
+            SecurityService service = BuildService(options, userManager, user.Id);
+
+            Result<List<string>> firstBatch = await service.EnableEmailTwoFactorAsync();
+            Result<List<string>> result = await service.RegenerateRecoveryCodesAsync("not-my-password");
+
+            Assert.IsFalse(result.IsSuccess);
+            Assert.IsTrue((await userManager.RedeemTwoFactorRecoveryCodeAsync(user, firstBatch.Data![0])).Succeeded, "The old codes must still work");
         }
     }
 }
