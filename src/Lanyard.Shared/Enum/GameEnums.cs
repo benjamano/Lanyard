@@ -17,26 +17,30 @@ public enum GameStatus
     GetReady,
 }
 
+/// <summary>
+/// Game modes as the Begeara control box numbers them: the box sends the number as a three-digit
+/// field ("@001" for Standard solo, up to "@018" for Zombies), counting from 1.
+/// </summary>
 public enum GameMode
 {
-    StandardSolo = 0,
-    StandardTeam = 1,
-    FastSolo = 2,
-    FastTeam = 3,
-    SoloElimination = 4,
-    TeamElimination = 5,
-    FastTeamElimination = 6,
-    TeamReload = 7,
-    BirthdaySolo = 8,
-    BirthdayTeam = 9,
-    Vampire = 10,
-    Targets1 = 11,
-    Targets2 = 12,
-    ContinuousSolo = 13,
-    ContinuousTeam = 14,
-    Targets3 = 15,
-    Targets4 = 16,
-    Zombie = 17
+    StandardSolo = 1,
+    StandardTeam = 2,
+    FastSolo = 3,
+    FastTeam = 4,
+    SoloElimination = 5,
+    TeamElimination = 6,
+    FastTeamElimination = 7,
+    TeamReload = 8,
+    BirthdaySolo = 9,
+    BirthdayTeam = 10,
+    Vampire = 11,
+    Targets1 = 12,
+    Targets2 = 13,
+    ContinuousSolo = 14,
+    ContinuousTeam = 15,
+    Targets3 = 16,
+    Targets4 = 17,
+    Zombie = 18
 }
 
 public enum SoundSet

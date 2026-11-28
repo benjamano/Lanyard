@@ -27,6 +27,9 @@ public interface IGameStateService
     List<PlayerScoreDTO> GetAllPlayerScores();
     void UpdatePlayerScore(PlayerScoreDTO playerScore);
 
+    void UpdateGameMode(GameMode gameMode);
+    GameMode? GetGameMode();
+
     void UpdateGameLength(TimeSpan gameLength);
     TimeSpan GetGameLength();
 }
