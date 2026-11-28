@@ -32,6 +32,12 @@ public class LaserGameStatusDTO
     public int TotalTimeSeconds { get; set; }
     public int PlayerCount { get; set; }
 
+    /// <summary>
+    /// The mode the control box last reported, or null until it has reported one (and always null
+    /// from kiosks older than 1.0.50, which don't send it). Null means "assume teams".
+    /// </summary>
+    public GameMode? GameMode { get; set; }
+
     public List<PlayerScoreDTO> PlayerScores { get; set; } = [];
 
     public DateTime LastUpdateUtc { get; set; } = DateTime.UtcNow;

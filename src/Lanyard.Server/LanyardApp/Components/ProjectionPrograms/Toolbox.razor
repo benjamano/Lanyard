@@ -29,9 +29,17 @@
             foreach (ProjectionProgramStepTemplate template in stepTemplates)
             {
                 <FluentCard Appearance="CardAppearance.Filled" Class="toolbox-card" draggable="true" @ondragstart="(e) => OnDragStart(e, template)" @ondragend="OnDragEnd">
-                    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" Class="toolbox-card-header">
+                    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8" Class="toolbox-card-header">
                         <FluentIcon Value="@GetTemplateIcon(template.Name)" Color="Color.Primary" Class="toolbox-card-icon" />
                         <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400" Class="toolbox-card-title">@template.Name</FluentText>
+                        <FluentSpacer />
+                        @* Dragging is the only other way to add a step, and it needs a mouse. *@
+                        <FluentButton Appearance="ButtonAppearance.Subtle"
+                                      IconStart="@(new Icons.Regular.Size20.AddCircle())"
+                                      Title="@($"Add {template.Name} to the end")"
+                                      aria-label="@($"Add {template.Name} to the end")"
+                                      Disabled="@(!CanAddSteps)"
+                                      OnClick="@(() => OnAddTemplate.InvokeAsync(template))" />
                     </FluentStack>
                     @if (!string.IsNullOrWhiteSpace(template.Description))
                     {
@@ -62,6 +70,14 @@
 
     [Parameter]
     public bool IsSaving { get; set; }
+
+    /// <summary>Adds the template as a new last step, for anyone who can't drag.</summary>
+    [Parameter]
+    public EventCallback<ProjectionProgramStepTemplate> OnAddTemplate { get; set; }
+
+    /// <summary>Whether a program is selected to add steps to.</summary>
+    [Parameter]
+    public bool CanAddSteps { get; set; }
 
     private List<ProjectionProgramStepTemplate> stepTemplates = new();
     private bool isLoading;
@@ -97,6 +113,7 @@
         KioskTemplateConstants.TemplateNames.Delay => new Icons.Regular.Size24.Timer(),
         KioskTemplateConstants.TemplateNames.Dashboard => new Icons.Regular.Size24.SlideGrid(),
         KioskTemplateConstants.TemplateNames.LiveCapture => new Icons.Regular.Size24.Camera(),
+        KioskTemplateConstants.TemplateNames.WaitForGame => new Icons.Regular.Size24.HourglassHalf(),
         _ => new Icons.Regular.Size24.PuzzlePiece()
     };
 

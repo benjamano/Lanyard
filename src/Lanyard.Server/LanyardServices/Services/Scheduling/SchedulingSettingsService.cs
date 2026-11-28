@@ -70,6 +70,7 @@ public class SchedulingSettingsService(IDbContextFactory<ApplicationDbContext> f
             existing.BreakDeduction = settings.BreakDeduction;
             existing.BreakDeductionMinutes = settings.BreakDeductionMinutes;
             existing.BreakDeductionAfterHours = settings.BreakDeductionAfterHours;
+            existing.YoungWorkerNightWindow = settings.YoungWorkerNightWindow;
             existing.UpdateDate = DateTime.UtcNow;
 
             await ctx.SaveChangesAsync();
@@ -138,6 +139,11 @@ public class SchedulingSettingsService(IDbContextFactory<ApplicationDbContext> f
         if (!System.Enum.IsDefined(settings.BreakDeduction))
         {
             return "Choose how breaks are handled in the payroll export.";
+        }
+
+        if (!System.Enum.IsDefined(settings.YoungWorkerNightWindow))
+        {
+            return "Choose the night hours staff under 18 can't work.";
         }
 
         if (settings.BreakDeduction == BreakDeductionRule.FixedOverThreshold)

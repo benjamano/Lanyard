@@ -3,8 +3,8 @@
 // videoViewer runs on the kiosk that displays the remote stream. SDP/ICE signaling
 // travels through the server's VideoStreamSignalingService via Blazor circuits.
 //
-// A module, imported by VideoPublisher.razor and KioskLiveCaptureTemplate.razor (the only pages
-// that stream video) rather than loaded on every page from App.razor.
+// A module, imported by VideoPublisher.razor, KioskLiveCaptureTemplate.razor and LiveCameraView.razor
+// (the only components that stream video) rather than loaded on every page from App.razor.
 
 import { acquireCaptureStream } from './js/liveCapture.js';
 
@@ -40,16 +40,26 @@ export const videoPublisher = (() => {
     const sessions = new Map(); // sessionId -> { pc, deviceKey, pendingCandidates, remoteDescSet }
     const streams = new Map();  // deviceKey -> { stream, refCount } — one camera open shared by N viewers
 
-    async function acquireShared(deviceKey, deviceName, enableAudio, idealWidth, idealHeight) {
-        const existing = streams.get(deviceKey);
-        if (existing) {
-            existing.refCount++;
-            return existing.stream;
+    // Returns { stream, deviceKey } - the key actually held, which endSession must release.
+    async function acquireShared(deviceName, enableAudio, idealWidth, idealHeight) {
+        const name = (deviceName || "").toLowerCase();
+        const deviceKey = `${name}|${!!enableAudio}`;
+
+        // A video-only viewer (e.g. the Clients page Live camera preview) can ride on a stream
+        // that already carries audio: opening the same camera twice fails on many Windows
+        // drivers, or takes it away from the kiosk already showing it. The viewer stays muted.
+        const candidates = enableAudio ? [deviceKey] : [deviceKey, `${name}|true`];
+        for (const key of candidates) {
+            const existing = streams.get(key);
+            if (existing) {
+                existing.refCount++;
+                return { stream: existing.stream, deviceKey: key };
+            }
         }
 
         const stream = await acquireCaptureStream(deviceName, enableAudio, idealWidth, idealHeight);
         streams.set(deviceKey, { stream: stream, refCount: 1 });
-        return stream;
+        return { stream: stream, deviceKey: deviceKey };
     }
 
     function releaseShared(deviceKey) {
@@ -81,15 +91,17 @@ export const videoPublisher = (() => {
             };
 
             try {
-                const deviceKey = `${(deviceName || "").toLowerCase()}|${!!enableAudio}`;
-                const stream = await acquireShared(deviceKey, deviceName, enableAudio, idealWidth || 1920, idealHeight || 1080);
+                const { stream, deviceKey } = await acquireShared(deviceName, enableAudio, idealWidth || 1920, idealHeight || 1080);
 
                 const pc = new RTCPeerConnection({ iceServers: parseIceServers(iceServersJson) });
                 sessions.set(sessionId, { pc: pc, deviceKey: deviceKey, pendingCandidates: [], remoteDescSet: false });
 
                 attachIceDiagnostics(pc, report);
 
-                stream.getTracks().forEach(t => pc.addTrack(t, stream));
+                // A shared stream may carry audio this viewer didn't ask for; don't send it.
+                stream.getTracks()
+                    .filter(t => enableAudio || t.kind === 'video')
+                    .forEach(t => pc.addTrack(t, stream));
 
                 pc.onicecandidate = e => {
                     if (e.candidate && dotNetRef) {
@@ -225,17 +237,30 @@ export const videoViewer = (() => {
             };
 
             pc.ontrack = async e => {
+                // A session stopped while its tracks were arriving must not take over the element.
+                if (!sessions.has(sessionId)) return;
+
                 const video = document.getElementById(videoElementId);
                 if (!video) return;
+
+                session.stream = e.streams[0];
+
+                // ontrack fires once per track (video, then audio) with the same stream. Assigning
+                // srcObject again restarts the load, aborting the first play() - which the catch
+                // below used to take for blocked autoplay and mute a stream meant to have sound.
+                if (video.srcObject === e.streams[0]) return;
 
                 video.srcObject = e.streams[0];
                 video.muted = !enableAudio;
 
                 try {
                     await video.play();
-                } catch {
-                    video.muted = true;
-                    await video.play().catch(() => { });
+                } catch (err) {
+                    // Only a refusal to autoplay with sound is worth retrying muted.
+                    if (err && err.name === 'NotAllowedError' && !video.muted) {
+                        video.muted = true;
+                        await video.play().catch(() => { });
+                    }
                 }
             };
 
@@ -273,6 +298,16 @@ export const videoViewer = (() => {
             }
         },
 
+        // The sound button on a staff page's live camera: the stream already carries the audio.
+        setMuted(videoElementId, muted) {
+            const video = document.getElementById(videoElementId);
+            if (!video) return;
+            video.muted = !!muted;
+            if (!muted) {
+                video.play().catch(() => { });
+            }
+        },
+
         stop(sessionId, videoElementId) {
             try {
                 const session = sessions.get(sessionId);
@@ -285,8 +320,10 @@ export const videoViewer = (() => {
                 }
                 earlyCandidates.delete(sessionId);
 
+                // Only blank the element if it's showing this session: a replacement session on
+                // the same element may already be live when an old one is cleaned up.
                 const video = document.getElementById(videoElementId);
-                if (video) {
+                if (video && session && (!session.stream || video.srcObject === session.stream)) {
                     video.srcObject = null;
                 }
             } catch {

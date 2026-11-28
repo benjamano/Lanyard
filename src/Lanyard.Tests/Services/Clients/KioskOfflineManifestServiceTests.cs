@@ -129,6 +129,29 @@ public class KioskOfflineManifestServiceTests
     }
 
     [TestMethod]
+    public async Task BuildManifestAsync_SkipsWaitForGameSteps()
+    {
+        var options = GetInMemoryOptions();
+        Seed seed = await SeedAsync(options);
+        Guid waitTemplateId = Guid.NewGuid();
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            // Offline there are no game events to wait for, so the step is left out entirely.
+            ctx.ProjectionProgramStepTemplates.Add(new ProjectionProgramStepTemplate { Id = waitTemplateId, Name = Lanyard.Application.Services.Projection.GameWaitStepNames.Template, IsActive = true });
+            ctx.ProjectionProgramSteps.Add(new ProjectionProgramStep { Id = Guid.NewGuid(), ProjectionProgramId = seed.ProgramId, TemplateId = waitTemplateId, SortOrder = 5, IsActive = true });
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<KioskOfflineManifestDTO> result = await GetService(options).BuildManifestAsync(seed.ClientId);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        KioskOfflineDisplayDTO display = result.Data!.Displays.Single();
+        Assert.IsFalse(display.Steps.Any(x => x.TemplateName == Lanyard.Application.Services.Projection.GameWaitStepNames.Template));
+        Assert.AreEqual(2, display.SkippedStepCount, "The dashboard and the wait step are both skipped.");
+    }
+
+    [TestMethod]
     public async Task BuildManifestAsync_CarriesTextVideoAndSettings()
     {
         var options = GetInMemoryOptions();

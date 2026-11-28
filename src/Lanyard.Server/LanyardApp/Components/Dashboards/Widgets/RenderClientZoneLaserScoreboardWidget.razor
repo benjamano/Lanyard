@@ -2,79 +2,43 @@
 @using Lanyard.Application.Services.Clients
 @using Lanyard.Shared.DTO
 @using Lanyard.Shared.Enum
+@using Lanyard.Shared.LaserGame
 @implements IDisposable
 
 @inject ILaserGameStatusStore LaserGameStatusStore
 
 <FluentCard Appearance="@CardAppearance.Subtle" Padding="@Padding.All0" Height="100%">
-    <FluentGrid Class="h-100">
-        <FluentGridItem Md="6" Sm="12" Padding="@Padding.Right1">
-            <FluentCard Height="100%" Padding="@Padding.All0">
-                <FluentStack Orientation="@Orientation.Horizontal" 
-                                VerticalAlignment="@VerticalAlignment.Center" 
-                                HorizontalAlignment="@HorizontalAlignment.Center">
-                    <FluentBadge Color="@BadgeColor.Danger"
-                                        Shape="@BadgeShape.Square"
-                                        Padding="@Padding.All4"
-                                        Class="w-100">
-                        <FluentText Align="@TextAlign.Center"
-                                    Weight="@TextWeight.Bold">
-                            Red Team
-                        </FluentText>
-                    </FluentBadge>
-                </FluentStack>
-                <div class="h-100">
-                    <FluentDataGrid Items="@_redScores"                  
-                                    TGridItem="PlayerScoreDTO"
-                                    StripedRows="true">
-                        <ChildContent>
-                            <PropertyColumn Title="Name" Property="x=> x.GunName" Sortable="true"/>
-                            <PropertyColumn Title="Score" 
-                                            Property="x=> x.Score" 
-                                            Sortable="true" 
-                                            IsDefaultSortColumn="true" 
-                                            InitialSortDirection="@DataGridSortDirection.Descending" />
-                        </ChildContent>
-                        <EmptyContent>
-                        </EmptyContent>
-                    </FluentDataGrid>
-                </div>
-            </FluentCard>
-        </FluentGridItem>
-        <FluentGridItem Md="6" Sm="12" Padding="@Padding.Left1">
-            <FluentCard Height="100%" Padding="@Padding.All0">
-                <FluentStack Orientation="@Orientation.Horizontal" 
-                                VerticalAlignment="@VerticalAlignment.Center" 
-                                HorizontalAlignment="@HorizontalAlignment.Center">
-                    <FluentBadge Color="@BadgeColor.Success"
-                                Shape="@BadgeShape.Square"
-                                Padding="@Padding.All4"
-                                Class="w-100">
-                        <FluentText Align="@TextAlign.Center"
-                                    Weight="@TextWeight.Bold">
-                            Green Team
-                        </FluentText>
-                    </FluentBadge>
-                </FluentStack>
-                <div class="h-100">
-                    <FluentDataGrid Items="@_greenScores"                  
-                                    TGridItem="PlayerScoreDTO"
-                                    StripedRows="true">
-                        <ChildContent>
-                            <PropertyColumn Title="Name" Property="x=> x.GunName" 
-                                            Sortable="true" />
-                            <PropertyColumn Title="Score" Property="x=> x.Score"
-                                            Sortable="true" 
-                                            IsDefaultSortColumn="true" 
-                                            InitialSortDirection="@DataGridSortDirection.Descending" />
-                        </ChildContent>
-                        <EmptyContent>
-                        </EmptyContent>
-                    </FluentDataGrid>
-                </div>
-            </FluentCard>
-        </FluentGridItem>
-    </FluentGrid>
+    @if (_isSolo)
+    {
+        @* Solo modes: everyone plays for themselves, so one list ranked by score, in blue. *@
+        <FluentCard Height="100%" Padding="@Padding.All0" data-testid="laser-scoreboard-solo">
+            @HeaderBadge("Solo", BadgeColor.Brand, "background-color: #0f6cbd; color: #fff;")
+            <div class="h-100">
+                @ScoreGrid(_soloScores)
+            </div>
+        </FluentCard>
+    }
+    else
+    {
+        <FluentGrid Class="h-100">
+            <FluentGridItem Xs="12" Md="6" Padding="@Padding.Right1">
+                <FluentCard Height="100%" Padding="@Padding.All0" data-testid="laser-scoreboard-red">
+                    @HeaderBadge("Red Team", BadgeColor.Danger, null)
+                    <div class="h-100">
+                        @ScoreGrid(_redScores)
+                    </div>
+                </FluentCard>
+            </FluentGridItem>
+            <FluentGridItem Xs="12" Md="6" Padding="@Padding.Left1">
+                <FluentCard Height="100%" Padding="@Padding.All0" data-testid="laser-scoreboard-green">
+                    @HeaderBadge("Green Team", BadgeColor.Success, null)
+                    <div class="h-100">
+                        @ScoreGrid(_greenScores)
+                    </div>
+                </FluentCard>
+            </FluentGridItem>
+        </FluentGrid>
+    }
 </FluentCard>
 
 @code {
@@ -87,6 +51,24 @@
     // Where/OrderBy/AsQueryable per render made the grids refetch on every paint.
     private IQueryable<PlayerScoreDTO>? _redScores;
     private IQueryable<PlayerScoreDTO>? _greenScores;
+    private IQueryable<RankedScore>? _soloScores;
+
+    // Switches with the mode the kiosk reports. Unknown (no game yet, or a kiosk older than
+    // 1.0.50 that doesn't send it) keeps the Red/Green team layout.
+    private bool _isSolo;
+
+    private sealed record RankedScore(int Rank, int GunId, string? GunName, int Score);
+
+    // The kiosk only reports gun numbers (GunName is never filled in by the packet pipeline),
+    // so label by number like the Hall of Fame does, and sort numerically rather than "Gun 10" < "Gun 2".
+    private static readonly GridSort<PlayerScoreDTO> _sortByGun = GridSort<PlayerScoreDTO>.ByAscending(x => x.GunId);
+    private static readonly GridSort<RankedScore> _sortRankedByGun = GridSort<RankedScore>.ByAscending(x => x.GunId);
+
+    private static string GunLabel(PlayerScoreDTO score) =>
+        GunLabel(score.GunId, score.GunName);
+
+    private static string GunLabel(int gunId, string? gunName) =>
+        string.IsNullOrWhiteSpace(gunName) ? $"Gun {gunId}" : gunName;
 
     // One status message arrives per hit; paint at most ~10 times a second.
     private RenderCoalescer? _renderCoalescer;
@@ -130,9 +112,74 @@
             _redScores = status.PlayerScores.Where(x => x.Team == Team.Red).OrderByDescending(x => x.Score).ToList().AsQueryable();
             _greenScores = status.PlayerScores.Where(x => x.Team == Team.Green).OrderByDescending(x => x.Score).ToList().AsQueryable();
 
+            _isSolo = status.GameMode is GameMode mode && mode.IsSolo();
+            _soloScores = _isSolo
+                ? status.PlayerScores
+                    .OrderByDescending(x => x.Score)
+                    // Equal scores share a place (1, 1, 3), so ties aren't split arbitrarily.
+                    .Select(x => new RankedScore(1 + status.PlayerScores.Count(y => y.Score > x.Score), x.GunId, x.GunName, x.Score))
+                    .ToList()
+                    .AsQueryable()
+                : null;
+
             _renderCoalescer?.Request();
         }
     }
+
+    private static RenderFragment HeaderBadge(string title, BadgeColor color, string? style) => __builder =>
+    {
+        <FluentStack Orientation="@Orientation.Horizontal"
+                     VerticalAlignment="@VerticalAlignment.Center"
+                     HorizontalAlignment="@HorizontalAlignment.Center">
+            <FluentBadge Color="@color"
+                         Shape="@BadgeShape.Square"
+                         Padding="@Padding.All4"
+                         Style="@style"
+                         Class="w-100">
+                <FluentText Align="@TextAlign.Center"
+                            Weight="@TextWeight.Bold">
+                    @title
+                </FluentText>
+            </FluentBadge>
+        </FluentStack>
+    };
+
+    private static RenderFragment ScoreGrid(IQueryable<PlayerScoreDTO>? items) => __builder =>
+    {
+        <FluentDataGrid Items="@items"
+                        TGridItem="PlayerScoreDTO"
+                        StripedRows="true">
+            <ChildContent>
+                <TemplateColumn Title="Name" Sortable="true" SortBy="@_sortByGun">@GunLabel(context)</TemplateColumn>
+                <PropertyColumn Title="Score"
+                                Property="x => x.Score"
+                                Sortable="true"
+                                IsDefaultSortColumn="true"
+                                InitialSortDirection="@DataGridSortDirection.Descending" />
+            </ChildContent>
+            <EmptyContent>
+            </EmptyContent>
+        </FluentDataGrid>
+    };
+
+    private static RenderFragment ScoreGrid(IQueryable<RankedScore>? items) => __builder =>
+    {
+        <FluentDataGrid Items="@items"
+                        TGridItem="RankedScore"
+                        StripedRows="true">
+            <ChildContent>
+                <PropertyColumn Title="#" Property="x => x.Rank" Width="60px" />
+                <TemplateColumn Title="Name" Sortable="true" SortBy="@_sortRankedByGun">@GunLabel(context.GunId, context.GunName)</TemplateColumn>
+                <PropertyColumn Title="Score"
+                                Property="x => x.Score"
+                                Sortable="true"
+                                IsDefaultSortColumn="true"
+                                InitialSortDirection="@DataGridSortDirection.Descending" />
+            </ChildContent>
+            <EmptyContent>
+            </EmptyContent>
+        </FluentDataGrid>
+    };
 
     public void Dispose()
     {

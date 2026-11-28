@@ -1,0 +1,7 @@
+/* Half the pane on a desktop; the whole width on a phone, where half was too narrow for a step's
+   settings (Fluent dropdowns have a 160px minimum width and overflowed the card). */
+.program-flow-column{width:50%;}
+
+@media (max-width: 768px) {
+    .program-flow-column{width:100%;}
+}

@@ -76,7 +76,8 @@ public class KioskClientListServiceTests
                 Mock.Of<IHubContext<SignalRControlHub>>(),
                 NullLogger<ClientService>.Instance,
                 new MemoryCache(new MemoryCacheOptions()),
-                Bus);
+                Bus,
+                new ClientEqualiserEventBus());
 
             return new TestableKioskClientListService(clientService, Cache, tenant, () => ConnectedIds.ToList());
         }
@@ -195,7 +196,7 @@ public class KioskClientListServiceTests
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(fixture.Options));
         await new ClientService(factoryMock.Object, Mock.Of<IHubContext<SignalRControlHub>>(), NullLogger<ClientService>.Instance,
-            new MemoryCache(new MemoryCacheOptions()), fixture.Bus).UpdateClientAsync(client);
+            new MemoryCache(new MemoryCacheOptions()), fixture.Bus, new ClientEqualiserEventBus()).UpdateClientAsync(client);
 
         CollectionAssert.AreEqual(new[] { "Renamed in settings" }, await NamesAsync(service));
     }

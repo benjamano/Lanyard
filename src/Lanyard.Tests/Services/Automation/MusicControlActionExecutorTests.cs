@@ -89,6 +89,7 @@ public class MusicControlActionExecutorTests
         services.AddSingleton<ILogger<ClientService>>(NullLogger<ClientService>.Instance);
         services.AddMemoryCache();
         services.AddSingleton<IKioskFleetEventBus, KioskFleetEventBus>();
+        services.AddSingleton<IClientEqualiserEventBus, ClientEqualiserEventBus>();
         services.AddScoped<IClientService, ClientService>();
 
         return services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
@@ -166,6 +167,173 @@ public class MusicControlActionExecutorTests
         });
 
         await ctx.SaveChangesAsync();
+    }
+
+    private static async Task SeedPlaylistAsync(DbContextOptions<ApplicationDbContext> options, Guid playlistId, int songCount)
+    {
+        await using ApplicationDbContext ctx = new(options);
+
+        ctx.Playlists.Add(new Playlist { Id = playlistId, Name = "Game", CreateDate = DateTime.UtcNow });
+
+        for (int i = 0; i < songCount; i++)
+        {
+            Guid songId = Guid.NewGuid();
+            ctx.Songs.Add(new Song
+            {
+                Id = songId,
+                Name = $"Song {i}",
+                AlbumName = "Album",
+                FilePath = $"song{i}.mp3",
+                IsActive = true,
+                CreateDate = DateTime.UtcNow
+            });
+            ctx.PlaylistSongMembers.Add(new PlaylistSongMember { SongId = songId, PlaylistId = playlistId, CreateDate = DateTime.UtcNow });
+        }
+
+        await ctx.SaveChangesAsync();
+    }
+
+    private async Task<(MusicPlayerService Player, Mock<ISingleClientProxy> Proxy, MusicControlActionExecutor Executor)>
+        GetConnectedSetupAsync(DbContextOptions<ApplicationDbContext> options, Guid clientId)
+    {
+        Mock<ISystemDbContextFactory> factory = GetFactoryMock(options);
+        string connectionId = NewConnectionId();
+        await SeedClientAsync(options, clientId, connectionId);
+        MarkConnected(connectionId);
+
+        (MusicPlayerService player, Mock<ISingleClientProxy> proxy) = GetMusicPlayer(factory.Object);
+
+        return (player, proxy, GetExecutor(factory.Object, player));
+    }
+
+    private static int Sent(Mock<ISingleClientProxy> proxy, string method) =>
+        proxy.Invocations.Count(i => (string)i.Arguments[0] == method);
+
+    [TestMethod]
+    public async Task Play_WithResumeIfLoaded_CarriesOnWithThePausedPlaylistInsteadOfReloadingIt()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = Guid.NewGuid();
+        Guid playlistId = Guid.NewGuid();
+        await SeedPlaylistAsync(options, playlistId, 3);
+        (MusicPlayerService player, Mock<ISingleClientProxy> proxy, MusicControlActionExecutor executor) =
+            await GetConnectedSetupAsync(options, clientId);
+
+        AutomationRuleAction play = BuildAction(
+            $$"""{"TargetClientId":"{{clientId}}","Operation":"Play","PlaylistId":"{{playlistId}}","ResumeIfLoaded":true}""");
+
+        Assert.IsTrue((await executor.ExecuteAsync(play, clientId)).Success);
+        player.UpdatePlaybackState(clientId, NAudio.Wave.PlaybackState.Paused);
+        Assert.IsTrue((await executor.ExecuteAsync(play, clientId)).Success);
+
+        Assert.AreEqual(1, Sent(proxy, "LoadPlaylist"), "The second Play must resume, not load the playlist again.");
+        Assert.AreEqual(2, Sent(proxy, "Play"));
+    }
+
+    [TestMethod]
+    public async Task Play_WithResumeIfLoaded_LoadsThePlaylist_WhenADifferentOneIsLoadedOrItStopped()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = Guid.NewGuid();
+        Guid other = Guid.NewGuid();
+        Guid playlistId = Guid.NewGuid();
+        await SeedPlaylistAsync(options, other, 2);
+        await SeedPlaylistAsync(options, playlistId, 2);
+        (MusicPlayerService player, Mock<ISingleClientProxy> proxy, MusicControlActionExecutor executor) =
+            await GetConnectedSetupAsync(options, clientId);
+
+        await player.Play(clientId, other);
+        player.UpdatePlaybackState(clientId, NAudio.Wave.PlaybackState.Paused);
+
+        AutomationRuleAction play = BuildAction(
+            $$"""{"TargetClientId":"{{clientId}}","Operation":"Play","PlaylistId":"{{playlistId}}","ResumeIfLoaded":true}""");
+
+        Assert.IsTrue((await executor.ExecuteAsync(play, clientId)).Success);
+        Assert.AreEqual(2, Sent(proxy, "LoadPlaylist"), "A different playlist was loaded, so this one has to be loaded.");
+        Assert.AreEqual(playlistId, player.GetCurrentPlaylist(clientId)?.Id);
+
+        player.UpdatePlaybackState(clientId, NAudio.Wave.PlaybackState.Stopped);
+        Assert.IsTrue((await executor.ExecuteAsync(play, clientId)).Success);
+        Assert.AreEqual(3, Sent(proxy, "LoadPlaylist"), "After a stop there's nothing to carry on with.");
+    }
+
+    [TestMethod]
+    public async Task Play_WithoutResumeIfLoaded_StartsThePlaylistAgain()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = Guid.NewGuid();
+        Guid playlistId = Guid.NewGuid();
+        await SeedPlaylistAsync(options, playlistId, 2);
+        (MusicPlayerService player, Mock<ISingleClientProxy> proxy, MusicControlActionExecutor executor) =
+            await GetConnectedSetupAsync(options, clientId);
+
+        AutomationRuleAction play = BuildAction(
+            $$"""{"TargetClientId":"{{clientId}}","Operation":"Play","PlaylistId":"{{playlistId}}"}""");
+
+        await executor.ExecuteAsync(play, clientId);
+        player.UpdatePlaybackState(clientId, NAudio.Wave.PlaybackState.Paused);
+        await executor.ExecuteAsync(play, clientId);
+
+        Assert.AreEqual(2, Sent(proxy, "LoadPlaylist"), "Existing steps keep restarting the playlist, as before.");
+    }
+
+    [TestMethod]
+    public async Task Play_SetsShuffleAndRepeat_WhenTheStepSaysTo()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = Guid.NewGuid();
+        (MusicPlayerService player, _, MusicControlActionExecutor executor) = await GetConnectedSetupAsync(options, clientId);
+
+        AutomationRuleAction play = BuildAction(
+            $$"""{"TargetClientId":"{{clientId}}","Operation":"Play","Shuffle":"On","Repeat":"One"}""");
+
+        Assert.IsTrue((await executor.ExecuteAsync(play, clientId)).Success);
+        Assert.IsTrue(player.GetShuffleEnabled(clientId));
+        Assert.AreEqual(RepeatMode.One, player.GetCurrentRepeatMode(clientId));
+
+        AutomationRuleAction off = BuildAction(
+            $$"""{"TargetClientId":"{{clientId}}","Operation":"Play","Shuffle":"Off","Repeat":"Off"}""");
+
+        Assert.IsTrue((await executor.ExecuteAsync(off, clientId)).Success);
+        Assert.IsFalse(player.GetShuffleEnabled(clientId));
+        Assert.AreEqual(RepeatMode.Off, player.GetCurrentRepeatMode(clientId));
+    }
+
+    [TestMethod]
+    public async Task Play_PutsShuffleAndRepeatBack_WhenThePlaylistCantBePlayed()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = Guid.NewGuid();
+        (MusicPlayerService player, _, MusicControlActionExecutor executor) = await GetConnectedSetupAsync(options, clientId);
+
+        await player.SetShuffle(clientId, false);
+        await player.SetRepeatMode(clientId, RepeatMode.All);
+
+        (bool success, _) = await executor.ExecuteAsync(BuildAction(
+            $$"""{"TargetClientId":"{{clientId}}","Operation":"Play","PlaylistId":"{{Guid.NewGuid()}}","Shuffle":"On","Repeat":"One"}"""), clientId);
+
+        Assert.IsFalse(success, "The playlist doesn't exist.");
+        Assert.IsFalse(player.GetShuffleEnabled(clientId));
+        Assert.AreEqual(RepeatMode.All, player.GetCurrentRepeatMode(clientId));
+    }
+
+    [TestMethod]
+    public async Task ShuffleAndRepeat_AreLeftAlone_WhenNotSetOrOnPause()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = Guid.NewGuid();
+        (MusicPlayerService player, _, MusicControlActionExecutor executor) = await GetConnectedSetupAsync(options, clientId);
+
+        await player.SetShuffle(clientId, true);
+        await player.SetRepeatMode(clientId, RepeatMode.One);
+
+        await executor.ExecuteAsync(BuildAction(
+            $$"""{"TargetClientId":"{{clientId}}","Operation":"Play","Shuffle":null,"Repeat":null}"""), clientId);
+        await executor.ExecuteAsync(BuildAction(
+            $$"""{"TargetClientId":"{{clientId}}","Operation":"Pause","Shuffle":"Off","Repeat":"Off"}"""), clientId);
+
+        Assert.IsTrue(player.GetShuffleEnabled(clientId));
+        Assert.AreEqual(RepeatMode.One, player.GetCurrentRepeatMode(clientId));
     }
 
     [TestCleanup]

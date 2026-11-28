@@ -1,5 +1,6 @@
 @implements IDisposable
 @using Lanyard.Infrastructure.DTO
+@using Lanyard.App.Components.ProjectionPrograms
 
 @inject IProjectionProgramRunnerService ProgramRunner
 @inject IClientService ClientService
@@ -32,6 +33,11 @@
             <FluentText Size="@TextSize.Size300">
                 Step @(_run.CurrentStepIndex + 1) of @_run.Steps.Count: @StepName(_run)
             </FluentText>
+
+            @if (_run.GameWait is { } gameWait)
+            {
+                <ProjectionGameWaitLine Wait="gameWait" Compact="true" />
+            }
 
             <FluentProgressBar Min="0" Max="100" Value="@Progress(_run)" Width="100%" />
 

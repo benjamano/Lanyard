@@ -6,8 +6,10 @@ namespace Lanyard.Application.Services;
 public class LaserGameStatusStore : ILaserGameStatusStore
 {
     public event Action<LaserGameStatusDTO>? OnStatusUpdated;
+    public event Action<Guid>? OnGameRecorded;
 
     private readonly ConcurrentDictionary<Guid, LaserGameStatusDTO> _statusByClientId = new();
+    private readonly ConcurrentDictionary<Guid, DateTime> _gameStartedUtcByClientId = new();
 
     public void UpdateStatus(Guid clientId, LaserGameStatusDTO status)
     {
@@ -34,5 +36,26 @@ public class LaserGameStatusStore : ILaserGameStatusStore
     public void RemoveStatus(Guid clientId)
     {
         _statusByClientId.TryRemove(clientId, out _);
+        _gameStartedUtcByClientId.TryRemove(clientId, out _);
+    }
+
+    public void MarkGameStarted(Guid clientId, DateTime startedAtUtc)
+    {
+        _gameStartedUtcByClientId[clientId] = startedAtUtc;
+    }
+
+    public bool TryGetGameStart(Guid clientId, out DateTime startedAtUtc)
+    {
+        return _gameStartedUtcByClientId.TryGetValue(clientId, out startedAtUtc);
+    }
+
+    public void ClearGameStart(Guid clientId)
+    {
+        _gameStartedUtcByClientId.TryRemove(clientId, out _);
+    }
+
+    public void NotifyGameRecorded(Guid clientId)
+    {
+        OnGameRecorded?.Invoke(clientId);
     }
 }

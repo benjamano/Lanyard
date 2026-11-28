@@ -442,23 +442,59 @@
                                     Label="Operation"
                                     Value="@_actionRows[index].Operation"
                                     ValueChanged="@((string? op) => _actionRows[index].Operation = op ?? "Play")"
-                                    Style="width: 120px;">
+                                    Style="width: 160px;">
                                     <FluentOption Value="@("Play")">Play</FluentOption>
                                     <FluentOption Value="@("Pause")">Pause</FluentOption>
                                 </FluentSelect>
                             </div>
-                            <div>
-                                <FluentSelect TOption="Playlist"
-                                    TValue="string"
-                                    Label="Playlist"
-                                    Placeholder="Select Playlist"
-                                    Items="@_playlists"
-                                    OptionText="@(p => p?.Name ?? string.Empty)"
-                                    OptionValue="@(p => p?.Id.ToString())"
-                                    Value="@(_actionRows[index].PlaylistId?.ToString() ?? string.Empty)"
-                                    ValueChanged="@((string? id) => _actionRows[index].PlaylistId = Guid.TryParse(id, out Guid playlistId) ? playlistId : (Guid?)null)"
-                                    Style="flex: 1;" />
-                            </div>
+                            @if (_actionRows[index].Operation == "Play")
+                            {
+                                <div>
+                                    <FluentSelect TOption="Playlist"
+                                        TValue="string"
+                                        Label="Playlist"
+                                        Placeholder="Select Playlist"
+                                        Items="@_playlists"
+                                        OptionText="@(p => p?.Name ?? string.Empty)"
+                                        OptionValue="@(p => p?.Id.ToString())"
+                                        Value="@(_actionRows[index].PlaylistId?.ToString() ?? string.Empty)"
+                                        ValueChanged="@((string? id) => _actionRows[index].PlaylistId = Guid.TryParse(id, out Guid playlistId) ? playlistId : (Guid?)null)"
+                                        Style="flex: 1;" />
+                                </div>
+                                <div>
+                                    <FluentSelect TOption="string"
+                                        TValue="string"
+                                        Label="Shuffle"
+                                        Value="@_actionRows[index].Shuffle"
+                                        ValueChanged="@((string? value) => _actionRows[index].Shuffle = value ?? string.Empty)"
+                                        Style="width: 160px;">
+                                        <FluentOption TValue="string" Value="@string.Empty">Leave as it is</FluentOption>
+                                        <FluentOption TValue="string" Value="@MusicControlActionExecutor.On">On</FluentOption>
+                                        <FluentOption TValue="string" Value="@MusicControlActionExecutor.Off">Off</FluentOption>
+                                    </FluentSelect>
+                                </div>
+                                <div>
+                                    <FluentSelect TOption="string"
+                                        TValue="string"
+                                        Label="Repeat"
+                                        Value="@_actionRows[index].Repeat"
+                                        ValueChanged="@((string? value) => _actionRows[index].Repeat = value ?? string.Empty)"
+                                        Style="width: 160px;">
+                                        <FluentOption TValue="string" Value="@string.Empty">Leave as it is</FluentOption>
+                                        <FluentOption TValue="string" Value="@nameof(RepeatMode.Off)">Off</FluentOption>
+                                        <FluentOption TValue="string" Value="@nameof(RepeatMode.All)">Repeat playlist</FluentOption>
+                                        <FluentOption TValue="string" Value="@nameof(RepeatMode.One)">Repeat song</FluentOption>
+                                    </FluentSelect>
+                                </div>
+                                @if (_actionRows[index].PlaylistId is not null)
+                                {
+                                    <div class="automation-music-resume">
+                                        <FluentCheckbox Value="@_actionRows[index].ResumeIfLoaded"
+                                                        ValueChanged="@((bool ticked) => _actionRows[index].ResumeIfLoaded = ticked)"
+                                                        Label="If this playlist is already playing or paused, carry on where it left off" />
+                                    </div>
+                                }
+                            }
                         }
                         <FluentButton IconStart="new Icons.Regular.Size20.Dismiss()"
                             Disabled="@(_actionRows.Count <= 1)"
@@ -529,6 +565,10 @@
         public string TargetClientIdString { get; set; } = string.Empty;
         public string Operation { get; set; } = "Play";
         public Guid? PlaylistId { get; set; }
+        public bool ResumeIfLoaded { get; set; }
+        // Empty = leave the kiosk's current setting alone.
+        public string Shuffle { get; set; } = string.Empty;
+        public string Repeat { get; set; } = string.Empty;
         public string ProjectionProgramIdString { get; set; } = string.Empty;
         public string DisplayIndexString { get; set; } = "default";
         public List<ClientAvailableScreen> Screens { get; set; } = [];
@@ -843,6 +883,24 @@
                     {
                         row.PlaylistId = playlistId;
                     }
+
+                    if (doc.RootElement.TryGetProperty("ResumeIfLoaded", out JsonElement resumeElement) &&
+                        resumeElement.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                    {
+                        row.ResumeIfLoaded = resumeElement.GetBoolean();
+                    }
+
+                    if (doc.RootElement.TryGetProperty("Shuffle", out JsonElement shuffleElement) &&
+                        shuffleElement.ValueKind == JsonValueKind.String)
+                    {
+                        row.Shuffle = shuffleElement.GetString() ?? string.Empty;
+                    }
+
+                    if (doc.RootElement.TryGetProperty("Repeat", out JsonElement repeatElement) &&
+                        repeatElement.ValueKind == JsonValueKind.String)
+                    {
+                        row.Repeat = repeatElement.GetString() ?? string.Empty;
+                    }
                 }
 
                 _actionRows.Add(row);
@@ -1105,11 +1163,16 @@
             }
             else
             {
+                bool isPlay = row.Operation == "Play";
                 parametersJson = JsonSerializer.Serialize(new
                 {
                     TargetClientId = targetClientId,
                     Operation = row.Operation,
-                    PlaylistId = row.PlaylistId
+                    // Pause has no playlist; dropping a stale one keeps the step's summary honest.
+                    PlaylistId = isPlay ? row.PlaylistId : null,
+                    ResumeIfLoaded = isPlay && row.PlaylistId is not null && row.ResumeIfLoaded,
+                    Shuffle = isPlay && !string.IsNullOrEmpty(row.Shuffle) ? row.Shuffle : null,
+                    Repeat = isPlay && !string.IsNullOrEmpty(row.Repeat) ? row.Repeat : null
                 });
             }
 

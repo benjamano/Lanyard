@@ -42,7 +42,9 @@ public record SuggestionCandidate(
 //   8. fewest hours this week for their contract (hours / max, or min, or the team's usual)
 //   9. name, then id, so the same inputs always give the same order
 // Going over a maximum, a pending day off or a short rest only push someone down: the manager can
-// still pick them, as SaveShiftAsync only warns about each.
+// still pick them by hand. Breaking a young worker limit (YoungWorkerRules) comes through
+// ShiftClaimRules.WhyCantWork, so an under-18 is listed under "Not suggested" with the reason;
+// the manager can still pick them too, and SaveShiftAsync then warns.
 public static class ShiftSuggestionRules
 {
     public static readonly TimeSpan MinimumRest = TimeSpan.FromHours(11);

@@ -126,6 +126,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<UserClockInPin> UserClockInPins { get; set; }
         public DbSet<StaffAvailability> StaffAvailabilities { get; set; }
         public DbSet<StaffWorkPreference> StaffWorkPreferences { get; set; }
+        public DbSet<YoungWorkerStatus> YoungWorkerStatuses { get; set; }
         public DbSet<ShiftTemplate> ShiftTemplates { get; set; }
         public DbSet<PartyStaffingRule> PartyStaffingRules { get; set; }
         public DbSet<ShiftTemplateSlot> ShiftTemplateSlots { get; set; }
@@ -318,7 +319,8 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasValue<PendingTimeOffWidget>(WidgetType.PendingTimeOff)
                 .HasValue<ComplianceSummaryWidget>(WidgetType.ComplianceSummary)
                 .HasValue<DemandStaffingWidget>(WidgetType.DemandStaffing)
-                .HasValue<WhatsOnTodayWidget>(WidgetType.WhatsOnToday);
+                .HasValue<WhatsOnTodayWidget>(WidgetType.WhatsOnToday)
+                .HasValue<LiveCaptureWidget>(WidgetType.LiveCapture);
 
             // Sibling widget types share a ClientId property in the TPH table; pin the
             // column names so EF's automatic uniquification cannot rename existing columns.
@@ -392,6 +394,22 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<DemandStaffingWidget>()
                 .Property(x => x.RangeDays)
                 .HasColumnName("DemandStaffingWidget_RangeDays");
+
+            modelBuilder.Entity<LiveCaptureWidget>()
+                .Property(x => x.ClientId)
+                .HasColumnName("LiveCaptureWidget_ClientId");
+
+            modelBuilder.Entity<LiveCaptureWidget>()
+                .Property(x => x.DeviceName)
+                .HasColumnName("LiveCaptureWidget_DeviceName");
+
+            modelBuilder.Entity<LiveCaptureWidget>()
+                .Property(x => x.EnableAudio)
+                .HasColumnName("LiveCaptureWidget_EnableAudio");
+
+            modelBuilder.Entity<LiveCaptureWidget>()
+                .Property(x => x.FillTile)
+                .HasColumnName("LiveCaptureWidget_FillTile");
 
             modelBuilder.Entity<WhatsOnTodayWidget>()
                 .Property(x => x.LocationId)
@@ -625,6 +643,16 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<StaffWorkPreference>()
                 .Property(x => x.MaxHoursPerWeek)
                 .HasPrecision(5, 2);
+
+            modelBuilder.Entity<YoungWorkerStatus>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<YoungWorkerStatus>()
+                .HasIndex(x => new { x.CompanyId, x.UserId })
+                .IsUnique();
 
             // A location's weekly shift templates, read for one location at a time. Slots are part
             // of their template (replaced whenever it's saved); a position in use can only be

@@ -557,6 +557,7 @@ public class DashboardServiceTests
                 Id = Guid.Empty,
                 ClientId = clientId,
                 ShowSongTitle = false,
+                ShowVolumeAndEq = true,
                 IsActive = true
             }
         ];
@@ -569,6 +570,7 @@ public class DashboardServiceTests
         MusicTimelineWidget dbWidget = await ctx.DashboardWidgets.OfType<MusicTimelineWidget>().SingleAsync(x => x.DashboardId == dashboard.Id);
         Assert.AreEqual(clientId, dbWidget.ClientId);
         Assert.IsFalse(dbWidget.ShowSongTitle);
+        Assert.IsTrue(dbWidget.ShowVolumeAndEq);
     }
 
     [TestMethod]
@@ -595,6 +597,7 @@ public class DashboardServiceTests
 
         timelineWidget.ClientId = clientId;
         timelineWidget.ShowSongTitle = true;
+        timelineWidget.ShowVolumeAndEq = true;
 
         Result<bool> updateResult = await service.SaveDashboardAsync(dashboard);
         Assert.IsTrue(updateResult.Success, updateResult.Error);
@@ -603,6 +606,7 @@ public class DashboardServiceTests
         MusicTimelineWidget dbWidget = await ctx.DashboardWidgets.OfType<MusicTimelineWidget>().SingleAsync(x => x.Id == timelineWidget.Id);
         Assert.AreEqual(clientId, dbWidget.ClientId);
         Assert.IsTrue(dbWidget.ShowSongTitle);
+        Assert.IsTrue(dbWidget.ShowVolumeAndEq);
     }
 
     [TestMethod]
@@ -635,6 +639,7 @@ public class DashboardServiceTests
             DashboardId = dashboard.Id,
             ClientId = clientId,
             ShowSongTitle = false,
+            ShowVolumeAndEq = true,
             IsActive = true
         };
 
@@ -646,6 +651,103 @@ public class DashboardServiceTests
         MusicTimelineWidget dbWidget = await ctx.DashboardWidgets.OfType<MusicTimelineWidget>().SingleAsync(x => x.Id == existingWidget.Id);
         Assert.AreEqual(clientId, dbWidget.ClientId);
         Assert.IsFalse(dbWidget.ShowSongTitle);
+        Assert.IsTrue(dbWidget.ShowVolumeAndEq);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_PersistsAndUpdatesLiveCaptureWidget()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        Guid clientId = Guid.NewGuid();
+
+        LiveCaptureWidget widget = new()
+        {
+            Id = Guid.NewGuid(),
+            ClientId = clientId,
+            DeviceName = "HD Pro Webcam C920",
+            EnableAudio = true,
+            FillTile = false,
+            IsActive = true
+        };
+
+        dashboard.Widgets = [widget];
+
+        Result<bool> createResult = await service.SaveDashboardAsync(dashboard);
+        Assert.IsTrue(createResult.Success, createResult.Error);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            LiveCaptureWidget created = await ctx.DashboardWidgets.OfType<LiveCaptureWidget>().SingleAsync(x => x.Id == widget.Id);
+            Assert.AreEqual(clientId, created.ClientId);
+            Assert.AreEqual("HD Pro Webcam C920", created.DeviceName);
+            Assert.IsTrue(created.EnableAudio);
+            Assert.IsFalse(created.FillTile);
+        }
+
+        Guid otherClientId = Guid.NewGuid();
+
+        widget.ClientId = otherClientId;
+        widget.DeviceName = "USB Capture HDMI";
+        widget.EnableAudio = false;
+        widget.FillTile = true;
+
+        Result<bool> updateResult = await service.SaveDashboardAsync(dashboard);
+        Assert.IsTrue(updateResult.Success, updateResult.Error);
+
+        await using ApplicationDbContext updatedCtx = new(options);
+        LiveCaptureWidget updated = await updatedCtx.DashboardWidgets.OfType<LiveCaptureWidget>().SingleAsync(x => x.Id == widget.Id);
+        Assert.AreEqual(otherClientId, updated.ClientId);
+        Assert.AreEqual("USB Capture HDMI", updated.DeviceName);
+        Assert.IsFalse(updated.EnableAudio);
+        Assert.IsTrue(updated.FillTile);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveWidget_CopiesLiveCaptureConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        LiveCaptureWidget existingWidget = new()
+        {
+            Id = Guid.NewGuid(),
+            DashboardId = dashboard.Id,
+            IsActive = true
+        };
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(existingWidget);
+            await seedCtx.SaveChangesAsync();
+        }
+
+        Guid clientId = Guid.NewGuid();
+
+        LiveCaptureWidget incomingWidget = new()
+        {
+            Id = existingWidget.Id,
+            DashboardId = dashboard.Id,
+            ClientId = clientId,
+            DeviceName = "HD Pro Webcam C920",
+            EnableAudio = true,
+            FillTile = true,
+            IsActive = true
+        };
+
+        Result<DashboardWidget> result = await service.SaveWidgetAsync(incomingWidget);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        LiveCaptureWidget dbWidget = await ctx.DashboardWidgets.OfType<LiveCaptureWidget>().SingleAsync(x => x.Id == existingWidget.Id);
+        Assert.AreEqual(clientId, dbWidget.ClientId);
+        Assert.AreEqual("HD Pro Webcam C920", dbWidget.DeviceName);
+        Assert.IsTrue(dbWidget.EnableAudio);
+        Assert.IsTrue(dbWidget.FillTile);
     }
 
     // Guards CreateWidgetCopy: a widget type missing from that switch throws
@@ -2138,6 +2240,7 @@ public class DashboardServiceTests
             seedCtx.DashboardWidgets.Add(new DigitalClockWidget { DashboardId = source.Id, Is24HourFormat = true, GridX = 3, Title = "Time", ShowTitle = true, PhoneOrder = 1 });
             seedCtx.DashboardWidgets.Add(new HallOfFameWidget { DashboardId = source.Id, Period = HallOfFamePeriod.ThisWeek, HideOnPhone = true });
             seedCtx.DashboardWidgets.Add(new GreetingWidget { DashboardId = source.Id, IsActive = false });
+            seedCtx.DashboardWidgets.Add(new MusicTimelineWidget { DashboardId = source.Id, ShowSongTitle = false, ShowVolumeAndEq = true });
             await seedCtx.SaveChangesAsync();
         }
 
@@ -2150,7 +2253,7 @@ public class DashboardServiceTests
         Assert.AreEqual("Front desk (copy)", copy.Name);
         Assert.IsTrue(copy.FitToScreen);
         Assert.AreEqual(90, copy.RowHeight);
-        Assert.HasCount(2, copy.Widgets);
+        Assert.HasCount(3, copy.Widgets);
 
         DigitalClockWidget clock = copy.Widgets.OfType<DigitalClockWidget>().Single();
         Assert.IsTrue(clock.Is24HourFormat);
@@ -2159,9 +2262,63 @@ public class DashboardServiceTests
         Assert.AreEqual(1, clock.PhoneOrder);
         Assert.AreEqual(HallOfFamePeriod.ThisWeek, copy.Widgets.OfType<HallOfFameWidget>().Single().Period);
         Assert.IsTrue(copy.Widgets.OfType<HallOfFameWidget>().Single().HideOnPhone);
+        MusicTimelineWidget timeline = copy.Widgets.OfType<MusicTimelineWidget>().Single();
+        Assert.IsFalse(timeline.ShowSongTitle);
+        Assert.IsTrue(timeline.ShowVolumeAndEq);
 
         // The original is untouched.
-        Assert.AreEqual(2, await ctx.DashboardWidgets.CountAsync(x => x.DashboardId == source.Id && x.IsActive));
+        Assert.AreEqual(3, await ctx.DashboardWidgets.CountAsync(x => x.DashboardId == source.Id && x.IsActive));
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveWidget_KeepsGameHistorySettings_AndClampsTheCount()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        ClientZoneLaserGameStatusWidget existing = new() { Id = Guid.NewGuid(), DashboardId = dashboard.Id };
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(existing);
+            await seedCtx.SaveChangesAsync();
+        }
+
+        Result<DashboardWidget> result = await service.SaveWidgetAsync(new ClientZoneLaserGameStatusWidget
+        {
+            Id = existing.Id,
+            DashboardId = dashboard.Id,
+            ShowGameHistory = true,
+            GameHistoryCount = 500
+        });
+
+        Assert.IsTrue(result.Success, result.Error);
+        await using ApplicationDbContext ctx = new(options);
+        ClientZoneLaserGameStatusWidget saved = await ctx.DashboardWidgets.OfType<ClientZoneLaserGameStatusWidget>().SingleAsync();
+        Assert.IsTrue(saved.ShowGameHistory);
+        Assert.AreEqual(ClientZoneLaserGameStatusWidget.MaxGameHistoryCount, saved.GameHistoryCount);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_DuplicateDashboard_CopiesGameHistorySettings()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options, "Manager");
+        Dashboard source = await SeedDashboardAsync(options, "Arena");
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(new ClientZoneLaserGameStatusWidget { DashboardId = source.Id, ShowGameHistory = true, GameHistoryCount = 8 });
+            await seedCtx.SaveChangesAsync();
+        }
+
+        Result<Guid> result = await service.DuplicateDashboardAsync(source.Id);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        await using ApplicationDbContext ctx = new(options);
+        ClientZoneLaserGameStatusWidget copy = await ctx.DashboardWidgets.OfType<ClientZoneLaserGameStatusWidget>().SingleAsync(x => x.DashboardId == result.Data);
+        Assert.IsTrue(copy.ShowGameHistory);
+        Assert.AreEqual(8, copy.GameHistoryCount);
     }
 
     [TestMethod]

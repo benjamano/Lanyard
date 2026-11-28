@@ -35,7 +35,8 @@ public class ProjectionProgramRunnerServiceTests
         return new ProjectionProgramRunnerService(
             GetFactoryMock(options).Object,
             new ProjectionBindingResolver([], Mock.Of<ILogger<ProjectionBindingResolver>>()),
-            Mock.Of<ILogger<ProjectionProgramRunnerService>>());
+            Mock.Of<ILogger<ProjectionProgramRunnerService>>(),
+            new LaserGameStatusStore());
     }
 
     // The runner refuses a kiosk from another company, so every run needs a real client. Programs
@@ -567,7 +568,7 @@ public class ProjectionProgramRunnerServiceTests
             CacheDuration = TimeSpan.Zero
         };
 
-        return new ProjectionProgramRunnerService(GetFactoryMock(options).Object, resolver, Mock.Of<ILogger<ProjectionProgramRunnerService>>())
+        return new ProjectionProgramRunnerService(GetFactoryMock(options).Object, resolver, Mock.Of<ILogger<ProjectionProgramRunnerService>>(), new LaserGameStatusStore())
         {
             BindingRefreshInterval = refreshInterval
         };

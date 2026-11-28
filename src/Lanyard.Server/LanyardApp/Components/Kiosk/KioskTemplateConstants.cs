@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Projection;
 using Lanyard.Shared.Projection;
 
 namespace Lanyard.App.Components.Kiosk;
@@ -13,7 +14,16 @@ public static class KioskTemplateConstants
         public const string Delay = ProjectionTemplateNames.Delay;
         public const string Dashboard = ProjectionTemplateNames.Dashboard;
         public const string LiveCapture = ProjectionTemplateNames.LiveCapture;
+        public const string WaitForGame = GameWaitStepNames.Template;
     }
+
+    /// <summary>
+    /// Steps that only hold (Delay, Wait for Game) and draw nothing, so whatever the previous
+    /// step put on screen stays there.
+    /// </summary>
+    public static bool IsHoldOnly(string? templateName) =>
+        string.Equals(templateName, TemplateNames.Delay, StringComparison.Ordinal)
+        || string.Equals(templateName, TemplateNames.WaitForGame, StringComparison.Ordinal);
 
     public static class ParameterNames
     {
