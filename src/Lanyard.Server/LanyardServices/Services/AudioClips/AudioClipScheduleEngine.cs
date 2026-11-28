@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
@@ -63,13 +64,18 @@ public class AudioClipScheduleEngine(
                 .GroupBy(x => x.LocationId)
                 .ToDictionary(x => x.Key, x => x.ToList());
 
+            // Rota holidays from yesterday (a late close plays the next morning): a Closed day
+            // plays nothing, a bank holiday follows its staffed-like day's hours.
+            DateOnly today = DateOnly.FromDateTime(venueLocal);
+            Dictionary<int, List<RotaHoliday>> holidays = await RotaHolidayQueries.ForLocationsAsync(ctx, locationIds, today.AddDays(-1), today, ct);
+
             List<(AudioClipSchedule Schedule, DateTime At)> due = [];
 
             foreach (AudioClipSchedule schedule in schedules)
             {
                 List<LocationOpeningHours> hours = hoursByLocation.GetValueOrDefault(schedule.LocationId) ?? [];
 
-                if (AudioClipScheduleRules.DueAt(schedule, hours, venueLocal) is not DateTime at)
+                if (AudioClipScheduleRules.DueAt(schedule, hours, venueLocal, holidays.For(schedule.LocationId)) is not DateTime at)
                 {
                     continue;
                 }

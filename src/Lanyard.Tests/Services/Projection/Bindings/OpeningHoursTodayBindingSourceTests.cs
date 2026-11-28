@@ -50,6 +50,61 @@ public class OpeningHoursTodayBindingSourceTests
         await ctx.SaveChangesAsync();
     }
 
+    private static async Task AddHolidayAsync(DbContextOptions<ApplicationDbContext> options, RotaHolidayKind kind, string name, DayOfWeek? like = null, bool staffScheduling = true)
+    {
+        await using ApplicationDbContext ctx = new(options);
+        DateOnly today = DateOnly.FromDateTime(RotaTime.ToVenueLocal(NowUtc));
+
+        ctx.RotaHolidays.Add(new RotaHoliday
+        {
+            Id = Guid.NewGuid(), CompanyId = CompanyId, LocationId = LocationId, Name = name, Kind = kind,
+            StartDate = today, EndDate = today, StaffLike = like
+        });
+
+        if (staffScheduling)
+        {
+            ctx.LocationFeatureSettings.Add(new LocationFeatureSetting { LocationId = LocationId, Feature = CompanyFeature.StaffScheduling, IsEnabled = true });
+        }
+
+        await ctx.SaveChangesAsync();
+    }
+
+    [TestMethod]
+    public async Task ClosedDay_SaysClosedTodayAndWhy_EvenWithNoHoursSet()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedAsync(options, CompanyId);
+        await AddHolidayAsync(options, RotaHolidayKind.Closed, "Christmas Day");
+
+        Result<string?> result = await ResolveAsync(CreateSource(options));
+
+        Assert.AreEqual("Closed today – Christmas Day", result.Data);
+    }
+
+    [TestMethod]
+    public async Task ClosedDay_IgnoredWhereStaffSchedulingIsOff()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedAsync(options, CompanyId, (Today, new TimeOnly(10, 0), new TimeOnly(18, 0)));
+        await AddHolidayAsync(options, RotaHolidayKind.Closed, "Refit", staffScheduling: false);
+
+        Result<string?> result = await ResolveAsync(CreateSource(options));
+
+        Assert.AreEqual("Open today 10:00 – 18:00", result.Data);
+    }
+
+    [TestMethod]
+    public async Task BankHoliday_ShowsTheStaffedLikeDaysHours()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedAsync(options, CompanyId, (Today, new TimeOnly(15, 0), new TimeOnly(19, 0)), (DayOfWeek.Sunday, new TimeOnly(10, 0), new TimeOnly(17, 0)));
+        await AddHolidayAsync(options, RotaHolidayKind.BankHoliday, "Summer bank holiday");
+
+        Result<string?> result = await ResolveAsync(CreateSource(options));
+
+        Assert.AreEqual("Open today 10:00 – 17:00", result.Data);
+    }
+
     private static Task<Result<string?>> ResolveAsync(OpeningHoursTodayBindingSource source, int? locationId = LocationId) =>
         source.ResolveAsync(new ProjectionBindingContext(CompanyId, locationId, Guid.NewGuid(), NowUtc), CancellationToken.None);
 

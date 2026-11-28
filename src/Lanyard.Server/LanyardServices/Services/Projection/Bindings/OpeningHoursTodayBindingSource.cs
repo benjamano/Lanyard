@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
@@ -8,9 +9,11 @@ using Microsoft.EntityFrameworkCore;
 namespace Lanyard.Application.Services.Projection.Bindings;
 
 /// <summary>
-/// "Open today 10:00 – 18:00" (several windows joined with commas), or "Closed today". Nothing - so
-/// the fallback shows - for a kiosk with no location, or a location that has never had hours set,
-/// since "Closed today" would be a guess there.
+/// "Open today 10:00 – 18:00" (several windows joined with commas), "Closed today", or "Closed today
+/// – Christmas Day" on a day marked Closed under Rota > Holidays. A bank holiday shows the hours of
+/// the day it's staffed like. Nothing - so the fallback shows - for a kiosk with no location, or a
+/// location that has never had hours set (and isn't closed for a holiday), since "Closed today"
+/// would be a guess there.
 /// </summary>
 public class OpeningHoursTodayBindingSource(ISystemDbContextFactory factory) : IProjectionBindingSource
 {
@@ -30,15 +33,26 @@ public class OpeningHoursTodayBindingSource(ISystemDbContextFactory factory) : I
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync(cancellationToken);
 
             // The location has to be this company's: the system context has no tenant filter.
+            bool ours = await ctx.Locations
+                .AsNoTracking()
+                .TagWithCallSite()
+                .AnyAsync(l => l.Id == locationId && l.CompanyId == context.CompanyId && l.IsActive, cancellationToken);
+
+            if (!ours)
+            {
+                return Result<string?>.Ok(null);
+            }
+
             List<LocationOpeningHours> hours = await ctx.LocationOpeningHours
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(h => h.LocationId == locationId
-                    && h.IsActive
-                    && ctx.Locations.Any(l => l.Id == locationId && l.CompanyId == context.CompanyId && l.IsActive))
+                .Where(h => h.LocationId == locationId && h.IsActive)
                 .ToListAsync(cancellationToken);
 
-            return Result<string?>.Ok(Describe(hours, RotaTime.ToVenueLocal(context.NowUtc).DayOfWeek));
+            DateOnly today = DateOnly.FromDateTime(RotaTime.ToVenueLocal(context.NowUtc));
+            Dictionary<int, List<RotaHoliday>> holidays = await RotaHolidayQueries.ForLocationAsync(ctx, locationId, today, today, cancellationToken);
+
+            return Result<string?>.Ok(Describe(hours, OpeningHoursRules.Resolve(hours, holidays.For(locationId), today)));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -46,19 +60,19 @@ public class OpeningHoursTodayBindingSource(ISystemDbContextFactory factory) : I
         }
     }
 
-    public static string? Describe(IReadOnlyCollection<LocationOpeningHours> hours, DayOfWeek today)
+    public static string? Describe(IReadOnlyCollection<LocationOpeningHours> hours, OpeningDay today)
     {
-        List<LocationOpeningHours> valid = [.. hours.Where(h => h.IsActive && OpeningHoursRules.IsValid(h.OpensAt, h.ClosesAt))];
+        if (today.Holiday.Closed is RotaHoliday closed)
+        {
+            return $"Closed today – {closed.Name}";
+        }
 
-        if (valid.Count == 0)
+        if (!hours.Any(h => h.IsActive && OpeningHoursRules.IsValid(h.OpensAt, h.ClosesAt)))
         {
             return null;
         }
 
-        List<string> windows = [.. valid
-            .Where(h => h.DayOfWeek == today)
-            .OrderBy(h => h.OpensAt)
-            .Select(h => $"{h.OpensAt:HH\\:mm} – {h.ClosesAt:HH\\:mm}")];
+        List<string> windows = [.. today.Windows.Select(w => $"{w.OpensLocal:HH\\:mm} – {w.ClosesLocal:HH\\:mm}")];
 
         return windows.Count == 0 ? "Closed today" : $"Open today {string.Join(", ", windows)}";
     }

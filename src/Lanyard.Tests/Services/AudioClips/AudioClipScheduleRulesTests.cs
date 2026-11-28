@@ -26,6 +26,54 @@ public class AudioClipScheduleRulesTests
     private static LocationOpeningHours Hours(DayOfWeek day, string opens, string closes) =>
         new() { LocationId = 1, DayOfWeek = day, OpensAt = TimeOnly.Parse(opens), ClosesAt = TimeOnly.Parse(closes), IsActive = true };
 
+    private static RotaHoliday Holiday(RotaHolidayKind kind, DateOnly day, DayOfWeek? like = null) => new()
+    {
+        CompanyId = 1, LocationId = 1, Name = "Refit", Kind = kind, StartDate = day, EndDate = day, StaffLike = like
+    };
+
+    [TestMethod]
+    public void ClosedDay_PlaysNothing_EvenAtASetTime()
+    {
+        List<RotaHoliday> closed = [Holiday(RotaHolidayKind.Closed, Friday)];
+        List<LocationOpeningHours> hours = [Hours(DayOfWeek.Friday, "10:00", "22:00")];
+
+        Assert.AreEqual(0, AudioClipScheduleRules.OccurrencesOn(Schedule(AudioClipScheduleAnchor.AtTime), hours, Friday, closed).Count());
+        Assert.AreEqual(0, AudioClipScheduleRules.OccurrencesOn(Schedule(AudioClipScheduleAnchor.BeforeClosing), hours, Friday, closed).Count());
+        Assert.AreEqual(1, AudioClipScheduleRules.OccurrencesOn(Schedule(AudioClipScheduleAnchor.AtTime), hours, Friday.AddDays(1), closed).Count(), "the day after plays");
+    }
+
+    [TestMethod]
+    public void BankHoliday_ClosingFollowsTheStaffedLikeDay()
+    {
+        // Friday bank holiday staffed like a Sunday: Sunday closes at 17:00, not Friday's 22:00.
+        List<LocationOpeningHours> hours = [Hours(DayOfWeek.Friday, "10:00", "22:00"), Hours(DayOfWeek.Sunday, "10:00", "17:00")];
+
+        DateTime[] plays = AudioClipScheduleRules.OccurrencesOn(Schedule(AudioClipScheduleAnchor.BeforeClosing), hours, Friday, [Holiday(RotaHolidayKind.BankHoliday, Friday)]).ToArray();
+
+        CollectionAssert.AreEqual(new[] { new DateTime(2026, 10, 16, 16, 45, 0) }, plays);
+    }
+
+    [TestMethod]
+    public void LateCloseBeforeAClosedDay_StillPlaysThatNight()
+    {
+        // Friday 18:00-02:00, Saturday closed: the closing call at 01:45 Saturday belongs to Friday.
+        List<LocationOpeningHours> hours = [Hours(DayOfWeek.Friday, "18:00", "02:00")];
+        List<RotaHoliday> saturdayClosed = [Holiday(RotaHolidayKind.Closed, Friday.AddDays(1))];
+
+        Assert.AreEqual(new DateTime(2026, 10, 17, 1, 45, 0),
+            AudioClipScheduleRules.DueAt(Schedule(AudioClipScheduleAnchor.BeforeClosing), hours, new DateTime(2026, 10, 17, 1, 45, 30), saturdayClosed));
+    }
+
+    [TestMethod]
+    public void Upcoming_SkipsAClosedDay()
+    {
+        AudioClipSchedule schedule = Schedule(AudioClipScheduleAnchor.AtTime, time: "12:00");
+
+        List<DateTime> next = AudioClipScheduleRules.Upcoming(schedule, [], new DateTime(2026, 10, 16, 9, 0, 0), 2, [Holiday(RotaHolidayKind.Closed, Friday)]);
+
+        CollectionAssert.AreEqual(new[] { new DateTime(2026, 10, 17, 12, 0, 0), new DateTime(2026, 10, 18, 12, 0, 0) }, next);
+    }
+
     [TestMethod]
     public void AtTime_PlaysAtThatTimeOnTheChosenDays()
     {

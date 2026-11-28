@@ -1150,7 +1150,9 @@
       "Staff now shows who is currently marked as under 18, and Rota Settings has a new choice for the night hours staff under 18 can't work: 22:00 to 06:00, or 23:00 to 07:00 if their contract says so.",
       "On a bank holiday marked under Rota > Holidays, opening and closing checklists are now due at the opening hours of the day it's staffed like (Sunday unless you pick another day).",
       "Days marked Closed under Rota > Holidays now count as closed for automation: \"a location is open\" rules and dashboard widgets don't run or show that day, and a skipped rule (including a test run) says why, such as \"Ipswich is closed today for Christmas Day (Rota › Holidays)\". Bank holidays use the opening hours of the day they're staffed like, or their usual hours if the venue never opens on that day.",
-      "Kiosk offline and needs-attention alerts aren't sent on a day marked Closed; a kiosk still down when the location next opens is reported then."
+      "Kiosk offline and needs-attention alerts aren't sent on a day marked Closed; a kiosk still down when the location next opens is reported then.",
+      "Scheduled audio clips don't play on a day marked Closed under Rota > Holidays (not even ones at a set time), and on a bank holiday Before closing and After opening clips follow the hours of the day it's staffed like. The schedule dialog says so when the location uses holidays.",
+      "The Opening hours today text on screens shows \"Closed today – \" and the holiday's name on a day marked Closed, and a bank holiday's staffed-like hours."
     ]
   }
 ]

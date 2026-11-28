@@ -17,11 +17,21 @@ public static class AudioClipScheduleRules
     /// The times the schedule plays that belong to <paramref name="date"/>: the day an AtTime clip
     /// plays, or the day the location opens for a closing or opening time, so a closing call for
     /// Friday's 18:00-02:00 belongs to Friday even though it plays early on Saturday. A day with
-    /// several opening windows gets one play per window. A day with no hours gets none.
+    /// several opening windows gets one play per window. A day with no hours gets none, and a day
+    /// marked Closed under Rota > Holidays gets none at all.
     /// </summary>
-    public static IEnumerable<DateTime> OccurrencesOn(AudioClipSchedule schedule, IEnumerable<LocationOpeningHours> hours, DateOnly date)
+    public static IEnumerable<DateTime> OccurrencesOn(AudioClipSchedule schedule, IEnumerable<LocationOpeningHours> hours, DateOnly date, IEnumerable<RotaHoliday>? holidays = null)
     {
         if (!AutomationScheduleDays.Matches(schedule.DaysOfWeek, date.DayOfWeek))
+        {
+            yield break;
+        }
+
+        // Rota holidays: a Closed day plays nothing at all, a set time included; a bank holiday
+        // opens and closes at the hours of the day it's staffed like.
+        OpeningDay day = OpeningHoursRules.Resolve(hours, holidays ?? [], date);
+
+        if (day.IsClosedForHoliday)
         {
             yield break;
         }
@@ -38,25 +48,18 @@ public static class AudioClipScheduleRules
 
         TimeSpan offset = TimeSpan.FromMinutes(Math.Clamp(schedule.OffsetMinutes, 0, AudioClipSchedule.MaxOffsetMinutes));
 
-        foreach (LocationOpeningHours window in hours
-                     .Where(x => x.IsActive && x.DayOfWeek == date.DayOfWeek && OpeningHoursRules.IsValid(x.OpensAt, x.ClosesAt))
-                     .OrderBy(x => x.OpensAt))
+        foreach (OpeningWindow window in day.Windows)
         {
-            DateTime opens = date.ToDateTime(window.OpensAt);
-            DateTime closes = window.ClosesAt <= window.OpensAt
-                ? date.AddDays(1).ToDateTime(window.ClosesAt)
-                : date.ToDateTime(window.ClosesAt);
-
-            DateTime at = schedule.Anchor == AudioClipScheduleAnchor.BeforeClosing ? closes - offset : opens + offset;
+            DateTime at = schedule.Anchor == AudioClipScheduleAnchor.BeforeClosing ? window.ClosesLocal - offset : window.OpensLocal + offset;
 
             // A long offset on a short window would land outside it; keep it within opening hours.
-            if (at < opens)
+            if (at < window.OpensLocal)
             {
-                at = opens;
+                at = window.OpensLocal;
             }
-            else if (at > closes)
+            else if (at > window.ClosesLocal)
             {
-                at = closes;
+                at = window.ClosesLocal;
             }
 
             yield return at;
@@ -67,13 +70,14 @@ public static class AudioClipScheduleRules
     /// The occurrence due at <paramref name="venueLocal"/>, if any: one that has started and is at
     /// most <see cref="LateBy"/> old. Yesterday is checked too, for closes after midnight.
     /// </summary>
-    public static DateTime? DueAt(AudioClipSchedule schedule, IEnumerable<LocationOpeningHours> hours, DateTime venueLocal)
+    public static DateTime? DueAt(AudioClipSchedule schedule, IEnumerable<LocationOpeningHours> hours, DateTime venueLocal, IEnumerable<RotaHoliday>? holidays = null)
     {
         List<LocationOpeningHours> windows = hours.ToList();
+        List<RotaHoliday> days = holidays?.ToList() ?? [];
         DateOnly today = DateOnly.FromDateTime(venueLocal);
 
-        return OccurrencesOn(schedule, windows, today.AddDays(-1))
-            .Concat(OccurrencesOn(schedule, windows, today))
+        return OccurrencesOn(schedule, windows, today.AddDays(-1), days)
+            .Concat(OccurrencesOn(schedule, windows, today, days))
             .Where(x => x <= venueLocal && venueLocal - x < LateBy)
             .OrderByDescending(x => x)
             .Select(x => (DateTime?)x)
@@ -81,14 +85,15 @@ public static class AudioClipScheduleRules
     }
 
     /// <summary>The next few plays from <paramref name="venueLocal"/>, for the preview.</summary>
-    public static List<DateTime> Upcoming(AudioClipSchedule schedule, IEnumerable<LocationOpeningHours> hours, DateTime venueLocal, int count = 3)
+    public static List<DateTime> Upcoming(AudioClipSchedule schedule, IEnumerable<LocationOpeningHours> hours, DateTime venueLocal, int count = 3, IEnumerable<RotaHoliday>? holidays = null)
     {
         List<LocationOpeningHours> windows = hours.ToList();
+        List<RotaHoliday> days = holidays?.ToList() ?? [];
         DateOnly today = DateOnly.FromDateTime(venueLocal);
 
         // Two weeks ahead, so a once-a-week schedule still shows a few plays.
         return Enumerable.Range(-1, 16)
-            .SelectMany(day => OccurrencesOn(schedule, windows, today.AddDays(day)))
+            .SelectMany(day => OccurrencesOn(schedule, windows, today.AddDays(day), days))
             .Where(x => x >= venueLocal)
             .Distinct()
             .Order()
