@@ -2,42 +2,6 @@
     width: 100%;
 }
 
-/* 16:9 box that keeps its shape while connecting, so the dialog doesn't jump when video starts. */
-.camera-frame {
-    position: relative;
-    width: 100%;
-    aspect-ratio: 16 / 9;
-    border-radius: 8px;
-    overflow: hidden;
-    background: #000;
-    border: 1px solid var(--colorNeutralStroke2);
-}
-
-.camera-video {
-    display: block;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-}
-
-.camera-video-hidden {
-    visibility: hidden;
-}
-
-.camera-overlay {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    padding: 16px;
-    text-align: center;
-    background: var(--colorNeutralBackground3);
-    color: var(--colorNeutralForeground1);
-}
-
 .camera-dialog ::deep .camera-name {
     color: var(--colorNeutralForeground3);
     overflow-wrap: anywhere;

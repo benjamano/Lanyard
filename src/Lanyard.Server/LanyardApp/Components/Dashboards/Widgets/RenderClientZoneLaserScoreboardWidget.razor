@@ -57,7 +57,18 @@
     // 1.0.50 that doesn't send it) keeps the Red/Green team layout.
     private bool _isSolo;
 
-    private sealed record RankedScore(int Rank, string? GunName, int Score);
+    private sealed record RankedScore(int Rank, int GunId, string? GunName, int Score);
+
+    // The kiosk only reports gun numbers (GunName is never filled in by the packet pipeline),
+    // so label by number like the Hall of Fame does, and sort numerically rather than "Gun 10" < "Gun 2".
+    private static readonly GridSort<PlayerScoreDTO> _sortByGun = GridSort<PlayerScoreDTO>.ByAscending(x => x.GunId);
+    private static readonly GridSort<RankedScore> _sortRankedByGun = GridSort<RankedScore>.ByAscending(x => x.GunId);
+
+    private static string GunLabel(PlayerScoreDTO score) =>
+        GunLabel(score.GunId, score.GunName);
+
+    private static string GunLabel(int gunId, string? gunName) =>
+        string.IsNullOrWhiteSpace(gunName) ? $"Gun {gunId}" : gunName;
 
     // One status message arrives per hit; paint at most ~10 times a second.
     private RenderCoalescer? _renderCoalescer;
@@ -106,7 +117,7 @@
                 ? status.PlayerScores
                     .OrderByDescending(x => x.Score)
                     // Equal scores share a place (1, 1, 3), so ties aren't split arbitrarily.
-                    .Select(x => new RankedScore(1 + status.PlayerScores.Count(y => y.Score > x.Score), x.GunName, x.Score))
+                    .Select(x => new RankedScore(1 + status.PlayerScores.Count(y => y.Score > x.Score), x.GunId, x.GunName, x.Score))
                     .ToList()
                     .AsQueryable()
                 : null;
@@ -139,7 +150,7 @@
                         TGridItem="PlayerScoreDTO"
                         StripedRows="true">
             <ChildContent>
-                <PropertyColumn Title="Name" Property="x => x.GunName" Sortable="true" />
+                <TemplateColumn Title="Name" Sortable="true" SortBy="@_sortByGun">@GunLabel(context)</TemplateColumn>
                 <PropertyColumn Title="Score"
                                 Property="x => x.Score"
                                 Sortable="true"
@@ -158,7 +169,7 @@
                         StripedRows="true">
             <ChildContent>
                 <PropertyColumn Title="#" Property="x => x.Rank" Width="60px" />
-                <PropertyColumn Title="Name" Property="x => x.GunName" Sortable="true" />
+                <TemplateColumn Title="Name" Sortable="true" SortBy="@_sortRankedByGun">@GunLabel(context.GunId, context.GunName)</TemplateColumn>
                 <PropertyColumn Title="Score"
                                 Property="x => x.Score"
                                 Sortable="true"
