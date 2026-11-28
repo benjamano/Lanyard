@@ -1,0 +1,255 @@
+@page "/manage/dashboards/{DashboardId:guid}/view"
+@* Any signed-in staff member can view a dashboard live - the same people who can see the
+   dashboards list and pick one as their home screen. Editing stays Admin/Manager (EditDashboard). *@
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Lanyard.App.Components.Dashboards
+
+<PageTitle>@(_dashboard is null ? "Dashboard" : DisplayName)</PageTitle>
+
+@inject IDashboardService DashboardService
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JS
+@inject ILogger<ViewDashboard> Logger
+@implements IAsyncDisposable
+
+<div class="view-dashboard mx-3">
+    <header class="view-dashboard-header">
+        <FluentButton Appearance="ButtonAppearance.Subtle"
+                      IconStart="@(new Icons.Regular.Size20.ArrowLeft())"
+                      Title="Back to dashboards"
+                      aria-label="Back to dashboards"
+                      OnClick="@(() => NavigationManager.NavigateTo("/manage/dashboards"))" />
+
+        <h1 class="view-dashboard-title" title="@DisplayName">@(_dashboard is null ? "Dashboard" : DisplayName)</h1>
+
+        <div class="view-dashboard-actions">
+            @* Each action comes twice: labelled on wider screens, icon-only on a phone, so the
+               dashboard's name still has room. A Fluent button with a hidden label keeps its
+               full width, which is why there are two rather than one with the text hidden. *@
+            @if (_dashboard is not null && _fullscreenSupported)
+            {
+                <span class="view-dashboard-wide">
+                    <FluentButton Appearance="ButtonAppearance.Outline"
+                                  IconStart="@(new Icons.Regular.Size20.FullScreenMaximize())"
+                                  Title="Show the dashboard full screen (press Esc to leave)"
+                                  OnClick="EnterFullscreenAsync">
+                        Full screen
+                    </FluentButton>
+                </span>
+                <span class="view-dashboard-narrow">
+                    <FluentButton Appearance="ButtonAppearance.Subtle"
+                                  IconStart="@(new Icons.Regular.Size20.FullScreenMaximize())"
+                                  Title="Full screen"
+                                  aria-label="Full screen"
+                                  OnClick="EnterFullscreenAsync" />
+                </span>
+            }
+            @if (_dashboard is not null && _canEdit)
+            {
+                <span class="view-dashboard-wide">
+                    <FluentButton Appearance="ButtonAppearance.Outline"
+                                  IconStart="@(new Icons.Regular.Size20.Edit())"
+                                  Title="Edit this dashboard"
+                                  OnClick="EditDashboard">
+                        Edit
+                    </FluentButton>
+                </span>
+                <span class="view-dashboard-narrow">
+                    <FluentButton Appearance="ButtonAppearance.Subtle"
+                                  IconStart="@(new Icons.Regular.Size20.Edit())"
+                                  Title="Edit this dashboard"
+                                  aria-label="Edit"
+                                  OnClick="EditDashboard" />
+                </span>
+            }
+            <HelpButton AreaKey="@HelpRegistry.Dashboards" Topic="overview" Compact="true" />
+        </div>
+    </header>
+
+    @if (_dashboard is null)
+    {
+        <FluentStack HorizontalAlignment="@HorizontalAlignment.Center" Padding="@Padding.All3">
+            @if (_loadError is string error)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@error</FluentMessageBar>
+            }
+            else
+            {
+                <FluentSpinner />
+            }
+        </FluentStack>
+    }
+
+    @* Always rendered so the full-screen element exists before the first OnAfterRender; it is
+       empty until the dashboard loads. *@
+    <div class="view-dashboard-stage @(_fullscreen ? "is-fullscreen" : null)" @ref="_stage">
+        @if (_dashboard is not null)
+        {
+            @if (_fullscreen)
+            {
+                <FluentButton Class="view-dashboard-exit"
+                              Appearance="ButtonAppearance.Subtle"
+                              IconStart="@(new Icons.Regular.Size20.FullScreenMinimize())"
+                              Title="Leave full screen (Esc)"
+                              aria-label="Leave full screen"
+                              OnClick="ExitFullscreenAsync" />
+            }
+
+            @if (_widgets.Count > 0)
+            {
+                @* The same live rendering as the home screen: buttons and controls act. Full screen
+                   uses the dashboard's Fit to screen setting, like a kiosk TV. *@
+                <DashboardGrid Widgets="_widgets"
+                               CompanyId="_dashboard.CompanyId"
+                               RowHeight="_dashboard.RowHeight"
+                               FitToScreen="@(_fullscreen && _dashboard.FitToScreen)"
+                               PreviewMode="true" />
+            }
+            else
+            {
+                <FluentCard Appearance="CardAppearance.Filled">
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">
+                            This dashboard has no widgets yet
+                        </FluentText>
+                        @if (_canEdit)
+                        {
+                            <FluentLink Href="@($"/manage/dashboards/{DashboardId}")">Add widgets in the designer</FluentLink>
+                        }
+                        else
+                        {
+                            <FluentText>An Admin or Manager can add some.</FluentText>
+                        }
+                    </FluentStack>
+                </FluentCard>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public Guid DashboardId { get; set; }
+
+    private Dashboard? _dashboard;
+    private List<DashboardWidget> _widgets = [];
+    private string? _loadError;
+    private bool _canEdit;
+    private Guid _loadedId;
+
+    private ElementReference _stage;
+    private bool _fullscreen;
+    private bool _fullscreenSupported;
+    private IJSObjectReference? _jsModule;
+    private IJSObjectReference? _watcher;
+    private DotNetObjectReference<ViewDashboard>? _dotNetRef;
+
+    private string DisplayName => string.IsNullOrWhiteSpace(_dashboard?.Name) ? "Untitled dashboard" : _dashboard!.Name;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canEdit = await _securityService.IsCurrentUserInRoleAsync("Admin")
+            || await _securityService.IsCurrentUserInRoleAsync("Manager");
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (DashboardId == _loadedId)
+        {
+            return;
+        }
+
+        _loadedId = DashboardId;
+        _dashboard = null;
+        _loadError = null;
+
+        Result<Dashboard> result = await DashboardService.GetDashboardAsync(DashboardId);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            Logger.LogWarning("Failed to load dashboard {DashboardId} for the live view: {Error}", DashboardId, result.Error);
+            _loadError = "This dashboard couldn't be found. It may have been deleted.";
+            return;
+        }
+
+        _dashboard = result.Data;
+        // GetDashboardAsync already leaves out removed widgets; the filter is kept as a guard.
+        _widgets = _dashboard.Widgets.Where(w => w.IsActive).ToList();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/dashboardFullscreen.js");
+            _fullscreenSupported = await _jsModule.InvokeAsync<bool>("isSupported");
+            _watcher = await _jsModule.InvokeAsync<IJSObjectReference>("watch", _stage, _dotNetRef);
+            StateHasChanged();
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit went away during the first render.
+        }
+    }
+
+    private void EditDashboard() => NavigationManager.NavigateTo($"/manage/dashboards/{DashboardId}");
+
+    private async Task EnterFullscreenAsync()
+    {
+        if (_jsModule is null)
+        {
+            return;
+        }
+
+        if (!await _jsModule.InvokeAsync<bool>("enter", _stage))
+        {
+            _toastService.ShowError("Your browser didn't allow full screen.");
+        }
+    }
+
+    private async Task ExitFullscreenAsync()
+    {
+        if (_jsModule is not null)
+        {
+            await _jsModule.InvokeVoidAsync("exit");
+        }
+    }
+
+    // Called by dashboardFullscreen.js whenever full screen starts or ends, so leaving with Esc
+    // puts the page back too.
+    [JSInvokable]
+    public Task OnFullscreenChanged(bool fullscreen)
+    {
+        _fullscreen = fullscreen;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_watcher is not null)
+            {
+                await _watcher.InvokeVoidAsync("dispose");
+                await _watcher.DisposeAsync();
+            }
+
+            if (_jsModule is not null)
+            {
+                await _jsModule.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit has gone; nothing to clean up in the browser.
+        }
+
+        _dotNetRef?.Dispose();
+    }
+}
