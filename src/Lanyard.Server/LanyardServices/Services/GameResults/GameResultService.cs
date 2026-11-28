@@ -49,14 +49,21 @@ public class GameResultService(
 
             DateTime playedAtUtc = DateTime.UtcNow;
 
+            // A start outside this game's possible window belongs to some other game (or a clock
+            // glitch): after the end, or longer before it than the game could have lasted. Drop
+            // it and let readers estimate instead.
+            DateTime earliestPossibleStartUtc = playedAtUtc.AddSeconds(-(status.TotalTimeSeconds + StartTimeSlackSeconds));
+            DateTime? plausibleStartUtc = startedAtUtc is { } start && start <= playedAtUtc && start >= earliestPossibleStartUtc
+                ? start
+                : null;
+
             GameResult gameResult = new()
             {
                 Id = Guid.NewGuid(),
                 CompanyId = companyId.Value,
                 ClientId = clientId,
                 PlayedAtUtc = playedAtUtc,
-                // A start after the end can only be a clock glitch; drop it and let readers estimate.
-                StartedAtUtc = startedAtUtc is { } start && start <= playedAtUtc ? start : null,
+                StartedAtUtc = plausibleStartUtc,
                 DurationSeconds = status.TotalTimeSeconds,
                 PlayerScores = [.. status.PlayerScores.Select(x => new GameResultPlayerScore
                 {
@@ -84,6 +91,10 @@ public class GameResultService(
             return Result<bool>.Fail($"Failed to record the completed game: {ex.Message}");
         }
     }
+
+    // Leeway on top of the game's configured length when judging whether a start is plausible:
+    // status reports are batched, so the edges can land a little late.
+    private const int StartTimeSlackSeconds = 120;
 
     public async Task<Result<IReadOnlyList<RecentGameDTO>>> GetRecentGamesAsync(Guid clientId, int take, int? companyId)
     {

@@ -343,16 +343,13 @@ public class SignalRControlHub(
 
         bool gameJustEnded = previousStatus?.Status == GameStatus.InGame && status.Status == GameStatus.NotStarted;
 
-        if (status.Status == GameStatus.InGame && previousStatus?.Status != GameStatus.InGame)
+        // Only a start the server actually saw is marked. With no previous status the server has
+        // only just heard from this kiosk (a restart or reconnect) and the game may have been
+        // running for a while; leaving it unmarked saves no start, and the history shows the
+        // estimate (with its ≈) rather than a guess presented as exact.
+        if (status.Status == GameStatus.InGame && previousStatus is not null && previousStatus.Status != GameStatus.InGame)
         {
-            // With no previous status the server has only just heard from this kiosk (a restart or
-            // reconnect) and the game may have been running for a while, so work back from the
-            // time already played rather than stamping it as starting now.
-            int secondsAlreadyPlayed = previousStatus is null
-                ? Math.Max(0, status.TotalTimeSeconds - status.TimeRemainingSeconds)
-                : 0;
-
-            _laserGameStatusStore.MarkGameStarted(clientId, DateTime.UtcNow.AddSeconds(-secondsAlreadyPlayed));
+            _laserGameStatusStore.MarkGameStarted(clientId, DateTime.UtcNow);
         }
 
         _laserGameStatusStore.UpdateStatus(clientId, status);
@@ -366,6 +363,8 @@ public class SignalRControlHub(
             DateTime? startedAtUtc = _laserGameStatusStore.TryGetGameStart(clientId, out DateTime markedStartUtc)
                 ? markedStartUtc
                 : null;
+
+            _laserGameStatusStore.ClearGameStart(clientId);
 
             Result<bool> recordResult = await _gameResultService.RecordCompletedGameAsync(clientId, status, startedAtUtc);
 

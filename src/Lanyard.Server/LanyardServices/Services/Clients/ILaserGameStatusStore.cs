@@ -15,6 +15,10 @@ public interface ILaserGameStatusStore
     void MarkGameStarted(Guid clientId, DateTime startedAtUtc);
     bool TryGetGameStart(Guid clientId, out DateTime startedAtUtc);
 
+    // Called once a game's end has been handled, so the next game can never pick up this one's
+    // start (for example if the server misses the edge between two games).
+    void ClearGameStart(Guid clientId);
+
     // Raised once a finished game has been saved, so history views can reload straight away
     // instead of polling. The status update for the end edge fires before the save completes, so
     // that event is too early to read the new row.

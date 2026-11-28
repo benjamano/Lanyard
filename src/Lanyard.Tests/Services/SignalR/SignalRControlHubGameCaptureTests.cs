@@ -300,21 +300,38 @@ public class SignalRControlHubGameCaptureTests
     }
 
     [TestMethod]
-    public async Task UpdateLaserGameStatus_WorksBackFromTimePlayed_WhenTheFirstReportIsMidGame()
+    public async Task UpdateLaserGameStatus_DoesNotMarkAStart_WhenTheFirstReportIsMidGame()
     {
+        // A restart or reconnect mid-game: the server never saw the start, so it saves none and
+        // the history shows an estimate (marked ≈) instead of a guess presented as exact.
         Guid clientId = Guid.NewGuid();
         Mock<IGameResultService> gameResultServiceMock = new();
         SignalRControlHub hub = BuildHub(clientId, gameResultServiceMock, out ILaserGameStatusStore store);
 
         LaserGameStatusDTO midGame = BuildStatus(GameStatus.InGame);
-        midGame.TimeRemainingSeconds = 400; // 200 of 600 seconds already played
+        midGame.TimeRemainingSeconds = 400;
 
-        DateTime before = DateTime.UtcNow;
         await hub.UpdateLaserGameStatus(midGame);
 
-        Assert.IsTrue(store.TryGetGameStart(clientId, out DateTime marked));
-        Assert.IsTrue(marked <= before.AddSeconds(-199), $"Expected about 200s ago, got {marked:O}");
-        Assert.IsTrue(marked >= before.AddSeconds(-202), $"Expected about 200s ago, got {marked:O}");
+        Assert.IsFalse(store.TryGetGameStart(clientId, out _));
+    }
+
+    [TestMethod]
+    public async Task UpdateLaserGameStatus_ClearsTheStart_OnceTheGameEnds()
+    {
+        Guid clientId = Guid.NewGuid();
+        Mock<IGameResultService> gameResultServiceMock = new();
+        gameResultServiceMock
+            .Setup(x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>(), It.IsAny<DateTime?>()))
+            .ReturnsAsync(Result<bool>.Ok(true));
+        SignalRControlHub hub = BuildHub(clientId, gameResultServiceMock, out ILaserGameStatusStore store);
+
+        await hub.UpdateLaserGameStatus(BuildStatus(GameStatus.NotStarted));
+        await hub.UpdateLaserGameStatus(BuildStatus(GameStatus.InGame));
+        await hub.UpdateLaserGameStatus(BuildStatus(GameStatus.NotStarted));
+
+        // Otherwise a later game whose start the server missed would be saved with this one's.
+        Assert.IsFalse(store.TryGetGameStart(clientId, out _));
     }
 
     [TestMethod]

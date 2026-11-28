@@ -49,6 +49,11 @@ public class LaserGameStatusStore : ILaserGameStatusStore
         return _gameStartedUtcByClientId.TryGetValue(clientId, out startedAtUtc);
     }
 
+    public void ClearGameStart(Guid clientId)
+    {
+        _gameStartedUtcByClientId.TryRemove(clientId, out _);
+    }
+
     public void NotifyGameRecorded(Guid clientId)
     {
         OnGameRecorded?.Invoke(clientId);

@@ -208,6 +208,33 @@ public class GameResultServiceRecentGamesTests
     }
 
     [TestMethod]
+    public async Task RecordCompletedGameAsync_DropsAStartLongerAgoThanTheGameCouldHaveLasted()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId;
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            Client client = new() { Id = Guid.NewGuid(), Name = "Arena kiosk", CompanyId = CompanyA };
+            ctx.Clients.Add(client);
+            await ctx.SaveChangesAsync();
+            clientId = client.Id;
+        }
+
+        // A 10 minute game can't have started 40 minutes ago: that start belongs to an earlier game.
+        LaserGameStatusDTO status = new()
+        {
+            Status = GameStatus.NotStarted,
+            TotalTimeSeconds = 600,
+            PlayerScores = [new PlayerScoreDTO { GunId = 1, Score = 100, Accuracy = 20, Team = Team.Red }]
+        };
+
+        await GetService(options).RecordCompletedGameAsync(clientId, status, DateTime.UtcNow.AddMinutes(-40));
+
+        await using ApplicationDbContext verify = new(options);
+        Assert.IsNull((await verify.GameResults.SingleAsync()).StartedAtUtc);
+    }
+
+    [TestMethod]
     public async Task RecordCompletedGameAsync_DropsAStartAfterTheEnd()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();

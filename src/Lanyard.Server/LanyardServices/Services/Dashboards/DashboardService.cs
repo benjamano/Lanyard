@@ -880,7 +880,7 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
                 ShowCurrentGameStatus = laserGameStatusWidget.ShowCurrentGameStatus,
                 ShowTimeLeft = laserGameStatusWidget.ShowTimeLeft,
                 ShowGameHistory = laserGameStatusWidget.ShowGameHistory,
-                GameHistoryCount = laserGameStatusWidget.GameHistoryCount,
+                GameHistoryCount = ClientZoneLaserGameStatusWidget.ClampGameHistoryCount(laserGameStatusWidget.GameHistoryCount),
                 ClientId = laserGameStatusWidget.ClientId
             },
             ClientZoneLaserScoreboardWidget scoreboardWidget => new ClientZoneLaserScoreboardWidget
@@ -1052,7 +1052,7 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
             targetLaserGameStatus.ShowCurrentGameStatus = sourceLaserGameStatus.ShowCurrentGameStatus;
             targetLaserGameStatus.ShowTimeLeft = sourceLaserGameStatus.ShowTimeLeft;
             targetLaserGameStatus.ShowGameHistory = sourceLaserGameStatus.ShowGameHistory;
-            targetLaserGameStatus.GameHistoryCount = sourceLaserGameStatus.GameHistoryCount;
+            targetLaserGameStatus.GameHistoryCount = ClientZoneLaserGameStatusWidget.ClampGameHistoryCount(sourceLaserGameStatus.GameHistoryCount);
             targetLaserGameStatus.ClientId = sourceLaserGameStatus.ClientId;
         }
 

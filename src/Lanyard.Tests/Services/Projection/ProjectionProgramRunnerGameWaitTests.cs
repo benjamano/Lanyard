@@ -431,6 +431,8 @@ public class ProjectionProgramRunnerGameWaitTests
 
         public bool TryGetGameStart(Guid clientId, out DateTime startedAtUtc) => _inner.TryGetGameStart(clientId, out startedAtUtc);
 
+        public void ClearGameStart(Guid clientId) => _inner.ClearGameStart(clientId);
+
         public void NotifyGameRecorded(Guid clientId) => _inner.NotifyGameRecorded(clientId);
 
         public event Action<Guid>? OnGameRecorded
