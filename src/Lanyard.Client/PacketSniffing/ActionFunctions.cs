@@ -1,5 +1,6 @@
 ﻿using Lanyard.Shared.DTO;
 using Lanyard.Shared.Enum;
+using Lanyard.Shared.LaserGame;
 using Microsoft.Extensions.Logging;
 
 namespace Lanyard.Client.PacketSniffing;
@@ -12,6 +13,13 @@ public class Actions(ILogger<Actions> logger, IGameStateService _gameStateServic
 
     public void HandleTimingPacket(string[] packetData)
     {
+        // Field 2 is the game mode, e.g. "@004". Read it before the start/end handling below so
+        // the first status published for a new game already carries the right mode.
+        if (LaserGameModes.TryParse(packetData[2], out GameMode gameMode))
+        {
+            _gameStateService.UpdateGameMode(gameMode);
+        }
+
         if (int.TryParse(packetData[3], out int timeLeftSeconds))
         {
             if (timeLeftSeconds <= 0)
@@ -132,11 +140,16 @@ public class Actions(ILogger<Actions> logger, IGameStateService _gameStateServic
                 }
                 else if (value.StartsWith("017"))
                 {
-                    //TODO: WORKOUT WHICH NUMBER EQUATES TO WHICH SOUND MODE
+                    // Sound set: 0171 is sound 1, 0172 is sound 2. Nothing uses it yet.
                 }
                 else if (value.StartsWith("00"))
                 {
-                    //TODO: MAKE A LIST OF GAME MODES AND WORKOUT WHICH ID THEY ARE FOR
+                    if (LaserGameModes.TryParse(value, out GameMode gameMode))
+                    {
+                        _gameStateService.UpdateGameMode(gameMode);
+
+                        _logger.LogDebug("Game mode updated to {GameMode}", gameMode);
+                    }
                 }
             }
         }
