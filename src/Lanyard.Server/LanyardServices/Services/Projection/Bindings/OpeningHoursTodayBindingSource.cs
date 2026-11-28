@@ -49,10 +49,12 @@ public class OpeningHoursTodayBindingSource(ISystemDbContextFactory factory) : I
                 .Where(h => h.LocationId == locationId && h.IsActive)
                 .ToListAsync(cancellationToken);
 
-            DateOnly today = DateOnly.FromDateTime(RotaTime.ToVenueLocal(context.NowUtc));
-            Dictionary<int, List<RotaHoliday>> holidays = await RotaHolidayQueries.ForLocationAsync(ctx, locationId, today, today, cancellationToken);
+            DateTime venueLocal = RotaTime.ToVenueLocal(context.NowUtc);
+            DateOnly today = DateOnly.FromDateTime(venueLocal);
+            Dictionary<int, List<RotaHoliday>> holidays = await RotaHolidayQueries.ForLocationAsync(ctx, locationId, today.AddDays(-1), today, cancellationToken);
+            IReadOnlyList<RotaHoliday> list = holidays.For(locationId);
 
-            return Result<string?>.Ok(Describe(hours, OpeningHoursRules.Resolve(hours, holidays.For(locationId), today)));
+            return Result<string?>.Ok(Describe(hours, OpeningHoursRules.Resolve(hours, list, today), OpeningHoursRules.Resolve(hours, list, today.AddDays(-1)), venueLocal));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -60,10 +62,16 @@ public class OpeningHoursTodayBindingSource(ISystemDbContextFactory factory) : I
         }
     }
 
-    public static string? Describe(IReadOnlyCollection<LocationOpeningHours> hours, OpeningDay today)
+    public static string? Describe(IReadOnlyCollection<LocationOpeningHours> hours, OpeningDay today, OpeningDay? yesterday = null, DateTime? venueLocal = null)
     {
         if (today.Holiday.Closed is RotaHoliday closed)
         {
+            // Still in last night's late hours: say when they end rather than "closed".
+            if (venueLocal is DateTime now && yesterday?.Windows.FirstOrDefault(w => w.Contains(now)) is OpeningWindow late)
+            {
+                return $"Open until {late.ClosesLocal:HH\\:mm}";
+            }
+
             return $"Closed today – {closed.Name}";
         }
 

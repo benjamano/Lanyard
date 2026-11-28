@@ -27,12 +27,22 @@ public static class AudioClipScheduleRules
             yield break;
         }
 
-        // Rota holidays: a Closed day plays nothing at all, a set time included; a bank holiday
-        // opens and closes at the hours of the day it's staffed like.
-        OpeningDay day = OpeningHoursRules.Resolve(hours, holidays ?? [], date);
+        // Rota holidays: a Closed day plays nothing, a set time included - except a set time in
+        // the early hours while the night before is still open (a window belongs to the day it
+        // opens on). A bank holiday opens and closes at the hours of the day it's staffed like;
+        // the Days ticked still mean the real day.
+        List<LocationOpeningHours> rows = [.. hours];
+        List<RotaHoliday> days = holidays?.ToList() ?? [];
+        OpeningDay day = OpeningHoursRules.Resolve(rows, days, date);
 
         if (day.IsClosedForHoliday)
         {
+            if (schedule.Anchor == AudioClipScheduleAnchor.AtTime && schedule.TimeOfDay is TimeOnly lateTime
+                && OpeningHoursRules.Resolve(rows, days, date.AddDays(-1)).IsOpenAt(date.ToDateTime(lateTime)))
+            {
+                yield return date.ToDateTime(lateTime);
+            }
+
             yield break;
         }
 

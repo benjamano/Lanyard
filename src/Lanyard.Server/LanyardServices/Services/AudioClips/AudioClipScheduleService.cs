@@ -233,6 +233,12 @@ public class AudioClipScheduleService(
         {
             await using ApplicationDbContext ctx = await factory.CreateDbContextAsync();
 
+            // Locations are tenant-filtered, so another company's location reads as not found.
+            if (!await ctx.Locations.AsNoTracking().AnyAsync(x => x.Id == locationId))
+            {
+                return Result<bool>.Fail("Location not found.");
+            }
+
             return Result<bool>.Ok(await Features.CompanyFeatureQueries.IsEnabledForLocationAsync(ctx, locationId, CompanyFeature.StaffScheduling));
         }
         catch (Exception ex)
@@ -247,6 +253,11 @@ public class AudioClipScheduleService(
         try
         {
             await using ApplicationDbContext ctx = await factory.CreateDbContextAsync();
+
+            if (!await ctx.Locations.AsNoTracking().AnyAsync(x => x.Id == locationId))
+            {
+                return Result<bool>.Fail("Location not found.");
+            }
 
             return Result<bool>.Ok(await ctx.LocationOpeningHours.AsNoTracking().AnyAsync(x => x.LocationId == locationId && x.IsActive));
         }

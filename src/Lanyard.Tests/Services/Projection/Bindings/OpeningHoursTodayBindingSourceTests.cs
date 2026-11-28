@@ -82,6 +82,21 @@ public class OpeningHoursTodayBindingSourceTests
     }
 
     [TestMethod]
+    public void ClosedDay_InLastNightsLateHours_SaysWhenItCloses()
+    {
+        // Friday 16 Oct 2026 18:00-02:00, Saturday closed for Christmas-style refit, 00:30 Saturday.
+        DateOnly friday = new(2026, 10, 16);
+        List<LocationOpeningHours> hours = [new() { LocationId = LocationId, DayOfWeek = DayOfWeek.Friday, OpensAt = new TimeOnly(18, 0), ClosesAt = new TimeOnly(2, 0), IsActive = true }];
+        List<RotaHoliday> holidays = [new() { CompanyId = CompanyId, LocationId = LocationId, Name = "Refit", Kind = RotaHolidayKind.Closed, StartDate = friday.AddDays(1), EndDate = friday.AddDays(1) }];
+
+        OpeningDay saturday = OpeningHoursRules.Resolve(hours, holidays, friday.AddDays(1));
+        OpeningDay fridayDay = OpeningHoursRules.Resolve(hours, holidays, friday);
+
+        Assert.AreEqual("Open until 02:00", OpeningHoursTodayBindingSource.Describe(hours, saturday, fridayDay, new DateTime(2026, 10, 17, 0, 30, 0)));
+        Assert.AreEqual("Closed today – Refit", OpeningHoursTodayBindingSource.Describe(hours, saturday, fridayDay, new DateTime(2026, 10, 17, 9, 0, 0)));
+    }
+
+    [TestMethod]
     public async Task ClosedDay_IgnoredWhereStaffSchedulingIsOff()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();

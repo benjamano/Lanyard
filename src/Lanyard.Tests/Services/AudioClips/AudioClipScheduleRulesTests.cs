@@ -65,6 +65,18 @@ public class AudioClipScheduleRulesTests
     }
 
     [TestMethod]
+    public void ClosedDay_SetTimeInLastNightsLateHours_StillPlays()
+    {
+        // Friday 18:00-02:00, Saturday closed: 01:00 Saturday is still Friday's session; noon isn't.
+        List<LocationOpeningHours> hours = [Hours(DayOfWeek.Friday, "18:00", "02:00")];
+        List<RotaHoliday> saturdayClosed = [Holiday(RotaHolidayKind.Closed, Friday.AddDays(1))];
+
+        CollectionAssert.AreEqual(new[] { new DateTime(2026, 10, 17, 1, 0, 0) },
+            AudioClipScheduleRules.OccurrencesOn(Schedule(AudioClipScheduleAnchor.AtTime, time: "01:00"), hours, Friday.AddDays(1), saturdayClosed).ToArray());
+        Assert.AreEqual(0, AudioClipScheduleRules.OccurrencesOn(Schedule(AudioClipScheduleAnchor.AtTime, time: "12:00"), hours, Friday.AddDays(1), saturdayClosed).Count());
+    }
+
+    [TestMethod]
     public void Upcoming_SkipsAClosedDay()
     {
         AudioClipSchedule schedule = Schedule(AudioClipScheduleAnchor.AtTime, time: "12:00");
