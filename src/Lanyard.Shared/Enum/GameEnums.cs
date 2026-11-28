@@ -30,10 +30,15 @@ public enum GameMode
     SoloElimination = 5,
     TeamElimination = 6,
     FastTeamElimination = 7,
+    /// <summary>Standard team, but each gun has 30 ammo. A player who runs out is out of the game.</summary>
     TeamReload = 8,
+    /// <summary>The birthday gun plays music, sounds different and fires much faster. Hand the flashing gun to the birthday player and press start again.</summary>
     BirthdaySolo = 9,
+    /// <summary>As BirthdaySolo, but the birthday player's whole team gets the fast-firing guns.</summary>
     BirthdayTeam = 10,
+    /// <summary>One gun starts as the vampire and infects the others it hits. Plays random sounds.</summary>
     Vampire = 11,
+    /// <summary>Targets modes: some guns may be invulnerable to others (unconfirmed).</summary>
     Targets1 = 12,
     Targets2 = 13,
     ContinuousSolo = 14,
@@ -43,6 +48,10 @@ public enum GameMode
     Zombie = 18
 }
 
+/// <summary>
+/// Sound set from the settings packet: "0171" is sound 1, "0172" is sound 2. Which of these is
+/// the male or female voice hasn't been confirmed.
+/// </summary>
 public enum SoundSet
 {
     Male = 1,
