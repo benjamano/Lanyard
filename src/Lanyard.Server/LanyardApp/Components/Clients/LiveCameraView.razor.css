@@ -1,0 +1,58 @@
+.live-camera {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    background: #000;
+    border-radius: 8px;
+}
+
+/* 16:9 box that keeps its shape while connecting, so a dialog doesn't jump when video starts. */
+.live-camera-fixed {
+    aspect-ratio: 16 / 9;
+    border: 1px solid var(--colorNeutralStroke2);
+}
+
+/* Fills a widget tile, whatever its shape. */
+.live-camera-fill {
+    height: 100%;
+    min-height: 120px;
+}
+
+.live-camera-video {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.live-camera-cover {
+    object-fit: cover;
+}
+
+.live-camera-hidden {
+    visibility: hidden;
+}
+
+.live-camera-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 16px;
+    text-align: center;
+    background: var(--colorNeutralBackground3);
+    color: var(--colorNeutralForeground1);
+}
+
+/* Over the picture, so it needs its own backdrop to stay readable on any frame. */
+.live-camera ::deep .live-camera-mute {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    border-radius: 999px;
+}

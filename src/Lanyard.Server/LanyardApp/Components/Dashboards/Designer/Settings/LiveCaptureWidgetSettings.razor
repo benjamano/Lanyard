@@ -1,0 +1,90 @@
+@inherits WidgetSettingsBase<LiveCaptureWidget>
+@using Lanyard.Application.Services.Clients
+@using Lanyard.Infrastructure.DTO.VideoDevices
+
+@inject IClientService ClientService
+
+<div class="widget-settings">
+    <div class="widget-settings-note">Plays on kiosk screens, and for Admins and Managers on a signed-in dashboard. The designer shows a stand-in, so editing never turns the camera on.</div>
+    @if (_cameras is null)
+    {
+        <FluentSkeleton Height="56px" Width="100%" />
+    }
+    else if (_cameras.Count == 0)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+            No kiosk has reported a camera yet. Plug one into a kiosk and restart the Lanyard Client there.
+        </FluentMessageBar>
+    }
+    else
+    {
+        <FluentSelect TOption="CameraOption"
+                      TValue="string"
+                      Items="@_cameras"
+                      OptionText="@(c => c?.Label ?? string.Empty)"
+                      OptionValue="@(c => c?.Key)"
+                      Label="Camera"
+                      Placeholder="Choose a camera"
+                      Value="@CurrentKey"
+                      ValueChanged="OnCameraChangedAsync"
+                      Width="100%" />
+    }
+
+    <FluentSwitch Value="@W.EnableAudio"
+                  ValueChanged="@(v => SetAsync(() => W.EnableAudio = v, v ? "Turned the sound on" : "Turned the sound off"))"
+                  Label="Play the camera's sound" />
+    <div class="widget-settings-note">On a kiosk the sound plays straight away. In a browser it starts muted until someone presses the sound button.</div>
+
+    <FluentSwitch Value="@W.FillTile"
+                  ValueChanged="@(v => SetAsync(() => W.FillTile = v, v ? "Cropped the picture to fill the tile" : "Showed the whole picture"))"
+                  Label="Fill the tile (crops the edges)" />
+</div>
+
+@code {
+    private sealed record CameraOption(string Key, Guid ClientId, string DeviceName, string Label);
+
+    private List<CameraOption>? _cameras;
+
+    private string? CurrentKey => W.ClientId is Guid id && !string.IsNullOrEmpty(W.DeviceName) ? KeyFor(id, W.DeviceName) : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<IEnumerable<ActiveVideoDeviceInfoDTO>> result = await ClientService.GetAllActiveVideoDevicesWithClientNamesAsync();
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError($"Couldn't load the cameras: {result.Error}");
+            _cameras = [];
+            return;
+        }
+
+        List<CameraOption> cameras = [.. result.Data.Select(d => new CameraOption(KeyFor(d.ClientId, d.DeviceName), d.ClientId, d.DeviceName, $"{d.ClientName} · {d.DeviceName}"))];
+
+        // A widget still pointing at a camera that's been unplugged would otherwise show an empty
+        // picker, looking unset while it isn't. Show it, so it can be changed.
+        if (CurrentKey is string saved && cameras.All(c => c.Key != saved))
+        {
+            cameras.Insert(0, new CameraOption(saved, W.ClientId!.Value, W.DeviceName!, $"{W.DeviceName} (not available right now)"));
+        }
+
+        _cameras = cameras;
+    }
+
+    private async Task OnCameraChangedAsync(string? key)
+    {
+        CameraOption? camera = _cameras?.FirstOrDefault(c => c.Key == key);
+
+        if (camera is null || camera.Key == CurrentKey)
+        {
+            return;
+        }
+
+        await SetAsync(() =>
+        {
+            W.ClientId = camera.ClientId;
+            W.DeviceName = camera.DeviceName;
+        }, "Chose a camera");
+    }
+
+    private static string KeyFor(Guid clientId, string deviceName) => $"{clientId:N}|{deviceName}";
+}

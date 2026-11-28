@@ -1,0 +1,89 @@
+@using Lanyard.App.Components.Clients
+@using Lanyard.Application.Services.Clients
+
+@inject IClientService _clientService
+
+<FluentCard Height="100%" Class="live-capture-card">
+    @if (Widget.ClientId is not Guid clientId || string.IsNullOrWhiteSpace(Widget.DeviceName))
+    {
+        <div class="live-capture-message">
+            <FluentBadge Appearance="@BadgeAppearance.Filled" Size="@BadgeSize.ExtraLarge">Choose a camera to show</FluentBadge>
+        </div>
+    }
+    else if (!AllowTrigger)
+    {
+        @* The designer and its previews: a stand-in, so editing never wakes a kiosk's camera. *@
+        <div class="live-capture-message live-capture-placeholder">
+            <FluentIcon Value="@(new Icons.Regular.Size48.Video())" Color="Color.Custom" CustomColor="var(--colorNeutralForeground3)" />
+            <FluentText Weight="TextWeight.Semibold">@Widget.DeviceName</FluentText>
+            <FluentText Size="TextSize.Size200" Class="live-capture-muted-text">
+                @(_kioskName is null ? "Live camera" : $"Live from {_kioskName}")
+            </FluentText>
+        </div>
+    }
+    else if (_access == Access.Checking)
+    {
+        <FluentSkeleton Width="100%" Height="100%" />
+    }
+    else if (_access == Access.Denied)
+    {
+        <div class="live-capture-message">
+            <FluentIcon Value="@(new Icons.Regular.Size24.VideoOff())" Color="Color.Custom" CustomColor="var(--colorNeutralForeground3)" />
+            <FluentText Size="TextSize.Size200" Class="live-capture-muted-text">Live capture is for Admins and Managers.</FluentText>
+        </div>
+    }
+    else
+    {
+        <LiveCameraView SourceClientId="clientId" DeviceName="@Widget.DeviceName" EnableAudio="Widget.EnableAudio"
+                        Fill="Widget.FillTile" Kiosk="Kiosk" CompanyId="CompanyId" />
+    }
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required LiveCaptureWidget Widget { get; set; }
+
+    // False in the designer and its phone/TV previews, where it shows a stand-in instead.
+    [Parameter]
+    public bool AllowTrigger { get; set; } = true;
+
+    // The dashboard's company: on a kiosk, the camera's kiosk must belong to it.
+    [Parameter]
+    public int? CompanyId { get; set; }
+
+    // Set when the dashboard is shown on a kiosk (see KioskScreen).
+    [CascadingParameter]
+    public KioskScreen? Kiosk { get; set; }
+
+    private enum Access { Checking, Allowed, Denied }
+
+    private Access _access = Access.Checking;
+    private string? _kioskName;
+    private Guid? _kioskNameFor;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // A kiosk screen is trusted by its viewer token (checked by the signalling service). Anyone
+        // else must be a signed-in Admin or Manager: a camera can show the venue and its guests.
+        _access = Kiosk is not null
+            || await _securityService.IsCurrentUserInRoleAsync("Admin")
+            || await _securityService.IsCurrentUserInRoleAsync("Manager")
+            ? Access.Allowed
+            : Access.Denied;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Only the designer's stand-in names the kiosk.
+        if (!AllowTrigger && Widget.ClientId is Guid clientId && _kioskNameFor != clientId)
+        {
+            Result<Client?> client = await _clientService.GetClientFromIdAsync(clientId);
+            _kioskName = client.Data?.Name;
+
+            if (client.IsSuccess)
+            {
+                _kioskNameFor = clientId;
+            }
+        }
+    }
+}
