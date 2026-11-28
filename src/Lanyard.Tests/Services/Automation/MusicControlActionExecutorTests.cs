@@ -89,6 +89,7 @@ public class MusicControlActionExecutorTests
         services.AddSingleton<ILogger<ClientService>>(NullLogger<ClientService>.Instance);
         services.AddMemoryCache();
         services.AddSingleton<IKioskFleetEventBus, KioskFleetEventBus>();
+        services.AddSingleton<IClientEqualiserEventBus, ClientEqualiserEventBus>();
         services.AddScoped<IClientService, ClientService>();
 
         return services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();

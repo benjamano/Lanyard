@@ -134,6 +134,52 @@ public class WhatsOnServiceTests
     }
 
     [TestMethod]
+    public async Task GetDashboardDayAsync_LoadsTheDayForTheDashboardsCompany_WithAScopeTheSourcesAccept()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+
+        WhatsOnItem party = Item(RotaTime.ToUtc(Day, new TimeOnly(10, 0)));
+        LocationScope? seen = null;
+
+        Mock<IWhatsOnSource> source = new();
+        source.Setup(x => x.GetItemsAsync(It.IsAny<LocationScope>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<bool>()))
+            .Callback<LocationScope, int, int, DateOnly, DateOnly, bool>((scope, _, _, _, _, _) => seen = scope)
+            .ReturnsAsync(Result<List<WhatsOnItem>>.Ok([party]));
+
+        Result<WhatsOnDay> result = await GetService(options, source.Object).GetDashboardDayAsync(company.Id, location.Id, Day);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.AreEqual(Day, result.Data!.Date);
+        Assert.AreEqual(party.Id, result.Data.Items.Single().Id);
+        Assert.IsNotNull(seen);
+        Assert.IsTrue(seen.IsAdmin, "The sources check the scope, so the dashboard read must pass it.");
+        Assert.AreEqual(company.Id, seen.CompanyId);
+    }
+
+    [TestMethod]
+    public async Task GetDashboardDayAsync_RefusesALocationFromAnotherCompany_OrOneThatsClosed()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        (_, Location other) = await SchedulingTestHelpers.SeedCompanyAsync(options, "Other", "Elsewhere");
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            Location closed = new() { CompanyId = company.Id, Name = "Closed", IsActive = false };
+            ctx.Locations.Add(closed);
+            await ctx.SaveChangesAsync();
+
+            WhatsOnService service = GetService(options, Source());
+
+            Assert.IsFalse((await service.GetDashboardDayAsync(company.Id, other.Id, Day)).IsSuccess, "Another company's location.");
+            Assert.IsFalse((await service.GetDashboardDayAsync(company.Id, closed.Id, Day)).IsSuccess, "An inactive location.");
+            Assert.IsFalse((await service.GetDashboardDayAsync(company.Id, 999_999, Day)).IsSuccess, "A missing location.");
+            Assert.IsTrue((await service.GetDashboardDayAsync(company.Id, location.Id, Day)).IsSuccess);
+        }
+    }
+
+    [TestMethod]
     public async Task GetRangeAsync_ListsOnlyPublishedStaffedShifts_AsTheyWerePublished()
     {
         DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();

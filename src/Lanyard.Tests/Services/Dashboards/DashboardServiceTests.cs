@@ -557,6 +557,7 @@ public class DashboardServiceTests
                 Id = Guid.Empty,
                 ClientId = clientId,
                 ShowSongTitle = false,
+                ShowVolumeAndEq = true,
                 IsActive = true
             }
         ];
@@ -569,6 +570,7 @@ public class DashboardServiceTests
         MusicTimelineWidget dbWidget = await ctx.DashboardWidgets.OfType<MusicTimelineWidget>().SingleAsync(x => x.DashboardId == dashboard.Id);
         Assert.AreEqual(clientId, dbWidget.ClientId);
         Assert.IsFalse(dbWidget.ShowSongTitle);
+        Assert.IsTrue(dbWidget.ShowVolumeAndEq);
     }
 
     [TestMethod]
@@ -595,6 +597,7 @@ public class DashboardServiceTests
 
         timelineWidget.ClientId = clientId;
         timelineWidget.ShowSongTitle = true;
+        timelineWidget.ShowVolumeAndEq = true;
 
         Result<bool> updateResult = await service.SaveDashboardAsync(dashboard);
         Assert.IsTrue(updateResult.Success, updateResult.Error);
@@ -603,6 +606,7 @@ public class DashboardServiceTests
         MusicTimelineWidget dbWidget = await ctx.DashboardWidgets.OfType<MusicTimelineWidget>().SingleAsync(x => x.Id == timelineWidget.Id);
         Assert.AreEqual(clientId, dbWidget.ClientId);
         Assert.IsTrue(dbWidget.ShowSongTitle);
+        Assert.IsTrue(dbWidget.ShowVolumeAndEq);
     }
 
     [TestMethod]
@@ -635,6 +639,7 @@ public class DashboardServiceTests
             DashboardId = dashboard.Id,
             ClientId = clientId,
             ShowSongTitle = false,
+            ShowVolumeAndEq = true,
             IsActive = true
         };
 
@@ -646,6 +651,7 @@ public class DashboardServiceTests
         MusicTimelineWidget dbWidget = await ctx.DashboardWidgets.OfType<MusicTimelineWidget>().SingleAsync(x => x.Id == existingWidget.Id);
         Assert.AreEqual(clientId, dbWidget.ClientId);
         Assert.IsFalse(dbWidget.ShowSongTitle);
+        Assert.IsTrue(dbWidget.ShowVolumeAndEq);
     }
 
     // Guards CreateWidgetCopy: a widget type missing from that switch throws
@@ -2138,6 +2144,7 @@ public class DashboardServiceTests
             seedCtx.DashboardWidgets.Add(new DigitalClockWidget { DashboardId = source.Id, Is24HourFormat = true, GridX = 3, Title = "Time", ShowTitle = true, PhoneOrder = 1 });
             seedCtx.DashboardWidgets.Add(new HallOfFameWidget { DashboardId = source.Id, Period = HallOfFamePeriod.ThisWeek, HideOnPhone = true });
             seedCtx.DashboardWidgets.Add(new GreetingWidget { DashboardId = source.Id, IsActive = false });
+            seedCtx.DashboardWidgets.Add(new MusicTimelineWidget { DashboardId = source.Id, ShowSongTitle = false, ShowVolumeAndEq = true });
             await seedCtx.SaveChangesAsync();
         }
 
@@ -2150,7 +2157,7 @@ public class DashboardServiceTests
         Assert.AreEqual("Front desk (copy)", copy.Name);
         Assert.IsTrue(copy.FitToScreen);
         Assert.AreEqual(90, copy.RowHeight);
-        Assert.HasCount(2, copy.Widgets);
+        Assert.HasCount(3, copy.Widgets);
 
         DigitalClockWidget clock = copy.Widgets.OfType<DigitalClockWidget>().Single();
         Assert.IsTrue(clock.Is24HourFormat);
@@ -2159,9 +2166,12 @@ public class DashboardServiceTests
         Assert.AreEqual(1, clock.PhoneOrder);
         Assert.AreEqual(HallOfFamePeriod.ThisWeek, copy.Widgets.OfType<HallOfFameWidget>().Single().Period);
         Assert.IsTrue(copy.Widgets.OfType<HallOfFameWidget>().Single().HideOnPhone);
+        MusicTimelineWidget timeline = copy.Widgets.OfType<MusicTimelineWidget>().Single();
+        Assert.IsFalse(timeline.ShowSongTitle);
+        Assert.IsTrue(timeline.ShowVolumeAndEq);
 
         // The original is untouched.
-        Assert.AreEqual(2, await ctx.DashboardWidgets.CountAsync(x => x.DashboardId == source.Id && x.IsActive));
+        Assert.AreEqual(3, await ctx.DashboardWidgets.CountAsync(x => x.DashboardId == source.Id && x.IsActive));
     }
 
     [TestMethod]

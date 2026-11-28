@@ -505,6 +505,7 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
                 case MusicTimelineWidget existingTimeline when widget is MusicTimelineWidget incomingTimeline:
                     existingTimeline.ClientId = incomingTimeline.ClientId;
                     existingTimeline.ShowSongTitle = incomingTimeline.ShowSongTitle;
+                    existingTimeline.ShowVolumeAndEq = incomingTimeline.ShowVolumeAndEq;
                     break;
                 case AutomationRuleStatusWidget existingRuleStatus when widget is AutomationRuleStatusWidget incomingRuleStatus:
                     existingRuleStatus.AutomationRuleId = incomingRuleStatus.AutomationRuleId;
@@ -899,7 +900,8 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
             MusicTimelineWidget timelineWidget => new MusicTimelineWidget
             {
                 ClientId = timelineWidget.ClientId,
-                ShowSongTitle = timelineWidget.ShowSongTitle
+                ShowSongTitle = timelineWidget.ShowSongTitle,
+                ShowVolumeAndEq = timelineWidget.ShowVolumeAndEq
             },
             AutomationRuleStatusWidget ruleStatusWidget => new AutomationRuleStatusWidget
             {
@@ -1073,6 +1075,7 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
         {
             targetTimeline.ClientId = sourceTimeline.ClientId;
             targetTimeline.ShowSongTitle = sourceTimeline.ShowSongTitle;
+            targetTimeline.ShowVolumeAndEq = sourceTimeline.ShowVolumeAndEq;
         }
 
         if (target is AutomationRuleStatusWidget targetRuleStatus && source is AutomationRuleStatusWidget sourceRuleStatus)

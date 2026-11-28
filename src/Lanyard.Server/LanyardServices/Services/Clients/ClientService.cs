@@ -28,13 +28,15 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
     IHubContext<SignalRControlHub> hubContext, 
     ILogger<ClientService> logger, 
     IMemoryCache cache,
-    IKioskFleetEventBus fleetEvents) : IClientService
+    IKioskFleetEventBus fleetEvents,
+    IClientEqualiserEventBus equaliserEvents) : IClientService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly IHubContext<SignalRControlHub> _hubContext = hubContext;
     private readonly ILogger<ClientService> _logger = logger;
     private readonly IMemoryCache _cache = cache;
     private readonly IKioskFleetEventBus _fleetEvents = fleetEvents;
+    private readonly IClientEqualiserEventBus _equaliserEvents = equaliserEvents;
 
     public async Task<Result<Client?>> GetClientFromIdAsync(Guid clientId)
     {
@@ -1311,6 +1313,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
             await ctx.SaveChangesAsync();
 
             _logger.LogInformation("Set music equaliser for client {ClientId}: bass {BassDb} dB, mid {MidDb} dB, treble {TrebleDb} dB", clientId, clamped.BassDb, clamped.MidDb, clamped.TrebleDb);
+
+            _equaliserEvents.Publish(clientId);
 
             Result<bool> connectedResult = await IsClientConnectedAsync(clientId);
             bool connected = connectedResult.IsSuccess && connectedResult.Data && !string.IsNullOrEmpty(client.MostRecentConnectionId);

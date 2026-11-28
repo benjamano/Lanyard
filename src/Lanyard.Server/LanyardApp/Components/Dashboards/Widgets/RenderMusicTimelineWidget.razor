@@ -5,6 +5,7 @@
 @implements IDisposable
 
 @inject IMusicPlayerService _player
+@inject IClientService _clientService
 
 @* The same now-playing snapshot and browser-driven timeline as the Music page, so a dashboard
    left open on a wall screen doesn't re-render once a second either. *@
@@ -48,6 +49,20 @@
             </div>
 
             <MusicProgress Snapshot="snapshot" ReadOnly="@(!CanControl)" />
+
+            @if (Widget.ShowVolumeAndEq)
+            {
+                @* The Music page's own controls, so volume and EQ behave the same in both places.
+                   Keyed on the kiosk: MusicVolume reads its starting value once. *@
+                <div class="music-timeline-widget-audio" @key="clientId">
+                    <MusicVolume ClientId="clientId" Volume="snapshot.Volume" Disabled="@(!CanControl)" />
+                    @* The EQ opens a dialog, and a kiosk screen has no dialog host to show it in. *@
+                    @if (Kiosk is null)
+                    {
+                        <MusicEqualiserChip ClientId="clientId" KioskName="@_kioskName" Disabled="@(!CanControl)" />
+                    }
+                </div>
+            }
         }
     </div>
 </FluentCard>
@@ -59,7 +74,13 @@
     [Parameter]
     public bool AllowTrigger { get; set; } = true;
 
+    // Set when the dashboard is shown on a kiosk (see KioskScreen).
+    [CascadingParameter]
+    public KioskScreen? Kiosk { get; set; }
+
     private MusicNowPlayingSnapshot? _snapshot;
+    private string _kioskName = "";
+    private Guid? _kioskNameFor;
 
     private bool IsPlaying => _snapshot is { IsConnected: true, State: PlaybackState.Playing };
     private bool CanControl => AllowTrigger && _snapshot?.IsConnected == true;
@@ -69,9 +90,22 @@
         _player.OnNowPlayingChanged += HandleNowPlayingChanged;
     }
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
         _snapshot = Widget.ClientId is Guid id ? _player.GetSnapshot(id) : null;
+
+        // Only the EQ dialog's heading needs the name, so skip the lookup when the controls are off.
+        if (Widget.ShowVolumeAndEq && Kiosk is null && Widget.ClientId is Guid clientId && clientId != Guid.Empty && _kioskNameFor != clientId)
+        {
+            Result<Client?> client = await _clientService.GetClientFromIdAsync(clientId);
+            _kioskName = client.Data?.Name ?? "";
+
+            // Only remember a lookup that worked, so a failed one is tried again next render.
+            if (client.Data is not null)
+            {
+                _kioskNameFor = clientId;
+            }
+        }
     }
 
     private void HandleNowPlayingChanged(Guid clientId)
