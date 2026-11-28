@@ -1061,8 +1061,18 @@
   {
     "version": "1.4.33",
     "releaseDate": "2026-11-22",
-    "summary": "Features are now switched on per location instead of per company.",
+    "summary": "A redesigned dashboard editor, and features can now be switched on per location.",
     "details": [
+      "Drag widgets from a searchable, grouped widget list straight onto a dashboard, or tap one to add it.",
+      "Drag widgets to move them; anything in the way moves down to make room, with an outline showing where it will land.",
+      "Resize widgets by dragging their edges or corner.",
+      "Select a widget to change its title, size, phone visibility and settings in a side panel, and duplicate or remove it.",
+      "Text widgets are now typed in the side panel, and the dashboard updates as you type.",
+      "Keyboard shortcuts: arrow keys move the selected widget, Shift+arrows resize it, Delete removes it and Ctrl+D duplicates it.",
+      "Works with touch on tablets and phones, where the widget list and settings open as panels.",
+      "Choose a row height for each dashboard (compact, comfortable or spacious), and tidy up gaps in one go.",
+      "Fixed a deleted dashboard still showing on kiosk screens, and a designer tab left open being able to save it back.",
+      "Fixed the last few words typed into a Text widget being lost when saving straight away.",
       "Features for on Companies & Locations now has a switch for every feature at every location. Staff only see the features switched on for the location they signed in to.",
       "A new location starts with every feature off. Use All on under its name to switch everything on at once.",
       "Every existing location keeps the features its company had, so nothing changes until you change it.",
@@ -1078,6 +1088,93 @@
       "Tests appear in the Execution Log with a Test badge and who ran them. They don't raise Operations Alerts or count as the rule's last run.",
       "Kiosk projection screens only play programs the kiosk itself opened: a screen's web address no longer works on another computer or for another company's program, and it no longer shows the kiosk's and program's ids while loading.",
       "A kiosk's list of cached songs is only shown on that kiosk's own page, not on every open Clients page."
+    ]
+  },
+  {
+    "version": "1.4.34",
+    "releaseDate": "2026-11-22",
+    "summary": "Every dashboard widget's settings are now in the designer's side panel, with no pop-ups.",
+    "details": [
+      "Select a widget in the dashboard designer to change its settings right there, and see the change on the dashboard straight away.",
+      "Kiosk, location and screen choices work the same way on every widget.",
+      "A widget that still needs something choosing, like a kiosk or an automation rule, says so on the dashboard and in its settings.",
+      "A widget whose kiosk has been removed now says so in its settings, instead of looking unset."
+    ]
+  },
+  {
+    "version": "1.4.35",
+    "releaseDate": "2026-11-22",
+    "summary": "Undo, redo and safer saving in the dashboard designer.",
+    "details": [
+      "Undo and redo in the dashboard designer, with toolbar buttons and Ctrl+Z / Ctrl+Shift+Z.",
+      "Press Ctrl+S to save. The designer shows whether there are unsaved changes.",
+      "Leaving the designer with unsaved changes now asks first.",
+      "If someone else saved the same dashboard while you were editing it, you're told when you save instead of overwriting their work without warning."
+    ]
+  },
+  {
+    "version": "1.4.36",
+    "releaseDate": "2026-11-22",
+    "summary": "Lay dashboards out for phones and kiosk TVs.",
+    "details": [
+      "New Desktop, Tablet, Phone and TV views in the dashboard designer.",
+      "Phone view: drag widgets into the order they should appear on phones and hide any you don't need there, with a live phone preview.",
+      "TV view: see a dashboard full-screen at 1920 × 1080, and turn on Fill the screen so it fits a kiosk TV exactly with no scrolling.",
+      "Home screens on phones now follow each dashboard's phone order and hidden widgets."
+    ]
+  },
+  {
+    "version": "1.4.37",
+    "releaseDate": "2026-11-22",
+    "summary": "A new Dashboards page, with ready-made layouts and copying.",
+    "details": [
+      "The Dashboards page now shows each dashboard as a card with a picture of its layout, and badges for your home screen, everyone's home screen and dashboards shown on kiosk TVs.",
+      "Start a new dashboard from a ready-made layout: Staff home screen, Manager's morning, Front desk or Arena scoreboard TV. It opens in the designer straight away.",
+      "Duplicate or delete a dashboard from its card."
+    ]
+  },
+  {
+    "version": "1.4.38",
+    "releaseDate": "2026-11-22",
+    "summary": "Text widgets can be edited on the kiosk screen.",
+    "details": [
+      "Turn on Can be edited on the kiosk screen in a Text widget's settings, and a kiosk showing it gets an Edit button, so staff can update notices at the screen itself.",
+      "Or turn on Save automatically as people type, so the text is always ready to type into on the kiosk and saves itself a moment after typing stops.",
+      "Text widgets stay read-only everywhere else, and saving the dashboard in the designer no longer overwrites what was typed on the kiosk."
+    ]
+  },
+  {
+    "version": "1.4.42",
+    "releaseDate": "2026-11-27",
+    "summary": "Safer rotas for staff under 18, easier staff phone set-up, live dashboard views, clearer dark-mode text dividers, more flexible automation music controls and kiosk volume and EQ on dashboards.",
+    "details": [
+      "Mark staff who are under 18 (Managers and Admins): on a person's Rota tab under Manage > Users, the new Under 18 section takes their date of birth and shows when they turn 18 and, for anyone under 16, when they're over school leaving age. It's only kept for staff under 18 and deleted on their 18th birthday, and staff can't see it.",
+      "Staff now shows who is currently marked as under 18, and Rota Settings has a new choice for the night hours staff under 18 can't work: 22:00 to 06:00, or 23:00 to 07:00 if their contract says so.",
+      "The rota now keeps staff under 18 within the UK young worker limits: 8 hours a day and 40 a week, a 30 minute break on shifts over 4.5 hours, 12 hours off between working days, 48 hours off in a row each week, and no night work. Hours at every location count.",
+      "Staff under 18 can't pick up, swap onto or be given through a request a shift that would break a limit; they see why instead. Anyone under school leaving age can't pick up shifts at all. Managers can still put them on a shift by hand, with a warning, for real emergencies.",
+      "On the rota, U18 marks staff under 18, and a broken limit shows as a warning for that week (on a phone, under rota warnings). Add shift warns as you fill it in, with a Set break to 30 min button, and Suggest staff lists anyone it would break a limit for under Not suggested.",
+      "Auto-build never breaks the limits for staff under 18, counting the shifts it has just given them too. A long shift gets a 30 minute break rather than skipping them, and a shift only under-18s were free for is left open with the reason. The Auto-build list says how many shifts had their break set or were left open for this.",
+      "The What's on today dashboard card now shows to everyone who can see the dashboard, including staff and kiosk screens, instead of only Admins and Managers. Only Admins and that location's Managers can click through to a party or the full day.",
+      "New Get Started page (/get-started) for every member of staff. It checks the phone you're on and takes you through what's left: putting the app on your Home Screen, turning on notifications (with a Send me a test button to check they arrive), and optionally Face ID or fingerprint sign-in. The install and notification steps tick off as they're done, and you'll see You're all ready to use Lanyard once the important ones are.",
+      "On iPhone and iPad, Get Started shows exactly how to Add to Home Screen, and explains that notifications are turned on from the app rather than Safari. On Android, Install opens the phone's own install prompt. If notifications are blocked, it says where to allow them for your phone and rechecks when you come back.",
+      "When new staff set their password, Continue to Login now signs them in and takes them straight to Get Started. Anyone can open it again from Account Management with Set up this device, beside Notifications.",
+      "Managers and Admins see a Copy link button at the bottom of Get Started, to turn into a QR code for a staff meeting so everyone can get set up at once.",
+      "New Staff Set-up page for Managers and Admins (Management › People › Staff Set-up). It lists everyone at your location with a tick or cross for the app on their phone, notifications and Face ID sign-in, shows how many are ready, and can hide everyone who already is. Anyone who hasn't accepted their invite is marked, and locked accounts are left out. Copy set-up link copies the Get Started link to send or show as a QR code.",
+      "Automation rules: a Music Control Play step with a playlist can now carry on where the music paused if that playlist is already loaded, instead of starting it again from the top. Handy for playing music while a game is on and pausing it when it ends.",
+      "Music Control Play steps can also turn Shuffle on or off and set Repeat to Off, Repeat playlist or Repeat song. Leave them as they are to keep the kiosk's current setting.",
+      "Dividers in text widgets are now easy to see in dark mode, both on the kiosk screen and while editing. Opening a text widget to edit it no longer removes the dividers already in it.",
+      "Coming back to Lanyard on a phone after pressing the home button now reconnects in about a second, instead of showing Reconnecting for a minute or more. If the phone's network is still waking up, it reconnects within a few seconds of the network coming back.",
+      "View any dashboard live from the Dashboards page: select View on its card to open it on its own page, working just as it does on a home screen. Full screen fills the screen with it (press Esc to leave), handy for a spare monitor or TV. Managers and Admins can also select Open live in the dashboard designer.",
+      "The Now playing dashboard widget can now show the kiosk's volume slider and EQ button: turn on Show volume and EQ in the widget's settings. They work the same as on the Music page."
+    ]
+  },
+  {
+    "version": "1.4.43",
+    "releaseDate": "2026-11-28",
+    "summary": "Watch a kiosk's camera live from the Clients page.",
+    "details": [
+      "Added a Live camera button on the Clients page for kiosks with a camera or capture card plugged in. It shows that camera live in a dialog, with a picker when there's more than one camera.",
+      "A kiosk already showing the same camera in a Live Capture step keeps working while you watch."
     ]
   }
 ]

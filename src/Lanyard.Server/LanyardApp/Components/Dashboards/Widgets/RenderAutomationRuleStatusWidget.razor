@@ -74,6 +74,24 @@
 
         _engineService.OnRuleEnabledChanged += HandleRuleEnabledChanged;
         _engineService.OnRuleExecuted += HandleRuleExecuted;
+    }
+
+    // The rule can change while the widget is shown (its settings in the dashboard designer apply
+    // live), so the rule is (re)loaded whenever it isn't the one already shown.
+    private Guid? _loadedRuleId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Widget.AutomationRuleId == _loadedRuleId)
+        {
+            return;
+        }
+
+        _loadedRuleId = Widget.AutomationRuleId;
+        _ruleName = null;
+        _isEnabled = false;
+        _lastRunAt = null;
+        _lastRunSuccess = null;
 
         if (Widget.AutomationRuleId is not Guid ruleId)
         {

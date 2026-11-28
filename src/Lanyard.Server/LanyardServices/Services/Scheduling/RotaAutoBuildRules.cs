@@ -7,7 +7,8 @@ namespace Lanyard.Application.Services.Scheduling;
 // One person Auto-build could put on shifts. Shifts is their active shifts at every location in the
 // company across the weeks being built (padded a day each side), and Auto-build adds each shift it
 // gives them to it as it goes, so hours, rest and clashes stay right for the next pick.
-// PendingTimeOff maps a day to the type of an undecided time-off request covering it.
+// PendingTimeOff maps a day to the type of an undecided time-off request covering it. YoungWorker is
+// set for anyone under 18 (or under school leaving age) in the weeks being built.
 public sealed record AutoBuildWorker(
     string UserId,
     string DisplayName,
@@ -17,10 +18,13 @@ public sealed record AutoBuildWorker(
     List<Shift> Shifts,
     IReadOnlyCollection<StaffAvailability> Availability,
     IReadOnlyDictionary<DateOnly, string> PendingTimeOff,
-    StaffWorkPreference? Wish = null);
+    StaffWorkPreference? Wish = null,
+    YoungWorkerProfile? YoungWorker = null);
 
 // A shift Auto-build decided on: the Shift row to save (UserId null = open) and how to describe it.
-public sealed record AutoBuildPick(Shift Shift, AutoBuildLine Line);
+// BreakRaised: given to someone under 18 with its break raised to 30 minutes. OpenForYoungWorkers:
+// left open because everyone otherwise free was under 18 and it would break their limits.
+public sealed record AutoBuildPick(Shift Shift, AutoBuildLine Line, bool BreakRaised = false, bool OpenForYoungWorkers = false);
 
 // Turns a location's shift templates into the shifts a date range needs, and chooses who works
 // them. Pure and deterministic - no database, no clock - so it can be tested directly.
@@ -205,7 +209,9 @@ public static class RotaAutoBuildRules
     // person and a shift (not at the location, doesn't hold the position, missing training, booked
     // off, a clash with a shift already on the rota) - ShiftClaimRules.WhyCantWork in practice;
     // clashes with shifts picked earlier in this same run are checked here. Each pick is added to
-    // that worker's Shifts.
+    // that worker's Shifts. Young workers are checked against those Shifts too (YoungWorkerRules),
+    // so the limits hold across picks made in the same run; a young worker is offered the shift with
+    // its break raised to 30 minutes where the limits need it, rather than skipped over the break.
     public static List<AutoBuildPick> Assign(
         int locationId,
         IEnumerable<DemandSlot> slots,
@@ -221,7 +227,9 @@ public static class RotaAutoBuildRules
             .Select((slot, index) =>
             {
                 Shift probe = NewShift(locationId, slot, actingUserId, nowUtc, positions);
-                int possible = workers.Count(w => cantWork(w, probe) is null && !Unavailable(w, probe));
+                // As each worker would be offered it: an under-18 gets a long shift with its break
+                // raised, so they count as able to work it.
+                int possible = workers.Count(w => ForWorker(w, probe) is Shift offered && cantWork(w, offered) is null && !Unavailable(w, offered));
 
                 return (Slot: slot, Index: index, Possible: possible);
             })
@@ -238,6 +246,31 @@ public static class RotaAutoBuildRules
         {
             Shift shift = NewShift(locationId, slot, actingUserId, nowUtc, positions);
 
+            // What each young worker would be offered (break raised if needed), and whether only the
+            // young worker limits stand in their way.
+            Dictionary<string, Shift> offered = [];
+            Dictionary<string, string> blockedOnlyByLimits = [];
+
+            string? WhyNot(AutoBuildWorker worker)
+            {
+                Shift forWorker = ForWorker(worker, shift);
+                offered[worker.UserId] = forWorker;
+
+                string? reason = cantWork(worker, forWorker) ?? ClashWithPicked(worker, forWorker);
+
+                if (reason is null && worker.YoungWorker is YoungWorkerProfile young)
+                {
+                    reason = YoungWorkerRules.Evaluate(young, forWorker, worker.Shifts).FirstOrDefault()?.Message;
+                }
+
+                if (reason is not null && YoungWorkerRules.IsBreachMessage(reason) && !Unavailable(worker, forWorker))
+                {
+                    blockedOnlyByLimits[worker.UserId] = reason;
+                }
+
+                return reason;
+            }
+
             List<SuggestionCandidate> candidates = workers.Select(worker => new SuggestionCandidate(
                 worker.UserId,
                 worker.DisplayName,
@@ -247,7 +280,7 @@ public static class RotaAutoBuildRules
                 worker.Shifts,
                 worker.PendingTimeOff.GetValueOrDefault(slot.Day),
                 false,
-                cantWork(worker, shift) ?? ClashWithPicked(worker, shift),
+                WhyNot(worker),
                 worker.Availability,
                 worker.Wish)).ToList();
 
@@ -266,6 +299,15 @@ public static class RotaAutoBuildRules
 
             if (best is null)
             {
+                if (ranking.Ranked.Count == 0 && blockedOnlyByLimits.Count > 0)
+                {
+                    string limit = blockedOnlyByLimits.Values.First();
+
+                    picks.Add(new AutoBuildPick(shift, Line(slot, null, null, null,
+                        $"Only staff under 18 are free, and this shift would break their limits ({Lower(limit)})."), OpenForYoungWorkers: true));
+                    continue;
+                }
+
                 string whyOpen = ranking.Ranked.Count > 0
                     ? "Everyone free would go over their weekly maximum, miss their rest between shifts, or has asked for that day off."
                     : possible == 0
@@ -277,11 +319,21 @@ public static class RotaAutoBuildRules
             }
 
             AutoBuildWorker chosen = workers.First(x => x.UserId == best.UserId);
+            bool breakRaised = offered.TryGetValue(chosen.UserId, out Shift? given) && given.BreakMinutes != shift.BreakMinutes;
+            shift.BreakMinutes = given?.BreakMinutes ?? shift.BreakMinutes;
             shift.UserId = chosen.UserId;
             chosen.Shifts.Add(shift);
 
             string? reason = regular is not null ? "Regular on this shift" : best.Positives.FirstOrDefault()?.Text;
-            picks.Add(new AutoBuildPick(shift, Line(slot, chosen.UserId, chosen.DisplayName, reason, null)));
+
+            if (breakRaised)
+            {
+                reason = reason is null
+                    ? $"Break set to {shift.BreakMinutes} min (under 18)"
+                    : $"{reason} · break set to {shift.BreakMinutes} min (under 18)";
+            }
+
+            picks.Add(new AutoBuildPick(shift, Line(slot, chosen.UserId, chosen.DisplayName, reason, null), BreakRaised: breakRaised));
         }
 
         return picks.OrderBy(x => x.Shift.StartUtc).ThenBy(x => x.Line.Name).ThenBy(x => x.Line.PositionName).ThenBy(x => x.Line.DisplayName).ToList();
@@ -311,6 +363,45 @@ public static class RotaAutoBuildRules
         return worker.Shifts.Any(x => x.IsActive && x.Id != shift.Id && RotaTime.LocalDate(x.StartUtc) != day
             && ((x.EndUtc <= shift.StartUtc && shift.StartUtc - x.EndUtc < ShiftSuggestionRules.MinimumRest)
                 || (x.StartUtc >= shift.EndUtc && x.StartUtc - shift.EndUtc < ShiftSuggestionRules.MinimumRest)));
+    }
+
+    // The shift as this worker would get it: for a young worker, with the break the limits need.
+    private static Shift ForWorker(AutoBuildWorker worker, Shift shift)
+    {
+        if (worker.YoungWorker is not YoungWorkerProfile young)
+        {
+            return shift;
+        }
+
+        int needed = YoungWorkerRules.RequiredBreakMinutes(young, WorkBlock.From(shift));
+
+        if (needed == shift.BreakMinutes)
+        {
+            return shift;
+        }
+
+        return new Shift
+        {
+            Id = shift.Id,
+            LocationId = shift.LocationId,
+            StaffPositionId = shift.StaffPositionId,
+            StaffPosition = shift.StaffPosition,
+            StartUtc = shift.StartUtc,
+            EndUtc = shift.EndUtc,
+            BreakMinutes = needed,
+            Notes = shift.Notes,
+            PartyBookingId = shift.PartyBookingId,
+            IsActive = shift.IsActive,
+            CreateDate = shift.CreateDate,
+            CreateByUserId = shift.CreateByUserId
+        };
+    }
+
+    // "Under 18: can't work ..." -> "can't work ...", to sit inside a sentence.
+    private static string Lower(string message)
+    {
+        int colon = message.IndexOf(": ", StringComparison.Ordinal);
+        return colon >= 0 ? message[(colon + 2)..].TrimEnd('.') : message.TrimEnd('.');
     }
 
     private static string? ClashWithPicked(AutoBuildWorker worker, Shift shift) =>

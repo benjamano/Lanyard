@@ -335,7 +335,11 @@ for (let i = 0; i < steps.length; i++) {
 
 // 2. Sign in (not recorded), carry the session into the recording context.
 const browser = await chromium.launch({ headless: !args.headed });
-const contextOpts = { viewport: { width, height }, isMobile: width < 600, deviceScaleFactor: 1 };
+// meta.userAgent: pretend to be a particular phone or browser (device-specific pages such as /get-started).
+const contextOpts = {
+  viewport: { width, height }, isMobile: width < 600, hasTouch: width < 600, deviceScaleFactor: 1,
+  ...(meta.userAgent ? { userAgent: meta.userAgent } : {})
+};
 let storageState;
 if (args.login) {
   const ctx = await browser.newContext(contextOpts);
@@ -348,6 +352,10 @@ if (args.login) {
 const videoDir = join(tmp, 'video');
 const context = await browser.newContext({ ...contextOpts, storageState, recordVideo: { dir: videoDir, size: { width, height } } });
 await context.addInitScript(overlayInit);
+// meta.initScript (+ meta.initArg): runs in every page before the app, e.g. to fake install or push state.
+if (typeof meta.initScript === 'function') {
+  await context.addInitScript(meta.initScript, meta.initArg);
+}
 // meta.cookies: set before the first page loads, e.g. a paired clock-in terminal's device cookie
 // ({ name, value } - the domain and path default to the base URL's host and "/").
 if (Array.isArray(meta.cookies) && meta.cookies.length > 0) {

@@ -65,6 +65,7 @@ public static class HelpRegistry
     public const string MyTraining = "my-training";
     public const string Rota = "rota";
     public const string MyShifts = "my-shifts";
+    public const string GetStarted = "get-started";
     public const string Users = "users";
     public const string Compliance = "compliance";
     public const string Onboarding = "onboarding";
@@ -90,6 +91,18 @@ public static class HelpRegistry
 
     public static IReadOnlyList<HelpArea> Areas { get; } =
     [
+        new(GetStarted,
+            "Getting Set Up",
+            "Putting the app on your phone, turning on notifications and Face ID or fingerprint sign-in.",
+            HelpAudience.Everyone,
+            () => new Icons.Regular.Size20.PhoneCheckmark(),
+            [
+                new("phone", "Setting Up Your Phone"),
+                new("troubleshooting", "Notifications Not Arriving"),
+                new("team", "Setting Up Your Team")
+            ],
+            ["/get-started"]),
+
         new(MyTraining,
             "My Training",
             "Taking the courses assigned to you, quizzes, retakes and certificates.",
@@ -179,6 +192,7 @@ public static class HelpRegistry
             [
                 new("overview", "Overview"),
                 new("editing", "Editing a Dashboard"),
+                new("devices", "Phones & TVs"),
                 new("widgets", "Widgets")
             ],
             ["/manage/dashboards"]),
@@ -354,7 +368,7 @@ public static class HelpRegistry
 
         new(Users,
             "Users & Roles",
-            "Adding staff, their profiles, roles and permissions, locations, company features and sign-in security.",
+            "Adding staff, their profiles, roles and permissions, locations, company features, sign-in security and who has set up their phone.",
             HelpAudience.Managers,
             () => new Icons.Regular.Size20.PeopleTeam(),
             [
@@ -362,9 +376,10 @@ public static class HelpRegistry
                 new("profile", "A Person's Profile"),
                 new("roles", "Roles & Permissions"),
                 new("locations", "Companies & Locations"),
-                new("security", "Sign-in & Security")
+                new("security", "Sign-in & Security"),
+                new("staff-setup", "Staff Set-up")
             ],
-            ["/manage/users", "/manage/roles", "/manage/companies-locations"],
+            ["/manage/users", "/manage/roles", "/manage/companies-locations", "/manage/staff-setup"],
             Roles: "Admin,Manager"),
 
         new(ManageChecklists,

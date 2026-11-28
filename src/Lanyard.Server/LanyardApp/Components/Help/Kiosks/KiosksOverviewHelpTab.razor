@@ -47,6 +47,8 @@
             <li><strong>Diagnostics</strong>: fetch the kiosk's recent log for troubleshooting. Passwords and tokens are
                 hidden.</li>
             <li><strong>Screens</strong>: <strong>Capture screens</strong> to see what each projected screen is showing right now.</li>
+            <li><strong>Live camera</strong> (the video camera button, only on kiosks with a camera or capture card
+                plugged in): watch that camera live. See <strong>Live camera</strong> below.</li>
             <li><strong>Identify displays</strong> (the # button): every screen on the kiosk shows its number for 8 seconds.
                 See <strong>Identify displays</strong> on the Settings tab.</li>
         </ul>
@@ -63,5 +65,27 @@
             <strong>This display link isn't valid</strong>, use <strong>Restart</strong> and choose
             <strong>Restart Lanyard Client</strong>, which opens the screens again.
         </FluentText>
+    </HelpSection>
+
+    <HelpSection Title="Live camera">
+        <FluentText>
+            Use this to check a camera is plugged in, pointing the right way and in focus, without setting up a
+            projection program to show it.
+        </FluentText>
+        <ol>
+            <li>Find the kiosk in the list and select the video camera button (<strong>Live camera</strong>).</li>
+            <li>The picture appears after a few seconds while the kiosk starts its camera.</li>
+            <li>If the kiosk has more than one camera, pick one from <strong>Camera</strong>.</li>
+            <li>Select <strong>Close</strong> when you're done. The camera is released straight away.</li>
+        </ol>
+        <FluentText>
+            It shows video only, with no sound, and nothing is recorded. A kiosk already showing the same camera in a
+            Live Capture step carries on as normal. If the picture doesn't start, select <strong>Try again</strong>.
+            If that fails too, check the camera is plugged in, then restart the Lanyard Client so it reports its cameras again.
+        </FluentText>
+        <HelpNote>
+            The button only appears for kiosks that have reported at least one camera, and only works while the
+            kiosk is connected.
+        </HelpNote>
     </HelpSection>
 </HelpTab>

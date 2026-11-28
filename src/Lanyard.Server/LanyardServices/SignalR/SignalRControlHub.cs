@@ -687,6 +687,13 @@ public class SignalRControlHub(
         if (!setResult.IsSuccess)
         {
             _logger.LogWarning("Failed to update available video devices for client {ClientId}: {Error}", clientId, setResult.Error);
+            return;
+        }
+
+        // The Clients page shows Live camera only for clients with cameras, so refresh its list now.
+        if (Context.Items.TryGetValue(CompanyIdItemKey, out object? companyId) && companyId is int id)
+        {
+            _fleetEvents.Publish(id);
         }
     }
 

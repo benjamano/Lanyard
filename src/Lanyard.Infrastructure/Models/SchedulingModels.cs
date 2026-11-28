@@ -178,6 +178,68 @@ namespace Lanyard.Infrastructure.Models
         public bool HasAnyValue => MaxShiftsPerWeek is not null || MaxHoursPerWeek is not null;
     }
 
+    // The date of birth of a member of staff under 18, so the UK young worker limits apply to their
+    // rota (8 hours a day, 40 a week, a 30 minute break over 4.5 hours, 12 hours rest between days,
+    // 48 hours off a week, no night work) - and, until they're over school leaving age, so they're
+    // never rostered automatically. Only kept while they're under 18: the row is deleted on their
+    // 18th birthday (YoungWorkerCleanupHostedService). Managers and Admins set it; staff never see
+    // it. Its own table, not a UserProfile column, so a profile save can't touch it and GDPR erasure
+    // is a row delete.
+    public class YoungWorkerStatus : ICompanyOwned
+    {
+        public Guid Id { get; set; }
+
+        public required int CompanyId { get; set; }
+        public Company? Company { get; set; }
+
+        public required string UserId { get; set; }
+        public UserProfile? User { get; set; }
+
+        public DateOnly DateOfBirth { get; set; }
+
+        public DateTime UpdateDate { get; set; }
+
+        // The manager who last changed it; null once they've been erased.
+        public string? UpdatedByUserId { get; set; }
+
+        public DateOnly EighteenthBirthday => YoungWorkerAge.EighteenthBirthday(DateOfBirth);
+
+        public DateOnly SchoolLeavingDate => YoungWorkerAge.SchoolLeavingDate(DateOfBirth);
+
+        public bool IsUnder18On(DateOnly day) => YoungWorkerAge.IsUnder18On(DateOfBirth, day);
+    }
+
+    // The dates the young worker rules need, worked out from a date of birth.
+    public static class YoungWorkerAge
+    {
+        // Under 18 on `day`: born after the same date 18 years earlier. Someone born on 29 February
+        // turns 18 on 1 March in a non-leap year, which this gives too.
+        public static bool IsUnder18On(DateOnly dateOfBirth, DateOnly day) => dateOfBirth > day.AddYears(-18);
+
+        // The latest date of birth of anyone who is 18 or over on `day` - for database filters:
+        // "still under 18" is DateOfBirth > this.
+        public static DateOnly Born18YearsBefore(DateOnly day) => day.AddYears(-18);
+
+        public static DateOnly EighteenthBirthday(DateOnly dateOfBirth)
+        {
+            DateOnly birthday = dateOfBirth.AddYears(18);
+            return dateOfBirth is { Month: 2, Day: 29 } && birthday.Day == 28 ? birthday.AddDays(1) : birthday;
+        }
+
+        // The day they're over school leaving age in England: the last Friday in June of the school
+        // year (September to August) in which they turn 16. Someone born September to December turns
+        // 16 early in Year 11 and leaves the following June; January to August, the June of the year
+        // they turn 16.
+        public static DateOnly SchoolLeavingDate(DateOnly dateOfBirth)
+        {
+            int year = dateOfBirth.Year + (dateOfBirth.Month >= 9 ? 17 : 16);
+            DateOnly lastOfJune = new(year, 6, 30);
+            int back = ((int)lastOfJune.DayOfWeek - (int)DayOfWeek.Friday + 7) % 7;
+
+            return lastOfJune.AddDays(-back);
+        }
+    }
+
     // The PIN a staff member types on the clock-in terminal. The terminal identifies the person
     // by name first (they tap themselves on today's roster), so the PIN only has to verify that
     // one user - it never has to be unique or looked up, which is why a salted Identity
@@ -247,6 +309,10 @@ namespace Lanyard.Infrastructure.Models
         public BreakDeductionRule BreakDeduction { get; set; } = BreakDeductionRule.None;
         public int BreakDeductionMinutes { get; set; } = 20;
         public decimal BreakDeductionAfterHours { get; set; } = 6;
+
+        // The night hours staff under 18 can't be rostered for: 22:00-06:00 unless their contract
+        // says 23:00-07:00. Midnight to 04:00 is ruled out either way.
+        public YoungWorkerNightWindow YoungWorkerNightWindow { get; set; } = YoungWorkerNightWindow.TenToSix;
 
         public DateTime UpdateDate { get; set; }
     }

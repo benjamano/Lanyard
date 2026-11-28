@@ -25,7 +25,7 @@ public class ClientServiceRestartTests
         IDbContextFactory<ApplicationDbContext> factory,
         IHubContext<SignalRControlHub> hubContext,
         IReadOnlyCollection<string> connectedIds)
-        : ClientService(factory, hubContext, new Mock<ILogger<ClientService>>().Object, new MemoryCache(new MemoryCacheOptions()), new KioskFleetEventBus())
+        : ClientService(factory, hubContext, new Mock<ILogger<ClientService>>().Object, new MemoryCache(new MemoryCacheOptions()), new KioskFleetEventBus(), new ClientEqualiserEventBus())
     {
         protected override IReadOnlyCollection<string> GetConnectedConnectionIds()
         {

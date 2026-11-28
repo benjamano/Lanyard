@@ -1,0 +1,19 @@
+.get-started-marker {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    font-weight: 600;
+    border: 2px solid var(--colorBrandStroke1, var(--colorBrandBackground));
+    color: var(--colorBrandForeground1);
+    background: var(--colorNeutralBackground1);
+}
+
+.get-started-marker.is-done {
+    border-color: var(--colorStatusSuccessBackground3);
+    background: var(--colorStatusSuccessBackground3);
+    color: var(--colorNeutralForegroundOnBrand, #fff);
+}

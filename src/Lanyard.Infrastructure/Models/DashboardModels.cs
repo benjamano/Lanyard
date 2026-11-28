@@ -112,6 +112,15 @@ public class TextAreaWidget : DashboardWidget
     }
 
     public string? Content { get; set; }
+
+    // Lets the text be changed on a kiosk screen showing it (an Edit button appears there), for
+    // a notice board staff update in place. While it's on, the kiosk owns the text: the designer
+    // shows it read-only, and saving the dashboard doesn't overwrite what was typed on the kiosk.
+    public bool EditableOnKiosk { get; set; }
+
+    // With kiosk editing on: true puts the editor straight on the kiosk screen and saves shortly
+    // after typing stops; false shows an Edit button and saves when Save is pressed.
+    public bool KioskAutoSave { get; set; }
 }
 
 public class ClientZoneLaserGameStatusWidget : DashboardWidget
@@ -208,6 +217,10 @@ public class MusicTimelineWidget : DashboardWidget
 
     public Guid? ClientId { get; set; }
     public bool ShowSongTitle { get; set; } = true;
+
+    // Off by default so dashboards saved before this option keep their look; the slider and EQ
+    // button make the widget taller, which a small wall-screen tile may not have room for.
+    public bool ShowVolumeAndEq { get; set; }
 }
 
 // Deliberately not scoped to a single ClientId like the other client-facing widgets: the

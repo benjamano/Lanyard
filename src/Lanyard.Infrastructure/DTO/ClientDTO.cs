@@ -18,6 +18,9 @@ public class ClientConnectedWithCapabilitiesDTO : Client
 
     public bool ProjectionEnabled { get; set; }
     public bool DmxEnabled { get; set; }
+
+    // Cameras/capture cards the client last reported. Above zero, the Clients page offers Live camera.
+    public int VideoDeviceCount { get; set; }
     public ZoneScoreboardVersion? ZoneScoreboardVersion { get; set; }
 }
 

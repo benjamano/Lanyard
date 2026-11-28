@@ -1,0 +1,140 @@
+@page "/manage/staff-setup"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+
+@using Lanyard.App.Extensions
+@using Lanyard.Application.Services.Notifications
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@inject IStaffReadinessService ReadinessService
+@inject IJSRuntime JS
+
+<PageTitle>Staff Set-up</PageTitle>
+
+@* Who at this location has finished Get Started (/get-started): the app on their phone and
+   notifications on. Managers use it after a set-up session to chase anyone who missed it. *@
+<div class="staff-setup-page">
+    <div class="staff-setup-header">
+        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size800">Staff Set-up</FluentText>
+        <HelpButton AreaKey="@HelpRegistry.Users" Topic="staff-setup" />
+    </div>
+
+    <div class="staff-setup-intro">
+        <FluentText Class="staff-setup-muted">
+            Who has the app on their phone and notifications turned on. Send anyone who isn't ready the set-up link,
+            or a QR code of it.
+        </FluentText>
+        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Copy())" OnClick="CopyLinkAsync">Copy set-up link</FluentButton>
+    </div>
+
+    @if (rows is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentSpinner />
+        </FluentStack>
+    }
+    else if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else if (rows.Count == 0)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">Nobody works at @(locationName ?? "this location") yet.</FluentMessageBar>
+    }
+    else
+    {
+        <div class="staff-setup-summary">
+            <div class="staff-setup-count">
+                <span class="staff-setup-count-number">@ReadyCount of @rows.Count</span>
+                <span>ready@(locationName is null ? "" : $" at {locationName}")</span>
+            </div>
+            <FluentSwitch @bind-Value="notReadyOnly" Label="Only show who isn't ready" />
+        </div>
+
+        @if (Shown.Count == 0)
+        {
+            <FluentMessageBar Intent="MessageBarIntent.Success" AllowDismiss="false">Everyone is set up.</FluentMessageBar>
+        }
+        else
+        {
+            <ul class="staff-setup-list">
+                @foreach (StaffReadinessRow row in Shown)
+                {
+                    <li class="staff-setup-row @(row.IsReady ? "is-ready" : "")">
+                        <div class="staff-setup-person">
+                            <a href="@($"/manage/users/{row.UserId}")">@row.Name</a>
+                            <span class="staff-setup-muted">
+                                @(row.InvitePending ? "Invite not accepted yet"
+                                    : row.LastAppUseUtc is DateTime seen
+                                    ? $"Last used the app {RotaTime.ToVenueLocal(seen).ToString("d MMM", RotaFormat.Uk)}"
+                                    : "Hasn't opened the app on a phone yet")
+                            </span>
+                        </div>
+                        <div class="staff-setup-chips">
+                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="@(row.HasApp ? BadgeColor.Success : BadgeColor.Danger)" title="@(row.HasApp ? "App installed" : "App not installed")" aria-label="@(row.HasApp ? "App installed" : "App not installed")">
+                                <FluentIcon Value="@Tick(row.HasApp)" Color="Color.Custom" CustomColor="currentColor" Class="staff-setup-chip-icon" />App
+                            </FluentBadge>
+                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="@(row.HasNotifications ? BadgeColor.Success : BadgeColor.Danger)" title="@(row.HasNotifications ? "Notifications on" : "Notifications off")" aria-label="@(row.HasNotifications ? "Notifications on" : "Notifications off")">
+                                <FluentIcon Value="@Tick(row.HasNotifications)" Color="Color.Custom" CustomColor="currentColor" Class="staff-setup-chip-icon" />Notifications
+                            </FluentBadge>
+                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="@(row.HasPasskey ? BadgeColor.Success : BadgeColor.Subtle)" title="@(row.HasPasskey ? "Face ID or fingerprint sign-in set up" : "No Face ID or fingerprint sign-in")" aria-label="@(row.HasPasskey ? "Face ID or fingerprint sign-in set up" : "No Face ID or fingerprint sign-in")">
+                                <FluentIcon Value="@Tick(row.HasPasskey)" Color="Color.Custom" CustomColor="currentColor" Class="staff-setup-chip-icon" />Face ID
+                            </FluentBadge>
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+    }
+</div>
+
+@code {
+    private List<StaffReadinessRow>? rows;
+    private string? locationName;
+    private string? loadError;
+    private bool notReadyOnly;
+
+    private static Icon Tick(bool done) => done ? new Icons.Regular.Size16.Checkmark() : new Icons.Regular.Size16.Dismiss();
+
+    private int ReadyCount => rows?.Count(x => x.IsReady) ?? 0;
+
+    private List<StaffReadinessRow> Shown => (rows ?? []).Where(x => !notReadyOnly || !x.IsReady).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (!scope.IsSuccess || scope.Data is null)
+        {
+            loadError = scope.Error ?? "We couldn't work out which location you're in. Try signing out and back in.";
+            rows = [];
+            return;
+        }
+
+        locationName = scope.Data.LocationDisplayName;
+
+        Result<List<StaffReadinessRow>> result = await ReadinessService.GetAsync(scope.Data);
+
+        if (!result.IsSuccess)
+        {
+            loadError = scope.Data.LocationId is null
+                ? "Choose a location at the top of the page to see who there has set up their phone."
+                : result.Error ?? "Couldn't load who has set up their phone. Try again in a moment.";
+        }
+
+        rows = result.Data ?? [];
+    }
+
+    private async Task CopyLinkAsync()
+    {
+        string url = _navigationManager.ToAbsoluteUri("/get-started").ToString();
+
+        if (await JS.TryCopyToClipboardAsync(url))
+        {
+            _toastService.ShowSuccess($"Copied {url}");
+        }
+        else
+        {
+            _toastService.ShowError($"Couldn't copy the link. It's {url}");
+        }
+    }
+}

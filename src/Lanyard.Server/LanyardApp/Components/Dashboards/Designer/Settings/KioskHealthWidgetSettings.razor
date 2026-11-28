@@ -1,0 +1,5 @@
+@inherits WidgetSettingsBase<KioskHealthWidget>
+
+<div class="widget-settings">
+    <FluentSwitch Value="@W.OnlyShowOffline" ValueChanged="@(v => SetAsync(() => W.OnlyShowOffline = v, v ? "Showed only kiosks needing attention" : "Showed every kiosk"))" Label="Only show kiosks that need attention" />
+</div>

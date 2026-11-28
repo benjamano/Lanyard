@@ -10,12 +10,12 @@ Every widget renders through one table, `Components/Dashboards/DashboardWidgetCa
 1. **`Lanyard.Infrastructure/Enum/WidgetType.cs`**: add the enum value. Check open PRs first: two stacks have clashed on the same number before.
 2. **`Lanyard.Infrastructure/Models/DashboardModels.cs`**: add a `DashboardWidget` subclass with a `[SetsRequiredMembers]` constructor that sets `Type` and a default `GridW`/`GridH`.
 3. **`ApplicationDbContext`'s `HasDiscriminator(...).HasValue<...>()` chain**: add the subclass, then generate and apply an EF migration. If you miss this you get a runtime EF discriminator error, not a compile error.
-4. **`DashboardWidgetCatalog.All`**: add a `WidgetDescriptor` with name, one-line description, category, icon, a `Create` that returns the new subclass, and the renderer type. Set `HasSettings: false` if there's nothing to configure.
+4. **`DashboardWidgetCatalog.All`**: add a `WidgetDescriptor` with name, one-line description, category, icon, a `Create` that returns the new subclass, the renderer type and the settings panel type (`null` only if there's nothing to configure).
 5. **The renderer, `Components/Dashboards/Widgets/RenderXWidget.razor`**: it must have `[Parameter] public required XWidget Widget`. It may also declare any of these optional parameters. `DashboardWidgetCatalog.RenderParameters` only passes the ones a component declares, because `DynamicComponent` throws on unknown parameters.
    - `AllowTrigger`: true on a live dashboard. Buttons and controls must only act when this is true.
    - `PreviewMode`: true on a live dashboard.
    - `CompanyId`: the dashboard's company. Kiosks render signed out.
-6. **Settings**: if `HasSettings`, add a `ConfigureXDialog.razor` and a `case XWidget` in `DashboardWidgetConfigurator.ConfigureAsync`. (The designer stack replaces these dialogs with inline inspector panels.)
+6. **Settings panel**: add `Components/Dashboards/Designer/Settings/XWidgetSettings.razor`, with `@inherits WidgetSettingsBase<XWidget>`. Edit through `SetAsync(() => W.Prop = v, "Short description")` so the canvas redraws and the change can be undone. Clamp numbers in the setter. Use `KioskPicker`, `LocationPicker` and `ScreenPicker` rather than hand-rolling selects. The panel shows in the designer's inspector; there are no settings dialogs.
 7. **`DashboardService.cs`**: three places, all easy to forget:
    - `CreateWidgetCopy`'s switch expression needs a case that copies the type's settings. Its `_ => throw` fallback fails the **whole dashboard save** for an unhandled type, and that failure only shows as a toast. Types with no settings still need a bare case (`GreetingWidget => new GreetingWidget()`).
    - `UpdateTypeSpecificWidgetProperties` does the same copy for an existing widget.

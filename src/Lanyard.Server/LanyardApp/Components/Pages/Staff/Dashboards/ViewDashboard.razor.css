@@ -1,0 +1,73 @@
+.view-dashboard-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    min-width: 0;
+}
+
+.view-dashboard-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    font-size: var(--fontSizeBase500);
+    font-weight: var(--fontWeightSemibold);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.view-dashboard-actions,
+.view-dashboard-wide {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+}
+
+/* In full screen the stage is the only thing on screen, so it needs its own background - a
+   full-screen element is drawn over black otherwise - and scrolls if the dashboard is taller than
+   the screen (one that isn't set to Fit to screen). */
+.view-dashboard-stage.is-fullscreen {
+    position: relative;
+    background: var(--colorNeutralBackground2);
+    overflow-y: auto;
+    padding: 8px;
+    box-sizing: border-box;
+}
+
+.view-dashboard-stage.is-fullscreen ::deep .dashboard-grid.fit-to-screen {
+    --dashboard-fit-height: calc(100dvh - 16px);
+}
+
+/* The way out of full screen, for touch screens with no Esc key. Kept small, faded and in the
+   bottom corner, where widgets rarely have text, and only fully visible on hover. */
+.view-dashboard-stage ::deep .view-dashboard-exit {
+    position: fixed;
+    bottom: 12px;
+    right: 12px;
+    z-index: 10;
+    opacity: 0.55;
+    background: var(--colorNeutralBackground1);
+    border-radius: var(--borderRadiusCircular);
+    box-shadow: var(--shadow4);
+}
+
+.view-dashboard-stage ::deep .view-dashboard-exit:hover,
+.view-dashboard-stage ::deep .view-dashboard-exit:focus-visible {
+    opacity: 1;
+}
+
+.view-dashboard-narrow {
+    display: none;
+}
+
+@media (max-width: 600px) {
+    .view-dashboard-wide {
+        display: none;
+    }
+
+    .view-dashboard-narrow {
+        display: contents;
+    }
+}

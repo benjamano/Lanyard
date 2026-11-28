@@ -1,0 +1,76 @@
+@using Lanyard.App.Components.Manager
+@using Lanyard.Shared.Kiosk
+
+@* Which of a kiosk's screens a projection widget follows. Screens are per kiosk, so the list
+   reloads whenever the kiosk changes. *@
+
+@inject IClientService ClientService
+
+@if (ClientId is not null)
+{
+    <DisplayPickerRow ClientId="@ClientId">
+        <FluentSelect TOption="string" TValue="string" Label="Screen" Width="100%"
+                      Value="@(Value?.ToString() ?? "default")"
+                      ValueChanged="OnChangedAsync">
+            <FluentOption TValue="string" Value="default">The kiosk's default screen</FluentOption>
+            @foreach (ClientAvailableScreen screen in _screens)
+            {
+                <FluentOption TValue="string" Value="@screen.Index.ToString()">@DisplayIdentifyRules.PickerLabel(screen.Index, screen.Name, screen.Width, screen.Height)</FluentOption>
+            }
+        </FluentSelect>
+    </DisplayPickerRow>
+}
+
+@code {
+    [Parameter]
+    public Guid? ClientId { get; set; }
+
+    [Parameter]
+    public int? Value { get; set; }
+
+    [Parameter]
+    public EventCallback<int?> ValueChanged { get; set; }
+
+    private List<ClientAvailableScreen> _screens = [];
+    private Guid? _loadedFor;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ClientId == _loadedFor)
+        {
+            return;
+        }
+
+        _loadedFor = ClientId;
+        _screens = [];
+
+        if (ClientId is not Guid clientId)
+        {
+            return;
+        }
+
+        Result<IEnumerable<ClientAvailableScreen>> result = await ClientService.GetClientAvailableScreensAsync(clientId);
+
+        // The kiosk may have been changed again while this was loading; a late answer for the
+        // previous kiosk mustn't replace the current one's screens.
+        if (ClientId != clientId)
+        {
+            return;
+        }
+
+        if (result.IsSuccess && result.Data is not null)
+        {
+            _screens = [.. result.Data.Where(x => x.IsActive).OrderBy(x => x.Index)];
+        }
+    }
+
+    private async Task OnChangedAsync(string? value)
+    {
+        int? index = int.TryParse(value, out int parsed) ? parsed : null;
+
+        if (index != Value)
+        {
+            await ValueChanged.InvokeAsync(index);
+        }
+    }
+}

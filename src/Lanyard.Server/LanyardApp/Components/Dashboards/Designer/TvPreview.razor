@@ -1,0 +1,83 @@
+@* How the dashboard looks full-screen on a 1920x1080 kiosk TV, scaled down to fit. With "Fill
+   the screen" on, the rows stretch to fill the TV exactly; off, they keep their set height and
+   anything below the screen is cut off, as it would be on a kiosk nobody can scroll. *@
+
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="tv-preview">
+    <div class="tv-preview-bar">
+        <FluentSwitch Value="@Dashboard.FitToScreen"
+                      ValueChanged="@(v => SetFitAsync(v))"
+                      Label="Fill the screen on kiosk TVs" />
+        <span class="tv-preview-hint">
+            @(Dashboard.FitToScreen
+                ? "Rows stretch so the whole dashboard fits a TV with no scrolling."
+                : "Rows keep their height. Anything below the bottom of the TV won't be seen.")
+        </span>
+    </div>
+
+    <div class="tv-preview-stage" @ref="_stageRef">
+        <div class="tv-preview-screen" @ref="_screenRef" style="--dashboard-fit-height: @(TvHeight - 24)px;">
+            <DashboardGrid Widgets="Dashboard.Widgets"
+                           CompanyId="Dashboard.CompanyId"
+                           RowHeight="Dashboard.RowHeight"
+                           FitToScreen="Dashboard.FitToScreen"
+                           ControlsEnabled="false"
+                           PreviewMode="true" />
+        </div>
+    </div>
+
+    <div class="tv-preview-hint">Shown at 1920 × 1080, scaled to fit. A dashboard reaches a TV through a projection program's Dashboard step.</div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required Dashboard Dashboard { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnChanged { get; set; }
+
+    private const int TvWidth = 1920;
+    private const int TvHeight = 1080;
+
+    private ElementReference _stageRef;
+    private ElementReference _screenRef;
+    private IJSObjectReference? _module;
+    private IJSObjectReference? _fit;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/dashboardDesigner.js");
+            _fit = await _module.InvokeAsync<IJSObjectReference>("fitFrame", _stageRef, _screenRef, TvWidth, TvHeight);
+        }
+    }
+
+    private async Task SetFitAsync(bool fit)
+    {
+        Dashboard.FitToScreen = fit;
+        await OnChanged.InvokeAsync(fit ? "Turned on fill the screen" : "Turned off fill the screen");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_fit is not null)
+            {
+                await _fit.InvokeVoidAsync("dispose");
+                await _fit.DisposeAsync();
+            }
+
+            if (_module is not null)
+            {
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}

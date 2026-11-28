@@ -80,6 +80,19 @@ public interface IMusicPlayerService
     Task<Result<bool>> RestartOrPrevious(Guid clientId);
     Task<bool> ToggleShuffle(Guid clientId);
     Task<RepeatMode> CycleRepeatMode(Guid clientId);
+
+    /// <summary>Turns shuffle on or off. Does nothing if it's already set that way.</summary>
+    Task<bool> SetShuffle(Guid clientId, bool enabled);
+
+    /// <summary>Sets the repeat setting directly.</summary>
+    Task<RepeatMode> SetRepeatMode(Guid clientId, RepeatMode mode);
+
+    /// <summary>
+    /// True when this playlist is what the kiosk is playing or paused on, so a plain Play would
+    /// carry on with it. False after a stop, after a server restart, for a different playlist, and
+    /// after the kiosk reconnects until it reports its playback state again (it may have restarted).
+    /// </summary>
+    bool IsPlaylistLoaded(Guid clientId, Guid playlistId);
     Task<Result<bool>> Seek(Guid clientId, double positionSeconds);
     Task GetCachedSongsAsync(Guid clientId);
     Task<Result<bool>> SetVolume(Guid clientId, int volume, MusicCommandSource source = MusicCommandSource.Manual);

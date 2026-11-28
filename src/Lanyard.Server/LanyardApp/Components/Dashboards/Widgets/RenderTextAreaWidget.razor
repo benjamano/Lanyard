@@ -1,19 +1,33 @@
 @implements IAsyncDisposable
 @inject IJSRuntime JS
+@inject IKioskTextWidgetService KioskText
 
 <FluentCard Appearance="CardAppearance.Outline"
             Padding="@Padding.All0"
             Height="100%">
-    @if (PreviewMode)
+    @if (PreviewMode && !_editingOnKiosk && !KioskAutoSaving)
     {
-        <div class="text-area-widget-display ql-editor">
-            @((MarkupString)_sanitizer.Sanitize(Widget.Content ?? string.Empty))
+        <div class="text-area-widget-display-host">
+            <div class="text-area-widget-display ql-editor">
+                @((MarkupString)_sanitizer.Sanitize(Widget.Content ?? string.Empty))
+            </div>
+            @if (CanEditOnKiosk)
+            {
+                <div class="text-area-widget-kiosk-edit">
+                    <FluentButton Appearance="ButtonAppearance.Outline"
+                                  IconStart="@(new Icons.Regular.Size20.Edit())"
+                                  OnClick="StartKioskEdit">
+                        Edit
+                    </FluentButton>
+                </div>
+            }
         </div>
     }
     else
     {
+        <div class="text-area-widget-edit-layout">
         <QuillGate OnReady="StateHasChanged">
-            <div class="text-area-widget-editor-host" @ref="_editorHostRef" @onfocusout="SyncContentAsync">
+            <div class="text-area-widget-editor-host" @ref="_editorHostRef" @onfocusout="TickAsync">
                 <BlazoredTextEditor @ref="_editor" Placeholder="Widget content...">
                     <ToolbarContent>
                         <span class="ql-formats">
@@ -36,6 +50,32 @@
                 </BlazoredTextEditor>
             </div>
         </QuillGate>
+
+        @if (KioskAutoSaving)
+        {
+            <div class="text-area-widget-kiosk-actions is-auto" aria-live="polite">
+                @if (_kioskError is string autoError)
+                {
+                    <span class="text-area-widget-kiosk-error" role="alert">@autoError</span>
+                }
+                else
+                {
+                    <span class="text-area-widget-kiosk-status">@(_kioskSaving ? "Saving…" : _kioskSavedAt is DateTime saved ? $"Saved {RotaTime.ToVenueLocal(saved):HH:mm}" : "Changes save automatically")</span>
+                }
+            </div>
+        }
+        else if (_editingOnKiosk)
+        {
+            <div class="text-area-widget-kiosk-actions">
+                @if (_kioskError is string error)
+                {
+                    <span class="text-area-widget-kiosk-error" role="alert">@error</span>
+                }
+                <FluentButton Appearance="ButtonAppearance.Primary" Loading="_kioskSaving" OnClick="SaveKioskEditAsync">Save</FluentButton>
+                <FluentButton Appearance="ButtonAppearance.Outline" Disabled="_kioskSaving" OnClick="CancelKioskEdit">Cancel</FluentButton>
+            </div>
+        }
+        </div>
     }
 </FluentCard>
 
@@ -48,6 +88,82 @@
     [Parameter]
     public bool PreviewMode { get; set; }
 
+    // Set when the dashboard is on a kiosk. With the widget's "Can be edited on the kiosk
+    // screen" setting on, the kiosk gets an Edit button and saves straight away (see
+    // KioskTextWidgetService); everywhere else the text is read-only.
+    [CascadingParameter]
+    public KioskScreen? Kiosk { get; set; }
+
+    // A kiosk window opened by the kiosk app carries a token; without one (someone opening the
+    // kiosk address in a browser) the server would refuse the save, so don't offer it.
+    private bool CanEditOnKiosk => PreviewMode && Widget.EditableOnKiosk && !string.IsNullOrEmpty(Kiosk?.ViewerToken);
+
+    // "Save automatically as people type": the editor is always on the kiosk screen, and the
+    // timer below saves whatever has changed (and again when focus leaves the box).
+    private bool KioskAutoSaving => CanEditOnKiosk && Widget.KioskAutoSave;
+
+    private string? _lastKioskSaved;
+    private string? _lastKioskFailed;
+    private DateTime? _kioskSavedAt;
+
+    private bool _editingOnKiosk;
+    private bool _kioskSaving;
+    private string? _kioskError;
+
+    private void StartKioskEdit()
+    {
+        _editingOnKiosk = true;
+        _kioskError = null;
+
+        // A fresh editor is created for this edit, so let OnAfterRenderAsync load the text into it.
+        _loadedWidgetId = null;
+    }
+
+    private void CancelKioskEdit()
+    {
+        _editingOnKiosk = false;
+        _kioskError = null;
+    }
+
+    private async Task SaveKioskEditAsync()
+    {
+        if (_editor is null || Kiosk is null || _kioskSaving)
+        {
+            return;
+        }
+
+        _kioskSaving = true;
+        _kioskError = null;
+
+        try
+        {
+            string html = await _editor.GetHTML();
+            Result<bool> result = await KioskText.SaveTextFromKioskAsync(Widget.Id, Kiosk.ClientId, Kiosk.ViewerToken, html);
+
+            if (!result.IsSuccess)
+            {
+                _kioskError = result.Error;
+                return;
+            }
+
+            Widget.Content = html;
+            _editingOnKiosk = false;
+        }
+        catch (Microsoft.JSInterop.JSException)
+        {
+            _kioskError = "Couldn't read the text. Try again.";
+        }
+        finally
+        {
+            _kioskSaving = false;
+        }
+    }
+
+    // Raised when the editor's text has been copied into the widget, so the designer can redraw
+    // the canvas and mark the dashboard as changed.
+    [Parameter]
+    public EventCallback ContentChanged { get; set; }
+
     // Rendered content comes from the WYSIWYG editor as raw HTML, which is fundamentally
     // untrusted the moment it's read back out of storage - sanitize at the point it becomes
     // live markup rather than trusting whatever produced/persisted it.
@@ -57,6 +173,20 @@
     private ElementReference _editorHostRef;
     private Guid? _loadedWidgetId;
     private Timer? _syncTimer;
+    private bool _disposed;
+    private IDisposable? _flushRegistration;
+
+    // The designer's, so it can make this editor hand over what's typed before it saves.
+    [CascadingParameter]
+    public Lanyard.App.Components.Dashboards.Designer.TextEditorFlusher? Flusher { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (!PreviewMode && Flusher is not null)
+        {
+            _flushRegistration = Flusher.Register(SyncContentAsync);
+        }
+    }
     private IJSObjectReference? _editorModule;
 
     // BlazoredTextEditor (v1.1.3) does not accept its initial content as a bound parameter -
@@ -66,10 +196,29 @@
     {
         if (_editor is not null && _loadedWidgetId != Widget.Id)
         {
+            // Teach Quill the divider (<hr>) tag first, or loading drops any saved dividers. Kept
+            // apart from the load below: if this fails (e.g. a browser still holding an older copy
+            // of the script), losing the dividers is better than the editor never loading the text.
+            try
+            {
+                _editorModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/kioskWidgetEditor.js");
+                await _editorModule.InvokeVoidAsync("kioskWidgetEditor.registerDivider");
+            }
+            catch (Microsoft.JSInterop.JSException)
+            {
+            }
+
             try
             {
                 await _editor.LoadHTMLContent(Widget.Content ?? string.Empty);
                 _loadedWidgetId = Widget.Id;
+
+                // What's saved now, as Quill writes it, so auto-save only fires on a real change.
+                if (KioskAutoSaving)
+                {
+                    _lastKioskSaved = await _editor.GetHTML();
+                }
+
                 StartSyncTimer();
             }
             catch (Microsoft.JSInterop.JSException)
@@ -84,6 +233,11 @@
     // along with it and could be reached from any screen the widget was shown on.
     private async Task SyncContentAsync()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         if (PreviewMode || _editor is null)
         {
             return;
@@ -100,15 +254,92 @@
             return;
         }
 
+        if (html == (Widget.Content ?? string.Empty))
+        {
+            return;
+        }
+
         Widget.Content = html;
+        await ContentChanged.InvokeAsync();
     }
 
     // BlazoredTextEditor has no bindable change event, so poll as well as syncing on focus-out:
     // otherwise pressing Save straight after typing (without leaving the editor) loses the edit.
+    private static readonly TimeSpan AutoSaveInterval = TimeSpan.FromSeconds(1.5);
+
+    // One timer serves both editors: in the designer it copies the text into the widget; on an
+    // auto-saving kiosk it saves.
+    private Task TickAsync() => KioskAutoSaving ? AutoSaveOnKioskAsync() : SyncContentAsync();
+
+    private async Task AutoSaveOnKioskAsync()
+    {
+        if (_editor is null || Kiosk is null || _kioskSaving || _disposed)
+        {
+            return;
+        }
+
+        string html;
+
+        try
+        {
+            html = await _editor.GetHTML();
+        }
+        catch (Microsoft.JSInterop.JSException)
+        {
+            return;
+        }
+
+        // Normally set as the text loads; this only covers a read that failed then.
+        if (_lastKioskSaved is null)
+        {
+            _lastKioskSaved = html;
+            return;
+        }
+
+        // Nothing new since the last save - or since the last failed attempt, which isn't retried
+        // until the text changes again (a kiosk that's lost its token would otherwise try, and
+        // log a refusal, every tick until it's restarted).
+        if (html == _lastKioskSaved || html == _lastKioskFailed)
+        {
+            return;
+        }
+
+        _kioskSaving = true;
+        StateHasChanged();
+
+        Result<bool> result = await KioskText.SaveTextFromKioskAsync(Widget.Id, Kiosk.ClientId, Kiosk.ViewerToken, html);
+
+        _kioskSaving = false;
+
+        if (result.IsSuccess)
+        {
+            _lastKioskSaved = html;
+            _lastKioskFailed = null;
+            _kioskSavedAt = DateTime.UtcNow;
+            _kioskError = null;
+            Widget.Content = html;
+        }
+        else
+        {
+            // Shown on the screen; tried again as soon as the text changes.
+            _lastKioskFailed = html;
+            _kioskError = result.Error;
+        }
+
+        StateHasChanged();
+    }
+
     private void StartSyncTimer()
     {
         _syncTimer?.Dispose();
-        _syncTimer = new Timer(_ => _ = InvokeAsync(SyncContentAsync), null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
+        _syncTimer = new Timer(_ =>
+        {
+            // A tick already under way when the component is disposed must not reach the renderer.
+            if (!_disposed)
+            {
+                _ = InvokeAsync(TickAsync);
+            }
+        }, null, AutoSaveInterval, AutoSaveInterval);
     }
 
     private async Task InsertDividerAsync()
@@ -119,6 +350,8 @@
 
     public async ValueTask DisposeAsync()
     {
+        _disposed = true;
+        _flushRegistration?.Dispose();
         _syncTimer?.Dispose();
 
         try

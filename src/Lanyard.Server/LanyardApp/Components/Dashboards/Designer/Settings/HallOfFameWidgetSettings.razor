@@ -1,0 +1,23 @@
+@inherits WidgetSettingsBase<HallOfFameWidget>
+
+<div class="widget-settings">
+    <FluentSelect TOption="HallOfFamePeriod" TValue="string" Items="@Periods"
+                  OptionText="@(p => Describe(p))" OptionValue="@(p => p.ToString())"
+                  Label="Time period" Value="@W.Period.ToString()" Width="100%"
+                  ValueChanged="@((string? v) => SetAsync(() => W.Period = Enum.TryParse(v, out HallOfFamePeriod p) ? p : HallOfFamePeriod.Today, "Changed the time period"))" />
+    <KioskPicker Value="@W.ClientId" ValueChanged="@(v => SetAsync(() => { W.ClientId = v; }, "Chose a kiosk"))" Label="Kiosk" LaserGameKiosksOnly="true" NoneText="All kiosks" />
+    <FluentSwitch Value="@W.ShowTopScore" ValueChanged="@(v => SetAsync(() => W.ShowTopScore = v, v ? "Showed top scores" : "Hid top scores"))" Label="Show top scores" />
+    <FluentSwitch Value="@W.ShowBestAccuracy" ValueChanged="@(v => SetAsync(() => W.ShowBestAccuracy = v, v ? "Showed best accuracy" : "Hid best accuracy"))" Label="Show best accuracy" />
+    <FluentSwitch Value="@W.ShowBestTeam" ValueChanged="@(v => SetAsync(() => W.ShowBestTeam = v, v ? "Showed team totals" : "Hid team totals"))" Label="Show team totals" />
+</div>
+@code {
+    private static readonly HallOfFamePeriod[] Periods = [HallOfFamePeriod.Today, HallOfFamePeriod.ThisWeek, HallOfFamePeriod.ThisMonth, HallOfFamePeriod.AllTime];
+
+    private static string Describe(HallOfFamePeriod period) => period switch
+    {
+        HallOfFamePeriod.Today => "Today",
+        HallOfFamePeriod.ThisWeek => "This week",
+        HallOfFamePeriod.ThisMonth => "This month",
+        _ => "All time"
+    };
+}

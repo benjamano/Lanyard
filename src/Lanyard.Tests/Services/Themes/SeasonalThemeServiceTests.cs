@@ -6,6 +6,7 @@ using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Tests.Services.Scheduling;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -20,6 +21,7 @@ public class SeasonalThemeServiceTests
     private static SeasonalThemeService Service(DbContextOptions<ApplicationDbContext>? options = null, DateTime? now = null) =>
         new(SchedulingTestHelpers.GetFactory(options ?? SchedulingTestHelpers.GetInMemoryOptions()),
             new TestClock(now ?? November),
+            new MemoryCache(new MemoryCacheOptions()),
             NullLogger<SeasonalThemeService>.Instance);
 
     [TestMethod]
@@ -113,7 +115,7 @@ public class SeasonalThemeServiceTests
     public async Task CompanySetting_IsSavedAndReturnedWithBranding()
     {
         DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
-        CompanyLocationService companies = new(SchedulingTestHelpers.GetFactory(options));
+        CompanyLocationService companies = new(SchedulingTestHelpers.GetFactory(options), new MemoryCache(new MemoryCacheOptions()));
 
         Result<Company> created = await companies.SaveCompanyAsync(new Company { Name = "Play2Day" });
         Assert.IsTrue(created.IsSuccess, created.Error);

@@ -4,15 +4,22 @@ using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Lanyard.Application.Services.Locations;
 
 public class CurrentLocationContextService(
     AuthenticationStateProvider authStateProvider,
-    IDbContextFactory<ApplicationDbContext> factory) : ICurrentLocationContext
+    IDbContextFactory<ApplicationDbContext> factory,
+    IMemoryCache cache) : ICurrentLocationContext
 {
     private readonly AuthenticationStateProvider _authStateProvider = authStateProvider;
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly IMemoryCache _cache = cache;
+
+    // The few columns a scope needs from a location and its company, shared by every circuit and
+    // request (see BrandingCache). Evicted by location and company saves; null = no such location.
+    private sealed record CachedLocation(int Id, int CompanyId, bool IsActive, string DisplayName);
 
     // Scoped service, so this memo lives for one circuit. The scope is requested by the layout,
     // the footer, the home page and a dozen other components on every page, and it only ever
@@ -89,13 +96,7 @@ public class CurrentLocationContextService(
                 return Result<LocationScope>.Fail("No location is set for this session. Please log in again.");
             }
 
-            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
-
-            Location? location = await ctx.Locations
-                .AsNoTracking()
-                .TagWithCallSite()
-                .Include(x => x.Company)
-                .FirstOrDefaultAsync(x => x.Id == locationId);
+            CachedLocation? location = await GetLocationAsync(locationId);
 
             if (location is null || !location.IsActive)
             {
@@ -112,7 +113,33 @@ public class CurrentLocationContextService(
             // write any location's data. An admin's LocationId is no longer branding-only though:
             // CourseService.GetCoursesAsync uses it to decide which location's courses to list
             // unless allLocations is set, so treat it as a real value when adding scoped reads.
-            return Result<LocationScope>.Ok(new LocationScope(isAdmin, location.Id, location.CompanyId, location.GetDisplayName(), isManager));
+            return Result<LocationScope>.Ok(new LocationScope(isAdmin, location.Id, location.CompanyId, location.DisplayName, isManager));
         }
+    }
+
+    private async Task<CachedLocation?> GetLocationAsync(int locationId)
+    {
+        string key = BrandingCache.LocationScope(locationId);
+
+        if (_cache.TryGetValue(key, out CachedLocation? cached))
+        {
+            return cached;
+        }
+
+        await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+        CachedLocation? location = await ctx.Locations
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => x.Id == locationId)
+            // Same display name as Location.GetDisplayName(), without loading the whole company row.
+            .Select(x => new CachedLocation(x.Id, x.CompanyId, x.IsActive, (x.Company!.Name + " " + x.Name).Trim()))
+            .FirstOrDefaultAsync();
+
+        // Misses are cached too: the id comes from the signed-in user's own claim, not from the
+        // request, so it can't be used to fill memory, and a removed location keeps failing cheaply.
+        _cache.Set(key, location, BrandingCache.Ttl);
+
+        return location;
     }
 }

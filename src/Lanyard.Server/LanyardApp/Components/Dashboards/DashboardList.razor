@@ -1,68 +1,176 @@
-﻿@using Lanyard.App.Components.Dialogs
+@using Lanyard.App.Components.Dialogs
 
 @inject IDashboardService DashboardService
 @inject ILogger<DashboardList> Logger
 
-@* Creating and editing dashboards is for Admins and Managers - the same people who can set
-   everyone's home screen, so one role check covers both. *@
-@if (_canSetOrganisationDefault)
-{
-    <FluentStack Width="20%">
-        <FluentCard Appearance="@CardAppearance.Filled" Width="auto">
-            <FluentStack HorizontalAlignment="@HorizontalAlignment.Center">
-                <FluentButton Appearance="@ButtonAppearance.Primary"
-                            IconStart="new Icons.Regular.Size24.AddCircle()"
-                            OnClick="() => CreateBlankDashboard()">Create blank dashboard</FluentButton>
-            </FluentStack>
-        </FluentCard>
-    </FluentStack>
-}
-
-<FluentDataGrid Items="Dashboards.AsQueryable()" 
-                Loading="IsLoading"
-                ShowHover="true"
-                TGridItem="Dashboard"
-                OnRowClick="(row) => OnRowClick(row.Item?.Id ?? Guid.Empty)">
-    <LoadingContent>
-        <FluentSpinner/>
-    </LoadingContent>
-    <ChildContent>
-        <PropertyColumn Property="x=> x.Name" Title="Name"/>
-        <PropertyColumn Property="x=> x.LastUpdateDate" Title="Updated Date"/>
-        <TemplateColumn Title="Home Screen" Align="DataGridCellAlignment.Center">
-            @{
-                bool isHomeScreen = context.Id == _defaultDashboardId;
-            }
-            @* The wrapping div is what carries stopPropagation - the directive only works on HTML
-               elements, and without it the click bubbles to the grid's OnRowClick and navigates to
-               the editor mid-save. *@
-            <div @onclick:stopPropagation="true">
-                <FluentButton Appearance="@ButtonAppearance.Subtle"
-                              Title="@GetPersonalHomeScreenTitle(isHomeScreen)"
-                              IconStart="@(isHomeScreen ? new Icons.Filled.Size20.Home() : (Icon)new Icons.Regular.Size20.Home())"
-                              OnClick="@(() => ToggleHomeScreen(context))" />
-            </div>
-        </TemplateColumn>
+<div class="dashboards-header">
+    <div class="dashboards-header-text">
+        <h1 class="dashboards-title">Dashboards</h1>
+        <div class="dashboards-subtitle">
+            Screens for home pages and kiosk TVs. Pick yours with the house button.
+        </div>
+    </div>
+    <div class="dashboards-header-actions">
+        @* Creating and editing dashboards is for Admins and Managers - the same people who can set
+           everyone's home screen, so one role check covers both. *@
         @if (_canSetOrganisationDefault)
         {
-            <TemplateColumn Title="Everyone's Home Screen" Align="DataGridCellAlignment.Center">
-                @{
-                    bool isOrganisationHomeScreen = context.Id == _organisationDefaultDashboardId;
-                }
-                <div @onclick:stopPropagation="true">
-                    <FluentButton Appearance="@ButtonAppearance.Subtle"
-                                  Title="@(isOrganisationHomeScreen ? "This is everyone's home screen - click to clear it" : "Set as everyone's home screen")"
-                                  IconStart="@(isOrganisationHomeScreen ? new Icons.Filled.Size20.People() : (Icon)new Icons.Regular.Size20.People())"
-                                  OnClick="@(() => ToggleOrganisationHomeScreen(context))" />
-                </div>
-            </TemplateColumn>
+            <FluentButton Appearance="ButtonAppearance.Primary"
+                          IconStart="@(new Icons.Regular.Size20.Add())"
+                          OnClick="CreateDashboardAsync">
+                New dashboard
+            </FluentButton>
         }
-    </ChildContent>
-</FluentDataGrid>
+        <HelpButton AreaKey="@HelpRegistry.Dashboards" Compact="true" />
+    </div>
+</div>
+
+@if (IsLoading)
+{
+    <div class="dashboards-gallery">
+        @for (int i = 0; i < 3; i++)
+        {
+            <div class="dashboard-card"><FluentSkeleton Height="220px" Width="100%" /></div>
+        }
+    </div>
+}
+else if (!Dashboards.Any())
+{
+    <div class="dashboards-empty">
+        <FluentIcon Value="@(new Icons.Regular.Size24.Grid())" Width="40px" />
+        <div class="dashboards-empty-title">No dashboards yet</div>
+        <div>
+            @(_canSetOrganisationDefault
+                ? "Make one to give your team a home screen, or to show scores and notices on a kiosk TV."
+                : "An Admin or Manager can make one for your team.")
+        </div>
+        @if (_canSetOrganisationDefault)
+        {
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Add())" OnClick="CreateDashboardAsync">
+                New dashboard
+            </FluentButton>
+        }
+    </div>
+}
+else
+{
+    <div class="dashboards-gallery">
+        @foreach (DashboardCard card in Dashboards)
+        {
+            bool isHomeScreen = card.Id == _defaultDashboardId;
+            bool isOrganisationHomeScreen = card.Id == _organisationDefaultDashboardId;
+
+            <article @key="card.Id" class="dashboard-card">
+                @if (_canSetOrganisationDefault)
+                {
+                    <a class="dashboard-card-preview" href="@($"/manage/dashboards/{card.Id}")" aria-label="@($"Open {card.Name} in the designer")">
+                        <DashboardThumbnail Widgets="card.Widgets" />
+                    </a>
+                }
+                else
+                {
+                    <a class="dashboard-card-preview" href="@($"/manage/dashboards/{card.Id}/view")" aria-label="@($"View {card.Name}")">
+                        <DashboardThumbnail Widgets="card.Widgets" />
+                    </a>
+                }
+
+                <div class="dashboard-card-body">
+                    <h2 class="dashboard-card-name">@card.Name</h2>
+                    @if (!string.IsNullOrWhiteSpace(card.Description))
+                    {
+                        <div class="dashboard-card-description">@card.Description</div>
+                    }
+
+                    <div class="dashboard-card-badges">
+                        @if (isHomeScreen)
+                        {
+                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Brand">Your home screen</FluentBadge>
+                        }
+                        @if (isOrganisationHomeScreen)
+                        {
+                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative">Everyone's home screen</FluentBadge>
+                        }
+                        @if (card.ProjectionPrograms.Count > 0)
+                        {
+                            @* The program's name is in the badge itself, not only a hover tooltip, which a
+                               touch screen can't show. *@
+                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Important"
+                                         title="@($"Shown by: {string.Join(", ", card.ProjectionPrograms)}")">
+                                @(card.ProjectionPrograms.Count == 1
+                                    ? $"On a kiosk TV: {card.ProjectionPrograms[0]}"
+                                    : $"On a kiosk TV: {card.ProjectionPrograms[0]} +{card.ProjectionPrograms.Count - 1}")
+                            </FluentBadge>
+                        }
+                        <span class="dashboard-card-meta">
+                            @card.Widgets.Count widget@(card.Widgets.Count == 1 ? "" : "s")
+                            @if (card.LastUpdateDate is DateTime updated)
+                            {
+                                <span> · Updated @RotaTime.ToVenueLocal(updated).ToString("d MMM yyyy")</span>
+                            }
+                        </span>
+                    </div>
+                </div>
+
+                <div class="dashboard-card-actions">
+                    <FluentButton Appearance="ButtonAppearance.Subtle"
+                                  Title="@GetPersonalHomeScreenTitle(isHomeScreen)"
+                                  aria-label="@GetPersonalHomeScreenTitle(isHomeScreen)"
+                                  aria-pressed="@(isHomeScreen ? "true" : "false")"
+                                  IconStart="@(isHomeScreen ? new Icons.Filled.Size20.Home() : (Icon)new Icons.Regular.Size20.Home())"
+                                  OnClick="@(() => ToggleHomeScreen(card))" />
+                    @if (_canSetOrganisationDefault)
+                    {
+                        <FluentButton Appearance="ButtonAppearance.Subtle"
+                                      Title="@(isOrganisationHomeScreen ? "This is everyone's home screen - click to clear it" : "Set as everyone's home screen")"
+                                      aria-label="@(isOrganisationHomeScreen ? "Clear everyone's home screen" : "Set as everyone's home screen")"
+                                      aria-pressed="@(isOrganisationHomeScreen ? "true" : "false")"
+                                      IconStart="@(isOrganisationHomeScreen ? new Icons.Filled.Size20.People() : (Icon)new Icons.Regular.Size20.People())"
+                                      OnClick="@(() => ToggleOrganisationHomeScreen(card))" />
+                    }
+
+                    <span class="dashboard-card-actions-spacer"></span>
+
+                    @if (_canSetOrganisationDefault)
+                    {
+                        <FluentButton Id="@($"dashboard-more-{card.Id}")" Appearance="ButtonAppearance.Subtle"
+                                      IconStart="@(new Icons.Regular.Size20.MoreHorizontal())"
+                                      aria-label="@($"More for {card.Name}")" />
+                        <FluentMenu Trigger="@($"dashboard-more-{card.Id}")">
+                            <FluentMenuList>
+                                <FluentMenuItem OnClick="@(() => DuplicateAsync(card))">Duplicate</FluentMenuItem>
+                                <FluentMenuItem OnClick="@(() => DeleteAsync(card))">Delete</FluentMenuItem>
+                            </FluentMenuList>
+                        </FluentMenu>
+                    }
+
+                    @* View and Edit stay together, and drop to their own row on a narrow card. *@
+                    <div class="dashboard-card-open">
+                        @* Opens the dashboard live, as it looks on a home screen - for everyone. *@
+                        <FluentButton Appearance="ButtonAppearance.Outline"
+                                      IconStart="@(new Icons.Regular.Size20.Eye())"
+                                      aria-label="@($"View {card.Name}")"
+                                      OnClick="@(() => View(card.Id))">
+                            View
+                        </FluentButton>
+
+                        @if (_canSetOrganisationDefault)
+                        {
+                            <FluentButton Appearance="ButtonAppearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size20.Edit())"
+                                          OnClick="@(() => Open(card.Id))">
+                                Edit
+                            </FluentButton>
+                        }
+                    </div>
+                </div>
+            </article>
+        }
+    </div>
+}
 
 @if (_canSetOrganisationDefault && !IsLoading)
 {
-    <FluentText Color="Color.Disabled" Class="mt-2">
+    <FluentText Color="Color.Disabled" Class="mt-3 d-block">
         @(_organisationDefaultDashboardName is null
             ? "No dashboard is set as everyone's home screen, so everyone sees the standard home page unless they pick their own."
             : $"\"{_organisationDefaultDashboardName}\" is everyone's home screen. Anyone who has picked their own dashboard, or chosen the standard home page, keeps that instead.")
@@ -70,7 +178,7 @@
 }
 
 @code {
-    public IEnumerable<Dashboard> Dashboards { get; set; } = [];
+    public IEnumerable<DashboardCard> Dashboards { get; set; } = [];
 
     public bool IsLoading { get; set; } = true;
 
@@ -113,7 +221,7 @@
         _organisationDefaultDashboardId = organisationResult.Data;
     }
 
-    private async Task ToggleOrganisationHomeScreen(Dashboard dashboard)
+    private async Task ToggleOrganisationHomeScreen(DashboardCard dashboard)
     {
         if (!_canSetOrganisationDefault)
         {
@@ -146,7 +254,7 @@
 
     // This one change affects every user who has not picked their own home screen, so it asks
     // first - unlike the personal toggle, which only affects the person clicking it.
-    private async Task<bool> ConfirmOrganisationHomeScreenChangeAsync(Dashboard dashboard, Guid? newOrganisationDefaultId)
+    private async Task<bool> ConfirmOrganisationHomeScreenChangeAsync(DashboardCard dashboard, Guid? newOrganisationDefaultId)
     {
         string message = newOrganisationDefaultId is null
             ? $"Stop showing \"{dashboard.Name}\" as everyone's home screen? Anyone inheriting it will see the standard home page again."
@@ -203,7 +311,7 @@
             : $"This is your home screen - click to go back to \"{_organisationDefaultDashboardName}\", the organisation default";
     }
 
-    private async Task ToggleHomeScreen(Dashboard dashboard)
+    private async Task ToggleHomeScreen(DashboardCard dashboard)
     {
         if (_userId is null)
         {
@@ -240,7 +348,7 @@
 
     private async Task GetDashboards()
     {
-        Result<IEnumerable<Dashboard>> response = await DashboardService.GetDashboardSummariesAsync();
+        Result<IEnumerable<DashboardCard>> response = await DashboardService.GetDashboardCardsAsync();
 
         if (response.IsSuccess && response.Data != null)
         {
@@ -254,24 +362,63 @@
         IsLoading = false;
     }
 
-    private void OnRowClick(Guid dashboardId)
+    private void Open(Guid dashboardId) => _navigationManager.NavigateTo($"/manage/dashboards/{dashboardId}");
+
+    private void View(Guid dashboardId) => _navigationManager.NavigateTo($"/manage/dashboards/{dashboardId}/view");
+
+    private async Task CreateDashboardAsync()
     {
-        // Everyone else would only be sent to the login redirect the editor's route gives them.
-        if (dashboardId == Guid.Empty || !_canSetOrganisationDefault)
+        // The dialog opens the new dashboard in the designer itself.
+        await _dialogService.ShowDialogAsync<CreateDashboardDialog>(options =>
+        {
+            options.Width = "760px";
+            options.Modal = true;
+        });
+    }
+
+    private async Task DuplicateAsync(DashboardCard dashboard)
+    {
+        Result<Guid> result = await DashboardService.DuplicateDashboardAsync(dashboard.Id);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Couldn't duplicate \"{dashboard.Name}\": {result.Error}");
+            return;
+        }
+
+        _toastService.ShowSuccess($"Made a copy of \"{dashboard.Name}\".");
+        await GetDashboards();
+    }
+
+    private async Task DeleteAsync(DashboardCard dashboard)
+    {
+        DialogResult confirm = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Delete dashboard";
+            options.Width = "450px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message), $"Delete \"{dashboard.Name}\"? This can't be undone.");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Delete");
+        });
+
+        if (confirm.Cancelled || confirm.Value is not true)
         {
             return;
         }
 
-        _navigationManager.NavigateTo($"/manage/dashboards/{dashboardId}");
-    }
+        Result<bool> result = await DashboardService.DeleteDashboardAsync(dashboard.Id);
 
-    private async Task CreateBlankDashboard()
-    {
-        DialogResult? result = await _dialogService.ShowDialogAsync<CreateDashboardDialog>(options =>{});
-
-        if (result.Cancelled)
+        if (!result.IsSuccess)
         {
+            _toastService.ShowError($"Couldn't delete \"{dashboard.Name}\": {result.Error}");
             return;
+        }
+
+        _toastService.ShowSuccess($"Deleted \"{dashboard.Name}\".");
+
+        if (_organisationDefaultDashboardId == dashboard.Id)
+        {
+            _organisationDefaultDashboardId = null;
         }
 
         await GetDashboards();
