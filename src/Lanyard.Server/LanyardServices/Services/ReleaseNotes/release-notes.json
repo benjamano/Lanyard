@@ -1142,9 +1142,9 @@
     ]
   },
   {
-    "version": "1.4.41",
+    "version": "1.4.42",
     "releaseDate": "2026-11-27",
-    "summary": "Safer rotas for staff under 18, easier staff phone set-up, clearer dark-mode text dividers, more flexible automation music controls and kiosk volume and EQ on dashboards.",
+    "summary": "Safer rotas for staff under 18, easier staff phone set-up, live dashboard views, clearer dark-mode text dividers, more flexible automation music controls and kiosk volume and EQ on dashboards.",
     "details": [
       "Mark staff who are under 18 (Managers and Admins): on a person's Rota tab under Manage > Users, the new Under 18 section takes their date of birth and shows when they turn 18 and, for anyone under 16, when they're over school leaving age. It's only kept for staff under 18 and deleted on their 18th birthday, and staff can't see it.",
       "Staff now shows who is currently marked as under 18, and Rota Settings has a new choice for the night hours staff under 18 can't work: 22:00 to 06:00, or 23:00 to 07:00 if their contract says so.",
@@ -1162,14 +1162,17 @@
       "Music Control Play steps can also turn Shuffle on or off and set Repeat to Off, Repeat playlist or Repeat song. Leave them as they are to keep the kiosk's current setting.",
       "Dividers in text widgets are now easy to see in dark mode, both on the kiosk screen and while editing. Opening a text widget to edit it no longer removes the dividers already in it.",
       "Coming back to Lanyard on a phone after pressing the home button now reconnects in about a second, instead of showing Reconnecting for a minute or more. If the phone's network is still waking up, it reconnects within a few seconds of the network coming back.",
+      "View any dashboard live from the Dashboards page: select View on its card to open it on its own page, working just as it does on a home screen. Full screen fills the screen with it (press Esc to leave), handy for a spare monitor or TV. Managers and Admins can also select Open live in the dashboard designer.",
       "The Now playing dashboard widget can now show the kiosk's volume slider and EQ button: turn on Show volume and EQ in the widget's settings. They work the same as on the Music page."
     ]
   },
   {
-    "version": "1.4.42",
+    "version": "1.4.43",
     "releaseDate": "2026-11-28",
-    "summary": "Gun names now show on the laser scoreboard widget.",
+    "summary": "Watch a kiosk's camera live from the Clients page, and gun names show on the laser scoreboard widget.",
     "details": [
+      "Added a Live camera button on the Clients page for kiosks with a camera or capture card plugged in. It shows that camera live in a dialog, with a picker when there's more than one camera.",
+      "A kiosk already showing the same camera in a Live Capture step keeps working while you watch.",
       "The laser scoreboard dashboard widget's Name column was blank. It now shows each player's gun, such as Gun 4, and sorting by Name puts guns in number order."
     ]
   }
