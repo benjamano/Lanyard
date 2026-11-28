@@ -40,16 +40,26 @@ export const videoPublisher = (() => {
     const sessions = new Map(); // sessionId -> { pc, deviceKey, pendingCandidates, remoteDescSet }
     const streams = new Map();  // deviceKey -> { stream, refCount } — one camera open shared by N viewers
 
-    async function acquireShared(deviceKey, deviceName, enableAudio, idealWidth, idealHeight) {
-        const existing = streams.get(deviceKey);
-        if (existing) {
-            existing.refCount++;
-            return existing.stream;
+    // Returns { stream, deviceKey } - the key actually held, which endSession must release.
+    async function acquireShared(deviceName, enableAudio, idealWidth, idealHeight) {
+        const name = (deviceName || "").toLowerCase();
+        const deviceKey = `${name}|${!!enableAudio}`;
+
+        // A video-only viewer (e.g. the Clients page Live camera preview) can ride on a stream
+        // that already carries audio: opening the same camera twice fails on many Windows
+        // drivers, or takes it away from the kiosk already showing it. The viewer stays muted.
+        const candidates = enableAudio ? [deviceKey] : [deviceKey, `${name}|true`];
+        for (const key of candidates) {
+            const existing = streams.get(key);
+            if (existing) {
+                existing.refCount++;
+                return { stream: existing.stream, deviceKey: key };
+            }
         }
 
         const stream = await acquireCaptureStream(deviceName, enableAudio, idealWidth, idealHeight);
         streams.set(deviceKey, { stream: stream, refCount: 1 });
-        return stream;
+        return { stream: stream, deviceKey: deviceKey };
     }
 
     function releaseShared(deviceKey) {
@@ -81,15 +91,17 @@ export const videoPublisher = (() => {
             };
 
             try {
-                const deviceKey = `${(deviceName || "").toLowerCase()}|${!!enableAudio}`;
-                const stream = await acquireShared(deviceKey, deviceName, enableAudio, idealWidth || 1920, idealHeight || 1080);
+                const { stream, deviceKey } = await acquireShared(deviceName, enableAudio, idealWidth || 1920, idealHeight || 1080);
 
                 const pc = new RTCPeerConnection({ iceServers: parseIceServers(iceServersJson) });
                 sessions.set(sessionId, { pc: pc, deviceKey: deviceKey, pendingCandidates: [], remoteDescSet: false });
 
                 attachIceDiagnostics(pc, report);
 
-                stream.getTracks().forEach(t => pc.addTrack(t, stream));
+                // A shared stream may carry audio this viewer didn't ask for; don't send it.
+                stream.getTracks()
+                    .filter(t => enableAudio || t.kind === 'video')
+                    .forEach(t => pc.addTrack(t, stream));
 
                 pc.onicecandidate = e => {
                     if (e.candidate && dotNetRef) {

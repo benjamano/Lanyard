@@ -1,0 +1,425 @@
+@implements IAsyncDisposable
+@implements IVideoViewerHandle
+@using Lanyard.Application.Services.Clients
+@using Lanyard.Application.Services.VideoStreaming
+@using Microsoft.Extensions.Options
+
+@inject IJSRuntime JS
+@inject IClientService _clientService
+@inject IVideoStreamSignalingService _signalingService
+@inject IOptions<VideoStreamingOptions> _videoStreamingOptions
+@inject ILogger<ClientCameraDialog> _logger
+
+<FluentDialogBody>
+    <ChildContent>
+        <div class="camera-dialog">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="14px" Class="w-100">
+            <FluentText>
+                Watch a camera plugged into <strong>@ClientName</strong> live. Nothing is recorded, and
+                any kiosk already showing this camera carries on as normal.
+            </FluentText>
+
+            @if (_devices.Count > 1)
+            {
+                <FluentSelect TOption="string" TValue="string" Label="Camera" Class="camera-picker"
+                              @bind-Value="_selectedDevice" @bind-Value:after="OnDeviceChangedAsync">
+                    @foreach (ClientAvailableVideoDevice device in _devices)
+                    {
+                        <FluentOption TValue="string" Value="@device.DeviceName">@device.DeviceName</FluentOption>
+                    }
+                </FluentSelect>
+            }
+            else if (_devices.Count == 1)
+            {
+                <FluentText Size="TextSize.Size200" Class="camera-name">Camera: @_selectedDevice</FluentText>
+            }
+
+            @if (_state == ViewState.NoCameras)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                    @ClientName hasn't reported any cameras. Plug one in and restart the Lanyard Client to see it here.
+                </FluentMessageBar>
+            }
+            else
+            {
+                <div class="camera-frame">
+                    <video id="@_videoElementId" class="camera-video @(_state == ViewState.Live ? null : "camera-video-hidden")"
+                           autoplay playsinline muted></video>
+
+                    @if (_state is ViewState.Connecting or ViewState.Loading)
+                    {
+                        <div class="camera-overlay">
+                            <FluentSpinner />
+                            <FluentText>Starting camera…</FluentText>
+                        </div>
+                    }
+                    else if (_state == ViewState.Error)
+                    {
+                        <div class="camera-overlay">
+                            <FluentIcon Value="@(new Icons.Regular.Size24.VideoOff())" Color="Color.Error" />
+                            <FluentText>@_error</FluentText>
+                            <FluentButton Appearance="ButtonAppearance.Primary"
+                                          IconStart="@(new Icons.Regular.Size20.ArrowClockwise())"
+                                          OnClick="RetryAsync">
+                                Try again
+                            </FluentButton>
+                        </div>
+                    }
+                </div>
+
+                @if (_state == ViewState.Live)
+                {
+                    <FluentText Size="TextSize.Size200" Class="camera-name">
+                        Live · video only, no sound
+                    </FluentText>
+                }
+            }
+        </FluentStack>
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentStack HorizontalGap="8px" HorizontalAlignment="HorizontalAlignment.End">
+            <FluentButton OnClick="@CloseAsync">Close</FluentButton>
+        </FluentStack>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    // A preview, not a projection: ask the camera for 720p rather than the viewer's screen size.
+    private const int PreviewWidth = 1280;
+    private const int PreviewHeight = 720;
+    private static readonly TimeSpan AutoRetryDelay = TimeSpan.FromSeconds(5);
+    // A kiosk that lost power or network can stay registered as a video source until its page's
+    // circuit times out, and starting a session on it then hangs for a minute. Give up sooner.
+    private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(20);
+
+    private enum ViewState { Loading, NoCameras, Connecting, Live, Error }
+
+    [Parameter]
+    public Guid ClientId { get; set; }
+
+    [Parameter]
+    public string ClientName { get; set; } = "this kiosk";
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private readonly string _videoElementId = $"camera-preview-{Guid.NewGuid():N}";
+    private readonly CancellationTokenSource _disposeCts = new();
+
+    private List<ClientAvailableVideoDevice> _devices = [];
+    private string? _selectedDevice;
+    private ViewState _state = ViewState.Loading;
+    private string? _error;
+
+    private Guid? _sessionId;
+    // Bumped whenever a start is superseded (camera changed, retry, close) so late results are dropped.
+    private int _generation;
+    // One silent retry after a dropped stream, then the Try again button.
+    private bool _autoRetried;
+    private bool _startPending;
+
+    private DotNetObjectReference<ClientCameraDialog>? _selfRef;
+    private IJSObjectReference? _videoModule;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Client is company-owned, so this lookup is also the tenant check: another company's
+        // client id finds nothing and no stream is ever requested for it.
+        Result<Client?> client = await _clientService.GetClientFromIdAsync(ClientId);
+
+        if (!client.IsSuccess || client.Data is null)
+        {
+            SetError(client.IsSuccess ? "This kiosk couldn't be found." : $"Couldn't load this kiosk: {client.Error}");
+            return;
+        }
+
+        Result<IEnumerable<ClientAvailableVideoDevice>> devices = await _clientService.GetClientAvailableVideoDevicesAsync(ClientId);
+
+        if (!devices.IsSuccess)
+        {
+            SetError($"Couldn't load the cameras: {devices.Error}");
+            return;
+        }
+
+        _devices = devices.Data!.ToList();
+
+        if (_devices.Count == 0)
+        {
+            _state = ViewState.NoCameras;
+            return;
+        }
+
+        _selectedDevice = _devices[0].DeviceName;
+        _state = ViewState.Connecting;
+        _startPending = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // The <video> element has to exist before an offer arrives, so start after a render.
+        if (!_startPending)
+        {
+            return;
+        }
+
+        _startPending = false;
+        await StartAsync(++_generation);
+    }
+
+    private async Task StartAsync(int generation)
+    {
+        if (string.IsNullOrEmpty(_selectedDevice))
+        {
+            return;
+        }
+
+        _ = ConnectWatchdogAsync(generation);
+
+        try
+        {
+            _selfRef ??= DotNetObjectReference.Create(this);
+            _videoModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./video-stream.js");
+
+            Result<Guid> session = await _signalingService.CreateStaffSessionAsync(
+                ClientId, _selectedDevice, enableAudio: false, PreviewWidth, PreviewHeight, this, _disposeCts.Token);
+
+            if (generation != _generation || _disposeCts.IsCancellationRequested)
+            {
+                if (session.IsSuccess)
+                {
+                    await _signalingService.EndSessionAsync(session.Data);
+                }
+
+                return;
+            }
+
+            if (!session.IsSuccess)
+            {
+                SetError(FriendlyError(session.Error));
+                return;
+            }
+
+            _sessionId = session.Data;
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit gone; nothing to show.
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to start camera preview for client {ClientId}", ClientId);
+            SetError(FriendlyError(ex.Message));
+        }
+    }
+
+    private async Task OnDeviceChangedAsync()
+    {
+        await StopCurrentAsync();
+
+        _autoRetried = false;
+        _state = ViewState.Connecting;
+        _startPending = true;
+        _generation++;
+    }
+
+    private async Task RetryAsync()
+    {
+        await StopCurrentAsync();
+
+        _autoRetried = false;
+        _state = ViewState.Connecting;
+        _startPending = true;
+        _generation++;
+    }
+
+    public async Task ReceiveOfferAsync(Guid sessionId, string sdpOffer)
+    {
+        string answerSdp = string.Empty;
+
+        await InvokeAsync(async () =>
+        {
+            answerSdp = await _videoModule!.InvokeAsync<string>("videoViewer.receiveOffer", _videoElementId, sessionId, sdpOffer,
+                false, _selfRef, _videoStreamingOptions.Value.ToIceServersJson());
+
+            // Only a start still in progress goes live: a late offer from a session the watchdog
+            // already gave up on mustn't hide the error.
+            if (_state == ViewState.Connecting && (_sessionId == sessionId || _sessionId is null))
+            {
+                _state = ViewState.Live;
+                _error = null;
+                StateHasChanged();
+            }
+        });
+
+        await _signalingService.ViewerSendAnswerAsync(sessionId, answerSdp);
+    }
+
+    public async Task ReceiveIceCandidateAsync(Guid sessionId, string candidateJson)
+    {
+        await InvokeAsync(async () =>
+        {
+            await _videoModule!.InvokeVoidAsync("videoViewer.addIceCandidate", sessionId, candidateJson);
+        });
+    }
+
+    public async Task SessionEndedAsync(Guid sessionId, string? error)
+    {
+        await InvokeAsync(async () =>
+        {
+            if (_sessionId != sessionId)
+            {
+                return;
+            }
+
+            _sessionId = null;
+            await StopViewerAsync(sessionId);
+
+            if (!_autoRetried && !_disposeCts.IsCancellationRequested)
+            {
+                _autoRetried = true;
+                _state = ViewState.Connecting;
+                StateHasChanged();
+                _ = RetryAfterDelayAsync(_generation);
+                return;
+            }
+
+            SetError(FriendlyError(error ?? "The camera stopped."));
+        });
+    }
+
+    private async Task ConnectWatchdogAsync(int generation)
+    {
+        try
+        {
+            await Task.Delay(ConnectTimeout, _disposeCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        await InvokeAsync(async () =>
+        {
+            if (generation != _generation || _state != ViewState.Connecting || _disposeCts.IsCancellationRequested)
+            {
+                return;
+            }
+
+            // Bumping the generation makes StartAsync end the session if it does come back late.
+            _generation++;
+            await StopCurrentAsync();
+            SetError("The kiosk's camera didn't respond. Check it's online, then try again.");
+        });
+    }
+
+    private async Task RetryAfterDelayAsync(int generation)
+    {
+        try
+        {
+            await Task.Delay(AutoRetryDelay, _disposeCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        await InvokeAsync(async () =>
+        {
+            if (generation == _generation && !_disposeCts.IsCancellationRequested)
+            {
+                await StartAsync(++_generation);
+            }
+        });
+    }
+
+    [JSInvokable]
+    public async Task OnViewerIceCandidate(Guid sessionId, string candidateJson)
+    {
+        await _signalingService.ViewerSendIceCandidateAsync(sessionId, candidateJson);
+    }
+
+    [JSInvokable]
+    public void OnIceDiagnostic(Guid sessionId, string phase, string detail)
+    {
+        _logger.LogInformation("Camera preview of client {ClientId} session {SessionId} [{Phase}]: {Detail}", ClientId, sessionId, phase, detail);
+    }
+
+    [JSInvokable]
+    public async Task OnViewerConnectionLost(Guid sessionId)
+    {
+        await _signalingService.EndSessionAsync(sessionId);
+        await SessionEndedAsync(sessionId, "The video connection was lost.");
+    }
+
+    // The signalling service's messages are written for a kiosk screen; say what to do instead.
+    private static string FriendlyError(string? error)
+    {
+        return error switch
+        {
+            "Video publisher did not start on the source client." =>
+                "The kiosk didn't start its camera in time. Check it's online, then try again.",
+            "The video publisher is no longer reachable." =>
+                "Lost touch with the kiosk's camera. Try again.",
+            null or "" => "The camera couldn't be started.",
+            _ => error
+        };
+    }
+
+    private void SetError(string message)
+    {
+        _error = message;
+        _state = ViewState.Error;
+        StateHasChanged();
+    }
+
+    private async Task StopCurrentAsync()
+    {
+        if (_sessionId is Guid sessionId)
+        {
+            _sessionId = null;
+            await _signalingService.EndSessionAsync(sessionId);
+            await StopViewerAsync(sessionId);
+        }
+    }
+
+    private async Task StopViewerAsync(Guid sessionId)
+    {
+        try
+        {
+            if (_videoModule is not null)
+            {
+                await _videoModule.InvokeVoidAsync("videoViewer.stop", sessionId, _videoElementId);
+            }
+        }
+        catch (JSDisconnectedException) { }
+        catch (InvalidOperationException) { }
+    }
+
+    private async Task CloseAsync()
+    {
+        await Dialog.CloseAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposeCts.Cancel();
+        _generation++;
+
+        // Ending the session releases the publisher's hold on the camera, so its light goes off
+        // when nothing else is using it.
+        await StopCurrentAsync();
+
+        try
+        {
+            if (_videoModule is not null)
+            {
+                await _videoModule.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException) { }
+
+        _selfRef?.Dispose();
+        _disposeCts.Dispose();
+    }
+}
