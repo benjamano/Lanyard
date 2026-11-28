@@ -543,6 +543,12 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
                     existingProjectionStatus.DisplayIndex = incomingProjectionStatus.DisplayIndex;
                     existingProjectionStatus.ShowControls = incomingProjectionStatus.ShowControls;
                     break;
+                case LiveCaptureWidget existingLiveCapture when widget is LiveCaptureWidget incomingLiveCapture:
+                    existingLiveCapture.ClientId = incomingLiveCapture.ClientId;
+                    existingLiveCapture.DeviceName = incomingLiveCapture.DeviceName;
+                    existingLiveCapture.EnableAudio = incomingLiveCapture.EnableAudio;
+                    existingLiveCapture.FillTile = incomingLiveCapture.FillTile;
+                    break;
                 case AnnouncementsWidget existingAnnouncements when widget is AnnouncementsWidget incomingAnnouncements:
                     existingAnnouncements.MaxItems = incomingAnnouncements.MaxItems;
                     break;
@@ -953,6 +959,13 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
                 DisplayIndex = projectionStatusWidget.DisplayIndex,
                 ShowControls = projectionStatusWidget.ShowControls
             },
+            LiveCaptureWidget liveCaptureWidget => new LiveCaptureWidget
+            {
+                ClientId = liveCaptureWidget.ClientId,
+                DeviceName = liveCaptureWidget.DeviceName,
+                EnableAudio = liveCaptureWidget.EnableAudio,
+                FillTile = liveCaptureWidget.FillTile
+            },
             AnnouncementsWidget announcementsWidget => new AnnouncementsWidget
             {
                 MaxItems = announcementsWidget.MaxItems
@@ -1181,6 +1194,14 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory, I
             targetProjectionStatus.ClientId = sourceProjectionStatus.ClientId;
             targetProjectionStatus.DisplayIndex = sourceProjectionStatus.DisplayIndex;
             targetProjectionStatus.ShowControls = sourceProjectionStatus.ShowControls;
+        }
+
+        if (target is LiveCaptureWidget targetLiveCapture && source is LiveCaptureWidget sourceLiveCapture)
+        {
+            targetLiveCapture.ClientId = sourceLiveCapture.ClientId;
+            targetLiveCapture.DeviceName = sourceLiveCapture.DeviceName;
+            targetLiveCapture.EnableAudio = sourceLiveCapture.EnableAudio;
+            targetLiveCapture.FillTile = sourceLiveCapture.FillTile;
         }
     }
 }

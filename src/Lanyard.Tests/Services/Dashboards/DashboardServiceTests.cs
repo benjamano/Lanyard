@@ -654,6 +654,102 @@ public class DashboardServiceTests
         Assert.IsTrue(dbWidget.ShowVolumeAndEq);
     }
 
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_PersistsAndUpdatesLiveCaptureWidget()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        Guid clientId = Guid.NewGuid();
+
+        LiveCaptureWidget widget = new()
+        {
+            Id = Guid.NewGuid(),
+            ClientId = clientId,
+            DeviceName = "HD Pro Webcam C920",
+            EnableAudio = true,
+            FillTile = false,
+            IsActive = true
+        };
+
+        dashboard.Widgets = [widget];
+
+        Result<bool> createResult = await service.SaveDashboardAsync(dashboard);
+        Assert.IsTrue(createResult.Success, createResult.Error);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            LiveCaptureWidget created = await ctx.DashboardWidgets.OfType<LiveCaptureWidget>().SingleAsync(x => x.Id == widget.Id);
+            Assert.AreEqual(clientId, created.ClientId);
+            Assert.AreEqual("HD Pro Webcam C920", created.DeviceName);
+            Assert.IsTrue(created.EnableAudio);
+            Assert.IsFalse(created.FillTile);
+        }
+
+        Guid otherClientId = Guid.NewGuid();
+
+        widget.ClientId = otherClientId;
+        widget.DeviceName = "USB Capture HDMI";
+        widget.EnableAudio = false;
+        widget.FillTile = true;
+
+        Result<bool> updateResult = await service.SaveDashboardAsync(dashboard);
+        Assert.IsTrue(updateResult.Success, updateResult.Error);
+
+        await using ApplicationDbContext updatedCtx = new(options);
+        LiveCaptureWidget updated = await updatedCtx.DashboardWidgets.OfType<LiveCaptureWidget>().SingleAsync(x => x.Id == widget.Id);
+        Assert.AreEqual(otherClientId, updated.ClientId);
+        Assert.AreEqual("USB Capture HDMI", updated.DeviceName);
+        Assert.IsFalse(updated.EnableAudio);
+        Assert.IsTrue(updated.FillTile);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveWidget_CopiesLiveCaptureConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        LiveCaptureWidget existingWidget = new()
+        {
+            Id = Guid.NewGuid(),
+            DashboardId = dashboard.Id,
+            IsActive = true
+        };
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(existingWidget);
+            await seedCtx.SaveChangesAsync();
+        }
+
+        Guid clientId = Guid.NewGuid();
+
+        LiveCaptureWidget incomingWidget = new()
+        {
+            Id = existingWidget.Id,
+            DashboardId = dashboard.Id,
+            ClientId = clientId,
+            DeviceName = "HD Pro Webcam C920",
+            EnableAudio = true,
+            FillTile = true,
+            IsActive = true
+        };
+
+        Result<DashboardWidget> result = await service.SaveWidgetAsync(incomingWidget);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        LiveCaptureWidget dbWidget = await ctx.DashboardWidgets.OfType<LiveCaptureWidget>().SingleAsync(x => x.Id == existingWidget.Id);
+        Assert.AreEqual(clientId, dbWidget.ClientId);
+        Assert.AreEqual("HD Pro Webcam C920", dbWidget.DeviceName);
+        Assert.IsTrue(dbWidget.EnableAudio);
+        Assert.IsTrue(dbWidget.FillTile);
+    }
+
     // Guards CreateWidgetCopy: a widget type missing from that switch throws
     // "Unsupported widget type." and fails the whole dashboard save, not just its own widget.
     [TestMethod]

@@ -55,6 +55,8 @@ public static class DashboardWidgetCatalog
             WidgetCategory.KiosksAndProjection, () => new Icons.Regular.Size20.FlashPlay(), () => new ButtonWidget(), typeof(RenderButtonWidget), typeof(ButtonWidgetSettings)),
         new(WidgetType.ProjectionStatus, "Projection status", "What a kiosk is projecting right now, with optional controls.",
             WidgetCategory.KiosksAndProjection, () => new Icons.Regular.Size20.Live(), () => new ProjectionStatusWidget(), typeof(RenderProjectionStatusWidget), typeof(ProjectionStatusWidgetSettings)),
+        new(WidgetType.LiveCapture, "Live capture", "A kiosk's camera or capture card, live.",
+            WidgetCategory.KiosksAndProjection, () => new Icons.Regular.Size20.Video(), () => new LiveCaptureWidget(), typeof(RenderLiveCaptureWidget), typeof(LiveCaptureWidgetSettings)),
         new(WidgetType.KioskHealth, "Kiosk health", "Every kiosk and whether it's online, offline first.",
             WidgetCategory.KiosksAndProjection, () => new Icons.Regular.Size20.Desktop(), () => new KioskHealthWidget(), typeof(RenderKioskHealthWidget), typeof(KioskHealthWidgetSettings)),
         new(WidgetType.AutomationRuleStatus, "Automation rule", "Whether an automation rule is on and when it last ran.",

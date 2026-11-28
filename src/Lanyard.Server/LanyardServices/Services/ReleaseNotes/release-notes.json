@@ -1173,10 +1173,22 @@
   {
     "version": "1.4.43",
     "releaseDate": "2026-11-28",
-    "summary": "Watch a kiosk's camera live from the Clients page, and past games on the Laser game status dashboard card.",
+    "summary": "Watch a kiosk's camera live from the Clients page, and gun names show on the laser scoreboard widget.",
     "details": [
       "Added a Live camera button on the Clients page for kiosks with a camera or capture card plugged in. It shows that camera live in a dialog, with a picker when there's more than one camera.",
       "A kiosk already showing the same camera in a Live Capture step keeps working while you watch.",
+      "The laser scoreboard dashboard widget's Name column was blank. It now shows each player's gun, such as Gun 4, and sorting by Name puts guns in number order."
+    ]
+  },
+  {
+    "version": "1.4.44",
+    "releaseDate": "2026-11-28",
+    "summary": "Show a kiosk's camera live on a dashboard, and past games on the Laser game status dashboard card.",
+    "details": [
+      "New Live capture dashboard widget (under Kiosks & projection). Pick a camera or capture card plugged into any of your kiosks and it plays live in the tile, the same picture a projection Live Capture step shows.",
+      "On a kiosk screen it plays straight away and keeps trying on its own if the camera drops out. On a signed-in dashboard only Admins and Managers see the picture.",
+      "Sound is off unless you turn on Play the camera's sound. In a browser it then starts muted, with a speaker button to turn it on. Fill the tile crops the picture to fill the tile instead of showing bars.",
+      "While you edit a dashboard the tile shows the camera's name instead of the picture, so the camera only switches on when the dashboard is viewed.",
       "The Laser game status dashboard card can now list the kiosk's past games: turn on Show past games in its settings and choose How many games. Each game shows when it started, which team won, both teams' scores and how many players there were, and a new game appears as soon as it finishes. Equal team totals show as a Draw, and when nobody was on a team the gun with the top score wins."
     ]
   }

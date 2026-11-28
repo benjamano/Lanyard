@@ -28,7 +28,7 @@
                                     TGridItem="PlayerScoreDTO"
                                     StripedRows="true">
                         <ChildContent>
-                            <PropertyColumn Title="Name" Property="x=> x.GunName" Sortable="true"/>
+                            <TemplateColumn Title="Name" Sortable="true" SortBy="@_sortByGun">@GunLabel(context)</TemplateColumn>
                             <PropertyColumn Title="Score" 
                                             Property="x=> x.Score" 
                                             Sortable="true" 
@@ -61,8 +61,7 @@
                                     TGridItem="PlayerScoreDTO"
                                     StripedRows="true">
                         <ChildContent>
-                            <PropertyColumn Title="Name" Property="x=> x.GunName" 
-                                            Sortable="true" />
+                            <TemplateColumn Title="Name" Sortable="true" SortBy="@_sortByGun">@GunLabel(context)</TemplateColumn>
                             <PropertyColumn Title="Score" Property="x=> x.Score"
                                             Sortable="true" 
                                             IsDefaultSortColumn="true" 
@@ -87,6 +86,13 @@
     // Where/OrderBy/AsQueryable per render made the grids refetch on every paint.
     private IQueryable<PlayerScoreDTO>? _redScores;
     private IQueryable<PlayerScoreDTO>? _greenScores;
+
+    // The kiosk only reports gun numbers (GunName is never filled in by the packet pipeline),
+    // so label by number like the Hall of Fame does, and sort numerically rather than "Gun 10" < "Gun 2".
+    private static readonly GridSort<PlayerScoreDTO> _sortByGun = GridSort<PlayerScoreDTO>.ByAscending(x => x.GunId);
+
+    private static string GunLabel(PlayerScoreDTO score) =>
+        string.IsNullOrWhiteSpace(score.GunName) ? $"Gun {score.GunId}" : score.GunName;
 
     // One status message arrives per hit; paint at most ~10 times a second.
     private RenderCoalescer? _renderCoalescer;

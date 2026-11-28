@@ -5669,6 +5669,29 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasDiscriminator().HasValue(9);
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.LiveCaptureWidget", b =>
+                {
+                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
+
+                    b.Property<Guid?>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("LiveCaptureWidget_ClientId");
+
+                    b.Property<string>("DeviceName")
+                        .HasColumnType("text")
+                        .HasColumnName("LiveCaptureWidget_DeviceName");
+
+                    b.Property<bool>("EnableAudio")
+                        .HasColumnType("boolean")
+                        .HasColumnName("LiveCaptureWidget_EnableAudio");
+
+                    b.Property<bool>("FillTile")
+                        .HasColumnType("boolean")
+                        .HasColumnName("LiveCaptureWidget_FillTile");
+
+                    b.HasDiscriminator().HasValue(24);
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.MusicPlaylistSelectorWidget", b =>
                 {
                     b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
