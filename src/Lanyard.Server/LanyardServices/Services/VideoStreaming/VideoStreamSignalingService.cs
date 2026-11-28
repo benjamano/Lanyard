@@ -81,6 +81,26 @@ public class VideoStreamSignalingService(IServiceScopeFactory scopeFactory, IVid
                 return Result<Guid>.Fail("This kiosk is not authorised to open a video stream.");
             }
 
+            return await CreateSessionCoreAsync(sourceClientId, deviceName, enableAudio, idealWidth, idealHeight, viewer, "kiosk", cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating video session for client {ClientId}", sourceClientId);
+            return Result<Guid>.Fail(ex.Message);
+        }
+    }
+
+    public Task<Result<Guid>> CreateStaffSessionAsync(Guid sourceClientId, string deviceName, bool enableAudio,
+        int idealWidth, int idealHeight, IVideoViewerHandle viewer, CancellationToken cancellationToken)
+    {
+        return CreateSessionCoreAsync(sourceClientId, deviceName, enableAudio, idealWidth, idealHeight, viewer, "staff preview", cancellationToken);
+    }
+
+    private async Task<Result<Guid>> CreateSessionCoreAsync(Guid sourceClientId, string deviceName, bool enableAudio,
+        int idealWidth, int idealHeight, IVideoViewerHandle viewer, string viewerKind, CancellationToken cancellationToken)
+    {
+        try
+        {
             if (!_publishers.TryGetValue(sourceClientId, out IVideoPublisherHandle? publisher))
             {
                 publisher = await WaitForPublisherAsync(sourceClientId, cancellationToken);
@@ -117,7 +137,7 @@ public class VideoStreamSignalingService(IServiceScopeFactory scopeFactory, IVid
                 return Result<Guid>.Fail("The video publisher is no longer reachable.");
             }
 
-            _logger.LogInformation("Video session {SessionId} created: client {ClientId} device '{DeviceName}'", sessionId, sourceClientId, deviceName);
+            _logger.LogInformation("Video session {SessionId} created ({ViewerKind}): client {ClientId} device '{DeviceName}'", sessionId, viewerKind, sourceClientId, deviceName);
 
             return Result<Guid>.Ok(sessionId);
         }

@@ -1,1 +1,4 @@
 .flow-scroll{max-height:70vh;overflow-y:auto;overflow-x:hidden;}
+
+.step-summary{margin-top:4px;font-size:var(--fontSizeBase200);color:var(--colorNeutralForeground3);}
+.parameter-hint{margin-top:2px;font-size:var(--fontSizeBase200);color:var(--colorNeutralForeground3);text-align:start;}

@@ -45,6 +45,15 @@ public interface IVideoStreamSignalingService
     Task<Result<Guid>> CreateSessionAsync(Guid sourceClientId, Guid viewingClientId, string? viewerToken,
         string deviceName, bool enableAudio, int idealWidth, int idealHeight, IVideoViewerHandle viewer,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Opens a preview session for a staff member watching a capture source (Clients page
+    /// "Live camera"). There is no viewer token: call this only from a circuit that has already
+    /// passed the Admin route check and confirmed the source client belongs to the caller's
+    /// company. Blazor Server exposes no client-callable endpoint for it.
+    /// </summary>
+    Task<Result<Guid>> CreateStaffSessionAsync(Guid sourceClientId, string deviceName, bool enableAudio,
+        int idealWidth, int idealHeight, IVideoViewerHandle viewer, CancellationToken cancellationToken);
     Task ViewerSendAnswerAsync(Guid sessionId, string sdpAnswer);
     Task ViewerSendIceCandidateAsync(Guid sessionId, string candidateJson);
     Task EndSessionAsync(Guid sessionId);

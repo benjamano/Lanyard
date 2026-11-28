@@ -1144,7 +1144,7 @@
   {
     "version": "1.4.42",
     "releaseDate": "2026-11-27",
-    "summary": "Safer rotas for staff under 18, easier staff phone set-up, live dashboard views, clearer dark-mode text dividers, more flexible automation music controls and kiosk volume and EQ on dashboards.",
+    "summary": "Safer rotas for staff under 18, easier staff phone set-up, live dashboard views, clearer dark-mode text dividers, kiosk volume and EQ, more flexible automation music controls and projection programs that wait for a laser game.",
     "details": [
       "Mark staff who are under 18 (Managers and Admins): on a person's Rota tab under Manage > Users, the new Under 18 section takes their date of birth and shows when they turn 18 and, for anyone under 16, when they're over school leaving age. It's only kept for staff under 18 and deleted on their 18th birthday, and staff can't see it.",
       "Staff now shows who is currently marked as under 18, and Rota Settings has a new choice for the night hours staff under 18 can't work: 22:00 to 06:00, or 23:00 to 07:00 if their contract says so.",
@@ -1163,14 +1163,20 @@
       "Dividers in text widgets are now easy to see in dark mode, both on the kiosk screen and while editing. Opening a text widget to edit it no longer removes the dividers already in it.",
       "Coming back to Lanyard on a phone after pressing the home button now reconnects in about a second, instead of showing Reconnecting for a minute or more. If the phone's network is still waking up, it reconnects within a few seconds of the network coming back.",
       "View any dashboard live from the Dashboards page: select View on its card to open it on its own page, working just as it does on a home screen. Full screen fills the screen with it (press Esc to leave), handy for a spare monitor or TV. Managers and Admins can also select Open live in the dashboard designer.",
-      "The Now playing dashboard widget can now show the kiosk's volume slider and EQ button: turn on Show volume and EQ in the widget's settings. They work the same as on the Music page."
+      "The Now playing dashboard widget can now show the kiosk's volume slider and EQ button: turn on Show volume and EQ in the widget's settings. They work the same as on the Music page.",
+      "Projection programs have a new Wait for Game step (Managers and Admins, on Projection). It holds the program until a laser kiosk's game gets ready, starts, ends, or has a set number of seconds left, and keeps the previous screen up meanwhile. One program can now run your attract loop, the live scoreboard and the results with no automation rules. Give Up After moves on anyway if the game never comes.",
+      "Projection Control and the Projection Status widget show what a Wait for Game step is waiting for, and warn when its laser kiosk isn't sending game updates.",
+      "Steps can be added to a projection program without dragging: each step in the toolbox has an Add button that puts it at the end. The program editor now uses the full width on a phone.",
+      "Fixed: a setting added to a projection step that was already saved could be lost when the program was saved again."
     ]
   },
   {
     "version": "1.4.43",
     "releaseDate": "2026-11-28",
-    "summary": "The laser scoreboard now has its own layout for solo games.",
+    "summary": "Watch a kiosk's camera live from the Clients page, and a solo layout for the laser scoreboard.",
     "details": [
+      "Added a Live camera button on the Clients page for kiosks with a camera or capture card plugged in. It shows that camera live in a dialog, with a picker when there's more than one camera.",
+      "A kiosk already showing the same camera in a Live Capture step keeps working while you watch.",
       "The Laser Scoreboard dashboard widget now follows the game mode: solo games show one blue Solo list ranked by score instead of putting everyone under Red Team. Team games still show Red Team and Green Team. Kiosks need client 1.0.50 or later to report the mode."
     ]
   }
