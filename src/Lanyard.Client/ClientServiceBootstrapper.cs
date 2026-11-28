@@ -3,6 +3,7 @@ using Lanyard.Client.AudioDevices;
 using Lanyard.Client.Controllers;
 using Lanyard.Client.Diagnostics;
 using Lanyard.Client.Health;
+using Lanyard.Client.GameRecordings;
 using Lanyard.Client.PacketSniffing;
 using Lanyard.Client.ProjectionPrograms;
 using Lanyard.Client.ProjectionPrograms.Offline;
@@ -111,6 +112,8 @@ public static class ClientServiceBootstrapper
         services.AddSingleton<KioskSelfTestController>();
         services.AddSingleton<IDisplayIdentifyService, DisplayIdentifyService>();
         services.AddSingleton<DisplayIdentifyController>();
+        services.AddSingleton<IPacketCaptureCoordinator, PacketCaptureCoordinator>();
+        services.AddSingleton<PacketCaptureController>();
 
         return services.BuildServiceProvider();
     }
@@ -133,7 +136,8 @@ public static class ClientServiceBootstrapper
             provider.GetRequiredService<EqualiserController>().Register,
             provider.GetRequiredService<ClientDiagnosticsController>().Register,
             provider.GetRequiredService<KioskSelfTestController>().Register,
-            provider.GetRequiredService<DisplayIdentifyController>().Register
+            provider.GetRequiredService<DisplayIdentifyController>().Register,
+            provider.GetRequiredService<PacketCaptureController>().Register
         ];
     }
 }

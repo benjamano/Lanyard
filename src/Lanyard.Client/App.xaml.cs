@@ -1,6 +1,8 @@
 using Lanyard.Client.Enrolment;
 using Lanyard.Client.Health;
 using Lanyard.Client.PacketSniffing;
+using Lanyard.Client.GameRecordings;
+using Lanyard.Shared.DTO;
 using Lanyard.Client.ProjectionPrograms.Offline;
 using Lanyard.Client.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
@@ -82,6 +84,10 @@ public partial class App : Application
             // Skips each beat while disconnected, so it's safe to start before the first connect.
             provider.GetRequiredService<KioskHealthReporter>().Start();
 
+            IPacketCaptureCoordinator packetCapture = provider.GetRequiredService<IPacketCaptureCoordinator>();
+            packetCapture.Start();
+            StartReplayFromEnvironment(packetCapture);
+
             // Not awaited: Connect retries until the server answers, which can be hours if the
             // server or the internet is down. Nothing after this point may wait on it, so the
             // kiosk keeps running (DMX, packet capture, and later offline playback) meanwhile.
@@ -94,6 +100,33 @@ public partial class App : Application
             Console.WriteLine($"Fatal startup error: {ex}");
             Environment.Exit(1);
         }
+    }
+
+    // Developer flag: LANYARD_CLIENT_REPLAY_FILE=<path to a .lanyardcap> replays that recording at
+    // start-up, at LANYARD_CLIENT_REPLAY_SPEED (1, 2, 5 or 10; default 1). Needs no Npcap and no
+    // server, though with one the scoreboards show the replay.
+    private static void StartReplayFromEnvironment(IPacketCaptureCoordinator packetCapture)
+    {
+        string? path = Environment.GetEnvironmentVariable("LANYARD_CLIENT_REPLAY_FILE");
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        double speed = double.TryParse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_REPLAY_SPEED"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double parsed)
+            && Lanyard.Shared.LaserGame.Capture.PacketCaptureRules.IsAllowedSpeed(parsed)
+                ? parsed
+                : 1;
+
+        _ = Task.Run(async () =>
+        {
+            PacketCaptureCommandResultDTO result = await packetCapture.StartReplayFromFileAsync(path, speed, CancellationToken.None);
+
+            Console.WriteLine(result.Accepted
+                ? $"Replaying {path} at {speed}x (LANYARD_CLIENT_REPLAY_FILE)."
+                : $"Couldn't replay {path}: {result.Error}");
+        });
     }
 
     private static async Task ConnectAndPublishAsync(ISignalRClient signalRClient, List<Action<HubConnection>> registrations, ILaserGameStatePublisher laserGameStatePublisher)

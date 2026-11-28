@@ -19,4 +19,7 @@ public interface ISignalRClient
 
     /// <summary>Sends a heartbeat. True when the server stored it.</summary>
     Task<bool> ReportKioskHealthAsync(KioskHealthReportDTO report);
+
+    /// <summary>Tells the server what recording or replay is doing. Skipped while disconnected.</summary>
+    Task ReportPacketCaptureStateAsync(PacketCaptureStateDTO state);
 }

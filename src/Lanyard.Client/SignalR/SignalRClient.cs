@@ -545,6 +545,17 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
         return await _connection.InvokeAsync<bool>("ReportKioskHealth", report);
     }
 
+    public async Task ReportPacketCaptureStateAsync(PacketCaptureStateDTO state)
+    {
+        if (_connection is null || _connection.State != HubConnectionState.Connected)
+        {
+            return;
+        }
+
+        // Fire-and-forget: a report that never arrives is replaced by the next one.
+        await _connection.SendAsync(ClientHubMethods.ReportPacketCaptureState, state);
+    }
+
     public async Task<string> IssueKioskTokenAsync()
     {
         if (_connection is null || _connection.State != HubConnectionState.Connected)

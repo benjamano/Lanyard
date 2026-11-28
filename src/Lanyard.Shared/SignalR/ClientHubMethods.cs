@@ -68,4 +68,30 @@ public static class ClientHubMethods
     /// HubException.
     /// </summary>
     public const string IdentifyDisplays = "IdentifyDisplays";
+
+    /// <summary>
+    /// Server to kiosk, client result: takes a <c>StartPacketRecordingRequestDTO</c>, starts
+    /// recording the laser game's control box packets, and returns a
+    /// <c>PacketCaptureCommandResultDTO</c>. Kiosks before 1.0.50 have no handler.
+    /// </summary>
+    public const string StartPacketRecording = "StartPacketRecording";
+
+    /// <summary>Server to kiosk, client result: stops recording; returns a <c>PacketCaptureCommandResultDTO</c>.</summary>
+    public const string StopPacketRecording = "StopPacketRecording";
+
+    /// <summary>
+    /// Server to kiosk, client result: takes a <c>StartPacketReplayRequestDTO</c>, downloads that
+    /// recording from File Manager and replays it into the kiosk's game pipeline. Returns a
+    /// <c>PacketCaptureCommandResultDTO</c> once the replay has started, or why it couldn't.
+    /// </summary>
+    public const string StartPacketReplay = "StartPacketReplay";
+
+    /// <summary>Server to kiosk, client result: stops a replay; returns a <c>PacketCaptureCommandResultDTO</c>.</summary>
+    public const string StopPacketReplay = "StopPacketReplay";
+
+    /// <summary>
+    /// Kiosk to server: sends a <c>PacketCaptureStateDTO</c> whenever recording or replay starts,
+    /// stops or moves on. The server takes the kiosk from the connection, never from the DTO.
+    /// </summary>
+    public const string ReportPacketCaptureState = "ReportPacketCaptureState";
 }
