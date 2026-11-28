@@ -15,6 +15,10 @@ namespace Lanyard.Infrastructure.Migrations
                 table: "DashboardWidgets",
                 type: "boolean",
                 nullable: true);
+
+            // The column is shared by every widget type, so it can't be NOT NULL, but Now playing
+            // widgets read it as a plain bool: give the existing ones "off" rather than NULL.
+            migrationBuilder.Sql("UPDATE \"DashboardWidgets\" SET \"ShowVolumeAndEq\" = FALSE WHERE \"Type\" = 7;");
         }
 
         /// <inheritdoc />

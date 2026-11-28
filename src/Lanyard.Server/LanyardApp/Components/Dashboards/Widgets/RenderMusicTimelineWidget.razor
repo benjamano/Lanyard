@@ -56,7 +56,11 @@
                    Keyed on the kiosk: MusicVolume reads its starting value once. *@
                 <div class="music-timeline-widget-audio" @key="clientId">
                     <MusicVolume ClientId="clientId" Volume="snapshot.Volume" Disabled="@(!CanControl)" />
-                    <MusicEqualiserChip ClientId="clientId" KioskName="@_kioskName" Disabled="@(!CanControl)" />
+                    @* The EQ opens a dialog, and a kiosk screen has no dialog host to show it in. *@
+                    @if (Kiosk is null)
+                    {
+                        <MusicEqualiserChip ClientId="clientId" KioskName="@_kioskName" Disabled="@(!CanControl)" />
+                    }
                 </div>
             }
         }
@@ -69,6 +73,10 @@
 
     [Parameter]
     public bool AllowTrigger { get; set; } = true;
+
+    // Set when the dashboard is shown on a kiosk (see KioskScreen).
+    [CascadingParameter]
+    public KioskScreen? Kiosk { get; set; }
 
     private MusicNowPlayingSnapshot? _snapshot;
     private string _kioskName = "";
@@ -87,11 +95,16 @@
         _snapshot = Widget.ClientId is Guid id ? _player.GetSnapshot(id) : null;
 
         // Only the EQ dialog's heading needs the name, so skip the lookup when the controls are off.
-        if (Widget.ShowVolumeAndEq && Widget.ClientId is Guid clientId && _kioskNameFor != clientId)
+        if (Widget.ShowVolumeAndEq && Kiosk is null && Widget.ClientId is Guid clientId && clientId != Guid.Empty && _kioskNameFor != clientId)
         {
-            _kioskNameFor = clientId;
             Result<Client?> client = await _clientService.GetClientFromIdAsync(clientId);
             _kioskName = client.Data?.Name ?? "";
+
+            // Only remember a lookup that worked, so a failed one is tried again next render.
+            if (client.Data is not null)
+            {
+                _kioskNameFor = clientId;
+            }
         }
     }
 
